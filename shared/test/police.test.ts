@@ -345,3 +345,54 @@ test("a laggy client (its lock clock far behind the server's) can still pick the
   const r = ev.find((e) => e.t === "released") as Extract<WorldEvent, { t: "released" }>;
   assert.ok(r && r.breakout, "the server accepted the presses (no tension/noise timeouts on the server's clock)");
 });
+
+// ---------------------------------------------------------------- Phase 5A: night + tasers
+function nightfall(w: World) { w.match.phase = "night"; w.match.timeLeft = 999; }
+
+test("night: twice the cops per star (2/4/6) and a cop car from 2 stars", () => {
+  for (const [heat, cops, cars] of [[35, 2, 0], [65, 4, 1]]) {
+    const { w, p } = quiet();
+    nightfall(w);
+    p.notoriety = heat;
+    const ev: WorldEvent[] = [];
+    run(w, "a", 10, {}, ev, () => { if (p.jailT <= 0) p.notoriety = heat; });
+    const n = ev.filter((e) => e.t === "copSpawn").length;
+    assert.ok(n >= cops && n <= cops + cars, `${heat} heat at night: ${n} cops (+1 may hop out of the car)`);
+    assert.equal(ev.filter((e) => e.t === "copCar" && e.stage === "dispatch").length, cars, `${heat} heat at night: cars`);
+  }
+});
+
+test("taser at 3 stars: the cop aims (warning), hits = stunned + drops what's in your hands, then cuffed", () => {
+  const { w, p } = quiet();
+  const tv = w.placeItem("crt_tv", 0, 0.3, -19);
+  run(w, "a", 0.5);
+  w.action("a", { a: "grab", item: tv });
+  assert.equal(p.hand, tv);
+  p.notoriety = 95;
+  w.police.spawnCop(p, { x: 0, z: -15.5 }, true);
+  const ev: WorldEvent[] = [];
+  run(w, "a", 1.2, {}, ev, () => { p.notoriety = 95; });
+  assert.ok(ev.some((e) => e.t === "taser" && e.stage === "aim"), "aims first (telegraphed)");
+  assert.ok(ev.some((e) => e.t === "taser" && e.stage === "hit"), "zap");
+  assert.ok(p.move.stunT > 0, "stunned");
+  assert.equal(p.hand, "", "dropped the TV");
+  run(w, "a", 3, {}, ev, () => { if (p.jailT <= 0) p.notoriety = 95; });
+  assert.ok(ev.some((e) => e.t === "busted"), "the cop reached you and cuffed you");
+});
+
+test("taser: dodging while he fires makes it miss", () => {
+  const { w, p } = quiet();
+  p.notoriety = 95;
+  const c = w.police.spawnCop(p, { x: 0, z: -15.5 }, true)!;
+  const ev: WorldEvent[] = [];
+  let dodged = false;
+  for (let i = 0; i < 60 * 1.5 && !ev.some((e) => e.t === "taser" && e.stage !== "aim"); i++) {
+    const dodge = c.state === "aim" && c.stateT < 0.12;
+    w.pushInputs("a", [inp(p.lastSeq + 1, { dodge, mx: dodge ? 1 : 0 })]); w.tick(); ev.push(...w.takeEvents());
+    if (dodge && p.move.dodgeT > 0) dodged = true;
+    p.notoriety = 95;
+  }
+  assert.ok(dodged);
+  assert.ok(ev.some((e) => e.t === "taser" && e.stage === "miss"), "missed");
+  assert.equal(p.move.stunT, 0);
+});

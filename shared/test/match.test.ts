@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  World, buildTrashington, fortAt, LOCK_TIME, ROUND_TIME, INTRO_TIME, TALLY_TIME, ROUNDS, TRUCK_SPEED,
+  World, buildTrashington, fortAt, LOCK_TIME, ROUND_TIME, INTRO_TIME, TRUCK_SPEED, CYCLES, NIGHT_TIME, DUSK_TIME, DAWN_TIME, SHOP_TIME, UPGRADE_TIME, ITEM_TARGET_NIGHT,
   lootDef, type WorldEvent, type MoveInput,
 } from "../src/index.js";
 
@@ -44,22 +44,37 @@ test("fort yards: each contains its pad, no loot spawns inside, fortAt finds the
   assert.equal(fortAt(city, 0, 0), -1);
 });
 
-test("match flow: lobby -> intro -> scavenge (3 min) -> tally -> ... -> over after 3 rounds; START again resets", () => {
+test("cycle: intro -> scavenge (3 min) -> dusk -> night (1 min) -> dawn -> shop -> upgrades, x3 -> over; START resets", () => {
   const { w, ps } = quiet(2);
   assert.equal(w.match.phase, "lobby");
   w.debugTeleport("p0", 0, 0, 0);
   toScavenge(w);
   const pad = yard(w, ps[0].colorIdx);
-  assert.ok(Math.hypot(ps[0].move.x - pad.padX, ps[0].move.z - pad.padZ) < 0.5, "round start sends you home");
+  assert.ok(Math.hypot(ps[0].move.x - pad.padX, ps[0].move.z - pad.padZ) < 0.5, "a cycle starts at home");
   const ev: WorldEvent[] = [];
   run(w, ROUND_TIME - 29, ev);
   assert.ok(ev.some((e) => e.t === "round" && e.phase === "hurry"), "30 s warning");
   run(w, 30);
-  assert.equal(w.match.phase, "tally");
-  run(w, TALLY_TIME + 0.05);
+  assert.equal(w.match.phase, "dusk");
+  assert.ok(w.match.night, "night falls");
+  run(w, DUSK_TIME + 0.05);
+  assert.equal(w.match.phase, "night");
+  run(w, NIGHT_TIME + 0.05);
+  assert.equal(w.match.phase, "dawn");
+  assert.ok(!w.match.night);
+  run(w, DAWN_TIME + 0.05);
+  assert.equal(w.match.phase, "shop");
+  run(w, SHOP_TIME + 0.05);
+  assert.equal(w.match.phase, "upgrades");
+  // everyone READY skips the wait
+  w.action("p0", { a: "ready" }); w.action("p1", { a: "ready" });
+  run(w, 1.1);
   assert.equal(w.match.phase, "intro");
   assert.equal(w.match.round, 2);
-  for (let r = 2; r <= ROUNDS; r++) { run(w, INTRO_TIME + ROUND_TIME + TALLY_TIME + 0.2); }
+  const cycle = INTRO_TIME + ROUND_TIME + DUSK_TIME + NIGHT_TIME + DAWN_TIME + SHOP_TIME + 0.4;
+  run(w, cycle + UPGRADE_TIME); // cycle 2
+  run(w, cycle); // cycle 3: straight to the final results after the shop
+  assert.equal(w.match.round, CYCLES);
   assert.equal(w.match.phase, "over");
   ps[0].cash = 99;
   assert.ok(w.startMatch());
@@ -108,20 +123,18 @@ test("loot in an empty (unowned) fort yard doesn't bank", () => {
   assert.equal(w.items.get(id)!.locked, false);
 });
 
-test("time's up: carried loot outside your fort is LOST; at home it's cashed; yard loot is cashed", () => {
+test("time's up: carried loot away from home is LOST; at home it lands in your yard; the fort keeps it through the night", () => {
   const { w, ps } = quiet(2);
   toScavenge(w);
   const [a, b] = ps;
   const fa = yard(w, a.colorIdx);
-  // a: stands at home holding a TV, plus a locked TV and an unlocked chicken in the yard
   const yardTv = w.placeItem("crt_tv", fa.padX + 2, 0.3, fa.padZ);
   run(w, LOCK_TIME + 0.5);
-  const yardChicken = w.placeItem("rubber_chicken", fa.padX - 2, 0.3, fa.padZ);
+  const yardChicken = w.placeItem("rubber_chicken", fa.padX - 2, 0.3, fa.padZ); // not locked yet at time-up
   const heldTv = w.placeItem("crt_tv", a.move.x + Math.sin(a.move.yaw), 1, a.move.z + Math.cos(a.move.yaw));
   run(w, 0.5);
   w.action(a.id, { a: "grab", item: heldTv });
   assert.equal(a.hand, heldTv);
-  // b: out in the plaza with a TV
   w.debugTeleport(b.id, 5, 5, 0);
   const bTv = w.placeItem("crt_tv", 5, 1, 6);
   run(w, 0.5);
@@ -130,19 +143,105 @@ test("time's up: carried loot outside your fort is LOST; at home it's cashed; ya
   const expectA = [yardTv, yardChicken, heldTv].reduce((s, id) => s + w.items.get(id)!.value, 0);
   const ev: WorldEvent[] = [];
   run(w, w.match.timeLeft + 0.1, ev);
-  assert.equal(w.match.phase, "tally");
-  assert.equal(a.cash, expectA, "everything at home cashed in");
-  assert.equal(b.cash, 0);
-  assert.ok(ev.some((e) => e.t === "lost" && e.p === b.id && e.count === 1), "b lost the TV");
-  assert.ok(!w.items.has(bTv) && !w.items.has(heldTv));
-  const res = w.match.results;
-  assert.equal(res[0].id, a.id, "results sorted by cash");
-  assert.equal(res[1].lost, 1);
-  // next round: fresh start, cash kept
-  run(w, TALLY_TIME + 0.1);
-  assert.equal(w.match.round, 2);
-  assert.equal(a.cash, expectA);
+  assert.equal(w.match.phase, "dusk");
+  assert.equal(a.cash, 0, "loot isn't cash until you sell it");
   assert.equal(a.hand, "");
+  for (const id of [yardTv, yardChicken, heldTv]) assert.ok(w.items.get(id)?.locked, `${id} banked in a's fort through the night`);
+  assert.equal(w.match.bankedValue(a), expectA);
+  assert.ok(ev.some((e) => e.t === "lost" && e.p === b.id && e.count === 1), "b lost the TV");
+  assert.ok(!w.items.has(bTv));
+  assert.equal(w.match.results[0].id, a.id);
+  assert.equal(w.match.results.find((l) => l.id === b.id)!.lost, 1);
+});
+
+test("night: loot is scarce and worth x2, heat builds twice as fast", () => {
+  const w = new World({ seed: 5, npcs: 0, spawnLoot: true });
+  const p = w.addPlayer("p0", "A");
+  w.startMatch(); run(w, INTRO_TIME + 0.05);
+  w.match.cancelPlannedEvents();
+  const dayFree = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0).length;
+  w.match.timeLeft = 0.01; run(w, 0.05);
+  assert.equal(w.match.phase, "dusk");
+  const night = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0);
+  assert.ok(night.length <= ITEM_TARGET_NIGHT && night.length < dayFree, `scarce: ${night.length} vs ${dayFree} by day`);
+  assert.ok([...w.items.values()].every((it) => it.mult === 2), "night loot is worth double");
+  run(w, DUSK_TIME + 0.05);
+  p.notoriety = 0; w.addHeat(p, 10);
+  assert.equal(p.notoriety, 20, "heat x2 at night");
+});
+
+test("night raids: banked loot can be taken at night, and the owner's alarm goes off", () => {
+  const { w, ps } = quiet(2);
+  toScavenge(w);
+  const [a, b] = ps;
+  const fa = yard(w, a.colorIdx);
+  const tv = w.placeItem("crt_tv", fa.padX + 2, 0.3, fa.padZ);
+  run(w, LOCK_TIME + 0.5);
+  const grabAt = () => { const it = w.items.get(tv)!; w.debugTeleport(b.id, it.body.x, it.body.z - 1.2, 0); b.actionCd = 0; w.action(b.id, { a: "grab", item: tv }); };
+  grabAt();
+  assert.equal(b.hand, "", "by day banked loot is safe");
+  w.takeEvents();
+  w.match.timeLeft = 0.01; run(w, DUSK_TIME + 0.2);
+  assert.equal(w.match.phase, "night");
+  assert.ok(w.items.get(tv)!.locked, "still banked after nightfall");
+  grabAt();
+  const ev = w.takeEvents();
+  assert.equal(b.hand, tv, "raided!");
+  assert.ok(ev.some((e) => e.t === "raid" && e.owner === a.id && e.p === b.id), "alarm for the owner");
+});
+
+test("pawn shop: offers below value, haggle up or offend him, SELL = cash, unsold loot is lost", () => {
+  const { w, ps } = quiet(1);
+  toScavenge(w);
+  const [a] = ps;
+  const fa = yard(w, a.colorIdx);
+  const ids = [0, 1, 2, 3].map((i) => w.placeItem("crt_tv", fa.padX - 3 + i * 2, 0.3, fa.padZ));
+  run(w, LOCK_TIME + 0.5);
+  w.match.timeLeft = 0.01; run(w, DUSK_TIME + 0.2);
+  w.match.timeLeft = 0.01; run(w, DAWN_TIME + 0.2);
+  assert.equal(w.match.phase, "shop");
+  const offers = w.pawn.list(a.id);
+  assert.equal(offers.length, 4, "an offer for every item in the fort");
+  for (const o of offers) assert.ok(o.offer < o.value && o.offer <= o.max, "lowball first");
+  assert.ok(ids.every((id) => !w.items.has(id)), "items went to the shop");
+  const view = JSON.parse(w.pawn.viewJson(a.id));
+  assert.ok(!("max" in view[0]), "his limit is secret");
+  const o = offers[0];
+  let before = o.offer;
+  for (let i = 0; i < 6 && o.state === "open"; i++) {
+    w.action(a.id, { a: "haggle", item: o.id });
+    if (o.mood === "offended") assert.ok(o.offer < before, "offended: offer drops");
+    else assert.ok(o.offer > before, "haggled up");
+    before = o.offer;
+  }
+  assert.equal(o.state, "final");
+  assert.ok(o.offer <= o.max, "never above his limit");
+  w.action(a.id, { a: "sell", item: o.id });
+  assert.equal(a.cash, o.offer);
+  w.action(a.id, { a: "sell", item: offers[1].id });
+  const cash = a.cash;
+  const ev: WorldEvent[] = [];
+  run(w, w.match.timeLeft + 0.1, ev);
+  assert.equal(a.cash, cash);
+  assert.ok(ev.some((e) => e.t === "lost" && e.p === a.id && e.count === 2 && e.unsold), "2 unsold items lost");
+});
+
+test("small money goes straight into your cash; the money bag has to be carried home", () => {
+  const { w, ps } = quiet(1);
+  toScavenge(w);
+  const [a] = ps;
+  w.debugTeleport(a.id, 5, 5, 0);
+  const coins = w.placeItem("coin_pile", 5, 0.3, 6.2);
+  const bag = w.placeItem("money_bag", 5.6, 0.3, 6.2);
+  run(w, 0.5);
+  const v = w.items.get(coins)!.value;
+  w.action(a.id, { a: "grab", item: coins });
+  assert.equal(a.cash, v);
+  assert.ok(!w.items.has(coins));
+  a.actionCd = 0;
+  w.action(a.id, { a: "grab", item: bag });
+  assert.equal(a.hand, bag, "money bag is carried");
+  assert.equal(a.cash, v);
 });
 
 test("happy hour: loot in the zone is worth double; grab it in time to keep the bonus", () => {
@@ -244,17 +343,19 @@ test("raccoon heist: steals the best loot from your yard (even banked), escapes 
   }
 });
 
-test("events escalate: 1 in round 1, 2 in round 2, 3 in round 3, never the same one twice in a round", () => {
+test("events escalate: 1 in cycle 1, 2 in cycle 2, 3 in cycle 3 (day only), never the same one twice", () => {
   const w = new World({ seed: 3, npcs: 0, spawnLoot: true });
   w.addPlayer("p0", "A");
   w.startMatch();
   const counts: string[][] = [[], [], []];
   const ev: WorldEvent[] = [];
-  run(w, INTRO_TIME + ROUND_TIME * 3 + TALLY_TIME * 3 + INTRO_TIME * 2 + 1, ev);
-  let round = 0;
+  const cycle = INTRO_TIME + ROUND_TIME + DUSK_TIME + NIGHT_TIME + DAWN_TIME + SHOP_TIME + UPGRADE_TIME;
+  run(w, cycle * 3 + 1, ev);
+  let round = 0, night = false;
   for (const e of ev) {
-    if (e.t === "round" && e.phase === "scavenge") round = e.round;
-    if (e.t === "cityEvent" && e.stage === "warn") counts[round - 1].push(e.kind);
+    if (e.t === "round" && e.phase === "scavenge") { round = e.round; night = false; }
+    if (e.t === "round" && e.phase === "night") night = true;
+    if (e.t === "cityEvent" && e.stage === "warn") { assert.ok(!night, "no city events at night"); counts[round - 1].push(e.kind); }
   }
   assert.deepEqual(counts.map((c) => c.length), [1, 2, 3], JSON.stringify(counts));
   for (const c of counts) assert.equal(new Set(c).size, c.length);

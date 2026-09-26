@@ -218,7 +218,18 @@ export const sfx = {
   pickDrop() { for (let i = 0; i < 4; i++) blip(1600 - i * 200, 0.04, "square", 0.05, undefined, i * 0.05); },
   guard() { voice([0.7, 0.9, 0.6], 0.8, 0.09, 0.02); blip(180, 0.3, "sawtooth", 0.08, 140); },
   unlock() { blip(900, 0.05, "square", 0.1); blip(600, 0.3, "triangle", 0.1, 1200, 0.06); [784, 988, 1318].forEach((f, i) => blip(f, 0.1, "triangle", 0.09, undefined, 0.3 + i * 0.08)); },
-  dodgeNpc(gain = 1) { sweepNoise(0.2, 0.08 * gain, 2400, 600); blip(500, 0.1, "triangle", 0.05 * gain, 900, 0.08); },
+  // ---- Phase 5A
+  raidAlarm() { for (let i = 0; i < 4; i++) { blip(1100, 0.16, "square", 0.09, 700, i * 0.34); blip(700, 0.16, "square", 0.09, 1100, i * 0.34 + 0.17); } },
+  tugStart() { blip(180, 0.25, "sawtooth", 0.1, 260); voice([0.8, 1.1], 0.9, 0.06); },
+  tugPull() { blip(160 + Math.random() * 40, 0.06, "triangle", 0.07, 220); noise(0.04, 0.05, 900); },
+  tugWin() { [523, 784, 1046].forEach((f, i) => blip(f, 0.1, "square", 0.09, undefined, i * 0.07)); },
+  taserAim() { blip(2600, 0.5, "sine", 0.05, 3200); blip(60, 0.3, "square", 0.03); },
+  zap(gain = 1) { for (let i = 0; i < 6; i++) { noise(0.05, 0.14 * gain, 3000 + Math.random() * 3000, i * 0.07, 0.5); blip(80 + Math.random() * 60, 0.05, "sawtooth", 0.08 * gain, undefined, i * 0.07); } },
+  nightfall() { [330, 294, 262, 196].forEach((f, i) => blip(f, 0.35, "triangle", 0.07, f * 0.98, i * 0.22)); },
+  shopBell() { blip(2093, 0.4, "sine", 0.1, 2080); blip(2637, 0.5, "sine", 0.07, 2620, 0.12); },
+  haggleUp() { blip(523, 0.08, "square", 0.08); blip(784, 0.12, "square", 0.08, undefined, 0.08); },
+  offended() { voice([0.6, 0.5], 0.7, 0.09); blip(200, 0.35, "sawtooth", 0.08, 120); },
+    dodgeNpc(gain = 1) { sweepNoise(0.2, 0.08 * gain, 2400, 600); blip(500, 0.1, "triangle", 0.05 * gain, 900, 0.08); },
 };
 
 /** Rising "wind-up" tone while charging a throw. Returns a function that stops it. */

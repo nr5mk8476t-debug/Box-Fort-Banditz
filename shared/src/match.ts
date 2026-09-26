@@ -1,22 +1,35 @@
-// Phase 3: the round loop + city events. Runs inside the World (server + solo).
+// Phase 5A: the cycle loop. Runs inside the World (host browser + solo).
 //
-//   lobby --START--> intro (5 s) --> scavenge (3 min) --> tally (12 s) --> intro ... --> over
+//   lobby --START--> [ intro (5 s) -> scavenge (3 min, day) -> dusk (5 s) -> night (1 min)
+//                      -> dawn (results) -> shop (60 s, pawn shop) -> upgrades (60 s) ] x 3 -> over
 //
-// Banking (Blake's rule): loot resting in YOUR fort yard locks in 10 s after you drop it there.
-// Until then anyone can sneak in and steal it back. At time-up, anything you're still carrying
-// outside your fort is LOST; loot in your yard (locked or not) is cashed in.
+// Banking: loot resting in YOUR fort yard locks in 10 s after you drop it there (anyone can steal it
+// back before that). At NIGHT even locked loot can be taken (fort raids). When a scavenge ends,
+// anything you carry while away from home is LOST; carried at home = dropped into your yard.
+// Loot in your fort is only turned into cash by selling it to the pawn shop; unsold loot is lost.
+// Small money (coins, cash, wallets) goes straight into your cash when you pick it up.
+// 5A ending (temporary, until the Mayor race): after 3 cycles the richest bandit wins.
 import { fortAt } from "./arena.js";
 import type { World, ItemSim, PlayerSim } from "./world.js";
 
-export type MatchPhase = "lobby" | "intro" | "scavenge" | "tally" | "over";
+export type MatchPhase = "lobby" | "intro" | "scavenge" | "dusk" | "night" | "dawn" | "shop" | "upgrades" | "over";
 export type CityEventKind = "airdrop" | "truck" | "happyhour" | "raccoons";
 
-export const ROUNDS = 3;
+export const CYCLES = 3;
+/** (kept for older code: a "round" is now a whole cycle) */
+export const ROUNDS = CYCLES;
 export const ROUND_TIME = 180;
+export const NIGHT_TIME = 60;
 export const INTRO_TIME = 5;
-export const TALLY_TIME = 12;
+export const DUSK_TIME = 5;
+export const DAWN_TIME = 8;
+export const SHOP_TIME = 60;
+export const UPGRADE_TIME = 60;
 export const LOCK_TIME = 10;
 export const HOME_WARNING = 30;
+export const NIGHT_WARNING = 15;
+/** kept for older tests: the results pause after the night round */
+export const TALLY_TIME = DAWN_TIME;
 
 export const TRUCK_SPEED = 8;
 export const TRUCK_LEN = 5.5;
@@ -26,10 +39,10 @@ const EVENT_WARN = 5;
 
 export interface RoundLine {
   id: string; name: string; colorIdx: number;
-  banked: number; bankedValue: number; // cashed in this round
-  lost: number; lostValue: number; // carried outside the fort at time-up
+  banked: number; bankedValue: number; // loot sitting in your fort (to sell at the pawn shop)
+  lost: number; lostValue: number; // carried outside the fort at time-up (+ unsold at the shop)
   stolen: number; // items raccoons got away with
-  cash: number; // total after this round
+  cash: number; // cash so far
 }
 
 /** What clients need to show the current event. */
@@ -73,8 +86,11 @@ export class MatchSystem {
   round = 0;
   timeLeft = 0;
   results: RoundLine[] = [];
+  /** players who pressed READY in the shop / upgrades round (all ready = skip ahead) */
+  readonly ready = new Set<string>();
   private warned = false;
   private plan: { at: number; kind: CityEventKind }[] = [];
+  private lost = new Map<string, { n: number; v: number }>();
   ev: ActiveEvent | null = null;
   truck = { on: false, x: 0, z: 0, yaw: 0 };
 
@@ -85,25 +101,40 @@ export class MatchSystem {
   private get happyZones() { return this.w.arena.happyZones ?? DEFAULT_HAPPY_ZONES; }
   private get airdropSpots() { return this.w.arena.airdropSpots ?? DEFAULT_AIRDROP_SPOTS; }
 
+  /** Night round (and the dusk before it): dark city, x2 loot, tougher cops, fort raids. */
+  get night() { return this.phase === "night" || this.phase === "dusk"; }
+  /** A scavenge round is running (day or night). */
+  get scavenging() { return this.phase === "scavenge" || this.phase === "night"; }
+
   /** Host pressed START (also used to restart after the final results). */
   start(): boolean {
     if (this.phase !== "lobby" && this.phase !== "over") return false;
     for (const p of this.w.players.values()) p.cash = 0;
     this.round = 0;
     this.results = [];
-    this.nextRound();
+    this.nextCycle();
     return true;
   }
 
   get elapsed() { return this.phase === "scavenge" ? ROUND_TIME - this.timeLeft : 0; }
 
-  private nextRound() {
+  private nextCycle() {
     this.round++;
     this.phase = "intro";
     this.timeLeft = INTRO_TIME;
     this.warned = false;
-    this.w.resetCity();
+    this.ready.clear();
+    this.lost.clear();
+    this.w.resetCity(false);
     this.w.emit({ t: "round", phase: "intro", round: this.round });
+  }
+
+  private go(phase: MatchPhase, time: number) {
+    this.phase = phase;
+    this.timeLeft = time;
+    this.warned = false;
+    this.ready.clear();
+    this.w.emit({ t: "round", phase, round: this.round });
   }
 
   tick(dt: number) {
@@ -111,26 +142,45 @@ export class MatchSystem {
     this.timeLeft = Math.max(0, this.timeLeft - dt);
     switch (this.phase) {
       case "intro":
-        if (this.timeLeft <= 0) {
-          this.phase = "scavenge";
-          this.timeLeft = ROUND_TIME;
-          this.planEvents();
-          this.w.emit({ t: "round", phase: "scavenge", round: this.round });
-        }
+        if (this.timeLeft <= 0) { this.go("scavenge", ROUND_TIME); this.planEvents(); }
         break;
       case "scavenge":
         this.bankTick(dt);
         this.eventTick(dt);
         if (!this.warned && this.timeLeft <= HOME_WARNING) { this.warned = true; this.w.emit({ t: "round", phase: "hurry", round: this.round }); }
-        if (this.timeLeft <= 0) this.endRound();
+        if (this.timeLeft <= 0) this.endScavenge(false);
         break;
-      case "tally":
-        if (this.timeLeft <= 0) {
-          if (this.round < ROUNDS) this.nextRound();
-          else { this.phase = "over"; this.w.emit({ t: "round", phase: "over", round: this.round }); }
-        }
+      case "dusk":
+        if (this.timeLeft <= 0) this.go("night", NIGHT_TIME);
+        break;
+      case "night":
+        this.bankTick(dt);
+        if (!this.warned && this.timeLeft <= NIGHT_WARNING) { this.warned = true; this.w.emit({ t: "round", phase: "hurry", round: this.round }); }
+        if (this.timeLeft <= 0) this.endScavenge(true);
+        break;
+      case "dawn":
+        if (this.timeLeft <= 0) this.openShop();
+        break;
+      case "shop":
+        this.skipIfReady();
+        if (this.timeLeft <= 0) this.closeShop();
+        break;
+      case "upgrades":
+        this.skipIfReady();
+        if (this.timeLeft <= 0) this.nextCycle();
         break;
     }
+  }
+
+  /** READY in the shop / upgrades round. */
+  setReady(p: PlayerSim) {
+    if (this.phase !== "shop" && this.phase !== "upgrades") return;
+    this.ready.add(p.id);
+  }
+
+  private skipIfReady() {
+    const on = [...this.w.players.values()].filter((p) => p.connected);
+    if (on.length && on.every((p) => this.ready.has(p.id))) this.timeLeft = Math.min(this.timeLeft, 1);
   }
 
   // ---------------------------------------------------------------- banking
@@ -162,44 +212,96 @@ export class MatchSystem {
     return v;
   }
 
-  private endRound() {
+  /** Everything lying in a player's fort yard (locked or still banking). */
+  fortItems(p: PlayerSim): ItemSim[] {
+    const out: ItemSim[] = [];
+    for (const it of this.w.items.values()) {
+      if (it.mode === "free" && fortAt(this.w.arena, it.body.x, it.body.z) === p.colorIdx) out.push(it);
+    }
+    return out;
+  }
+
+  private addLost(p: PlayerSim, n: number, v: number) {
+    const l = this.lost.get(p.id) ?? { n: 0, v: 0 };
+    l.n += n; l.v += v;
+    this.lost.set(p.id, l);
+  }
+
+  /** Time's up (day or night): carried loot away from home is lost, carried at home goes in the yard. */
+  private endScavenge(night: boolean) {
     this.stopEvent();
     this.w.npc.clearRaccoons();
-    const lines = new Map<string, RoundLine>();
-    for (const p of this.w.players.values()) {
-      lines.set(p.id, { id: p.id, name: p.name, colorIdx: p.colorIdx, banked: 0, bankedValue: 0, lost: 0, lostValue: 0, stolen: p.stolenThisRound, cash: 0 });
-    }
     const arena = this.w.arena;
     const home = (p: PlayerSim) => fortAt(arena, p.move.x, p.move.z) === p.colorIdx;
-    for (const it of [...this.w.items.values()]) {
-      if (it.mode === "held" || it.mode === "pocket") {
-        const h = this.w.players.get(it.holder);
-        if (!h) continue;
-        const line = lines.get(h.id)!;
-        if (home(h)) { line.banked++; line.bankedValue += itemWorth(it); }
-        else { line.lost++; line.lostValue += itemWorth(it); }
-        this.w.items.delete(it.id);
-        continue;
-      }
-      const slot = fortAt(arena, it.body.x, it.body.z);
-      const owner = this.ownerOf(slot);
-      if (!owner) continue;
-      const line = lines.get(owner.id)!;
-      line.banked++; line.bankedValue += itemWorth(it);
-      this.w.items.delete(it.id);
-    }
     for (const p of this.w.players.values()) {
-      const line = lines.get(p.id)!;
-      p.cash += line.bankedValue;
-      line.cash = p.cash;
-      p.hand = ""; p.pockets.fill(""); p.stolenThisRound = 0;
+      const carried = this.w.carriedItems(p);
+      if (!carried.length) continue;
+      let n = 0, v = 0;
+      for (const it of carried) {
+        if (home(p)) {
+          this.w.putInYard(p, it);
+        } else {
+          n++; v += itemWorth(it);
+          this.w.items.delete(it.id);
+        }
+      }
+      p.hand = ""; p.pockets.fill("");
       this.w.refreshCarry(p);
-      if (line.lost) this.w.emit({ t: "lost", p: p.id, count: line.lost, value: line.lostValue });
+      if (n) { this.addLost(p, n, v); this.w.emit({ t: "lost", p: p.id, count: n, value: v }); }
     }
-    this.results = [...lines.values()].sort((a, b) => b.cash - a.cash);
-    this.phase = "tally";
-    this.timeLeft = TALLY_TIME;
-    this.w.emit({ t: "round", phase: "tally", round: this.round });
+    // everything left in a yard counts as banked (even if its 10 s weren't up yet)
+    for (const it of this.w.items.values()) {
+      if (it.mode !== "free") continue;
+      const slot = fortAt(arena, it.body.x, it.body.z);
+      if (slot >= 0 && this.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; }
+    }
+    this.results = this.lines();
+    if (!night) {
+      this.go("dusk", DUSK_TIME);
+      this.w.resetCity(true); // night falls: fresh (scarce, x2) loot; your fort keeps its loot
+    } else {
+      this.go("dawn", DAWN_TIME);
+    }
+  }
+
+  private lines(): RoundLine[] {
+    const out: RoundLine[] = [];
+    for (const p of this.w.players.values()) {
+      const items = this.fortItems(p);
+      const l = this.lost.get(p.id) ?? { n: 0, v: 0 };
+      out.push({
+        id: p.id, name: p.name, colorIdx: p.colorIdx,
+        banked: items.length, bankedValue: items.reduce((a, it) => a + itemWorth(it), 0),
+        lost: l.n, lostValue: l.v, stolen: p.stolenThisRound, cash: p.cash,
+      });
+    }
+    return out.sort((a, b) => b.cash + b.bankedValue - (a.cash + a.bankedValue));
+  }
+
+  /** Shop round: Sal makes an offer on everything in each fort. */
+  private openShop() {
+    const byPlayer = new Map<string, { id: string; type: string; value: number }[]>();
+    for (const p of this.w.players.values()) {
+      const items = this.fortItems(p);
+      byPlayer.set(p.id, items.map((it) => ({ id: it.id, type: it.type, value: itemWorth(it) })));
+      for (const it of items) this.w.items.delete(it.id); // carted off to the pawn shop
+    }
+    this.w.pawn.open(byPlayer);
+    this.go("shop", SHOP_TIME);
+  }
+
+  private closeShop() {
+    for (const p of this.w.players.values()) {
+      const left = this.w.pawn.unsold(p.id);
+      if (!left.length) continue;
+      const v = left.reduce((a, o) => a + o.value, 0);
+      this.addLost(p, left.length, v);
+      this.w.emit({ t: "lost", p: p.id, count: left.length, value: v, unsold: true });
+    }
+    this.w.pawn.close();
+    this.results = this.lines().sort((a, b) => b.cash - a.cash);
+    if (this.round >= CYCLES) this.go("over", 0);
+    else this.go("upgrades", UPGRADE_TIME);
   }
 
   // ---------------------------------------------------------------- events

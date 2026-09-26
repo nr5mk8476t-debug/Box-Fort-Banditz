@@ -4,6 +4,7 @@ import { TitleScene } from "./game/titleScene.ts";
 import { ArenaScene } from "./game/arenaScene.ts";
 import { LocalSession, SOLO_ID } from "./localSession.ts";
 import { HOST_LEFT } from "./p2p/peerRoom.ts";
+import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
@@ -12,7 +13,7 @@ import {
 } from "./net.ts";
 import {
   MSG, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington,
-  lootDef, RARITY_COLOR, starsOf, type MoveInput, NPC_DEFS, pinPos as pinPosOf, type WorldView, type WorldEvent,
+  lootDef, RARITY_COLOR, starsOf, type MoveInput, pinPos as pinPosOf, type WorldView, type WorldEvent,
 } from "@bfb/shared";
 
 // Both the server and this client build the same city from the same shared code.
@@ -68,7 +69,7 @@ function showFatal(msg: string) {
 window.addEventListener("error", (e) => showFatal(e.message || String(e.error)));
 window.addEventListener("unhandledrejection", (e) => showFatal(String((e as PromiseRejectionEvent).reason?.message ?? (e as PromiseRejectionEvent).reason)));
 
-const CONTROLS_TEXT = "WASD move / SHIFT sprint / SPACE jump + climb / C crouch (sprint+C slide) / Q dodge / E grab + search / HOLD R rob a till / G drop / CLICK punch + smash / HOLD CLICK or F throw / RIGHT CLICK pockets / ESC menu";
+const CONTROLS_TEXT = "WASD move / SHIFT sprint / SPACE jump + climb / C crouch (sprint+C slide) / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / CLICK punch + smash / HOLD CLICK or F throw / RIGHT CLICK pockets / ESC menu";
 
 // ---------------------------------------------------------------------------
 // Core objects
@@ -88,6 +89,10 @@ let ping = 0;
 let lastPhase = "";
 let lobbySig = "";
 let settingsReturnTo: "title" | "pause" = "title";
+/** Phase 5A: shop / upgrades screen open (mouse released, no pause menu) */
+let overlayOpen = "";
+const shop = new ShopScreen();
+shop.send = (act) => arena?.onAction?.(act);
 
 // ---------------------------------------------------------------------------
 // Title
@@ -157,8 +162,8 @@ async function startSolo() {
   show("lp-code-row", false);
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
-  $("lp-hint").textContent = "Press ENTER to start. Bring loot home to your fort's yard: it locks in after 10 s. Anything you're carrying away from home when time runs out is lost!";
-  $("mode-badge").textContent = "PHASE 4.6 / SOLO";
+  $("lp-hint").textContent = "Press ENTER to start. Each cycle: 3 min scavenge, 1 min NIGHT scavenge (x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
+  $("mode-badge").textContent = "PHASE 5A / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -170,6 +175,7 @@ function wireArena(a: ArenaScene) {
   a.onFeedback = (text, kind) => flash(text, kind);
   a.onScreenFx = (fx, seconds) => screenFx(fx, seconds);
   a.onBanner = (title, sub, kind) => banner(title, sub, kind);
+  a.onPawn = (e) => shop.onPawn(e);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,11 +220,17 @@ function updateMatchHud(a: ArenaScene) {
   // timer
   let round = "", time = "", sub = "", cls = "mh-time";
   if (m.phase === "lobby") { time = "LOBBY"; sub = starter ? "Press ENTER to start the match" : "Waiting for the host to start"; }
-  else if (m.phase === "intro") { round = `ROUND ${m.round}/${m.rounds}`; time = String(Math.max(1, Math.ceil(m.timeLeft))); sub = "Get ready!"; }
+  else if (m.phase === "intro") { round = `CYCLE ${m.round}/${m.rounds}`; time = String(Math.max(1, Math.ceil(m.timeLeft))); sub = "Get ready!"; }
   else if (m.phase === "scavenge") {
-    round = `ROUND ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft);
+    round = `DAY ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft);
     if (m.timeLeft <= 10) cls += " danger"; else if (m.timeLeft <= 30) cls += " warn";
-  } else if (m.phase === "tally") { round = `ROUND ${m.round}/${m.rounds}`; time = "TIME'S UP"; }
+  } else if (m.phase === "dusk") { round = `CYCLE ${m.round}/${m.rounds}`; time = "NIGHTFALL"; sub = `Night scavenge in ${Math.max(1, Math.ceil(m.timeLeft))}`; }
+  else if (m.phase === "night") {
+    round = `NIGHT ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "x2 loot / forts can be raided";
+    if (m.timeLeft <= 10) cls += " danger"; else if (m.timeLeft <= 15) cls += " warn";
+  } else if (m.phase === "dawn") { round = `CYCLE ${m.round}/${m.rounds}`; time = "SUNRISE"; sub = "The pawn shop opens soon"; }
+  else if (m.phase === "shop") { round = `CYCLE ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "PAWN SHOP"; }
+  else if (m.phase === "upgrades") { round = `CYCLE ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "UPGRADES"; }
   else if (m.phase === "over") { time = "MATCH OVER"; sub = starter ? "Press ENTER to play again" : "Waiting for the host"; }
   const sig = round + time + sub + cls;
   if (sig !== matchSig) {
@@ -240,14 +252,14 @@ function updateMatchHud(a: ArenaScene) {
       const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = x.name + (x.connected ? "" : " (away)");
       const cash = document.createElement("span"); cash.className = "cash"; cash.textContent = "$" + x.cash;
       li.append(dot, nm, cash);
-      if (x.bank > 0) { const b = document.createElement("span"); b.className = "bank"; b.textContent = "+" + x.bank; b.title = "locked in the fort this round"; li.append(b); }
+      if (x.bank > 0) { const b = document.createElement("span"); b.className = "bank"; b.textContent = "+" + x.bank; b.title = "loot banked in the fort (sell it at the pawn shop)"; li.append(b); }
       ol.appendChild(li);
     }
   }
 
   // current city event
   let ev = "", bad = false;
-  if (m.phase === "scavenge" && m.evKind) {
+  if ((m.phase === "scavenge") && m.evKind) {
     const zone = Math.abs(m.evX) < 1 && Math.abs(m.evZ) < 1 ? "THE PLAZA" : `THE ${m.evZ > 0 ? "NORTH" : "SOUTH"}-${m.evX > 0 ? "EAST" : "WEST"} BLOCK`;
     if (m.evKind === "happyhour") ev = m.evStage === "live" ? `HAPPY HOUR IN ${zone}: DOUBLE LOOT (GOLD RING) - ${m.evT}s` : `HAPPY HOUR IN ${zone}...`;
     if (m.evKind === "truck") { ev = m.evStage === "warn" ? `GARBAGE TRUCK IN ${m.evT}s - CLEAR THE ROAD!` : "GARBAGE TRUCK ON THE ROAD!"; bad = true; }
@@ -263,8 +275,8 @@ function updateMatchHud(a: ArenaScene) {
 
   // home compass (during the round, when you're away from your fort)
   const h = a.home();
-  const showHome = m.phase === "scavenge" && !h.inside;
-  const hSig = showHome ? `${Math.round(h.dist)}|${Math.round(h.bearing * 20)}|${m.timeLeft <= 30}` : "";
+  const showHome = (m.phase === "scavenge" || m.phase === "night") && !h.inside;
+  const hSig = showHome ? `${Math.round(h.dist)}|${Math.round(h.bearing * 20)}|${m.timeLeft <= (m.phase === "night" ? 15 : 30)}` : "";
   if (hSig !== homeSig) {
     homeSig = hSig;
     show("home-arrow", showHome);
@@ -272,7 +284,7 @@ function updateMatchHud(a: ArenaScene) {
       $("ha-arrow").style.transform = `rotate(${h.bearing}rad)`;
       $("home-arrow").style.setProperty("--home", PLAYER_COLORS[a.myColorIdx % PLAYER_COLORS.length]);
       $("ha-text").textContent = `HOME ${Math.round(h.dist)} m`;
-      $("home-arrow").classList.toggle("urgent", m.timeLeft <= 30);
+      $("home-arrow").classList.toggle("urgent", m.timeLeft <= (m.phase === "night" ? 15 : 30));
     }
   }
 
@@ -285,13 +297,36 @@ function updateMatchHud(a: ArenaScene) {
   }
 
   // tally / final results card
-  const showTally = m.phase === "tally" || m.phase === "over";
+  const showTally = m.phase === "dawn" || m.phase === "over";
   const tSig = showTally ? m.phase + m.round + m.results + Math.ceil(m.timeLeft) + starter : "";
   if (tSig !== tallySig) {
     tallySig = tSig;
     show("tally", showTally);
     if (showTally) renderTally(a, starter);
   }
+  document.body.classList.toggle("night", m.phase === "night" || m.phase === "dusk");
+
+  // Phase 5A: pawn shop + upgrades screens (the mouse is released while they're open)
+  const ov = m.phase === "shop" ? "shop" : m.phase === "upgrades" ? "upgrades" : "";
+  if (ov !== overlayOpen) {
+    const was = overlayOpen;
+    overlayOpen = ov;
+    show("shop", ov === "shop");
+    show("upgrades", ov === "upgrades");
+    a.fortView = ov === "upgrades";
+    if (ov) {
+      input.clear();
+      input.enabled = false;
+      if (input.dragLook) input.enabled = false;
+      input.releaseLock();
+      show("pause", false);
+    } else if (was && screen === "playing") {
+      if (input.dragLook) input.enabled = true; else showPause(true);
+    }
+  }
+  const myCash = a.scores.find((x) => x.me)?.cash ?? 0;
+  if (ov === "shop") shop.update(a.shopJson, m.timeLeft, myCash, a.ready);
+  if (ov === "upgrades") shop.updateUpgrades(m.timeLeft, a.ready);
 }
 
 function renderTally(a: ArenaScene, starter: boolean) {
@@ -299,31 +334,31 @@ function renderTally(a: ArenaScene, starter: boolean) {
   let lines: { id: string; name: string; colorIdx: number; banked: number; bankedValue: number; lost: number; lostValue: number; stolen: number; cash: number }[] = [];
   try { lines = JSON.parse(m.results || "[]"); } catch { /* keep empty */ }
   const over = m.phase === "over";
-  $("tally-title").textContent = over ? `TOP BANDIT: ${lines[0]?.name ?? "?"}` : `ROUND ${m.round} RESULTS`;
+  $("tally-title").textContent = over ? `RICHEST BANDIT: ${lines[0]?.name ?? "?"}` : `CYCLE ${m.round}: SUNRISE`;
   const table = $("tally-table") as HTMLTableElement;
   table.innerHTML = "";
   const head = table.insertRow();
-  for (const h of ["BANDIT", "BANKED", "LOST", "TOTAL"]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+  for (const h of over ? ["BANDIT", "LOST", "CASH"] : ["BANDIT", "FORT LOOT", "LOST", "CASH"]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
   lines.forEach((l, i) => {
     const tr = table.insertRow();
     if (i === 0 && over) tr.className = "winner";
     const name = tr.insertCell();
     const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = PLAYER_COLORS[l.colorIdx % PLAYER_COLORS.length];
     name.append(dot, document.createTextNode(l.name));
-    const b = tr.insertCell(); b.className = "money"; b.textContent = `+$${l.bankedValue}` + (l.banked ? ` (${l.banked})` : "");
+    if (!over) { const b = tr.insertCell(); b.className = "money"; b.textContent = `$${l.bankedValue}` + (l.banked ? ` (${l.banked})` : ""); }
     const lost = tr.insertCell(); lost.className = l.lost || l.stolen ? "neg" : "";
-    lost.textContent = [l.lost ? `$${l.lostValue} (${l.lost})` : "", l.stolen ? `${l.stolen} to raccoons` : ""].filter(Boolean).join(", ") || "-";
+    lost.textContent = [l.lost ? `${l.lost} item${l.lost > 1 ? "s" : ""}` : "", l.stolen ? `${l.stolen} to raccoons` : ""].filter(Boolean).join(", ") || "-";
     const tot = tr.insertCell(); tot.className = "money"; tot.textContent = "$" + l.cash;
   });
   $("tally-foot").textContent = over
-    ? (starter ? "The Mayor finale comes in a later phase. Press ENTER to play again." : "The Mayor finale comes in a later phase. Waiting for the host...")
-    : `Round ${m.round + 1} starts in ${Math.max(1, Math.ceil(m.timeLeft))}...`;
+    ? (starter ? "The race for Mayor comes in a later phase. Press ENTER to play again." : "The race for Mayor comes in a later phase. Waiting for the host...")
+    : `Fort loot goes to the pawn shop in ${Math.max(1, Math.ceil(m.timeLeft))}... (sell it or lose it)`;
 }
 
 const fxTimers: Record<string, number> = {};
 const fxHistory: string[] = []; // for automated tests (effects can be over before a slow test looks)
 /** Full-screen HTML effects: camera flash, pigeon swarm, knocked-down daze. */
-function screenFx(fx: "flash" | "swarm" | "knocked", seconds: number) {
+function screenFx(fx: "flash" | "swarm" | "knocked" | "zap", seconds: number) {
   if (fxHistory.push(fx) > 50) fxHistory.shift();
   const el = $("fx-" + fx);
   el.classList.remove("hidden", "on");
@@ -402,7 +437,7 @@ async function enterOnline(r: GameRoom) {
   $("lp-title").textContent = "LOBBY";
   show("lp-code-row");
   $("lp-code").textContent = r.roomId;
-  $("mode-badge").textContent = r.isHost ? "PHASE 4.6 / HOSTING" : "PHASE 4.6 / ONLINE";
+  $("mode-badge").textContent = r.isHost ? "PHASE 5A / HOSTING" : "PHASE 5A / ONLINE";
 
   r.onMessage(MSG.ANNOUNCE, (m: { text: string }) => toast(m.text));
   r.onDrop(() => {
@@ -455,7 +490,7 @@ function onRoomState(state: any) {
     const isOwner = state.ownerId === room.sessionId;
     $("lp-hint").textContent = state.phase === "lobby"
       ? (isOwner ? `${state.players.size}/4 bandits. Press ENTER (or ESC > START MATCH) when everyone's here.${room.isHost ? " You're hosting: the game runs in this tab, so keep it open!" : ""}` : "Waiting for the host to start. Explore meanwhile!")
-      : "Bring loot back to your fort's yard. It locks in after 10 s. Watch the traffic!";
+      : "Scavenge, get home before time's up, sell at the pawn shop. Richest after 3 cycles wins!";
   }
 }
 
@@ -522,7 +557,7 @@ document.addEventListener("pointerlockchange", () => {
     $("controls-hint").textContent = CONTROLS_TEXT;
   } else {
     input.clear();
-    if (screen === "playing" && $("settings").classList.contains("hidden")) showPause(true);
+    if (screen === "playing" && $("settings").classList.contains("hidden") && !overlayOpen) showPause(true);
   }
 });
 function enterDragLook() {
@@ -561,7 +596,7 @@ window.addEventListener("keydown", (e) => {
 });
 
 canvas.addEventListener("click", () => {
-  if (screen === "playing" && !input.locked && !input.dragLook) void resume();
+  if (screen === "playing" && !input.locked && !input.dragLook && !overlayOpen) void resume();
 });
 
 // ---------------------------------------------------------------------------
@@ -698,7 +733,7 @@ function updateHud(a: ArenaScene) {
       simple("CLICK", " Smash ", pt.name, pt.empty ? "already smashed - comes back later" : pt.kind === "car" ? "grab what's on the seat (car alarm!)" : "loot inside");
     } else if (!t && pt) {
       // "[CLICK] Bonk Gym Bro  - fights back!"
-      simple("CLICK", " Bonk ", pt.name, NPC_DEFS[pt.kind as keyof typeof NPC_DEFS]?.bigShot ? (pt.kind === "courier" ? "JACKPOT: armored (2 hits), drops the money bag. HUGE heat" : "JACKPOT: drops something valuable. BIG heat") : pt.kind === "bodyguard" ? "protects the boss: hits hard" : pt.kind === "cashier" ? "drops the float... and sets off the alarm" : pt.kind === "cop" ? "RESISTING ARREST: huge heat, 3 hits to drop them" : pt.fighter ? "FIGHTS BACK - land 2 hits before they do" : "might drop something");
+      simple("CLICK", " Bonk ", pt.name, pt.kind === "bodyguard" ? "protects the boss: hits hard" : pt.kind === "cashier" ? "drops the float... and sets off the alarm" : pt.kind === "cop" ? "RESISTING ARREST: huge heat, 3 hits to drop them" : pt.fighter ? "FIGHTS BACK - land 2 hits before they do" : "might drop something");
     } else if (!t) prompt.classList.add("hidden");
     else {
       const d = t.def;
@@ -706,12 +741,14 @@ function updateHud(a: ArenaScene) {
       const tags: string[] = [];
       if (d.size === "small") tags.push("POCKETABLE");
       if (d.heavy && d.size !== "giant") tags.push("HEAVY");
-      if (d.size === "giant") tags.push("NEEDS 2");
+      if (d.size === "giant") tags.push("DRAG IT (SLOW)");
+      if (d.money) tags.push("CASH: STRAIGHT TO YOUR WALLET");
       prompt.innerHTML = "";
       const locked = t.note.startsWith("LOCKED");
+      const raid = t.note.startsWith("RAID");
       const key = document.createElement("span"); key.className = "key"; key.textContent = locked ? "BANKED" : "E";
       const verb = document.createElement("span");
-      verb.textContent = t.note === "HELP CARRY" ? " Help carry " : locked ? ` in ${a.fortName(Number(t.note.split(":")[1]))}'s fort: ` : " Grab ";
+      verb.textContent = t.note === "TUG" ? " Tug of war for " : raid ? ` RAID ${a.fortName(Number(t.note.split(":")[1]))}'s fort: ` : locked ? ` in ${a.fortName(Number(t.note.split(":")[1]))}'s fort (safe until night): ` : " Grab ";
       const name = document.createElement("b"); name.textContent = d.name; name.style.color = RARITY_COLOR[rarity];
       const price = document.createElement("span"); price.className = "price"; price.textContent = d.mystery ? "  $???" : `  $${t.value}`;
       const meta = document.createElement("div"); meta.className = "meta";
@@ -750,15 +787,10 @@ function updateHud(a: ArenaScene) {
   }
   document.body.classList.toggle("jailed", jailed);
 
-  // big-shot tracker: "$$$ Millionaire  64 m" with an arrow pointing at them
-  const bs = a.bigShot;
-  const bsEl = $("bigshot");
-  bsEl.classList.toggle("hidden", !bs || jailed);
-  if (bs) {
-    $("bigshot-name").textContent = bs.name;
-    $("bigshot-dist").textContent = `${Math.round(bs.dist)} m`;
-    ($("bigshot-arrow") as HTMLElement).style.transform = `rotate(${bs.rel}rad)`;
-  }
+  // tug of war meter (your side on the right)
+  const tg = a.tug;
+  show("tug", !!tg);
+  if (tg) $("tug-knob").style.left = `${Math.round(50 + tg.balance * 50)}%`;
 
   updateMatchHud(a);
 
@@ -898,6 +930,14 @@ enterTitle();
     placeNpc: (kind: string, x: number, z: number, yaw = 0) => { if (local) return local.placeNpc(kind, x, z, yaw); room?.send("dbg", { op: "npc", kind, x, z, yaw }); return null; },
     clearNpcs: (x: number, z: number, r: number) => { if (local) local.world.npc.removeNear(x, z, r); else room?.send("dbg", { op: "clearNpcs", x, z, r }); },
     match: () => arena ? { ...arena.match, scores: arena.scores, home: arena.home() } : null,
+    // Phase 5A
+    shop: () => arena ? { open: overlayOpen === "shop", offers: shop.list, json: arena.shopJson, ready: arena.ready } : null,
+    shopAct: (act: any) => arena?.onAction?.(act),
+    night: () => arena ? { level: arena.nightLevel, body: document.body.classList.contains("night") } : null,
+    tug: () => arena?.tug ?? null,
+    overlay: () => overlayOpen,
+    fortView: () => arena?.fortView ?? false,
+    tugPress: () => arena?.onAction?.({ a: "tug" }),
     startMatch: () => startMatch(),
     triggerEvent: (kind: string) => { if (local) local.world.match.trigger(kind as never); else room?.send("dbg", { op: "event", kind }); },
     setTimeLeft: (t: number) => { if (local) { if (local.world.match.phase !== "lobby") local.world.match.timeLeft = t; } else room?.send("dbg", { op: "time", t }); },

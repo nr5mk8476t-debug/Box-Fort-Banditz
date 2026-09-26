@@ -22,6 +22,9 @@ export interface PlayerView extends Record<string, any> {
   lockSeed: number;
   /** seconds on the server's lock clock (since you were locked up) */
   lockT: number;
+  /** Phase 5A: pawn shop offers for your fort loot (JSON of OfferView[], "" = none); READY pressed */
+  shop: string;
+  ready: boolean;
 }
 export interface ItemView {
   type: string;
@@ -36,6 +39,8 @@ export interface ItemView {
   /** happy hour bonus (1 or 2) */
   mult: number;
   chute: boolean;
+  /** Phase 5A tug of war balance (-1 holder wins .. +1 challenger wins; 0 when no tug) */
+  tug: number;
 }
 
 /** Common "map-like" interface: both Map and Colyseus MapSchema provide forEach(value, key) and get(). */
@@ -96,6 +101,8 @@ export function playerView(w: World, id: string, out: Record<string, any> = {}):
   out.jailT = p.jailT > 0 ? Math.max(0.1, Math.ceil(p.jailT * 10) / 10) : 0;
   out.lockSeed = p.jailT > 0 ? p.lockSeed : 0;
   out.lockT = p.jailT > 0 ? Math.floor((w.time - p.lockT0) * 20) / 20 : 0;
+  out.shop = w.pawn.viewJson(id);
+  out.ready = w.match.ready.has(id);
   return out as PlayerView;
 }
 
@@ -108,6 +115,7 @@ export function itemView(w: World, id: string, out: Record<string, any> = {}): I
   out.mode = it.mode; out.holder = it.holder; out.holder2 = it.holder2; out.resting = b.resting;
   out.lock = it.locked ? 100 : it.fort >= 0 ? Math.min(99, Math.max(1, Math.floor((it.bankT / LOCK_TIME) * 100))) : 0;
   out.fort = it.fort; out.mult = it.mult; out.chute = it.chute;
+  out.tug = it.holder2 ? Math.round(it.tug * 100) / 100 : 0;
   return out as ItemView;
 }
 

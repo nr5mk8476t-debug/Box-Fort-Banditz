@@ -7,7 +7,7 @@ export type Material = "rubber" | "plastic" | "cloth" | "glass" | "metal" | "car
 export interface LootDef {
   type: string;
   name: string;
-  /** small = pocketable, big = both hands, giant = needs two players */
+  /** small = pocketable, big = both hands, giant = dragged along the ground (slowly) */
   size: SizeClass;
   rarity: Rarity;
   valueMin: number;
@@ -28,6 +28,8 @@ export interface LootDef {
   blurb: string;
   /** only ever dropped by pedestrians (never spawns loose in the city) */
   npcOnly?: boolean;
+  /** Phase 5A: small money (coins, cash, wallets) goes straight into your cash when you grab it */
+  money?: boolean;
 }
 
 export const LOOT: LootDef[] = [
@@ -49,8 +51,8 @@ export const LOOT: LootDef[] = [
   { type: "mystery_suitcase", name: "Mystery Suitcase", size: "big", rarity: "rare", valueMin: 20, valueMax: 200, mystery: true, weight: 0.2, material: "cloth", radius: 0.38, bounce: 0.15, spawnWeight: 2.5, blurb: "Locked. Rattling. Promising." },
 
   // ---- giant (two players) ------------------------------------------------------------
-  { type: "arcade_machine", name: "Broken Arcade Machine", size: "giant", rarity: "epic", valueMin: 180, valueMax: 320, weight: 0.4, heavy: true, material: "metal", radius: 0.65, bounce: 0.05, spawnWeight: 1, blurb: "High score held by a raccoon. Needs two." },
-  { type: "rubber_duck", name: "Giant Rubber Duck", size: "giant", rarity: "legendary", valueMin: 300, valueMax: 600, weight: 0.4, heavy: true, material: "rubber", radius: 0.75, bounce: 0.5, spawnWeight: 0.5, blurb: "Escaped from a parade. Needs two." },
+  { type: "arcade_machine", name: "Broken Arcade Machine", size: "giant", rarity: "epic", valueMin: 180, valueMax: 320, weight: 0.4, heavy: true, material: "metal", radius: 0.65, bounce: 0.05, spawnWeight: 1, blurb: "High score held by a raccoon. Drag it home." },
+  { type: "rubber_duck", name: "Giant Rubber Duck", size: "giant", rarity: "legendary", valueMin: 300, valueMax: 600, weight: 0.4, heavy: true, material: "rubber", radius: 0.75, bounce: 0.5, spawnWeight: 0.5, blurb: "Escaped from a parade. Drag it home." },
 
   // ---- pedestrian drops (Phase 2.5): "low but funny", with the occasional surprise ----
   { type: "half_sandwich", name: "Half a Sandwich", size: "small", rarity: "common", valueMin: 1, valueMax: 4, weight: 0, material: "cloth", radius: 0.12, bounce: 0.1, spawnWeight: 0, npcOnly: true, blurb: "The good half. Allegedly." },
@@ -64,14 +66,14 @@ export const LOOT: LootDef[] = [
   { type: "plastic_badge", name: "Plastic Security Badge", size: "small", rarity: "uncommon", valueMin: 8, valueMax: 18, weight: 0, material: "plastic", radius: 0.1, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Authority: very limited." },
   { type: "fancy_earbuds", name: "Fancy Earbuds", size: "small", rarity: "uncommon", valueMin: 20, valueMax: 45, weight: 0, material: "plastic", radius: 0.08, bounce: 0.4, spawnWeight: 0, npcOnly: true, blurb: "Still playing a motivational podcast." },
   { type: "bedazzled_phone", name: "Bedazzled Phone", size: "small", rarity: "uncommon", valueMin: 25, valueMax: 60, weight: 0, material: "glass", radius: 0.1, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "4 million followers. Still live." },
-  { type: "mystery_wallet", name: "Mystery Wallet", size: "small", rarity: "uncommon", valueMin: 5, valueMax: 80, mystery: true, weight: 0, material: "cloth", radius: 0.1, bounce: 0.1, spawnWeight: 0, npcOnly: true, blurb: "Could be anything. Probably receipts." },
+  { type: "mystery_wallet", name: "Mystery Wallet", size: "small", rarity: "uncommon", valueMin: 5, valueMax: 80, mystery: true, weight: 0, material: "cloth", radius: 0.1, bounce: 0.1, spawnWeight: 0, npcOnly: true, money: true, blurb: "Could be anything. Probably receipts." },
   // Phase 3.5: loot from shops, dumpsters, smashed props and parked cars (never spawns on the street by itself)
   { type: "phone_handset", name: "Payphone Handset", size: "small", rarity: "uncommon", valueMin: 12, valueMax: 30, weight: 0, material: "plastic", radius: 0.12, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Still has a dial tone. Somehow." },
   { type: "candy_bar", name: "Candy Bar", size: "small", rarity: "common", valueMin: 2, valueMax: 5, weight: 0, material: "plastic", radius: 0.1, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "Mostly nougat. Mostly." },
   { type: "soda_can", name: "Soda Can", size: "small", rarity: "common", valueMin: 2, valueMax: 4, weight: 0, material: "metal", radius: 0.09, bounce: 0.4, spawnWeight: 0, npcOnly: true, blurb: "Pre-shaken for your enjoyment." },
-  { type: "coin_pile", name: "Loose Change", size: "small", rarity: "common", valueMin: 3, valueMax: 12, weight: 0, material: "metal", radius: 0.1, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "Jingles with possibility." },
+  { type: "coin_pile", name: "Loose Change", size: "small", rarity: "common", valueMin: 3, valueMax: 12, weight: 0, material: "metal", radius: 0.1, bounce: 0.2, spawnWeight: 0, npcOnly: true, money: true, blurb: "Jingles with possibility." },
   { type: "newspaper", name: "Yesterday's Newspaper", size: "small", rarity: "common", valueMin: 1, valueMax: 3, weight: 0, material: "cloth", radius: 0.14, bounce: 0.05, spawnWeight: 0, npcOnly: true, blurb: "Headline: LOCAL BANDIT STRIKES AGAIN." },
-  { type: "cash_bundle", name: "Bundle of Cash", size: "small", rarity: "rare", valueMin: 40, valueMax: 90, weight: 0, material: "cloth", radius: 0.1, bounce: 0.1, spawnWeight: 0, npcOnly: true, blurb: "Smells like crime." },
+  { type: "cash_bundle", name: "Bundle of Cash", size: "small", rarity: "rare", valueMin: 40, valueMax: 90, weight: 0, material: "cloth", radius: 0.1, bounce: 0.1, spawnWeight: 0, npcOnly: true, money: true, blurb: "Smells like crime." },
   { type: "cash_register", name: "Cash Register", size: "big", rarity: "epic", valueMin: 150, valueMax: 260, weight: 0.5, heavy: true, material: "metal", radius: 0.38, bounce: 0.05, spawnWeight: 0, npcOnly: true, blurb: "The whole till. Very subtle." },
   { type: "laptop", name: "Laptop", size: "big", rarity: "rare", valueMin: 60, valueMax: 140, weight: 0.2, material: "plastic", radius: 0.3, bounce: 0.1, spawnWeight: 0, npcOnly: true, blurb: "37 tabs open. All recipes." },
   { type: "sunglasses", name: "Designer Sunglasses", size: "small", rarity: "uncommon", valueMin: 10, valueMax: 25, weight: 0, material: "plastic", radius: 0.1, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Designed by someone, definitely." },
@@ -92,7 +94,7 @@ export const LOOT: LootDef[] = [
   { type: "baguette", name: "Baguette", size: "small", rarity: "common", valueMin: 3, valueMax: 6, weight: 0, material: "cloth", radius: 0.14, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "Also a sword." },
   { type: "birthday_cake", name: "Birthday Cake", size: "big", rarity: "rare", valueMin: 40, valueMax: 90, weight: 0.1, material: "cloth", radius: 0.3, bounce: 0.05, spawnWeight: 0, npcOnly: true, blurb: "Happy birthday, Gary." },
   // Phase 3 event loot (never spawns normally): the airdrop crate parachutes into the plaza
-  { type: "airdrop_crate", name: "Airdrop Crate", size: "giant", rarity: "legendary", valueMin: 350, valueMax: 600, weight: 0.4, heavy: true, material: "cardboard", radius: 0.75, bounce: 0.05, spawnWeight: 0, npcOnly: true, blurb: "Care package from nobody. Needs two." },
+  { type: "airdrop_crate", name: "Airdrop Crate", size: "giant", rarity: "legendary", valueMin: 350, valueMax: 600, weight: 0.4, heavy: true, material: "cardboard", radius: 0.75, bounce: 0.05, spawnWeight: 0, npcOnly: true, blurb: "Care package from nobody. Drag it home." },
   { type: "rolecks_watch", name: "Rolecks Watch", size: "small", rarity: "epic", valueMin: 150, valueMax: 300, weight: 0, material: "metal", radius: 0.09, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Genuine imitation luxury." },
 ];
 
@@ -118,9 +120,12 @@ export function hasSparkle(def: LootDef): boolean {
   return def.rarity === "rare" || def.rarity === "epic" || def.rarity === "legendary" || !!def.mystery && def.rarity !== "common";
 }
 
+/** Phase 5A: giant items are dragged by ONE player, slowly. */
+export const GIANT_DRAG_MUL = 0.4;
+
 /** Speed multiplier while carrying (1 = no penalty). Giant items depend on carrier count. */
 export function carrySpeedMul(def: LootDef, carriers = 1): number {
-  if (def.size === "giant") return carriers >= 2 ? 0.65 : 0.3;
+  if (def.size === "giant") return carriers >= 2 ? 0 : GIANT_DRAG_MUL; // 2 = a tug of war: nobody moves
   return 1 - def.weight;
 }
 

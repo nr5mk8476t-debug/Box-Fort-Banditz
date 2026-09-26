@@ -19,6 +19,7 @@ import { PropRenderer } from "./propRenderer.ts";
 import { CarRenderer } from "./carRenderer.ts";
 import { CopCarRenderer } from "./copCarRenderer.ts";
 import { LockpickUI } from "./lockpickUI.ts";
+import { NightRenderer } from "./nightRenderer.ts";
 import {
   makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
   throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, type PropDef,
@@ -58,7 +59,7 @@ export interface ScoreLine { id: string; name: string; colorIdx: number; cash: n
 export interface HomeInfo { inside: boolean; dist: number; bearing: number; }
 
 /** Full-screen effects main.ts draws in HTML (camera flash, pigeon swarm, knocked-down vignette). */
-export type ScreenFx = "flash" | "swarm" | "knocked";
+export type ScreenFx = "flash" | "swarm" | "knocked" | "zap";
 
 /** Your inventory as displayed (server truth + instant local feedback). */
 export interface Inventory { hand: string; pockets: string[]; sel: number; }
@@ -131,7 +132,16 @@ export class ArenaScene {
   private serverInv: Inventory = { hand: "", pockets: ["", "", ""], sel: 0 };
   private optimistic: (Inventory & { until: number }) | null = null;
   private itemTypes = new Map<string, string>();
-  private itemViews = new Map<string, { value: number; mode: string; holder: string; holder2: string; lock: number; fort: number; mult: number }>();
+  private itemViews = new Map<string, { value: number; mode: string; holder: string; holder2: string; lock: number; fort: number; mult: number; tug: number }>();
+  // Phase 5A: night, tug of war, pawn shop, fort view
+  private night: NightRenderer;
+  private wires: { m: Mesh; t: number }[] = [];
+  /** tug of war you're in: balance from YOUR side (+1 = you win), or null */
+  tug: { balance: number; rival: string } | null = null;
+  /** pawn shop results (main.ts plays the reaction) */
+  onPawn: ((e: { item: string; r: string; offer: number }) => void) | null = null;
+  /** upgrades round: look at your fort instead of through your eyes */
+  fortView = false;
 
   // Phase 3: round loop
   match: MatchHud = { phase: "lobby", round: 0, rounds: ROUNDS, timeLeft: 0, results: "[]", evKind: "", evStage: "", evX: 0, evZ: 0, evR: 0, evT: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0 };
@@ -147,6 +157,9 @@ export class ArenaScene {
   /** Phase 4 jail: the lock-picking screen (shown while you're locked up) */
   readonly lock: LockpickUI;
   jailT = 0;
+  /** Phase 5A: my pawn shop offers (JSON), READY pressed */
+  shopJson = "";
+  ready = false;
   lockSeed = 0;
   lockT = 0;
   private sirenT = 0;
@@ -181,6 +194,7 @@ export class ArenaScene {
   punchTarget: PunchTarget | null = null;
   /** my heat 0..100 (wanted stars at 30 / 60 / 90) */
   heat = 0;
+  private firstWorld = true;
   /** Full-screen effect requests (main.ts draws them). */
   onScreenFx: ((fx: ScreenFx, seconds: number) => void) | null = null;
 
@@ -226,6 +240,7 @@ export class ArenaScene {
     }
 
     new CityRenderer(scene, this.arena, shadows);
+    this.night = new NightRenderer(scene, this.arena, hemi, sun, cam);
     // Only the static city casts shadows, so draw the shadow map once instead of every frame
     const sm = shadows?.getShadowMap();
     if (sm) sm.refreshRate = 0; // RenderTargetTexture.REFRESHRATE_RENDER_ONCE
@@ -333,7 +348,7 @@ export class ArenaScene {
       itemIds.add(id);
       this.items.sync(id, it, now);
       this.itemTypes.set(id, it.type);
-      this.itemViews.set(id, { value: it.value, mode: it.mode, holder: it.holder, holder2: it.holder2, lock: it.lock ?? 0, fort: it.fort ?? -1, mult: it.mult ?? 1 });
+      this.itemViews.set(id, { value: it.value, mode: it.mode, holder: it.holder, holder2: it.holder2, lock: it.lock ?? 0, fort: it.fort ?? -1, mult: it.mult ?? 1, tug: (it as any).tug ?? 0 });
     });
     this.items.retain(itemIds);
     for (const id of [...this.itemTypes.keys()]) if (!itemIds.has(id)) { this.itemTypes.delete(id); this.itemViews.delete(id); }
@@ -341,6 +356,10 @@ export class ArenaScene {
     // round loop + event state
     const mv = view as unknown as Record<string, any>;
     for (const k of Object.keys(this.match) as (keyof MatchHud)[]) if (mv[k] !== undefined) (this.match as any)[k] = mv[k];
+    const isNight = this.match.phase === "dusk" || this.match.phase === "night";
+    this.night.night = isNight;
+    this.npcs.night = isNight;
+    if (this.firstWorld) { this.firstWorld = false; this.night.snap(); }
     const scores: ScoreLine[] = [];
     view.players.forEach((p, id) => {
       scores.push({ id, name: p.name, colorIdx: p.colorIdx, cash: p.cash ?? 0, bank: p.bank ?? 0, connected: p.connected, me: id === myId });
@@ -358,6 +377,8 @@ export class ArenaScene {
         this.jailT = p.jailT ?? 0;
         this.lockSeed = p.lockSeed ?? 0;
         this.lockT = p.lockT ?? 0;
+        this.shopJson = p.shop ?? "";
+        this.ready = !!p.ready;
         // drop the optimistic guess once the server agrees (or it expires)
         const o = this.optimistic;
         if (o && (now > o.until || (o.hand === this.serverInv.hand && o.pockets.join() === this.serverInv.pockets.join()))) this.optimistic = null;
@@ -410,7 +431,7 @@ export class ArenaScene {
             this.optimistic = null;
             if (e.reason !== "cooldown") {
               sfx.whiff();
-              this.onFeedback?.(e.reason === "taken" ? "Too slow!" : e.reason === "far" ? "Can't reach!" : e.reason === "locked" ? "Banked in a fort. Locked!" : e.reason === "full" ? "Pockets full!" : "Hands full!", "bad");
+              this.onFeedback?.(e.reason === "taken" ? "Too slow!" : e.reason === "far" ? "Can't reach!" : e.reason === "locked" ? "Banked in a fort. Locked until NIGHT!" : e.reason === "full" ? "Pockets full!" : "Hands full!", "bad");
             }
           }
           break;
@@ -519,7 +540,10 @@ export class ArenaScene {
           break;
         }
         case "lost":
-          if (e.p === me) { sfx.lost(); this.onFeedback?.(`You lost ${e.count} item${e.count > 1 ? "s" : ""} worth $${e.value}. Get home next time!`, "bad"); }
+          if (e.p === me) {
+            sfx.lost();
+            this.onFeedback?.(e.unsold ? `${e.count} unsold item${e.count > 1 ? "s" : ""} went in the dumpster.` : `You lost ${e.count} item${e.count > 1 ? "s" : ""}. Get home before time's up!`, "bad");
+          }
           break;
         case "cityEvent": this.onCityEvent(e.kind, e.stage, e.detail); break;
         case "swept": { if (gainAt(e.x, 0.5, e.z) > 0.1) this.puff(e.x, 0.4, e.z, 0.8); break; }
@@ -605,17 +629,55 @@ export class ArenaScene {
         case "bigShot": {
           const def = NPC_DEFS[e.kind];
           const title = def.bigShot?.title ?? def.name.toUpperCase();
-          if (e.stage === "arrive") { sfx.bigShot(); this.onBanner?.(`${title} IS IN TOWN!`, `Look for the $$$ near ${areaName(e.x, e.z)}. A jackpot... and a LOT of heat.`, "good"); }
-          else if (e.stage === "hit") {
-            if (e.by === me) this.onFeedback?.(e.kind === "courier" ? "Armored courier! Knock them out for the money bag!" : "JACKPOT! Grab it and RUN (the cops are coming)", "good");
-            else { const name = this.scores.find((x) => x.id === e.by)?.name ?? "Someone"; this.onFeedback?.(`${name} is robbing the ${def.name.toLowerCase()}!`, "info"); }
-          } else if (e.stage === "gone") this.onFeedback?.(`The ${def.name.toLowerCase()} left town.`, "info");
+          // (Blake, Phase 5A: big shots are never announced or highlighted: spot them yourself)
+          if (e.stage === "hit" && e.by === me) this.onFeedback?.(e.kind === "courier" ? "Armored! Keep swinging!" : `You robbed the ${def.name.toLowerCase()}! RUN.`, "good");
+          void title; void areaName;
           break;
         }
         case "copCar":
           if (e.p === me && e.stage === "dispatch") { sfx.siren(1); this.onBanner?.("COP CAR INCOMING!", "Max heat. Get off the streets and out of sight!", "bad"); }
           if (e.stage === "deploy" && e.p === me) sfx.cellDoor(); // car doors slam
           break;
+        // ---- Phase 5A
+        case "cash":
+          if (e.p === me) {
+            sfx.cash();
+            const p = this.items.drawnPos(e.item) ?? { x: this.cur.x, y: this.cur.y + 1, z: this.cur.z };
+            this.pop("+$" + e.value, p.x, p.y + 0.6, p.z, "#7fe07a");
+            this.onFeedback?.(`+$${e.value} cash (${lootDef(e.type).name})`, "good");
+          }
+          break;
+        case "raid":
+          if (e.owner === me) { sfx.raidAlarm(); this.onBanner?.("YOUR FORT IS BEING RAIDED!", "Somebody is stealing your banked loot. Get home!", "bad"); }
+          else if (e.p === me) { const o = this.scores.find((x) => x.id === e.owner)?.name ?? "a rival"; this.onFeedback?.(`Raiding ${o}'s fort! Their alarm is going off...`, "good"); }
+          break;
+        case "tug":
+          if (e.stage === "start") {
+            const it = this.itemViews.get(e.item);
+            if (it && (it.holder === me || it.holder2 === me)) { sfx.tugStart(); this.onFeedback?.("TUG OF WAR! Mash E!", "bad"); }
+          } else if (e.stage === "win") {
+            if (e.winner === me) { sfx.tugWin(); this.onFeedback?.("You won the tug of war!", "good"); }
+            else if (e.loser === me) { sfx.lost(); this.addTrauma(0.4); this.onFeedback?.("Lost the tug of war!", "bad"); }
+          }
+          break;
+        case "pawn":
+          if (e.p === me) this.onPawn?.({ item: e.item, r: e.r, offer: e.offer });
+          break;
+        case "taser": {
+          const q = this.npcs.pos(e.npc);
+          if (e.stage === "aim") {
+            if (e.p === me) { sfx.taserAim(); this.onFeedback?.("TASER! Dodge (Q) or get behind something!", "bad"); }
+          } else {
+            const g = q ? gainAt(q.x, q.y, q.z) : 0;
+            if (e.stage === "hit") {
+              const tgt = e.p === me ? { x: this.cur.x, y: this.cur.y + 1.1, z: this.cur.z } : this.remotes.anchor(e.p);
+              if (q && tgt) this.wire(q.x, q.y + 1.2, q.z, tgt.x, (tgt as any).y + (e.p === me ? 0 : 1.1), tgt.z);
+              if (e.p === me) { sfx.zap(1); this.addTrauma(0.7); this.onScreenFx?.("zap", 2); this.onFeedback?.("ZAPPED! You dropped what you were holding.", "bad"); }
+              else if (g > 0.1) sfx.zap(g);
+            } else if (e.p === me) { sfx.whiff(); this.onFeedback?.("Dodged the taser!", "good"); }
+          }
+          break;
+        }
         case "flash":
           if (e.p === me) { sfx.cameraFlash(); this.onScreenFx?.("flash", 1.2); this.onFeedback?.("Say cheese! (the tourist got a photo)", "info"); }
           break;
@@ -631,10 +693,18 @@ export class ArenaScene {
 
   private onRound(phase: string, round: number) {
     switch (phase) {
-      case "intro": sfx.roundIntro(); this.onBanner?.(`ROUND ${round} OF ${this.match.rounds}`, "Get ready to scavenge...", "info"); break;
+      case "intro": sfx.roundIntro(); this.onBanner?.(`CYCLE ${round} OF ${this.match.rounds}`, "Scavenge by day, raid by night, sell at the pawn shop", "info"); break;
       case "scavenge": sfx.roundStart(); this.onBanner?.("SCAVENGE!", "Bring loot home: it banks in your fort after 10 s", "good"); break;
-      case "hurry": sfx.hurry(); this.onBanner?.("30 SECONDS!", "Get home, or lose whatever you're carrying!", "bad"); break;
-      case "tally": sfx.timeUp(); this.onBanner?.("TIME'S UP!", "", "info"); break;
+      case "hurry":
+        sfx.hurry();
+        if (this.match.phase === "night") this.onBanner?.("15 SECONDS!", "Get home before sunrise!", "bad");
+        else this.onBanner?.("30 SECONDS!", "Get home, or lose whatever you're carrying!", "bad");
+        break;
+      case "dusk": sfx.timeUp(); setTimeout(() => sfx.nightfall(), 600); this.onBanner?.("NIGHT FALLS...", "Scarce loot worth DOUBLE. Forts can be RAIDED. Twice the cops.", "info"); break;
+      case "night": sfx.roundStart(); this.onBanner?.("NIGHT SCAVENGE!", "1 minute. Raid a fort or grab the x2 loot. Guard your own!", "good"); break;
+      case "dawn": sfx.timeUp(); this.onBanner?.("SUNRISE", "Time to sell your loot at the pawn shop", "info"); break;
+      case "shop": sfx.shopBell(); break;
+      case "upgrades": sfx.uiClick(); break;
       case "over": sfx.roundIntro(); break;
     }
   }
@@ -706,7 +776,7 @@ export class ArenaScene {
   /** Round countdown ticks, garbage truck rumble. */
   private matchSounds(dt: number) {
     const m = this.match;
-    if (m.phase === "scavenge" && m.timeLeft <= 10 && m.timeLeft > 0) {
+    if ((m.phase === "scavenge" || m.phase === "night") && m.timeLeft <= 10 && m.timeLeft > 0) {
       const sec = Math.ceil(m.timeLeft);
       if (sec !== this.lastTickSec) { this.lastTickSec = sec; sfx.tick(sec <= 3); }
     } else this.lastTickSec = -1;
@@ -794,6 +864,7 @@ export class ArenaScene {
       this.onAction?.({ a: "use", prop: r.id });
       return;
     }
+    if (a === "grab" && this.tug) { this.onAction?.({ a: "tug" }); sfx.tugPull(); this.viewmodel.kick(0.25); return; }
     if (a === "grab") this.updateLookTarget();
     if (a === "grab" && !this.lookTarget && this.useTarget) {
       const u = this.useTarget;
@@ -806,9 +877,11 @@ export class ArenaScene {
       const t = this.lookTarget;
       this.logAction("grab-target:" + (t?.id ?? "none"));
       if (!t) return;
-      if (t.note.startsWith("LOCKED")) { sfx.full(); this.onFeedback?.("Banked in a fort. Locked!", "info"); return; }
+      if (t.note.startsWith("LOCKED")) { sfx.full(); this.onFeedback?.("Banked in a fort. Locked until NIGHT!", "info"); return; }
       const size = t.def.size;
-      if (size === "small" && inv.pockets.includes("")) {
+      if (t.def.money) {
+        // cash goes straight into your wallet (the server confirms with a "cash" event)
+      } else if (size === "small" && inv.pockets.includes("")) {
         const pockets = [...inv.pockets];
         pockets[pockets.indexOf("")] = t.id;
         this.optimistic = { ...inv, pockets, until: now + hold };
@@ -903,12 +976,13 @@ export class ArenaScene {
       if (iv.mode === "pocket") continue;
       if (id === inv.hand || inv.pockets.includes(id)) continue;
       let note = "";
-      if (iv.lock >= 100) note = "LOCKED:" + iv.fort;
+      const night = this.match.phase === "night" || this.match.phase === "dusk";
+      if (iv.lock >= 100) note = night ? (iv.fort === this.myColorIdx ? "" : "RAID:" + iv.fort) : "LOCKED:" + iv.fort;
       if (iv.mode === "held") {
         if (this.npcs.kindOf(iv.holder)) continue; // being carried off by a raccoon: bonk it instead
-        // only a giant item with a free second handle can be joined
+        // a rival dragging a giant item: grab the other end for a tug of war
         if (def.size !== "giant" || iv.holder2 || iv.holder === this.myId) continue;
-        note = "HELP CARRY";
+        note = "TUG";
       }
       const p = this.items.drawnPos(id);
       if (!p) continue;
@@ -1091,6 +1165,8 @@ export class ArenaScene {
     const lieBack = pose === "knocked" ? -0.55 : 0;
     this.lie += (lieBack - this.lie) * ease(8);
     this.camera.rotation.set(safePitch(this.input.pitch + shakeP + this.lie), this.input.yaw + shakeY, clampAbs(this.roll + shakeR, MAX_ROLL));
+    if (this.fortView) this.aimAtFort();
+    this.viewmodel.setVisible(!this.fortView);
     if (!Number.isFinite(this.camera.position.y) || !Number.isFinite(this.camera.rotation.z) || !Number.isFinite(this.camera.rotation.x)) {
       // last line of defence: never leave the camera broken
       this.camera.position.set(px, py + PLAYER.eyeHeight, pz);
@@ -1123,6 +1199,13 @@ export class ArenaScene {
       cam: this.camera.position,
     });
     this.npcs.update(now, dt, this.camera);
+    this.night.update(dt);
+    this.updateWires(dt);
+    // tug of war (from my side: +1 = I'm winning)
+    const hv = hand ? this.itemViews.get(hand) : undefined;
+    if (hv && hv.mode === "held" && hv.holder2 && (hv.holder === myId || hv.holder2 === myId)) {
+      this.tug = { balance: hv.holder2 === myId ? hv.tug : -hv.tug, rival: hv.holder2 === myId ? hv.holder : hv.holder2 };
+    } else this.tug = null;
     this.events.update(this.match, dt);
     this.propsR.update(dt);
     this.cars.update(dt);
@@ -1182,6 +1265,45 @@ export class ArenaScene {
   }
 
   private addTrauma(t: number) { this.trauma = Math.min(1, this.trauma + t); }
+
+  /** Upgrades round: a slow orbit around your fort. */
+  private aimAtFort() {
+    const f = this.arena.forts?.find((x) => x.slot === this.myColorIdx);
+    if (!f) return;
+    // stand out on the street side of the yard, looking back at the fort
+    const ox = f.padX - f.backX, oz = f.padZ - f.backZ, l = Math.max(0.01, Math.hypot(ox, oz));
+    const sway = Math.sin(this.time * 0.25) * 0.35;
+    const dirx = (ox / l) * Math.cos(sway) - (oz / l) * Math.sin(sway), dirz = (ox / l) * Math.sin(sway) + (oz / l) * Math.cos(sway);
+    const cx = f.x + dirx * 11, cz = f.z + dirz * 11, cy = 5.5;
+    this.camera.position.set(cx, cy, cz);
+    const tx = f.x - cx, tz = f.z - cz, ty = 1.2 - cy;
+    this.camera.rotation.set(Math.atan2(-ty, Math.hypot(tx, tz)), Math.atan2(tx, tz), 0);
+  }
+
+  /** The taser's wires: a jagged line from the cop to whoever got zapped. */
+  private wire(ax: number, ay: number, az: number, bx: number, by: number, bz: number) {
+    const pts: Vector3[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const k = i / 8, j = i === 0 || i === 8 ? 0 : 0.12;
+      pts.push(new Vector3(ax + (bx - ax) * k + (Math.random() - 0.5) * j, ay + (by - ay) * k + (Math.random() - 0.5) * j, az + (bz - az) * k + (Math.random() - 0.5) * j));
+    }
+    const m = MeshBuilder.CreateLines("wire", { points: pts }, this.scene);
+    m.color = Color3.FromHexString("#8fe3ff");
+    m.isPickable = false;
+    this.wires.push({ m, t: 0.6 });
+  }
+
+  private updateWires(dt: number) {
+    for (let i = this.wires.length - 1; i >= 0; i--) {
+      const w = this.wires[i];
+      w.t -= dt;
+      w.m.visibility = Math.max(0, w.t / 0.6) * (Math.random() > 0.3 ? 1 : 0.4);
+      if (w.t <= 0) { w.m.dispose(); this.wires.splice(i, 1); }
+    }
+  }
+
+  /** Test hook: is it night on this screen, and how dark (0..1)? */
+  get nightLevel() { return this.night.level; }
 
   hud(): HudState {
     return { stamina: this.cur.stamina, winded: this.cur.winded, dodgeReady: this.cur.dodgeCd <= 0 && this.cur.dodgeT <= 0 && this.cur.stamina >= PLAYER.dodgeStamina, pose: movePose(this.cur) };

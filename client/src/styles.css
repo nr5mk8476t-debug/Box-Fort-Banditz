@@ -136,7 +136,7 @@ h2 { margin: 0; font: 400 28px "Bungee", sans-serif; }
 .fatal { position: fixed; left: 16px; right: 16px; bottom: 48px; z-index: 100; background: #b8321c; color: #fff; font: 800 15px "Nunito", sans-serif; padding: 10px 14px; border: 3px solid var(--ink); border-radius: 10px; box-shadow: var(--shadow); white-space: pre-wrap; }
 
 /* Stamina bar under the crosshair: fades out when full */
-.stamina { position: absolute; left: 50%; top: calc(50% + 34px); width: 120px; height: 12px; margin-left: -60px; background: rgba(27, 20, 32, 0.55); border: 2px solid var(--ink); border-radius: 7px; overflow: visible; transition: opacity 0.4s; }
+.stamina { position: absolute; left: 22px; bottom: 44px; width: 180px; height: 14px; background: rgba(27, 20, 32, 0.55); border: 2px solid var(--ink); border-radius: 7px; overflow: visible; transition: opacity 0.4s; }
 .stamina.full { opacity: 0; }
 #stamina-fill { height: 100%; width: 100%; background: #7fe07a; border-radius: 4px; }
 .stamina.winded #stamina-fill { background: var(--danger); }
@@ -260,8 +260,58 @@ h2 { margin: 0; font: 400 28px "Bungee", sans-serif; }
 body.jailed #prompt, body.jailed #charge, body.jailed .crosshair { display: none !important; }
 
 /* ---- Phase 4.5: big-shot tracker ---- */
-.bigshot { position: absolute; top: 148px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 12px;
+.bigshot-removed { position: absolute; top: 148px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 12px;
   background: rgba(27, 20, 32, 0.6); border: 2px solid #ffcf3a; color: #fff; font: 900 15px "Nunito", sans-serif; text-shadow: 1px 1px 0 var(--ink); pointer-events: none; }
 .bigshot.hidden { display: none; }
 .bigshot .bs-cash { font: 400 16px "Bungee", sans-serif; color: #ffcf3a; }
 .bigshot .bs-arrow { display: inline-block; color: #ffcf3a; transition: transform 0.1s linear; }
+
+/* ---- Phase 5A ---- */
+.fx-zap { background: rgba(120, 200, 255, 0.28); opacity: 0; }
+.fx-zap.on { animation: zap 2s steps(12) forwards; }
+.fx-zap .zap-text { position: absolute; left: 50%; top: 26%; transform: translateX(-50%) rotate(-6deg); font: 400 56px "Bungee", sans-serif; color: #bff0ff; text-shadow: 3px 3px 0 var(--ink); }
+@keyframes zap { 0% { opacity: 1; } 10% { opacity: 0.2; } 20% { opacity: 0.9; } 35% { opacity: 0.3; } 50% { opacity: 0.8; } 100% { opacity: 0; } }
+.tug { position: absolute; left: 50%; top: calc(50% + 110px); transform: translateX(-50%); text-align: center; color: #fff; font: 400 20px "Bungee", sans-serif; text-shadow: 2px 2px 0 var(--ink); }
+.tug .key { display: inline-block; padding: 0 8px; background: var(--paper); color: var(--ink); border: 2px solid var(--ink); border-radius: 5px; text-shadow: none; animation: mash 0.18s ease-in-out infinite alternate; }
+@keyframes mash { from { transform: translateY(0); } to { transform: translateY(3px); } }
+.tug-bar { position: relative; width: 300px; height: 22px; margin: 6px auto 0; border: 3px solid var(--ink); border-radius: 12px; background: linear-gradient(90deg, #e74c3c 0 50%, #7fe07a 50% 100%); }
+.tug-bar span { position: absolute; top: 26px; font-size: 11px; }
+.tug-them { left: 0; } .tug-you { right: 0; }
+.tug-knob { position: absolute; top: -6px; left: 50%; width: 14px; height: 28px; margin-left: -7px; background: var(--paper); border: 3px solid var(--ink); border-radius: 5px; transition: left 0.1s linear; }
+.overlay { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(27, 20, 32, 0.45); }
+.overlay.side { justify-content: flex-start; padding-left: 3vw; background: linear-gradient(90deg, rgba(27,20,32,0.55), rgba(27,20,32,0) 55%); }
+.overlay.hidden { display: none; }
+.shop-card { width: min(680px, 94vw); max-height: 88vh; display: flex; flex-direction: column; gap: 10px; }
+.shop-head { display: flex; align-items: center; gap: 14px; }
+.shop-title { flex: 1; }
+.shop-title h2 { margin: 0; font: 400 26px "Bungee", sans-serif; }
+.sal-name { font: 800 13px "Nunito", sans-serif; opacity: 0.7; }
+.sal-line { font: 800 16px "Nunito", sans-serif; margin-top: 4px; min-height: 22px; }
+.sal-face { width: 86px; height: 86px; flex: none; }
+.shop-timer { font: 400 24px "Bungee", sans-serif; }
+.shop-timer.warn { color: #c0392b; }
+.shop-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
+.shop-empty { text-align: center; font: 800 16px "Nunito", sans-serif; padding: 18px; opacity: 0.8; }
+.offer { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; padding: 6px 10px; border: 2px solid var(--ink); border-radius: 8px; background: rgba(255,255,255,0.55); font: 800 15px "Nunito", sans-serif; }
+.offer .nm b { font-family: "Bungee", sans-serif; font-weight: 400; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink); }
+.offer .worth { font-size: 12px; opacity: 0.75; display: block; }
+.offer .mood { font-size: 11px; font-family: "Bungee", sans-serif; padding: 2px 6px; border-radius: 6px; border: 2px solid var(--ink); }
+.offer .mood.eager { background: #7fe07a; } .offer .mood.thinking { background: #ffe14a; } .offer .mood.sweaty { background: #ff9a3c; }
+.offer .mood.offended { background: #e74c3c; color: #fff; } .offer .mood.done { background: #d8cfc0; }
+.offer .price { font: 400 20px "Bungee", sans-serif; color: #2f8f3a; min-width: 70px; text-align: right; }
+.offer .btns { display: flex; gap: 6px; }
+.offer .btn { font-size: 13px; padding: 6px 10px; }
+.offer.sold { opacity: 0.6; background: rgba(127,224,122,0.35); }
+.offer.flash-up { animation: rowUp 0.5s; } .offer.flash-bad { animation: rowBad 0.5s; }
+@keyframes rowUp { from { background: #7fe07a; } } @keyframes rowBad { from { background: #e74c3c; } }
+.shop-foot { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.shop-cash { margin-right: auto; font: 400 16px "Bungee", sans-serif; }
+.shop-cash b { color: #2f8f3a; font-weight: 400; }
+.shop-note { margin: 0; }
+.upg-card { width: min(380px, 92vw); display: flex; flex-direction: column; gap: 10px; }
+.upg-card h2 { margin: 0; font: 400 26px "Bungee", sans-serif; }
+.upg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.upg { border: 2px dashed var(--ink); border-radius: 8px; padding: 8px; opacity: 0.6; display: flex; flex-direction: column; gap: 4px; font: 700 12px "Nunito", sans-serif; }
+.upg b { font: 400 13px "Bungee", sans-serif; }
+.upg-foot { display: flex; justify-content: space-between; align-items: center; }
+body.night .match-hud .mh-time { color: #bfd0ff; }

@@ -27,6 +27,8 @@ export const PlayerState = schema({
   jailT: t.float32(),
   lockSeed: t.number(),
   lockT: t.float32(),
+  shop: t.string(),
+  ready: t.boolean(),
   ...moveFields,
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState> & Record<string, any>;
@@ -46,6 +48,7 @@ export const ItemState = schema({
   fort: t.int8(),
   mult: t.uint8(),
   chute: t.boolean(),
+  tug: t.float32(),
 }, "ItemState");
 export type ItemState = SchemaType<typeof ItemState> & Record<string, any>;
 

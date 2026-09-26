@@ -3,14 +3,14 @@
 // walk, idle, flee (arms up, running), stunned (spin + stars), chase (angry, red "!"),
 // windup (arm pulled back), ko (flat on the ground + stars), film (phone up), gloat, huff.
 // Poses ease toward targets (same animation approach as the players), so they never get stuck.
-import { Scene, MeshBuilder, Mesh, TransformNode, type Camera } from "./babylon.ts";
+import { Scene, MeshBuilder, Mesh, TransformNode, StandardMaterial, Color3, type Camera } from "./babylon.ts";
 import { toon, ink, textTexture, unlitTextured, bakeGroup } from "./look.ts";
 import { NPC_DEFS, type NpcView } from "@bfb/shared";
 
 const INTERP_MS = 110;
 const DRAW_DISTANCE = 60;
 const COP_DRAW_DISTANCE = 90; // you want to see them coming
-const BIGSHOT_DRAW_DISTANCE = 130; // and you want to see the $$$ from across town
+const BIGSHOT_DRAW_DISTANCE = 90; // (no $$$ any more, Blake 5A: spot them by their fancy clothes)
 
 interface Snap { t: number; x: number; y: number; z: number; yaw: number; }
 
@@ -49,7 +49,11 @@ interface Vis {
   stars: TransformNode;
   bang: Mesh;
   huh: Mesh;
-  cash: Mesh | null;
+  /** big shots: no marker (Blake 5A), but the renderer still knows who they are */
+  big: boolean;
+  /** cops: flashlight beam (night) + taser laser (aiming) */
+  beam: Mesh | null;
+  laser: Mesh | null;
   bubble: Mesh | null;
   bubbleT: number;
   snaps: Snap[];
@@ -66,8 +70,27 @@ export class NpcRenderer {
   private map = new Map<string, Vis>();
   private bubbleTex = new Map<string, ReturnType<typeof unlitTextured>>();
   private time = 0;
+  /** night: cops carry flashlights */
+  night = false;
+  private beamM: StandardMaterial | null = null;
+  private laserM: StandardMaterial | null = null;
 
   constructor(private scene: Scene) {}
+
+  private beamMat() {
+    if (!this.beamM) {
+      const m = (this.beamM = new StandardMaterial("beamMat", this.scene));
+      m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#fff3c4"); m.alpha = 0.16; m.backFaceCulling = false;
+    }
+    return this.beamM;
+  }
+  private laserMat() {
+    if (!this.laserM) {
+      const m = (this.laserM = new StandardMaterial("laserMat", this.scene));
+      m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#ff2030");
+    }
+    return this.laserM;
+  }
 
   private build(id: string, v: NpcView): Vis {
     const sc = this.scene;
@@ -177,13 +200,21 @@ export class NpcRenderer {
     huh.parent = root; huh.position.y = 2.25; huh.billboardMode = Mesh.BILLBOARDMODE_ALL; huh.isPickable = false;
     huh.material = unlitTextured(sc, textTexture(sc, "?", { w: 128, h: 160, fg: "#ffcf3a", stroke: "#1b1420" }), "huh");
     huh.setEnabled(false);
-    // big shots: a floating gold $$$ you can spot from across town
-    let cash: Mesh | null = null;
-    if (NPC_DEFS[v.kind as keyof typeof NPC_DEFS]?.bigShot) {
-      cash = MeshBuilder.CreatePlane("bigshot", { width: 1.3, height: 0.5 }, sc);
-      cash.parent = root; cash.position.y = 2.75; cash.billboardMode = Mesh.BILLBOARDMODE_ALL; cash.isPickable = false;
-      cash.material = unlitTextured(sc, textTexture(sc, "$$$", { w: 384, h: 160, fg: "#ffcf3a", stroke: "#1b1420" }), "bigshot");
-      cash.renderingGroupId = 1;
+    const big = !!NPC_DEFS[v.kind as keyof typeof NPC_DEFS]?.bigShot;
+    // cops: a flashlight beam at night (a soft cone in front of them) and a red taser laser
+    let beam: Mesh | null = null, laser: Mesh | null = null;
+    if (v.kind === "cop") {
+      beam = MeshBuilder.CreateCylinder("beam", { diameterTop: 3.2, diameterBottom: 0.12, height: 9, tessellation: 16, cap: Mesh.NO_CAP }, sc);
+      beam.rotation.x = Math.PI / 2 + 0.12; // pointing forward, slightly down
+      beam.position.set(0.3, 1.3, 4.6);
+      beam.parent = root; beam.isPickable = false;
+      beam.material = this.beamMat();
+      beam.setEnabled(false);
+      laser = MeshBuilder.CreateBox("laser", { width: 0.02, height: 0.02, depth: 6.5 }, sc);
+      laser.position.set(0.25, 1.25, 3.3);
+      laser.parent = root; laser.isPickable = false;
+      laser.material = this.laserMat();
+      laser.setEnabled(false);
     }
     if (v.kind === "raccoon") {
       // bandit mask, round ears, striped tail; the whole raccoon is drawn at about half size
@@ -205,7 +236,7 @@ export class NpcRenderer {
     // merge each moving body part into one mesh (big draw-call saving with a crowd on screen)
     for (const g of [pivot, head, legL, legR, armL, armR, prop, stars]) if (g) bakeGroup(sc, g, g === stars ? 0 : 0.022);
     return {
-      root, pivot, head, armL, armR, legL, legR, prop, stars, bang, huh, cash, bubble: null, bubbleT: 0,
+      root, pivot, head, armL, armR, legL, legR, prop, stars, bang, huh, big, beam, laser, bubble: null, bubbleT: 0,
       snaps: [], view: { ...v }, phase: Math.random() * 6, lastX: v.x, lastZ: v.z,
       lean: 0, armUp: 0, spin: 0, flat: 0, windup: 0, phoneUp: 0, enabled: true, hitT: 0, slapT: 0, speed: 0, phase0: Math.random() * 6,
     };
@@ -265,7 +296,7 @@ export class NpcRenderer {
   /** Big shots in town (latest synced position, even when not drawn): for the HUD tracker. */
   bigShots(): { id: string; kind: string; x: number; z: number; robbed: boolean }[] {
     const out: { id: string; kind: string; x: number; z: number; robbed: boolean }[] = [];
-    for (const [id, n] of this.map) if (n.cash && n.snaps.length) { const s = n.snaps[n.snaps.length - 1]; out.push({ id, kind: n.view.kind, x: s.x, z: s.z, robbed: n.view.robbed }); }
+    for (const [id, n] of this.map) if (n.big && n.snaps.length) { const s = n.snaps[n.snaps.length - 1]; out.push({ id, kind: n.view.kind, x: s.x, z: s.z, robbed: n.view.robbed }); }
     return out;
   }
 
@@ -289,7 +320,7 @@ export class NpcRenderer {
       while (dy < -Math.PI) dy += Math.PI * 2;
       const yaw = a.yaw + dy * k;
       // distance culling (keeps the crowd affordable)
-      const far = Math.hypot(x - cam.x, z - cam.z) > (n.cash ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" ? COP_DRAW_DISTANCE : DRAW_DISTANCE);
+      const far = Math.hypot(x - cam.x, z - cam.z) > (n.big ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" ? COP_DRAW_DISTANCE : DRAW_DISTANCE);
       if (far === n.enabled) { n.enabled = !far; n.root.setEnabled(!far); }
       const speed = dt > 0 ? Math.hypot(x - n.lastX, z - n.lastZ) / dt : 0;
       n.lastX = x; n.lastZ = z;
@@ -302,7 +333,7 @@ export class NpcRenderer {
         : st === "sneak" ? 0.45 : st === "escape" || st === "scram" ? 0.3 : 0;
       const tArmUp = st === "flee" || st === "escape" || st === "cower" ? 1 : st === "gloat" ? 0.8 : 0; // raccoons hold loot over their heads, cashiers put their hands up
       const tFlat = st === "ko" ? 1 : 0;
-      const tWind = st === "windup" ? 1 : 0;
+      const tWind = st === "windup" || st === "aim" ? 1 : 0;
       const tPhone = st === "film" || (n.view.kind === "influencer" && st === "idle") ? 1 : 0;
       n.lean += (tLean - n.lean) * f; n.armUp += (tArmUp - n.armUp) * f; n.flat += (tFlat - n.flat) * f;
       n.windup += (tWind - n.windup) * (1 - Math.exp(-dt * 20)); n.phoneUp += (tPhone - n.phoneUp) * f;
@@ -353,7 +384,8 @@ export class NpcRenderer {
       if (dazed) { n.stars.rotation.y += dt * 5; n.stars.position.y = 2.05 - n.flat * 1.6; }
       n.bang.setEnabled(st === "chase" || st === "windup");
       n.huh.setEnabled(st === "search");
-      if (n.cash) { n.cash.setEnabled(!n.view.robbed); n.cash.position.y = 2.75 + Math.sin(this.time * 3 + n.phase0) * 0.12; }
+      if (n.beam) n.beam.setEnabled(this.night && st !== "ko" && st !== "stunned");
+      if (n.laser) n.laser.setEnabled(st === "aim" && Math.sin(this.time * 40) > -0.6);
       if (st === "search") n.head.rotation.y = Math.sin(this.time * 2.2 + n.phase0) * 0.7; else if (n.head.rotation.y !== 0) n.head.rotation.y *= Math.exp(-dt * 8);
       if (n.bubble) { n.bubbleT -= dt; if (n.bubbleT <= 0) { n.bubble.dispose(); n.bubble = null; } }
     }

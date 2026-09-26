@@ -9,6 +9,11 @@
 // Punch a cop and they stagger (big heat); three punches and they're out for a few seconds.
 // LOSING THEM: cops need line of sight. Duck behind buildings, into alleys, crouch behind cars.
 // If no cop has seen you for 4 s your heat cools fast; at 0 stars every cop gives up.
+// NIGHT (Phase 5A): twice the cops per star (2/4/6), cop cars from 2 stars, flashlights (they see
+// further), and heat builds twice as fast (World.addHeat).
+// TASERS (Phase 5A) at 3 stars: a cop within 6 m who can see you stops, aims (a red laser: your
+// warning) and fires. Dodge (Q) or get behind cover to make it miss. Hit = ~2 s stunned, you drop
+// what's in your hands, and any cop who reaches you cuffs you.
 // BUSTED: everything you carry is confiscated (gone), heat resets, 30 s in a cell at the station.
 // JAIL: pick the lock (lockpick.ts) to break out early into the back alley (still wanted, 1 star),
 // or serve the 30 s and walk out the front door clean.
@@ -36,7 +41,10 @@ const GRAB_WINDUP = 0.55; // time to react (dodge / keep running)
 const LOSE_SIGHT = 0.8; // seconds without seeing you before a chasing cop starts searching
 const SEARCH_TIME = 6;
 const MAX_COPS = 6;
+const MAX_COPS_NIGHT = 10;
 const MAX_CARS = 2;
+export const COP_SIGHT_NIGHT = 30; // flashlights
+export const TASER = { stars: 3, range: 6, aim: 0.8, reach: 7, stun: 2, cooldown: 4 };
 const COOL_DELAY = 3; // unseen this long -> heat cools fast
 const COOL_FAST = 4; // heat per second
 const COOL_SLOW = 0.6;
@@ -57,7 +65,8 @@ export type PoliceEvent =
   | { t: "busted"; p: string; by: string; count: number; value: number; car: boolean }
   | { t: "released"; p: string; breakout: boolean }
   | { t: "lock"; p: string; r: LockResult }
-  | { t: "copCar"; car: string; p: string; stage: "dispatch" | "deploy" | "leave" };
+  | { t: "copCar"; car: string; p: string; stage: "dispatch" | "deploy" | "leave" }
+  | { t: "taser"; npc: string; p: string; stage: "aim" | "hit" | "miss"; x: number; z: number };
 
 interface RoadPt { x: number; z: number; edge: number; }
 
@@ -127,6 +136,7 @@ export class PoliceSystem {
   }
 
   private wanted(p: PlayerSim) { return p.connected && p.jailT <= 0 && p.respawnT <= 0; }
+  private get night() { return this.w.match.night; }
 
   /** Send cops (and at 3 stars a car) after anyone whose stars outnumber the cops on them. */
   private dispatch() {
@@ -137,11 +147,12 @@ export class PoliceSystem {
       const stars = starsOf(p.notoriety);
       if (!stars) continue;
       const on = cops.filter((c) => c.target === p.id && c.state !== "leave").length;
-      if (on < stars && cops.length < MAX_COPS && (this.nextCop.get(p.id) ?? 0) <= w.time) {
+      const want = this.night ? stars * 2 : stars;
+      if (on < want && cops.length < (this.night ? MAX_COPS_NIGHT : MAX_COPS) && (this.nextCop.get(p.id) ?? 0) <= w.time) {
         const c = this.spawnCop(p);
-        if (c) { cops.push(c); this.nextCop.set(p.id, w.time + 4); }
+        if (c) { cops.push(c); this.nextCop.set(p.id, w.time + (this.night ? 2 : 4)); }
       }
-      if (stars >= 3 && this.cars.length < MAX_CARS && !this.cars.some((c) => c.target === p.id && c.mode !== "leave") && (this.nextCarT.get(p.id) ?? 0) <= w.time) {
+      if (stars >= (this.night ? 2 : 3) && this.cars.length < MAX_CARS && !this.cars.some((c) => c.target === p.id && c.mode !== "leave") && (this.nextCarT.get(p.id) ?? 0) <= w.time) {
         if (this.spawnCar(p)) this.nextCarT.set(p.id, w.time + 12);
       }
     }
@@ -193,7 +204,7 @@ export class PoliceSystem {
   canSee(n: NpcSimData, p: PlayerSim): boolean {
     const m = p.move;
     const d = Math.hypot(m.x - n.move.x, m.z - n.move.z);
-    if (d > COP_SIGHT || Math.abs(m.y - n.move.y) > 8) return false;
+    if (d > (this.night ? COP_SIGHT_NIGHT : COP_SIGHT) || Math.abs(m.y - n.move.y) > 8) return false;
     if (d < COP_HEAR) return true;
     const eye = m.crouching || m.slideT > 0 ? 0.9 : 1.6; // your head; crouching behind a parked car (1.5 m) hides it
     return this.los(n.move.x, n.move.y + 1.6, n.move.z, m.x, m.y + eye, m.z);
@@ -278,11 +289,34 @@ export class PoliceSystem {
           if (n.lostT > LOSE_SIGHT || Math.hypot(n.lastX - n.move.x, n.lastZ - n.move.z) < 1) { n.state = "search"; n.lostT = 0; n.path = []; }
         }
         if (n.sees && d < GRAB_RANGE && n.attackCd <= 0 && Math.abs(m.y - n.move.y) < 1.2) {
-          n.state = "windup"; n.stateT = m.knockT > 0 ? 0.25 : GRAB_WINDUP;
+          n.state = "windup"; n.stateT = m.knockT > 0 || m.stunT > 0 ? 0.25 : GRAB_WINDUP;
           this.say(n, NPC_DEFS.cop.lines.fight);
           w.emit({ t: "npcAttack", npc: n.id, p: pl.id, hit: false });
+        } else if (n.sees && starsOf(pl.notoriety) >= TASER.stars && d <= TASER.range && d > GRAB_RANGE + 0.4
+          && n.taserCd <= 0 && m.stunT <= 0 && m.knockT <= 0 && Math.abs(m.y - n.move.y) < 2) {
+          // 3 stars: stop and aim the taser (the red laser is your warning)
+          n.state = "aim"; n.stateT = TASER.aim;
+          this.say(n, ["TASER! TASER!", "Don't make me do this!", "Hold it right there!"]);
+          w.emit({ t: "taser", npc: n.id, p: pl.id, stage: "aim", x: n.move.x, z: n.move.z });
         }
         return { tx, tz, speed: d < 0.9 ? 0 : COP_RUN, face: null };
+      }
+      case "aim": {
+        const face = Math.atan2(m.x - n.move.x, m.z - n.move.z);
+        if (n.stateT <= 0) {
+          n.taserCd = TASER.cooldown;
+          n.state = "chase";
+          const clear = this.los(n.move.x, n.move.y + 1.3, n.move.z, m.x, m.y + (m.crouching ? 0.8 : 1.2), m.z);
+          if (clear && d <= TASER.reach && m.dodgeT <= 0 && m.knockT <= 0 && pl.respawnT <= 0 && pl.jailT <= 0) {
+            m.stunT = TASER.stun;
+            m.vx *= 0.2; m.vz *= 0.2;
+            w.dropHand(pl);
+            w.emit({ t: "taser", npc: n.id, p: pl.id, stage: "hit", x: n.move.x, z: n.move.z });
+          } else {
+            w.emit({ t: "taser", npc: n.id, p: pl.id, stage: "miss", x: n.move.x, z: n.move.z });
+          }
+        }
+        return { tx: n.move.x, tz: n.move.z, speed: 0, face };
       }
       case "windup": {
         const face = Math.atan2(m.x - n.move.x, m.z - n.move.z);

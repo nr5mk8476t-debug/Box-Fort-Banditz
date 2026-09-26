@@ -12,6 +12,8 @@ export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup"
   | "sneak" | "escape" | "scram"
   // police (Phase 4): patrol = heading to where you were reported, search = lost sight of you, leave = giving up
   | "patrol" | "search" | "leave"
+  // police (Phase 5A): aiming a taser
+  | "aim"
   // big shots' entourage (Phase 4.5): bodyguard / fans stick close to their boss
   | "follow"
   // shop cashiers (Phase 3.5): stand at the till / hands up
@@ -46,6 +48,8 @@ export interface NpcSimData {
   sees: boolean; losT: number; lostT: number; lastX: number; lastZ: number;
   // entourage: who they follow (big shot id); big shots: seconds since robbed (-1 = not yet)
   leader: string; robbedT: number;
+  /** police: seconds until this cop's taser has recharged */
+  taserCd: number;
   // raccoons only
   carry: string; // item id being stolen
   path: { x: number; z: number }[]; // escape route (last point = gone)
@@ -170,7 +174,7 @@ export class NpcSystem {
     const move = makeMoveState(n.x + (this.rng() - 0.5), n.z + (this.rng() - 0.5), this.rng() * Math.PI * 2);
     const npc: NpcSimData = {
       id, kind: k, move, state: "walk", stateT: 0, node, prevNode: node, hp: def.hp, robbed: false,
-      item: pickWeighted(def.loot, () => this.rng()), target: "", chaseT: 0, attackCd: 0, stuckT: 0, lastDist: 99, avoidSide: 1, avoidT: 0, sees: false, losT: 0, lostT: 0, lastX: 0, lastZ: 0, leader: "", robbedT: -1,
+      item: pickWeighted(def.loot, () => this.rng()), target: "", chaseT: 0, attackCd: 0, taserCd: 0, stuckT: 0, lastDist: 99, avoidSide: 1, avoidT: 0, sees: false, losT: 0, lostT: 0, lastX: 0, lastZ: 0, leader: "", robbedT: -1,
       sayCd: 3 + this.rng() * 10, fromX: 0, fromZ: 0,
       pace: 0.85 + this.rng() * 0.3, lane: (this.rng() - 0.5), curSpeed: 0, lookYaw: 0, lookT: 0,
       carry: "", path: [], fortSlot: -1, lifeT: 0, post: null, shop: -1,
@@ -352,6 +356,18 @@ export class NpcSystem {
     return undefined;
   }
 
+  /**
+   * New scavenge: any big shot (and entourage) goes home. By day the first one comes after
+   * BIG_SHOT_FIRST; at NIGHT one usually shows up within seconds (Blake: more likely at night).
+   */
+  resetBigShots(night: boolean) {
+    for (const n of [...this.npcs.values()]) if (NPC_DEFS[n.kind].bigShot || n.kind === "bodyguard" || n.kind === "fan") this.npcs.delete(n.id);
+    this.bigShotT = night ? (this.rng() < 0.8 ? 4 + this.rng() * 8 : 25 + this.rng() * 10) : BIG_SHOT_FIRST;
+    this.nightMode = night;
+  }
+  /** at night the next big shot comes sooner */
+  nightMode = false;
+
   /** Bring a big shot (+ entourage) to town, somewhere nobody is looking. */
   spawnBigShot(kind?: NpcKind): NpcSimData | null {
     const kinds = BIG_SHOTS;
@@ -385,7 +401,7 @@ export class NpcSystem {
     if (!b) {
       if (!players.length || !this.graph.length) return;
       this.bigShotT -= dt;
-      if (this.bigShotT <= 0) { this.spawnBigShot(); this.bigShotT = BIG_SHOT_GAP[0] + this.rng() * (BIG_SHOT_GAP[1] - BIG_SHOT_GAP[0]); }
+      if (this.bigShotT <= 0) { this.spawnBigShot(); this.bigShotT = (BIG_SHOT_GAP[0] + this.rng() * (BIG_SHOT_GAP[1] - BIG_SHOT_GAP[0])) * (this.nightMode ? 0.4 : 1); }
       return;
     }
     b.lifeT += dt;
@@ -444,6 +460,7 @@ export class NpcSystem {
       if (n.leader && n.state === "walk") n.state = "follow"; // entourage: back to the boss after a fight / panic
       n.sayCd -= dt;
       n.attackCd = Math.max(0, n.attackCd - dt);
+      n.taserCd = Math.max(0, n.taserCd - dt);
       if (n.stateT > 0) n.stateT -= dt;
       let tx = n.move.x, tz = n.move.z, speed = 0;
       let face: number | null = null;

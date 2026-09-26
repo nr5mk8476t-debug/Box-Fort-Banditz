@@ -216,9 +216,9 @@ try {
   ok(await waitInv("v.hand === '' && v.pockets.every((x) => !x)", 8000), "G empties pockets one by one");
   await spawnAhead("rubber_duck", -8, 5);
   ok(await lookAt("rubber_duck"), "looking at the giant duck");
-  ok(/NEEDS 2/.test(await A.textContent("#prompt")), "giant items say they need 2 players");
+  ok(/DRAG IT/.test(await A.textContent("#prompt")), "giant items say you drag them");
   await A.keyboard.press("e");
-  ok(await waitInv("Math.abs(v.carryMul - 0.3) < 0.01"), "dragging a giant item alone is very slow (x0.3)");
+  ok(await waitInv("Math.abs(v.carryMul - 0.4) < 0.01"), "dragging a giant item alone is slow (x0.4)");
   await hide();
   await A.evaluate(() => window.__bfb.setPitch(0.3));
   await sleep(600);
@@ -426,13 +426,14 @@ try {
   await A.evaluate(() => { window.__bfb.teleport(-16, -11, 0); window.__bfb.setPitch(0); window.__bfb.clearNpcs(-16, -3, 14); });
   const bsId = await A.evaluate(() => window.__bfb.spawnBigShot("millionaire"));
   ok(!!bsId, "a millionaire comes to town");
-  ok(await A.waitForFunction(() => !!window.__bfb.bigShot() && !document.getElementById("bigshot").classList.contains("hidden"), null, { timeout: 15000 }).then(() => true, () => false), "HUD tracker: $$$ Millionaire, distance + arrow");
+  await sleep(1500);
+  ok(await A.evaluate(() => !document.getElementById("bigshot") && !/IN TOWN/.test(document.getElementById("bb-title").textContent)), "5A: no tracker, no banner, no $$$: big shots just show up");
   // a millionaire standing right in front of you: punch = jackpot
   await A.evaluate(() => { window.__bfb.clearNpcs(-16, -3, 14); window.__bfb.placeNpc("millionaire", -16, -9.8, Math.PI); });
   await sleep(800);
   await A.mouse.move(640, 360);
   const heatBs0 = await A.evaluate(() => window.__bfb.heat());
-  ok(await A.waitForFunction(() => /JACKPOT/.test(document.getElementById("prompt").textContent), null, { timeout: 10000 }).then(() => true, () => false), "prompt says JACKPOT (and big heat)");
+  ok(await A.waitForFunction(() => /Bonk/.test(document.getElementById("prompt").textContent) && !/JACKPOT/.test(document.getElementById("prompt").textContent), null, { timeout: 10000 }).then(() => true, () => false), "5A: the prompt doesn't give away the jackpot");
   await A.mouse.click(640, 360);
   ok(await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "gold_bar" || i.type === "diamond_ring"), null, { timeout: 15000 }).then(() => true, () => false), "punching the millionaire: gold bar / diamond ring pops out");
   ok((await A.evaluate(() => window.__bfb.heat())) - heatBs0 >= 25, "and that's a lot of heat");
@@ -440,19 +441,19 @@ try {
   await shot(A, "36-bigshot.png");
   await A.evaluate(() => { window.__bfb.clearCops(); window.__bfb.setHeat(0); window.__bfb.clearNpcs(-16, -8, 20); });
 
-  // ---- Phase 3: the round loop (solo, real keys) ----
-  console.log("\n# Phase 3 rounds (solo)");
+  // ---- Phase 5A: the cycle loop (solo, real keys) ----
+  console.log("\n# Phase 5A cycle (solo)");
   const M = () => A.evaluate(() => window.__bfb.match());
   const waitPhase = (ph, ms = 60000) => A.waitForFunction((x) => window.__bfb.match().phase === x, ph, { timeout: ms }).then(() => true, () => false);
   ok((await M()).phase === "lobby" && /LOBBY/.test(await A.textContent("#mh-time")), "starts in the lobby (free roam)");
   ok(/ENTER/.test(await A.textContent("#mh-sub")), `lobby hint: "${await A.textContent("#mh-sub")}"`);
   await A.keyboard.press("Enter");
   ok(await A.waitForFunction(() => window.__bfb.match().phase !== "lobby", null, { timeout: 10000 }).then(() => true, () => false), "ENTER starts the match (intro countdown)");
-  ok(/ROUND 1 OF 3/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
-  ok((await M()).home.inside, "round start sends you home to your fort");
+  ok(/CYCLE 1 OF 3/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
+  ok((await M()).home.inside, "a cycle starts at home");
   ok(await waitPhase("scavenge", 30000), "intro -> scavenge");
   await A.evaluate(() => window.__bfb.noEvents());
-  ok(/^[23]:\d\d$/.test(await A.textContent("#mh-time")), `round timer shows ${await A.textContent("#mh-time")}`);
+  ok(/^[23]:\d\d$/.test(await A.textContent("#mh-time")) && /DAY 1/.test(await A.textContent("#mh-round")), `day timer shows ${await A.textContent("#mh-round")} ${await A.textContent("#mh-time")}`);
   ok(await A.isVisible("#scores"), "scoreboard shows during the round");
   // bank a TV: drop it in the yard and wait 10 s
   const yardPos = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z, yaw: m.yaw }; });
@@ -461,7 +462,7 @@ try {
   const banked = await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "crt_tv" && i.lock === 100), null, { timeout: 60000 }).then(() => true, () => false);
   ok(banked, "loot resting in your yard locks in (banked) after 10 s");
   const bankNow = (await M()).scores[0].bank;
-  ok(bankNow > 0 && /\+\d+/.test(await A.textContent("#scores")), `scoreboard shows the banked value (+${bankNow})`);
+  ok(bankNow > 0 && /\+\d+/.test(await A.textContent("#scores")), `scoreboard shows the fort loot value (+${bankNow})`);
   await A.evaluate(() => window.__bfb.setPitch(0.35));
   await sleep(600);
   await hide();
@@ -475,29 +476,72 @@ try {
       ok(await A.waitForFunction(() => window.__bfb.match().truckOn && window.__bfb.scene().getTransformNodeByName("truck").isEnabled(), null, { timeout: 20000 }).then(() => true, () => false), "the garbage truck drives in");
     }
     if (kind === "airdrop") ok(await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "airdrop_crate"), null, { timeout: 20000 }).then(() => true, () => false), "an airdrop crate spawns");
-    if (kind === "raccoons") ok(await A.waitForFunction(() => window.__bfb.npcs().some((n) => n.kind === "raccoon"), null, { timeout: 20000 }).then(() => true, () => false), "a raccoon sneaks toward your fort");
+    if (kind === "raccoons") ok(await A.waitForFunction(() => window.__bfb.npcs().some((n) => n.kind === "raccoon"), null, { timeout: 45000 }).then(() => true, () => false), "a raccoon sneaks toward your fort");
   }
-  // carry something away from home when time runs out = lost
+  // small money goes straight into your cash
   await A.evaluate(() => { window.__bfb.clearNpcs(-8, -8, 8); window.__bfb.teleport(-8, -8, 0); });
   await sleep(500);
-  await A.evaluate(() => { window.__bfb.spawnItem("rubber_chicken", -8, -6.4); window.__bfb.setPitch(Math.atan2(1.35, 1.6)); });
+  await A.evaluate(() => { window.__bfb.spawnItem("coin_pile", -8, -6.4); window.__bfb.setPitch(Math.atan2(1.35, 1.6)); });
+  await lookAt("coin_pile");
+  ok(/STRAIGHT TO YOUR WALLET/.test(await A.textContent("#prompt")), "coins say they go straight to your wallet");
+  const cash0 = (await M()).scores[0].cash;
+  await A.keyboard.press("e");
+  ok(await A.waitForFunction((c) => window.__bfb.match().scores[0].cash > c, cash0, { timeout: 15000 }).then(() => true, () => false), "grabbing coins = instant cash");
+  ok(await waitInv("v.pockets.every((x) => !x)", 5000), "(not in your pockets)");
+  // carry something away from home when time runs out = lost
+  await A.evaluate(() => { window.__bfb.spawnItem("rubber_chicken", -8, -6.4); });
   await lookAt("rubber_chicken");
   await A.keyboard.press("e");
   ok(await waitInv("v.pockets.some(Boolean)"), "pocketed a chicken out in the city");
   ok(await A.isVisible("#home-arrow") && /HOME \d+ m/.test(await A.textContent("#home-arrow")), `home compass: "${await A.textContent("#home-arrow")}"`);
   await A.evaluate(() => window.__bfb.setTimeLeft(2));
-  ok(await waitPhase("tally", 30000), "time's up -> tally");
-  const res = JSON.parse((await M()).results)[0];
-  ok(res.lost >= 1 && res.banked >= 1, `results: banked ${res.banked} ($${res.bankedValue}), lost ${res.lost} ($${res.lostValue})`);
-  ok(await A.isVisible("#tally") && /ROUND 1 RESULTS/.test(await A.textContent("#tally")), "round results card");
+  ok(await waitPhase("dusk", 30000), "time's up -> nightfall");
   ok(await waitInv("v.pockets.every((x) => !x)", 5000), "the chicken is gone (lost)");
-  await hide();
-  await shot(A, "25-round-results.png");
-  ok(await waitPhase("intro", 30000) && (await M()).round === 2, "round 2 begins after the results");
+  ok(/NIGHT FALLS/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
+  ok(await waitPhase("night", 30000), "dusk -> night scavenge");
+  ok(await A.waitForFunction(() => window.__bfb.night().level > 0.9 && window.__bfb.night().body, null, { timeout: 20000 }).then(() => true, () => false), "the city goes dark (night visuals)");
+  ok(/NIGHT 1/.test(await A.textContent("#mh-round")) && /^[01]:\d\d$/.test(await A.textContent("#mh-time")), `night timer: ${await A.textContent("#mh-time")}`);
+  const nightItems = await A.evaluate(() => window.__bfb.items().filter((i) => i.mode === "free"));
+  const tvStill = nightItems.find((i) => i.type === "crt_tv" && i.lock === 100);
+  ok(!!tvStill, "your banked TV is still in the fort at night");
+  ok(nightItems.filter((i) => i.type !== "crt_tv").every((i) => i.mult === 2), "night loot is worth x2");
+  await A.evaluate(() => { window.__bfb.teleport(-8, -30, 0); window.__bfb.setPitch(0.05); });
+  await sleep(1500); await hide();
+  await shot(A, "37-night.png");
+  await A.evaluate(() => window.__bfb.setTimeLeft(1));
+  ok(await waitPhase("dawn", 30000), "night -> sunrise");
+  ok(await A.isVisible("#tally") && /SUNRISE/.test(await A.textContent("#tally")), "sunrise results card");
+  const res = JSON.parse((await M()).results)[0];
+  ok(res.lost >= 1 && res.banked >= 1, `results: fort loot ${res.banked} ($${res.bankedValue}), lost ${res.lost}`);
+  await A.evaluate(() => window.__bfb.setTimeLeft(0.5));
+  ok(await waitPhase("shop", 30000), "sunrise -> pawn shop");
+  ok(await A.waitForFunction(() => window.__bfb.shop().open && !document.getElementById("shop").classList.contains("hidden"), null, { timeout: 10000 }).then(() => true, () => false), "the pawn shop screen opens (mouse released)");
+  const offers = (await A.evaluate(() => window.__bfb.shop())).offers;
+  const tvOffer = offers.find((o) => o.type === "crt_tv");
+  ok(tvOffer && tvOffer.offer < tvOffer.value, `Sal lowballs the TV: $${tvOffer?.offer} for a $${tvOffer?.value} TV (${tvOffer?.mood})`);
+  await A.click(`.offer button[data-act=haggle][data-id=${tvOffer.id}]`);
+  await A.waitForFunction(([id, v]) => window.__bfb.shop().offers.find((o) => o.id === id)?.offer !== v, [tvOffer.id, tvOffer.offer], { timeout: 15000 }).catch(() => {});
+  const tvNow = (await A.evaluate(() => window.__bfb.shop())).offers.find((o) => o.id === tvOffer.id);
+  ok(tvNow && tvNow.offer !== tvOffer.offer, `haggled: $${tvOffer.offer} -> $${tvNow?.offer} (${tvNow?.mood}: "${tvNow?.line}")`);
+  await sleep(200);
+  await shot(A, "38-pawn-shop.png");
+  const cashBefore = (await M()).scores[0].cash;
+  const price = (await A.evaluate((id) => window.__bfb.shop().offers.find((o) => o.id === id).offer, tvOffer.id));
+  await A.click(`.offer button[data-act=sell][data-id=${tvOffer.id}]`);
+  ok(await A.waitForFunction(([c, v]) => window.__bfb.match().scores[0].cash === c + v, [cashBefore, price], { timeout: 15000 }).then(() => true, () => false), `SELL: +$${price} cash`);
+  ok(await A.waitForFunction((id) => window.__bfb.shop().offers.find((o) => o.id === id)?.state === "sold", tvOffer.id, { timeout: 10000 }).then(() => true, () => false), "the TV shows as SOLD");
+  await A.click("#btn-shop-done");
+  ok(await waitPhase("upgrades", 15000), "DONE (everyone ready) skips to the upgrades round");
+  ok(await A.waitForFunction(() => window.__bfb.overlay() === "upgrades" && window.__bfb.fortView(), null, { timeout: 10000 }).then(() => true, () => false), "upgrades screen over a view of your fort ('coming soon')");
+  await sleep(1200);
+  await shot(A, "39-upgrades.png");
+  await A.click("#btn-upg-done");
+  ok(await waitPhase("intro", 15000) && (await M()).round === 2, "READY -> cycle 2");
+  ok(await A.waitForFunction(() => window.__bfb.overlay() === "" && !window.__bfb.fortView(), null, { timeout: 5000 }).then(() => true, () => false), "screens close for the next cycle");
   // fast-forward to the end of the match
-  for (let k = 0; k < 12 && (await M()).phase !== "over"; k++) { await A.evaluate(() => window.__bfb.setTimeLeft(0.2)); await sleep(700); }
-  ok((await M()).phase === "over", "after 3 rounds: match over");
-  ok(/TOP BANDIT/.test(await A.textContent("#tally")), `final card: "${(await A.textContent("#tally-title"))}"`);
+  for (let k = 0; k < 40 && (await M()).phase !== "over"; k++) { await A.evaluate(() => window.__bfb.setTimeLeft(0.2)); await sleep(600); }
+  ok((await M()).phase === "over", "after 3 cycles: match over");
+  ok(/RICHEST BANDIT/.test(await A.textContent("#tally")), `final card: "${(await A.textContent("#tally-title"))}"`);
   await hide();
   await shot(A, "26-final-results.png");
   await A.keyboard.press("Enter");
@@ -618,6 +662,31 @@ try {
   await (hands[0] ? A : C).keyboard.press("g");
   await sleep(500);
 
+  // ---- Phase 5A: tug of war over a giant item ----
+  console.log("\n# Tug of war (online)");
+  await A.evaluate(() => { window.__bfb.teleport(-16, -4.7, 0); window.__bfb.clearNpcs(-16, -3, 10); });
+  await C.evaluate(() => window.__bfb.teleport(-14.3, -2.9, -Math.PI / 2));
+  await sleep(1000);
+  await A.evaluate(() => window.__bfb.spawnItem("rubber_duck", -16, -2.9));
+  const duck = await A.waitForFunction(() => window.__bfb.items().find((i) => i.type === "rubber_duck" && i.resting)?.id, null, { timeout: 15000 }).then((h) => h.jsonValue(), () => null);
+  ok(!!duck, "a giant duck lands between A and C");
+  await A.evaluate((id) => window.__bfb.shopAct({ a: "grab", item: id }), duck);
+  ok(await A.waitForFunction((id) => window.__bfb.serverInventory().hand === id, duck, { timeout: 15000 }).then(() => true, () => false), "A drags the duck (alone)");
+  await C.evaluate((id) => window.__bfb.shopAct({ a: "grab", item: id }), duck);
+  ok(await C.waitForFunction(() => !!window.__bfb.tug() && !document.getElementById("tug").classList.contains("hidden"), null, { timeout: 15000 }).then(() => true, () => false), "C grabs the other end: TUG OF WAR (mash meter)");
+  ok(await A.waitForFunction(() => !!window.__bfb.tug(), null, { timeout: 15000 }).then(() => true, () => false), "A sees the tug of war too");
+  // C mashes E (about 12 presses a second, right in the page so test lag doesn't slow it); A doesn't
+  const mashing = C.evaluate(async () => { for (let k = 0; k < 40; k++) { window.__bfb.tugPress(); await new Promise((r) => setTimeout(r, 80)); } });
+  await sleep(700);
+  await hideOverlays(C);
+  await shot(C, "40-tug-of-war.png");
+  await mashing;
+  ok(await C.waitForFunction((id) => window.__bfb.serverInventory().hand === id, duck, { timeout: 15000 }).then(() => true, () => false), "C mashed harder and won the duck");
+  ok(await A.waitForFunction(() => window.__bfb.serverInventory().hand === "" && !window.__bfb.tug(), null, { timeout: 15000 }).then(() => true, () => false), "A lost their grip");
+  await C.keyboard.press("g");
+  await A.keyboard.press("g"); // (in case A kept it)
+  await sleep(500);
+
   // ---- Phase 2.5 PvP punch online: A punches C = full knockdown, everyone sees it ----
   console.log("\n# Phase 2.5 punch (online)");
   ok((await A.evaluate(() => window.__bfb.npcs().length)) >= 24, "pedestrians + cashiers are synced to online players");
@@ -724,6 +793,32 @@ try {
   await Promise.all([A, B].map((P) => P.waitForFunction(() => window.__bfb.match().phase === "scavenge", null, { timeout: 60000 }).catch(() => {})));
   const [ta, tb] = await Promise.all([A, B].map((P) => P.evaluate(() => window.__bfb.match().timeLeft)));
   ok(Math.abs(ta - tb) < 4, `everyone sees the same round timer (${ta.toFixed(1)} vs ${tb.toFixed(1)})`);
+
+  // ---- Phase 5A: night raid ----
+  console.log("\n# Night raid (online)");
+  await A.evaluate(() => window.__bfb.noEvents());
+  const aHome = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z, yaw: m.yaw }; });
+  const tvAt = { x: aHome.x + Math.sin(aHome.yaw) * 2, z: aHome.z + Math.cos(aHome.yaw) * 2 };
+  await A.evaluate(([x, z]) => window.__bfb.spawnItem("crt_tv", x, z), [tvAt.x, tvAt.z]);
+  const tvId = await A.waitForFunction(() => window.__bfb.items().find((i) => i.type === "crt_tv" && i.lock === 100)?.id, null, { timeout: 40000 }).then((h) => h.jsonValue(), () => null);
+  ok(!!tvId, "A banks a TV in their fort");
+  await A.evaluate(() => window.__bfb.setTimeLeft(0.3));
+  ok(await B.waitForFunction(() => window.__bfb.match().phase === "night", null, { timeout: 40000 }).then(() => true, () => false), "night falls for everyone");
+  ok(await B.waitForFunction(() => window.__bfb.night().level > 0.5, null, { timeout: 20000 }).then(() => true, () => false), "B's city goes dark too");
+  const tvNow2 = await B.evaluate((id) => window.__bfb.items().find((i) => i.id === id), tvId);
+  // stand between the TV and the city centre (away from the fort box), facing the TV
+  const dl = Math.hypot(tvNow2.x, tvNow2.z), bx = tvNow2.x - (tvNow2.x / dl) * 1.3, bz = tvNow2.z - (tvNow2.z / dl) * 1.3;
+  await B.evaluate(([x, z, y]) => window.__bfb.teleport(x, z, y), [bx, bz, Math.atan2(tvNow2.x - bx, tvNow2.z - bz)]);
+  await sleep(1500);
+  let raided = false;
+  for (let k = 0; k < 3 && !raided; k++) {
+    await B.evaluate((id) => window.__bfb.shopAct({ a: "grab", item: id }), tvId);
+    raided = await B.waitForFunction((id) => window.__bfb.serverInventory().hand === id, tvId, { timeout: 8000 }).then(() => true, () => false);
+  }
+  if (!raided) console.log(`   [diag] raid: B at ${JSON.stringify(await B.evaluate(() => window.__bfb.move()))} tv ${JSON.stringify(await B.evaluate((id) => window.__bfb.items().find((i) => i.id === id), tvId))} flash "${await B.textContent("#flash")}" phase ${(await B.evaluate(() => window.__bfb.match())).phase}`);
+  ok(raided, "B raids A's fort at night and takes the TV");
+  ok(await A.waitForFunction(() => /RAIDED/.test(document.getElementById("bb-title").textContent), null, { timeout: 15000 }).then(() => true, () => false), "A's raid alarm goes off");
+  await A.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
   await A.click("#btn-leave");
   await sleep(600);
   ok((await info(A)).screen === "title", "host returned to title");

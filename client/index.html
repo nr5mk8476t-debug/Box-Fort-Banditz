@@ -68,6 +68,7 @@
       <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
     </div>
     <div id="fx-flash" class="fx fx-flash hidden" aria-hidden="true"></div>
+    <div id="fx-zap" class="fx fx-zap hidden" aria-hidden="true"><div class="zap-text">ZZZT!</div></div>
     <div id="crosshair"></div>
     <!-- Phase 3: round loop -->
     <div id="match-hud" class="match-hud"><div id="mh-round" class="mh-round"></div><div id="mh-time" class="mh-time">LOBBY</div><div id="mh-sub" class="mh-sub"></div></div>
@@ -95,7 +96,7 @@
       <span class="heat-label">HEAT</span><span class="heat-bar"><span id="heat-fill"></span><i style="left:30%"></i><i style="left:60%"></i><i style="left:90%"></i></span>
       <span id="stars" class="stars"><b>★</b><b>★</b><b>★</b></span>
     </div>
-    <div id="bigshot" class="bigshot hidden"><span class="bs-cash">$$$</span><span id="bigshot-name"></span><span id="bigshot-dist"></span><span id="bigshot-arrow" class="bs-arrow">▲</span></div>
+    <div id="tug" class="tug hidden" aria-live="assertive"><div class="tug-label">TUG OF WAR! MASH <span class="key">E</span></div><div class="tug-bar"><span class="tug-them">THEM</span><div id="tug-knob" class="tug-knob"></div><span class="tug-you">YOU</span></div></div>
     <div id="dodge-pip" class="dodge-pip ready" title="Dodge (Q) ready">Q</div>
     <div id="charge" class="charge hidden" aria-hidden="true"></div>
     <div id="prompt" class="prompt hidden" aria-live="polite"></div>
@@ -106,7 +107,45 @@
       <div class="slot-wrap"><span class="slot-label">2</span><div id="slot-1" class="slot">empty</div></div>
       <div class="slot-wrap"><span class="slot-label">3</span><div id="slot-2" class="slot">empty</div></div>
     </div>
-    <div id="controls-hint" class="controls-hint">WASD move / SHIFT sprint / SPACE jump + climb / C crouch / Q dodge / E grab + search / HOLD R rob a till / G drop / CLICK punch + smash / HOLD CLICK or F throw / RIGHT CLICK pockets / ESC menu</div>
+    <div id="controls-hint" class="controls-hint">WASD move / SHIFT sprint / SPACE jump + climb / C crouch / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / CLICK punch + smash / HOLD CLICK or F throw / RIGHT CLICK pockets / ESC menu</div>
+  </section>
+
+  <!-- PHASE 5A: PAWN SHOP (shop round) -->
+  <section id="shop" class="overlay hidden" aria-label="Pawn shop">
+    <div class="card shop-card">
+      <div class="shop-head">
+        <div id="sal-face" class="sal-face" aria-hidden="true"></div>
+        <div class="shop-title">
+          <h2>PAWN-O-RAMA</h2>
+          <div class="sal-name">"Honest" Sal</div>
+          <div id="sal-line" class="sal-line">Whaddaya got for me?</div>
+        </div>
+        <div id="shop-timer" class="shop-timer">1:00</div>
+      </div>
+      <div id="shop-list" class="shop-list"></div>
+      <div class="shop-foot">
+        <span class="shop-cash">CASH <b id="shop-cash">$0</b></span>
+        <button id="btn-sell-all" class="btn btn-small">SELL ALL</button>
+        <button id="btn-shop-done" class="btn btn-go btn-small">DONE</button>
+      </div>
+      <p class="small shop-note">Read Sal's face: the happier he looks, the more room to haggle. Push too far and he gets offended. Anything you don't sell goes in the dumpster when the shop closes.</p>
+    </div>
+  </section>
+
+  <!-- PHASE 5A: UPGRADES (placeholder until 5B) -->
+  <section id="upgrades" class="overlay side hidden" aria-label="Upgrades">
+    <div class="card upg-card">
+      <h2>UPGRADES</h2>
+      <p class="small">Coming in the next update! Soon you'll spend your cash here, watching your fort transform.</p>
+      <div class="upg-grid">
+        <div class="upg"><b>BANDIT GEAR</b><span>bigger pockets, stamina, sprint, lockpick kit, taser-proof jacket</span></div>
+        <div class="upg"><b>FORT DEFENCES</b><span>guard dog, tin-can tripwire, spring boxing glove, a lock</span></div>
+        <div class="upg"><b>FORT PRESTIGE</b><span>cardboard, plywood, tin mansion, gold palace</span></div>
+        <div class="upg"><b>DIRTY TRICKS</b><span>banana peel, fake siren, smoke bomb, bribe a cop</span></div>
+      </div>
+      <div class="upg-foot"><span id="upg-timer" class="shop-timer">1:00</span><button id="btn-upg-done" class="btn btn-go btn-small">READY</button></div>
+      <p id="upg-wait" class="small"></p>
+    </div>
   </section>
 
   <!-- PAUSE -->

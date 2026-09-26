@@ -61,13 +61,15 @@ export interface MoveState {
   immuneT: number;
   trapT: number;
   swarmT: number;
+  /** Phase 5A: tased by a cop (can't move for ~2 s) */
+  stunT: number;
 }
 
 /** Every MoveState field, split by type. The server syncs exactly these. */
 export const MOVE_NUM_KEYS = [
   "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch", "stamina", "staminaDelay",
   "slideT", "slideCd", "dodgeT", "dodgeCd", "mantleT", "mantleY", "stumbleT", "carryMul",
-  "knockT", "immuneT", "trapT", "swarmT",
+  "knockT", "immuneT", "trapT", "swarmT", "stunT",
 ] as const;
 export const MOVE_BOOL_KEYS = ["grounded", "jumpLatch", "crouchLatch", "dodgeLatch", "crouching", "winded", "carryHeavy", "handsFull"] as const;
 
@@ -78,7 +80,7 @@ export function makeMoveState(x: number, z: number, yaw = 0): MoveState {
     stamina: 1, staminaDelay: 0, winded: false,
     slideT: 0, slideCd: 0, dodgeT: 0, dodgeCd: 0, mantleT: 0, mantleY: 0, stumbleT: 0,
     carryMul: 1, carryHeavy: false, handsFull: false,
-    knockT: 0, immuneT: 0, trapT: 0, swarmT: 0,
+    knockT: 0, immuneT: 0, trapT: 0, swarmT: 0, stunT: 0,
   };
 }
 
@@ -271,8 +273,9 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   s.immuneT = Math.max(0, s.immuneT - dt);
   s.trapT = Math.max(0, s.trapT - dt);
   s.swarmT = Math.max(0, s.swarmT - dt);
-  // Knocked down or trapped in a mime's invisible box: no control at all (you still slide to a stop)
-  if (s.knockT > 0 || s.trapT > 0) {
+  s.stunT = Math.max(0, s.stunT - dt);
+  // Knocked down, tased, or trapped in a mime's invisible box: no control at all (you still slide to a stop)
+  if (s.knockT > 0 || s.trapT > 0 || s.stunT > 0) {
     input = { ...input, mx: 0, mz: 0, sprint: false, jump: false, crouch: false, dodge: false };
     s.slideT = 0;
   }
@@ -517,7 +520,7 @@ export type MovePose = "knocked" | "mantle" | "stumble" | "slide" | "dodge" | "a
 export function movePose(s: MoveState): MovePose {
   if (s.knockT > 0) return "knocked";
   if (s.mantleT > 0) return "mantle";
-  if (s.stumbleT > 0) return "stumble";
+  if (s.stumbleT > 0 || s.stunT > 0) return "stumble";
   if (s.slideT > 0) return "slide";
   if (s.dodgeT > 0) return "dodge";
   if (!s.grounded) return "air";

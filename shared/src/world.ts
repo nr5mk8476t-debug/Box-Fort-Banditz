@@ -13,7 +13,9 @@ import type { ArenaLayout, LootZone } from "./arena.js";
 import { buildTrashington } from "./city.js";
 import { sanitizeName } from "./names.js";
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent } from "./npcSim.js";
-import { MatchSystem, itemWorth, type MatchPhase, type CityEventKind } from "./match.js";
+import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
+import { PawnSystem } from "./pawn.js";
+import { fortAt } from "./arena.js";
 import { PropSystem, PROP_RADIUS, SMASHABLE, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
 import { PoliceSystem, type PoliceEvent } from "./police.js";
@@ -24,10 +26,16 @@ export const POCKETS = 3;
 export const GRAB_RANGE = 2.9;
 /** Client-side reach used for the look prompt. */
 export const GRAB_RANGE_CLIENT = 2.4;
-export const GIANT_TETHER = 3.2; // two carriers further apart than this = the item tumbles
+export const GIANT_TETHER = 3.2; // tug of war: pulled further apart than this = the item tumbles
+/** Phase 5A tug of war over a giant item: each E press moves the balance this much; |balance| 1 = win */
+export const TUG_STEP = 0.12;
+export const TUG_MAX_TIME = 8;
+const TUG_PRESS_CD = 0.06;
+const RAID_ALARM_CD = 6;
 export const THROW_MIN_SPEED = 5;
 export const THROW_MAX_SPEED = 16;
 export const ITEM_TARGET = 55; // loose items the World tries to keep in the city (200 m city)
+export const ITEM_TARGET_NIGHT = 22; // night: loot is scarce (but worth double)
 export const ITEM_MAX = 95;
 export const GIANT_MAX = 2;
 const ACTION_COOLDOWN = 0.18; // seconds between grab/drop/throw (anti-spam)
@@ -57,6 +65,9 @@ export interface ItemSim {
   mult: number; // happy-hour bonus (1 or 2)
   chute: boolean; // airdrop crate still under its parachute
   shop: number; // shop stock / register (-1 = not from a shop)
+  /** Phase 5A tug of war (giant items): -1 = holder wins .. +1 = challenger (holder2) wins */
+  tug: number;
+  tugT: number;
 }
 
 export interface PlayerSim {
@@ -100,6 +111,9 @@ export interface PlayerSim {
   knownX: number; knownZ: number;
   /** world time of your last crime (heat doesn't cool for a few seconds after one) */
   crimeT: number;
+  /** Phase 5A: last tug-of-war press, last raid alarm on YOUR fort */
+  tugCd: number;
+  raidAlarmT: number;
 }
 
 export type WorldEvent =
@@ -125,7 +139,12 @@ export type WorldEvent =
   // Phase 3
   | { t: "round"; phase: MatchPhase | "hurry"; round: number }
   | { t: "banked"; item: string; p: string; value: number }
-  | { t: "lost"; p: string; count: number; value: number }
+  | { t: "lost"; p: string; count: number; value: number; unsold?: boolean }
+  // Phase 5A
+  | { t: "cash"; p: string; item: string; type: string; value: number }
+  | { t: "raid"; p: string; owner: string; item: string; x: number; z: number }
+  | { t: "tug"; item: string; stage: "start" | "win" | "tumble"; winner: string; loser: string }
+  | { t: "pawn"; p: string; item: string; r: "up" | "offended" | "sold"; offer: number }
   | { t: "cityEvent"; kind: CityEventKind; stage: "warn" | "live" | "end"; x: number; z: number; detail: string }
   | { t: "swept"; item: string; type: string; x: number; z: number }
   | { t: "raccoonGrab"; npc: string; item: string; p: string }
@@ -143,7 +162,11 @@ export type WorldAction =
   | { a: "punch"; yaw: number; pitch: number }
   | { a: "use"; prop: string } // search a dumpster / bin (E), or start a hold-up at a till (hold R)
   | { a: "robStop" }
-  | { a: "pick"; pin: number; t: number }; // jail lock-pick press (t = seconds since locked up)
+  | { a: "pick"; pin: number; t: number } // jail lock-pick press (t = seconds since locked up)
+  // Phase 5A
+  | { a: "tug" } // mash E in a tug of war
+  | { a: "sell"; item: string } | { a: "haggle"; item: string } | { a: "sellAll" } // pawn shop
+  | { a: "ready" }; // done shopping / upgrading
 
 /** Small, fast, seedable random numbers (deterministic worlds for tests). */
 export function makeRng(seed: number) {
@@ -177,6 +200,7 @@ export class World {
   readonly props: PropSystem;
   readonly traffic: TrafficSystem;
   readonly police: PoliceSystem;
+  readonly pawn: PawnSystem;
   private stockTimer = 0;
 
   constructor(opts: WorldOptions = {}) {
@@ -189,12 +213,14 @@ export class World {
     this.props = new PropSystem(this);
     this.traffic = new TrafficSystem(this);
     this.police = new PoliceSystem(this);
+    this.pawn = new PawnSystem(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
   /** Raise a player's heat (notoriety), capped at 100. Cops who see it happen come running. */
   addHeat(p: PlayerSim, n: number) {
     if (p.jailT > 0) return;
+    if (n > 0 && this.match.night) n *= 2; // night: heat builds twice as fast
     p.notoriety = Math.min(100, p.notoriety + n);
     if (n > 0) { p.knownX = p.move.x; p.knownZ = p.move.z; p.crimeT = this.time; this.police.onCrime(p); } // somebody calls it in
   }
@@ -244,12 +270,24 @@ export class World {
   /** Host pressed START (or solo). */
   startMatch() { return this.match.start(); }
 
-  /** New round: fresh loot, everyone back at their fort with empty hands. */
-  resetCity() {
+  /** Loot multiplier for anything that appears now (night = x2). */
+  get lootMult() { return this.match?.night ? 2 : 1; }
+  private get itemTarget() { return this.match?.night ? ITEM_TARGET_NIGHT : ITEM_TARGET; }
+
+  /**
+   * New scavenge: fresh loot + props, cops gone, everyone back at their fort with empty hands.
+   * keepForts: loot lying in fort yards stays (day -> night); otherwise the whole city is wiped.
+   */
+  resetCity(keepForts = false) {
     this.npc.clearRaccoons();
     this.npc.resetCashiers();
+    this.npc.resetBigShots(this.match.night);
     this.police.reset();
-    this.items.clear();
+    for (const it of [...this.items.values()]) {
+      const slot = it.mode === "free" ? fortAt(this.arena, it.body.x, it.body.z) : -1;
+      if (keepForts && slot >= 0 && this.match.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; continue; }
+      this.items.delete(it.id);
+    }
     if (this.spawnLoot) { this.fillLoot(); this.props.reset(); this.stockShops(true); }
     for (const p of this.players.values()) {
       p.hand = ""; p.pockets.fill(""); p.queued = null;
@@ -261,6 +299,37 @@ export class World {
       p.notoriety = 0; p.hitsTaken = 0; p.knockCount = 0; p.stolenThisRound = 0; p.rob = null; p.respawnT = 0;
       this.updateCarry(p);
     }
+  }
+
+  /** Everything a player is carrying (hands + pockets). */
+  carriedItems(p: PlayerSim): ItemSim[] {
+    const out: ItemSim[] = [];
+    for (const id of [p.hand, ...p.pockets]) { const it = id ? this.items.get(id) : undefined; if (it && !out.includes(it)) out.push(it); }
+    return out.filter((it) => it.holder === p.id || it.holder2 === p.id);
+  }
+
+  /** Time's up while standing at home: what you carry lands in your yard, banked. */
+  putInYard(p: PlayerSim, it: ItemSim) {
+    if (it.holder2 && it.holder2 !== p.id) { const o = this.players.get(it.holder2); if (o) { o.hand = ""; this.updateCarry(o); } }
+    else if (it.holder2 === p.id) { const o = this.players.get(it.holder); if (o) { o.hand = ""; this.updateCarry(o); } }
+    const a = this.rng() * Math.PI * 2, r = this.rng() * 0.8;
+    this.freeItem(it, p.move.x + Math.sin(a) * r, p.move.y + 0.6, p.move.z + Math.cos(a) * r, 0, 0, 0);
+    it.holder = ""; it.holder2 = ""; it.tug = 0; it.tugT = 0;
+    it.fort = p.colorIdx; it.locked = true; it.bankT = LOCK_TIME;
+  }
+
+  /** Taser hit: drop whatever is in your hands (pockets stay). */
+  dropHand(p: PlayerSim) {
+    if (!p.hand) return;
+    const it = this.items.get(p.hand);
+    if (!it) { p.hand = ""; return; }
+    if (lootDef(it.type).size === "giant" && it.holder2) { this.letGoOfGiant(it, p); return; }
+    p.hand = "";
+    this.updateCarry(p);
+    const ang = this.rng() * Math.PI * 2;
+    this.freeItem(it, p.move.x + Math.sin(ang) * 0.5, p.move.y + 1, p.move.z + Math.cos(ang) * 0.5, Math.sin(ang) * 2, 3, Math.cos(ang) * 2);
+    it.holder = ""; it.holder2 = "";
+    this.emit({ t: "drop", p: p.id, item: it.id });
   }
 
   refreshCarry(p: PlayerSim) { this.updateCarry(p); }
@@ -353,7 +422,7 @@ export class World {
       id, type, value: rollValue(def, this.rng),
       body: { x, y, z, vx: (ax / l) * 2 + (this.rng() - 0.5), vy: 4.5, vz: (az / l) * 2 + (this.rng() - 0.5), rot: 0, spin: 6, resting: false },
       mode: "free", holder: "", holder2: "", lastThrower: "", thrownT: 99, idleT: 0,
-      fort: -1, bankT: 0, locked: false, mult: 1, chute: false, shop: -1,
+      fort: -1, bankT: 0, locked: false, mult: this.lootMult, chute: false, shop: -1, tug: 0, tugT: 0,
     });
     this.emit({ t: "spawn", item: id });
     return id;
@@ -385,6 +454,7 @@ export class World {
       punchCd: 0, notoriety: 0, hitsTaken: 0, hitsDecayT: 0, knockCount: 0, knockWindowT: 0,
       cash: 0, stolenThisRound: 0, rob: null, respawnT: 0,
       jailT: 0, jailCell: -1, lock: null, lockSeed: 0, lockT0: 0, seenT: -99, knownX: 0, knownZ: 0, crimeT: -99,
+      tugCd: 0, raidAlarmT: -99,
     };
     this.players.set(id, p);
     return p;
@@ -430,12 +500,19 @@ export class World {
     const p = this.players.get(id);
     if (!p || !p.connected || !raw || typeof raw !== "object") return;
     const act = raw as WorldAction;
+    // shop round (a screen: works whatever state you're in)
+    if (act.a === "sell") { if (this.match.phase === "shop") this.pawn.sell(p, String((act as any).item ?? "")); return; }
+    if (act.a === "haggle") { if (this.match.phase === "shop") this.pawn.haggle(p, String((act as any).item ?? "")); return; }
+    if (act.a === "sellAll") { if (this.match.phase === "shop") this.pawn.sellAll(p); return; }
+    if (act.a === "ready") { this.match.setReady(p); return; }
     if (p.jailT > 0) { // locked up: the only thing you can do is pick the lock
       if (act.a === "pick") this.police.pick(p, Number((act as any).pin), Number((act as any).t));
       return;
     }
     if (p.move.knockT > 0 || p.move.trapT > 0) return; // can't do anything while flattened / boxed in
     if (p.respawnT > 0) return; // wiped out: waiting to respawn
+    if (p.move.stunT > 0) return; // tased
+    if (act.a === "tug") { this.tugPress(p); return; }
     if (act.a === "punch") { this.punch(p, Number((act as any).yaw), Number((act as any).pitch)); return; }
     if (act.a === "robStop") { this.props.cancelRob(p); return; }
     if (act.a === "use") { this.props.use(p, String((act as any).prop ?? "")); return; }
@@ -509,7 +586,8 @@ export class World {
   private grab(p: PlayerSim, itemId: string) {
     const it = this.items.get(itemId);
     if (!it) return this.emit({ t: "whiff", p: p.id, reason: "taken" });
-    if (it.locked) return this.emit({ t: "whiff", p: p.id, reason: "locked" });
+    // banked loot is safe by day; at NIGHT anyone can raid a fort
+    if (it.locked && !this.match.night) return this.emit({ t: "whiff", p: p.id, reason: "locked" });
     const def = lootDef(it.type);
     // Reach check: close enough and roughly in front of you
     const e = this.eye(p);
@@ -518,17 +596,23 @@ export class World {
     const facing = (dx * Math.sin(p.move.yaw) + dz * Math.cos(p.move.yaw)) / Math.max(0.001, Math.hypot(dx, dz));
     if (dist > GRAB_RANGE || (Math.hypot(dx, dz) > 0.8 && facing < 0.2)) return this.emit({ t: "whiff", p: p.id, reason: "far" });
 
+    if (it.mode === "free" && it.fort >= 0) this.raidCheck(p, it);
+
     if (def.size === "giant") {
+      if (it.mode === "held" && (it.holder === p.id || it.holder2 === p.id) && it.holder2) { this.tugPress(p); return; }
       if (p.hand) return this.emit({ t: "whiff", p: p.id, reason: "hands" });
+      let tug = false;
       if (it.mode === "free") {
         it.mode = "held"; it.holder = p.id; it.holder2 = "";
-      } else if (it.mode === "held" && !it.holder2 && it.holder !== p.id) {
-        it.holder2 = p.id;
+      } else if (it.mode === "held" && !it.holder2 && it.holder !== p.id && this.players.has(it.holder)) {
+        // grab the other end of a rival's giant item: TUG OF WAR
+        it.holder2 = p.id; it.tug = 0; it.tugT = 0; tug = true;
       } else {
         return this.emit({ t: "whiff", p: p.id, reason: "taken" });
       }
       p.hand = it.id;
-      this.touch(it);
+      if (!tug) this.touch(it);
+      if (tug) this.emit({ t: "tug", item: it.id, stage: "start", winner: "", loser: "" });
       this.updateCarry(p);
       for (const hid of [it.holder, it.holder2]) { const h = this.players.get(hid); if (h) this.updateCarry(h); }
       p.actionCd = ACTION_COOLDOWN;
@@ -536,6 +620,15 @@ export class World {
     }
 
     if (it.mode !== "free") return this.emit({ t: "whiff", p: p.id, reason: "taken" });
+    if (def.money) {
+      // coins / cash / wallets: straight into your cash
+      const value = itemWorth(it);
+      p.cash += value;
+      this.items.delete(it.id);
+      p.actionCd = ACTION_COOLDOWN;
+      if (it.shop >= 0) this.props.onShopGrab(p, it);
+      return this.emit({ t: "cash", p: p.id, item: it.id, type: it.type, value });
+    }
     if (def.size === "small") {
       const slot = p.pockets.indexOf("");
       if (slot >= 0) {
@@ -557,6 +650,43 @@ export class World {
     p.actionCd = ACTION_COOLDOWN;
     if (it.shop >= 0) this.props.onShopGrab(p, it);
     this.emit({ t: "grab", p: p.id, item: it.id, to: "hand" });
+  }
+
+  /** Night raid: taking loot out of a RIVAL's fort sets off their alarm. */
+  private raidCheck(p: PlayerSim, it: ItemSim) {
+    if (!this.match.night) return;
+    const owner = this.match.ownerOf(it.fort);
+    if (!owner || owner.id === p.id) return;
+    if (this.time - owner.raidAlarmT < RAID_ALARM_CD) return;
+    owner.raidAlarmT = this.time;
+    this.emit({ t: "raid", p: p.id, owner: owner.id, item: it.id, x: it.body.x, z: it.body.z });
+  }
+
+  /** One E press in a tug of war. */
+  private tugPress(p: PlayerSim) {
+    const it = p.hand ? this.items.get(p.hand) : undefined;
+    if (!it || it.mode !== "held" || !it.holder2 || p.tugCd > 0) return;
+    if (it.holder !== p.id && it.holder2 !== p.id) return;
+    p.tugCd = TUG_PRESS_CD;
+    it.tug += it.holder2 === p.id ? TUG_STEP : -TUG_STEP;
+    if (Math.abs(it.tug) >= 1) this.endTug(it);
+  }
+
+  /** Tug of war decided (or timed out): the winner keeps dragging, the loser lets go and staggers. */
+  private endTug(it: ItemSim) {
+    const winnerId = it.tug > 0 ? it.holder2 : it.holder;
+    const loserId = winnerId === it.holder ? it.holder2 : it.holder;
+    const loser = this.players.get(loserId), winner = this.players.get(winnerId);
+    it.holder = winnerId; it.holder2 = ""; it.tug = 0; it.tugT = 0;
+    this.touch(it);
+    if (loser) {
+      loser.hand = "";
+      this.updateCarry(loser);
+      if (winner) { const dx = loser.move.x - winner.move.x, dz = loser.move.z - winner.move.z, l = Math.max(0.01, Math.hypot(dx, dz)); loser.move.vx += (dx / l) * 4; loser.move.vz += (dz / l) * 4; }
+      loser.move.stumbleT = Math.max(loser.move.stumbleT, 0.5);
+    }
+    if (winner) this.updateCarry(winner);
+    this.emit({ t: "tug", item: it.id, stage: "win", winner: winnerId, loser: loserId });
   }
 
   /** Which item would an action use? Hands first, then the selected pocket, then any pocket. */
@@ -623,7 +753,7 @@ export class World {
 
   private letGoOfGiant(it: ItemSim, p: PlayerSim) {
     if (it.holder === p.id) { it.holder = it.holder2; }
-    it.holder2 = "";
+    it.holder2 = ""; it.tug = 0; it.tugT = 0;
     p.hand = "";
     this.updateCarry(p);
     const other = this.players.get(it.holder);
@@ -677,6 +807,7 @@ export class World {
       p.actionCd = Math.max(0, p.actionCd - dt);
       if (p.queued && p.actionCd <= 0) { const q = p.queued; p.queued = null; this.action(p.id, q); }
       p.punchCd = Math.max(0, p.punchCd - dt);
+      p.tugCd = Math.max(0, p.tugCd - dt);
       if (p.hitsDecayT > 0) { p.hitsDecayT -= dt; if (p.hitsDecayT <= 0) p.hitsTaken = 0; }
       if (p.knockWindowT > 0) { p.knockWindowT -= dt; if (p.knockWindowT <= 0) p.knockCount = 0; }
       if (!p.connected) continue;
@@ -731,10 +862,13 @@ export class World {
       if (def.size === "giant") {
         const h2 = it.holder2 ? this.players.get(it.holder2) : undefined;
         if (h2) {
+          // tug of war: nobody moves (carry speed 0) until someone wins or time runs out
+          it.tugT += SIM_DT;
+          if (it.tugT > TUG_MAX_TIME) { if (it.tug === 0) it.tug = -1e-6; this.endTug(it); continue; }
           const gap = Math.hypot(h1.move.x - h2.move.x, h1.move.z - h2.move.z);
           if (gap > GIANT_TETHER) {
-            // pulled apart: it tumbles to the ground and both let go
-            it.holder = ""; it.holder2 = "";
+            // pulled apart (shoved, knocked): it tumbles to the ground and both let go
+            it.holder = ""; it.holder2 = ""; it.tug = 0; it.tugT = 0;
             h1.hand = ""; h2.hand = "";
             this.updateCarry(h1); this.updateCarry(h2);
             this.freeItem(it, (h1.move.x + h2.move.x) / 2, 1.2, (h1.move.z + h2.move.z) / 2, 0, 2, 0);
@@ -819,13 +953,13 @@ export class World {
 
   // ------------------------------------------------------------------ loot spawning
   private fillLoot() {
-    for (let i = 0; i < ITEM_TARGET; i++) this.spawnOne();
+    for (let i = 0; i < this.itemTarget; i++) this.spawnOne();
   }
 
   private topUpLoot(n: number) {
     let free = 0;
     for (const it of this.items.values()) if (it.mode === "free") free++;
-    for (let i = 0; i < n && free < ITEM_TARGET && this.items.size < ITEM_MAX; i++, free++) this.spawnOne();
+    for (let i = 0; i < n && free < this.itemTarget && this.items.size < ITEM_MAX; i++, free++) this.spawnOne();
   }
 
   private pickType(zone: LootZone, groundLevel: boolean, allowGiant: boolean): LootDef {
@@ -864,7 +998,7 @@ export class World {
         id, type: def.type, value: rollValue(def, this.rng),
         body: { x: sp.x + jx, y: sp.y + def.radius + 0.4, z: sp.z + jz, vx: 0, vy: 0, vz: 0, rot: this.rng() * Math.PI * 2, spin: 0, resting: false },
         mode: "free", holder: "", holder2: "", lastThrower: "", thrownT: 99, idleT: 0,
-        fort: -1, bankT: 0, locked: false, mult: 1, chute: false, shop: -1,
+        fort: -1, bankT: 0, locked: false, mult: this.lootMult, chute: false, shop: -1, tug: 0, tugT: 0,
       });
       this.emit({ t: "spawn", item: id });
       return id;
@@ -889,7 +1023,7 @@ export class World {
       id, type, value: rollValue(def, this.rng),
       body: { x, y: y + def.radius, z, vx: 0, vy: 0, vz: 0, rot: 0, spin: 0, resting: false },
       mode: "free", holder: "", holder2: "", lastThrower: "", thrownT: 99, idleT: 0,
-      fort: -1, bankT: 0, locked: false, mult: 1, chute: false, shop: -1,
+      fort: -1, bankT: 0, locked: false, mult: this.lootMult, chute: false, shop: -1, tug: 0, tugT: 0,
     });
     return id;
   }

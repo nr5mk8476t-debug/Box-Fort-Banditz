@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  World, buildTrashington, LOOT, lootDef, PLAYER, GIANT_TETHER, ITEM_MAX,
+  World, buildTrashington, LOOT, lootDef, PLAYER, GIANT_DRAG_MUL, TUG_MAX_TIME, ITEM_MAX,
   type MoveInput, type ArenaLayout, type Box,
 } from "../src/index.js";
 
@@ -198,7 +198,7 @@ test("thrown item bonks another player (shove + event), not the thrower", () => 
   assert.ok(bonked, "B got bonked by A's cone");
 });
 
-test("giant items: one player drags slowly, two carry together, pulling apart makes it tumble", () => {
+test("giant items: ONE player drags slowly; a rival grabbing the other end starts a tug of war", () => {
   const w = flatWorld();
   const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
   a.move.x = -0.9; b.move.x = 0.9;
@@ -206,42 +206,42 @@ test("giant items: one player drags slowly, two carry together, pulling apart ma
   settle(w, 1);
   w.action("a", { a: "grab", item: duck });
   assert.equal(w.items.get(duck)!.holder, "a");
-  assert.ok(Math.abs(a.move.carryMul - 0.3) < 1e-9, "dragging alone is very slow");
+  assert.ok(Math.abs(a.move.carryMul - GIANT_DRAG_MUL) < 1e-9, "dragging alone is slow");
   settle(w, 0.3);
   w.action("b", { a: "grab", item: duck });
   const it = w.items.get(duck)!;
-  assert.equal(it.holder2, "b");
-  assert.ok(Math.abs(a.move.carryMul - 0.65) < 1e-9 && Math.abs(b.move.carryMul - 0.65) < 1e-9, "two carriers move faster");
-  // walk apart sideways until the tether breaks
-  let tumbled = false;
-  for (let i = 0; i < 240 && !tumbled; i++) {
-    w.pushInputs("a", [inp(a.lastSeq + 1, { mx: -1 })]);
-    w.pushInputs("b", [inp(b.lastSeq + 1, { mx: 1 })]);
+  assert.equal(it.holder2, "b", "b grabbed the other end");
+  assert.equal(a.move.carryMul, 0); assert.equal(b.move.carryMul, 0);
+  // b mashes harder: 2 presses for every 1 of a's
+  let won = false;
+  for (let i = 0; i < 400 && !won; i++) {
+    if (i % 5 === 0) w.action("b", { a: "tug" });
+    if (i % 10 === 0) w.action("a", { a: "tug" });
     w.tick();
-    tumbled = w.takeEvents().some((e) => e.t === "tumble");
+    won = w.takeEvents().some((e) => e.t === "tug" && e.stage === "win" && e.winner === "b");
   }
-  assert.ok(tumbled, "pulled apart = tumble");
-  assert.equal(it.mode, "free");
-  assert.equal(a.hand, ""); assert.equal(b.hand, "");
-  assert.ok(Math.hypot(a.move.x - b.move.x, a.move.z - b.move.z) > GIANT_TETHER - 0.2);
+  assert.ok(won, "the harder masher wins");
+  assert.equal(it.holder, "b"); assert.equal(it.holder2, "");
+  assert.equal(a.hand, ""); assert.equal(b.hand, duck);
+  assert.ok(Math.abs(b.move.carryMul - GIANT_DRAG_MUL) < 1e-9, "winner drags it away");
 });
 
-test("giant: can't be thrown; one carrier letting go leaves the other dragging", () => {
+test("tug of war: time runs out -> the holder keeps it; punching the dragger frees it", () => {
   const w = flatWorld();
   const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
   a.move.x = -0.9; b.move.x = 0.9;
   const arc = w.placeItem("arcade_machine", 0, 0, 1.6);
   settle(w, 1);
   w.action("a", { a: "grab", item: arc }); settle(w, 0.3);
-  w.action("b", { a: "grab", item: arc }); settle(w, 0.3);
   w.action("a", { a: "throw", charge: 1, yaw: 0, pitch: 0 });
-  assert.equal(w.items.get(arc)!.mode, "held");
-  settle(w, 0.3);
-  w.action("a", { a: "drop" });
+  assert.equal(w.items.get(arc)!.mode, "held", "can't throw a giant item");
+  w.action("b", { a: "grab", item: arc });
+  settle(w, TUG_MAX_TIME + 0.5);
   const it = w.items.get(arc)!;
-  assert.equal(it.holder, "b"); assert.equal(it.holder2, "");
-  assert.equal(a.hand, "");
-  assert.ok(Math.abs(b.move.carryMul - 0.3) < 1e-9);
+  assert.equal(it.holder, "a"); assert.equal(it.holder2, ""); assert.equal(b.hand, "");
+  // knock the dragger down: it drops
+  w.knockdown(a, "b");
+  assert.equal(it.mode, "free"); assert.equal(a.hand, "");
 });
 
 test("disconnect / leave drops everything so it can be stolen", () => {

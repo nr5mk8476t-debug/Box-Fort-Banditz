@@ -148,6 +148,9 @@ export class Viewmodel {
   punchAnim() { this.punchT = PUNCH_T; this.punchSide = this.punchSide === 1 ? -1 : 1; }
 
   /** Landing / impact dip (bigger impact = deeper dip). */
+  /** Hide the hands (upgrades screen looks at your fort from outside). */
+  setVisible(on: boolean) { if (this.rootNode.isEnabled() !== on) this.rootNode.setEnabled(on); }
+
   kick(amount: number) {
     this.dip.kick(-amount);
   }

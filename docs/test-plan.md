@@ -181,6 +181,24 @@ Note on the automated browser test: it renders 3D on the CPU, so it runs at sing
 | | joiner drop -> seat held + automatic reconnect; refresh -> same seat; 5th player "full"; host leaves -> everyone told, code stops working | e2e | pass |
 | Totals (4.6) | 108 shared unit + 2 client unit + server smoke + 178 browser checks (online now runs browser-hosted) | all | pass |
 
+| Cycle loop | intro -> day -> dusk -> night -> dawn -> shop -> upgrades x3 -> over; READY skips; START resets | unit + e2e | pass |
+| Night | scarce x2 loot, heat x2, 2/4/6 cops, cars from 2 stars, visuals (dark sky, lamps, lit windows) | unit + e2e | pass |
+| Fort raids | banked loot safe by day, raidable at night, owner's alarm | unit + e2e (online) | pass |
+| Pawn shop | lowball offers, haggle up / offended (never above his secret max), sell = cash, unsold lost | unit + e2e | pass |
+| Money | coins / cash / wallets auto-bank; money bag must be carried | unit + e2e | pass |
+| Tasers | 3 stars: aim (warning) -> hit = stun + drop hands -> cuffed; dodge = miss | unit | pass |
+| Tug of war | solo drag x0.4; rival grabs = tug; harder masher wins; timeout = holder; knockdown frees it | unit + e2e (online) | pass |
+| Totals (5A) | 115 shared unit + 2 client unit + server smoke + 208/208 browser checks (solo + 4 browser-hosted online windows) | all | pass |
+
+## Manual checklist for Blake (Phase 5A)
+
+- [ ] Does the full cycle feel good (3 min day, 1 min night, shop, upgrades)? Too long / short?
+- [ ] Night: dark enough? Can you still see what you're doing?
+- [ ] Raid a friend's fort at night. Is the alarm loud/clear enough?
+- [ ] Pawn shop: can you read Sal's mood? Is haggling fun or annoying?
+- [ ] Tasers at 3 stars: fair? Can you see the red laser in time to dodge?
+- [ ] Tug of war over the duck/arcade machine/airdrop crate.
+
 ## Manual checklist for Blake (Phase 4.6)
 
 - [ ] Host a room, have 1-3 friends join by link. Does it feel smoother than before?
