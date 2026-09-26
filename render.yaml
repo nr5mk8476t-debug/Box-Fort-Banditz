@@ -1,0 +1,15 @@
+# Render "Blueprint": the Box Fort Banditz game server (Colyseus), in Singapore (closest to Australia).
+# Render: New + > Blueprint > pick this repo. Free plan sleeps after ~15 min idle (first join then
+# takes ~1 min to wake it); switch "plan" to "starter" for an always-on server.
+services:
+  - type: web
+    name: box-fort-banditz-server
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run start --workspace server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

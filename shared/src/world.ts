@@ -1,0 +1,921 @@
+// The World: all game rules in one place, with no engine or network code.
+// - The multiplayer server runs one World per room and mirrors it to clients.
+// - Solo mode runs the exact same World inside the browser.
+// So solo and multiplayer can never drift apart.
+//
+// Phase 2 contents: players (movement + inventory), loot items (spawning, physics,
+// grab / pocket / drop / throw, two-person giant items), events for sounds/effects, cleanup.
+import { PLAYER, SIM_DT, MAX_PLAYERS, MAX_INPUTS_PER_TICK, PLAYER_COLORS } from "./constants.js";
+import { makeMoveState, stepMovement, sanitizeInput, groundHeightAt, type MoveInput, type MoveState } from "./movement.js";
+import { stepItem, type ItemBody } from "./itemPhysics.js";
+import { LOOT, lootDef, rollValue, carrySpeedMul, type LootDef } from "./loot.js";
+import type { ArenaLayout, LootZone } from "./arena.js";
+import { buildTrashington } from "./city.js";
+import { sanitizeName } from "./names.js";
+import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent } from "./npcSim.js";
+import { MatchSystem, itemWorth, type MatchPhase, type CityEventKind } from "./match.js";
+import { PropSystem, PROP_RADIUS, SMASHABLE, type PropEvent } from "./props.js";
+import { TrafficSystem, type TrafficEvent } from "./traffic.js";
+import { PoliceSystem, type PoliceEvent } from "./police.js";
+import type { LockRun } from "./lockpick.js";
+
+export const POCKETS = 3;
+/** Server-side grab reach (a bit generous: the server sees you ~0.1 s in the past). */
+export const GRAB_RANGE = 2.9;
+/** Client-side reach used for the look prompt. */
+export const GRAB_RANGE_CLIENT = 2.4;
+export const GIANT_TETHER = 3.2; // two carriers further apart than this = the item tumbles
+export const THROW_MIN_SPEED = 5;
+export const THROW_MAX_SPEED = 16;
+export const ITEM_TARGET = 55; // loose items the World tries to keep in the city (200 m city)
+export const ITEM_MAX = 95;
+export const GIANT_MAX = 2;
+const ACTION_COOLDOWN = 0.18; // seconds between grab/drop/throw (anti-spam)
+export const PUNCH_COOLDOWN = 0.55;
+export const PVP_PUNCH_COOLDOWN = 2.0; // after knocking a PLAYER down (anti-grief)
+export const KNOCK_TIMES = [1.5, 1.0, 0.6]; // repeat knockdowns within 12 s get shorter (anti-grief)
+export const KNOCK_IMMUNITY = 3; // seconds of immunity after getting up
+export const NPC_COUNT = 20; // Blake: 15-20 (was 35); top of the range now the city is bigger
+
+export type ItemMode = "free" | "held" | "pocket";
+
+export interface ItemSim {
+  id: string;
+  type: string;
+  value: number;
+  body: ItemBody;
+  mode: ItemMode;
+  holder: string;
+  holder2: string; // second carrier of a giant item
+  lastThrower: string;
+  thrownT: number; // time since thrown (for bonks)
+  idleT: number; // seconds resting untouched (cleanup)
+  // Phase 3 banking
+  fort: number; // fort yard it's resting in (-1 = none)
+  bankT: number; // seconds resting in that yard
+  locked: boolean; // banked: can't be picked up by players any more (raccoons can still steal it)
+  mult: number; // happy-hour bonus (1 or 2)
+  chute: boolean; // airdrop crate still under its parachute
+  shop: number; // shop stock / register (-1 = not from a shop)
+}
+
+export interface PlayerSim {
+  id: string;
+  name: string;
+  colorIdx: number;
+  connected: boolean;
+  move: MoveState;
+  lastSeq: number;
+  queue: MoveInput[];
+  credit: number;
+  hand: string;
+  pockets: string[];
+  sel: number;
+  actionCd: number;
+  /** one action pressed during the short cooldown: runs as soon as the cooldown ends (no lost key presses) */
+  queued: WorldAction | null;
+  punchCd: number;
+  /** heat 0..100 (wanted stars at 30 / 60 / 90) */
+  notoriety: number;
+  hitsTaken: number; // hits from a fighting pedestrian (2 = knocked down)
+  hitsDecayT: number;
+  knockCount: number; // recent knockdowns (for diminishing returns)
+  knockWindowT: number;
+  /** Phase 3: money from previous rounds this match */
+  cash: number;
+  stolenThisRound: number;
+  /** Phase 3.5: hold-up in progress at a till */
+  rob: { prop: string; t: number; x: number; z: number } | null;
+  /** Phase 3.5: seconds until you respawn at your fort after a car wiped you out (0 = alive) */
+  respawnT: number;
+  /** Phase 4: seconds left in jail (0 = free), which cell, the lock you're picking */
+  jailT: number;
+  jailCell: number;
+  lock: LockRun | null;
+  lockSeed: number;
+  lockT0: number; // world time you were locked up (lock clock starts here)
+  /** world time a cop last had eyes on you (heat only cools while nobody sees you) */
+  seenT: number;
+  /** where the police think you are: your last crime or last sighting (dispatched cops go here) */
+  knownX: number; knownZ: number;
+  /** world time of your last crime (heat doesn't cool for a few seconds after one) */
+  crimeT: number;
+}
+
+export type WorldEvent =
+  | { t: "grab"; p: string; item: string; to: "hand" | "pocket" | "carry" }
+  | { t: "whiff"; p: string; reason: "taken" | "far" | "full" | "hands" | "cooldown" | "locked" }
+  | { t: "drop"; p: string; item: string }
+  | { t: "throw"; p: string; item: string; speed: number }
+  | { t: "impact"; item: string; speed: number; x: number; y: number; z: number }
+  | { t: "bonk"; item: string; p: string; by: string }
+  | { t: "tumble"; item: string }
+  | { t: "spawn"; item: string }
+  | { t: "punch"; p: string; hit: "none" | "npc" | "player" | "blocked" | "prop"; target: string }
+  | { t: "knockdown"; p: string; by: string; time: number }
+  | { t: "npcHit"; npc: string; by: string; how: "punch" | "throw" }
+  | { t: "npcSay"; npc: string; line: string }
+  | { t: "npcAttack"; npc: string; p: string; hit: boolean }
+  | { t: "npcDodge"; npc: string; p: string }
+  | { t: "npcKo"; npc: string; by: string }
+  | { t: "panic"; npc: string }
+  | { t: "flash"; p: string }
+  | { t: "trap"; p: string }
+  | { t: "swarm"; p: string }
+  // Phase 3
+  | { t: "round"; phase: MatchPhase | "hurry"; round: number }
+  | { t: "banked"; item: string; p: string; value: number }
+  | { t: "lost"; p: string; count: number; value: number }
+  | { t: "cityEvent"; kind: CityEventKind; stage: "warn" | "live" | "end"; x: number; z: number; detail: string }
+  | { t: "swept"; item: string; type: string; x: number; z: number }
+  | { t: "raccoonGrab"; npc: string; item: string; p: string }
+  | { t: "raccoonEscaped"; npc: string; item: string; type: string; p: string; value: number }
+  | PropEvent
+  | TrafficEvent
+  | PoliceEvent
+  | BigShotEvent;
+
+export type WorldAction =
+  | { a: "grab"; item: string }
+  | { a: "drop" }
+  | { a: "throw"; charge: number; yaw: number; pitch: number }
+  | { a: "cycle" }
+  | { a: "punch"; yaw: number; pitch: number }
+  | { a: "use"; prop: string } // search a dumpster / bin (E), or start a hold-up at a till (hold R)
+  | { a: "robStop" }
+  | { a: "pick"; pin: number; t: number }; // jail lock-pick press (t = seconds since locked up)
+
+/** Small, fast, seedable random numbers (deterministic worlds for tests). */
+export function makeRng(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Rarity boost per spawn zone: the plaza, rooftops and shops are high-risk, high-reward. */
+const ZONE_RARE_BOOST: Record<LootZone, number> = { plaza: 3, rooftop: 2.2, shop: 2, yard: 1, alley: 1, street: 0.7 };
+
+export interface WorldOptions { seed?: number; arena?: ArenaLayout; spawnLoot?: boolean; npcs?: number; }
+
+export class World {
+  readonly arena: ArenaLayout;
+  readonly players = new Map<string, PlayerSim>();
+  readonly items = new Map<string, ItemSim>();
+  time = 0;
+  private events: WorldEvent[] = [];
+  private rng: () => number;
+  private nextItem = 1;
+  private spawnTimer = 0;
+  private recycleTimer = 0;
+  private spawnLoot: boolean;
+  readonly npc: NpcSystem;
+  readonly match: MatchSystem;
+  readonly props: PropSystem;
+  readonly traffic: TrafficSystem;
+  readonly police: PoliceSystem;
+  private stockTimer = 0;
+
+  constructor(opts: WorldOptions = {}) {
+    this.arena = opts.arena ?? buildTrashington();
+    this.rng = makeRng(opts.seed ?? 12345);
+    this.spawnLoot = opts.spawnLoot ?? true;
+    if (this.spawnLoot) this.fillLoot();
+    this.npc = new NpcSystem(this.npcHost(), opts.npcs ?? (opts.arena ? 0 : NPC_COUNT));
+    this.match = new MatchSystem(this);
+    this.props = new PropSystem(this);
+    this.traffic = new TrafficSystem(this);
+    this.police = new PoliceSystem(this);
+    if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
+  }
+
+  /** Raise a player's heat (notoriety), capped at 100. Cops who see it happen come running. */
+  addHeat(p: PlayerSim, n: number) {
+    if (p.jailT > 0) return;
+    p.notoriety = Math.min(100, p.notoriety + n);
+    if (n > 0) { p.knownX = p.move.x; p.knownZ = p.move.z; p.crimeT = this.time; this.police.onCrime(p); } // somebody calls it in
+  }
+
+  /** Teleport a player (jail, release). Keeps what they carry; clears queued inputs. */
+  movePlayer(p: PlayerSim, x: number, z: number, yaw: number) {
+    const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
+    p.move = { ...makeMoveState(x, z, yaw), ...keep };
+    p.move.y = groundHeightAt(x, z, this.arena.boxes, 1); // stand ON floors / curbs, never inside them
+    p.queue.length = 0;
+  }
+
+  /** Busted: everything carried is taken away for good. Returns how much. */
+  confiscateAll(p: PlayerSim): { count: number; value: number } {
+    let count = 0, value = 0, guard = 0;
+    while (this.activeItem(p) && guard++ < 10) {
+      const a = this.activeItem(p)!;
+      const it = a.item;
+      if (lootDef(it.type).size === "giant" && it.holder2) { this.letGoOfGiant(it, p); continue; } // your partner keeps dragging it
+      this.release(p, a.from);
+      count++; value += itemWorth(it);
+      this.items.delete(it.id);
+    }
+    p.hand = ""; p.pockets.fill("");
+    this.updateCarry(p);
+    return { count, value };
+  }
+
+  /** Fill shop shelves: every empty shelf spot (full) or one random empty spot per shop. */
+  stockShops(full: boolean) {
+    const spots = (this.arena.lootSpawns ?? []).filter((s) => s.pool && s.shop !== undefined);
+    const empty = spots.filter((sp) => ![...this.items.values()].some((it) => it.mode === "free" && Math.hypot(it.body.x - sp.x, it.body.z - sp.z) < 0.6 && Math.abs(it.body.y - sp.y) < 1));
+    const pick = full ? empty : (this.arena.shops ?? []).map((sh) => { const e = empty.filter((x) => x.shop === sh.id); return e[Math.floor(this.rng() * e.length)]; }).filter(Boolean);
+    for (const sp of pick) {
+      if (this.items.size >= ITEM_MAX + 30) break;
+      const type = sp.pool![Math.floor(this.rng() * sp.pool!.length)];
+      const id = this.placeItem(type, sp.x, sp.y, sp.z);
+      const it = this.items.get(id)!;
+      it.shop = sp.shop!;
+      it.body.rot = this.rng() * Math.PI * 2;
+    }
+  }
+
+  /** Shared random numbers (deterministic per seed). */
+  random() { return this.rng(); }
+
+  /** Host pressed START (or solo). */
+  startMatch() { return this.match.start(); }
+
+  /** New round: fresh loot, everyone back at their fort with empty hands. */
+  resetCity() {
+    this.npc.clearRaccoons();
+    this.npc.resetCashiers();
+    this.police.reset();
+    this.items.clear();
+    if (this.spawnLoot) { this.fillLoot(); this.props.reset(); this.stockShops(true); }
+    for (const p of this.players.values()) {
+      p.hand = ""; p.pockets.fill(""); p.queued = null;
+      const sp = this.arena.spawns[p.colorIdx % this.arena.spawns.length];
+      const keepSeq = p.lastSeq;
+      p.move = makeMoveState(sp.x, sp.z, sp.yaw);
+      p.lastSeq = keepSeq;
+      p.queue.length = 0;
+      p.notoriety = 0; p.hitsTaken = 0; p.knockCount = 0; p.stolenThisRound = 0; p.rob = null; p.respawnT = 0;
+      this.updateCarry(p);
+    }
+  }
+
+  refreshCarry(p: PlayerSim) { this.updateCarry(p); }
+  /** Drop everything a player carries (knockdowns, wipeouts). */
+  dropAll(p: PlayerSim) { this.dropEverything(p); }
+
+  /** Spawn a random ground item near a point (happy hour bonus). */
+  spawnAt(x: number, z: number): string {
+    if (this.items.size >= ITEM_MAX) return "";
+    const def = this.pickType("plaza", true, false);
+    const id = this.placeItem(def.type, x, 0.4, z);
+    this.emit({ t: "spawn", item: id });
+    return id;
+  }
+
+  /** The bridge the pedestrian AI uses to affect the world. */
+  private npcHost(): NpcHost {
+    const w = this;
+    return {
+      arena: this.arena,
+      rng: () => this.rng(),
+      playersForNpcs: () => [...w.players.values()].map((p) => ({
+        id: p.id, x: p.move.x, y: p.move.y, z: p.move.z, yaw: p.move.yaw, connected: p.connected && p.jailT <= 0,
+        knocked: p.move.knockT > 0, immune: p.move.immuneT > 0,
+      })),
+      npcHitPlayer: (npcId, pid) => {
+        const p = w.players.get(pid);
+        if (!p || p.move.knockT > 0 || p.move.immuneT > 0) return;
+        p.hitsTaken += 1;
+        p.hitsDecayT = 5;
+        const n = w.npc.npcs.get(npcId);
+        if (n) { const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, Math.hypot(dx, dz)); p.move.vx += (dx / l) * 3.5; p.move.vz += (dz / l) * 3.5; }
+        if (p.hitsTaken >= 2) { p.hitsTaken = 0; w.knockdown(p, npcId); w.npc.gloat(npcId); }
+      },
+      npcDropLoot: (_npcId, type, x, y, z, ax, az) => { w.popLoot(type, x, y, z, ax, az); },
+      shopAlarm: (shopId) => { const t = [...w.props.props.values()].find((x) => x.def.kind === "till" && x.def.shop === shopId); if (t) { t.alarmT = 6; w.emit({ t: "alarm", kind: "shop", prop: t.def.id, x: t.def.x, z: t.def.z }); } },
+      npcEvent: (e) => w.emit(e),
+      addNotoriety: (pid, n) => { const p = w.players.get(pid); if (p) w.addHeat(p, n); },
+      copBrain: (n, dt) => w.police.brain(n, dt),
+      applyToPlayer: (pid, effect) => {
+        const p = w.players.get(pid);
+        if (!p) return;
+        if (effect === "trap") { p.move.trapT = 1.6; w.emit({ t: "trap", p: pid }); }
+        if (effect === "swarm") { p.move.swarmT = 5; w.emit({ t: "swarm", p: pid }); }
+        if (effect === "flash") w.emit({ t: "flash", p: pid });
+      },
+      raccoonTarget: (slot) => {
+        // the most valuable thing lying in that fort yard (locked or not: raccoons don't care)
+        let best: ItemSim | null = null;
+        for (const it of w.items.values()) {
+          if (it.mode !== "free" || lootDef(it.type).size === "giant" || it.fort !== slot) continue;
+          if (!best || itemWorth(it) > itemWorth(best)) best = it;
+        }
+        return best ? { id: best.id, x: best.body.x, z: best.body.z } : null;
+      },
+      raccoonGrab: (npcId, itemId) => {
+        const it = w.items.get(itemId);
+        if (!it || it.mode !== "free") return false;
+        it.mode = "held"; it.holder = npcId; it.holder2 = "";
+        it.locked = false; it.bankT = 0;
+        const owner = w.match.ownerOf(it.fort);
+        it.fort = -1;
+        w.emit({ t: "raccoonGrab", npc: npcId, item: itemId, p: owner?.id ?? "" });
+        return true;
+      },
+      npcDropCarried: (itemId, x, y, z, ax, az) => {
+        const it = w.items.get(itemId);
+        if (!it) return;
+        const l = Math.max(0.01, Math.hypot(ax, az));
+        it.holder = ""; it.holder2 = "";
+        w.freeItem(it, x, y, z, (ax / l) * 1.5, 3.5, (az / l) * 1.5);
+      },
+      raccoonGone: (npcId, itemId, slot) => {
+        const it = itemId ? w.items.get(itemId) : undefined;
+        if (!it) return;
+        const owner = w.match.ownerOf(slot);
+        if (owner) owner.stolenThisRound++;
+        w.items.delete(itemId);
+        w.emit({ t: "raccoonEscaped", npc: npcId, item: itemId, type: it.type, p: owner?.id ?? "", value: itemWorth(it) });
+      },
+    };
+  }
+
+  /** Loot popping out of something (a pedestrian, a dumpster, a smashed phone booth...): flies up and away. */
+  popLoot(type: string, x: number, y: number, z: number, ax: number, az: number): string {
+    const def = lootDef(type);
+    const id = "i" + this.nextItem++;
+    const l = Math.max(0.01, Math.hypot(ax, az));
+    this.items.set(id, {
+      id, type, value: rollValue(def, this.rng),
+      body: { x, y, z, vx: (ax / l) * 2 + (this.rng() - 0.5), vy: 4.5, vz: (az / l) * 2 + (this.rng() - 0.5), rot: 0, spin: 6, resting: false },
+      mode: "free", holder: "", holder2: "", lastThrower: "", thrownT: 99, idleT: 0,
+      fort: -1, bankT: 0, locked: false, mult: 1, chute: false, shop: -1,
+    });
+    this.emit({ t: "spawn", item: id });
+    return id;
+  }
+
+  /** Knock a player down: they drop everything. Repeat knockdowns get shorter; immunity afterwards. */
+  knockdown(p: PlayerSim, by: string) {
+    if (p.move.knockT > 0 || p.move.immuneT > 0) return;
+    const time = KNOCK_TIMES[Math.min(p.knockCount, KNOCK_TIMES.length - 1)];
+    p.knockCount += 1;
+    p.knockWindowT = 12;
+    this.dropEverything(p);
+    p.move.knockT = time;
+    p.move.immuneT = time + KNOCK_IMMUNITY;
+    p.move.mantleT = 0; p.move.slideT = 0; p.move.dodgeT = 0;
+    this.emit({ t: "knockdown", p: p.id, by, time });
+  }
+
+  // ------------------------------------------------------------------ players
+  addPlayer(id: string, rawName: unknown): PlayerSim {
+    const used = new Set([...this.players.values()].map((p) => p.colorIdx));
+    let colorIdx = 0;
+    while (used.has(colorIdx) && colorIdx < PLAYER_COLORS.length - 1) colorIdx++;
+    const sp = this.arena.spawns[colorIdx % this.arena.spawns.length];
+    const p: PlayerSim = {
+      id, name: sanitizeName(rawName), colorIdx, connected: true,
+      move: makeMoveState(sp.x, sp.z, sp.yaw), lastSeq: -1, queue: [], credit: 0,
+      hand: "", pockets: Array(POCKETS).fill(""), sel: 0, actionCd: 0, queued: null,
+      punchCd: 0, notoriety: 0, hitsTaken: 0, hitsDecayT: 0, knockCount: 0, knockWindowT: 0,
+      cash: 0, stolenThisRound: 0, rob: null, respawnT: 0,
+      jailT: 0, jailCell: -1, lock: null, lockSeed: 0, lockT0: 0, seenT: -99, knownX: 0, knownZ: 0, crimeT: -99,
+    };
+    this.players.set(id, p);
+    return p;
+  }
+
+  get playerCount() { return this.players.size; }
+  get full() { return this.players.size >= MAX_PLAYERS; }
+
+  /** Lost connection: drop everything (so it's stealable) and freeze in place. */
+  setConnected(id: string, connected: boolean) {
+    const p = this.players.get(id);
+    if (!p) return;
+    p.connected = connected;
+    if (!connected) {
+      this.dropEverything(p);
+      p.queue.length = 0;
+      p.move.vx = 0; p.move.vz = 0; p.move.slideT = 0; p.move.dodgeT = 0;
+    }
+  }
+
+  removePlayer(id: string) {
+    const p = this.players.get(id);
+    if (!p) return;
+    this.dropEverything(p);
+    this.players.delete(id);
+  }
+
+  pushInputs(id: string, batch: unknown) {
+    const p = this.players.get(id);
+    if (!p || !p.connected || !Array.isArray(batch)) return;
+    for (const raw of batch.slice(0, 16)) {
+      const inp = sanitizeInput(raw as Partial<MoveInput>);
+      if (!inp) continue;
+      const lastQueued = p.queue.length ? p.queue[p.queue.length - 1].seq : p.lastSeq;
+      if (inp.seq <= lastQueued) continue; // duplicate or out of order
+      p.queue.push(inp);
+    }
+    if (p.queue.length > 60) p.queue.splice(0, p.queue.length - 60);
+  }
+
+  // ------------------------------------------------------------------ actions
+  action(id: string, raw: unknown) {
+    const p = this.players.get(id);
+    if (!p || !p.connected || !raw || typeof raw !== "object") return;
+    const act = raw as WorldAction;
+    if (p.jailT > 0) { // locked up: the only thing you can do is pick the lock
+      if (act.a === "pick") this.police.pick(p, Number((act as any).pin), Number((act as any).t));
+      return;
+    }
+    if (p.move.knockT > 0 || p.move.trapT > 0) return; // can't do anything while flattened / boxed in
+    if (p.respawnT > 0) return; // wiped out: waiting to respawn
+    if (act.a === "punch") { this.punch(p, Number((act as any).yaw), Number((act as any).pitch)); return; }
+    if (act.a === "robStop") { this.props.cancelRob(p); return; }
+    if (act.a === "use") { this.props.use(p, String((act as any).prop ?? "")); return; }
+    if (p.actionCd > 0 && act.a !== "cycle") {
+      // Pressed a moment too early (e.g. G right after E): remember it and do it when allowed.
+      if (!p.queued) p.queued = act; else this.emit({ t: "whiff", p: id, reason: "cooldown" });
+      return;
+    }
+    switch (act.a) {
+      case "grab": this.grab(p, String((act as any).item ?? "")); break;
+      case "drop": this.drop(p); break;
+      case "throw": this.throwItem(p, Number((act as any).charge), Number((act as any).yaw), Number((act as any).pitch)); break;
+      case "cycle": p.sel = (p.sel + 1) % POCKETS; break;
+    }
+  }
+
+  private eye(p: PlayerSim) {
+    const m = p.move;
+    return { x: m.x, y: m.y + (m.crouching || m.slideT > 0 ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight), z: m.z };
+  }
+
+  /** Punch whoever is in front of you (pedestrian or player). Only with empty hands. */
+  private punch(p: PlayerSim, yaw: number, pitch: number) {
+    if (p.punchCd > 0 || p.hand) return;
+    p.punchCd = PUNCH_COOLDOWN;
+    const aim = Number.isFinite(yaw) ? yaw : p.move.yaw;
+    void pitch;
+    const m = p.move;
+    let best: { kind: "npc" | "player" | "prop"; id: string; score: number } | null = null;
+    const consider = (kind: "npc" | "player" | "prop", id: string, x: number, y: number, z: number, surface = 0) => {
+      const dx = x - m.x, dz = z - m.z;
+      const d = Math.max(0.3, Math.hypot(dx, dz) - surface);
+      if (d > PUNCH_RANGE + 0.3 || Math.abs(y - m.y) > 1.3) return;
+      let ang = Math.atan2(dx, dz) - aim;
+      while (ang > Math.PI) ang -= Math.PI * 2;
+      while (ang < -Math.PI) ang += Math.PI * 2;
+      if (Math.abs(ang) > 0.9 && d > 0.6) return;
+      const score = d + Math.abs(ang) * 1.5;
+      if (!best || score < best.score) best = { kind, id, score };
+    };
+    for (const n of this.npc.npcs.values()) if (n.state !== "ko") consider("npc", n.id, n.move.x, n.move.y, n.move.z);
+    for (const o of this.players.values()) if (o.id !== p.id && o.connected && o.jailT <= 0 && o.move.knockT <= 0) consider("player", o.id, o.move.x, o.move.y, o.move.z);
+    // smashable props (phone booths, vending machines, meters, newspaper boxes, parked cars)
+    for (const ps of this.props.props.values()) {
+      const d = ps.def;
+      if (!SMASHABLE.has(d.kind) || Math.hypot(d.x - m.x, d.z - m.z) > 5) continue;
+      consider("prop", d.id, d.x, m.y, d.z, PROP_RADIUS[d.kind]);
+    }
+    const b = best as { kind: "npc" | "player" | "prop"; id: string; score: number } | null;
+    if (!b) return this.emit({ t: "punch", p: p.id, hit: "none", target: "" });
+    if (b.kind === "prop") {
+      this.props.smash(p, b.id);
+      return this.emit({ t: "punch", p: p.id, hit: "prop", target: b.id });
+    }
+    if (b.kind === "npc") {
+      const r = this.npc.hit(b.id, p.id, m.x, m.z);
+      this.emit({ t: "punch", p: p.id, hit: r === "hit" ? "npc" : "none", target: b.id });
+      if (r === "hit") this.emit({ t: "npcHit", npc: b.id, by: p.id, how: "punch" });
+      return;
+    }
+    const victim = this.players.get(b.id)!;
+    if (victim.move.immuneT > 0) return this.emit({ t: "punch", p: p.id, hit: "blocked", target: b.id });
+    this.emit({ t: "punch", p: p.id, hit: "player", target: b.id });
+    const dx = victim.move.x - m.x, dz = victim.move.z - m.z, l = Math.max(0.01, Math.hypot(dx, dz));
+    victim.move.vx += (dx / l) * 4; victim.move.vz += (dz / l) * 4;
+    this.knockdown(victim, p.id);
+    p.punchCd = PVP_PUNCH_COOLDOWN;
+    this.addHeat(p, 5);
+  }
+
+  private grab(p: PlayerSim, itemId: string) {
+    const it = this.items.get(itemId);
+    if (!it) return this.emit({ t: "whiff", p: p.id, reason: "taken" });
+    if (it.locked) return this.emit({ t: "whiff", p: p.id, reason: "locked" });
+    const def = lootDef(it.type);
+    // Reach check: close enough and roughly in front of you
+    const e = this.eye(p);
+    const dx = it.body.x - e.x, dy = it.body.y - e.y, dz = it.body.z - e.z;
+    const dist = Math.hypot(dx, dy, dz) - lootDef(it.type).radius;
+    const facing = (dx * Math.sin(p.move.yaw) + dz * Math.cos(p.move.yaw)) / Math.max(0.001, Math.hypot(dx, dz));
+    if (dist > GRAB_RANGE || (Math.hypot(dx, dz) > 0.8 && facing < 0.2)) return this.emit({ t: "whiff", p: p.id, reason: "far" });
+
+    if (def.size === "giant") {
+      if (p.hand) return this.emit({ t: "whiff", p: p.id, reason: "hands" });
+      if (it.mode === "free") {
+        it.mode = "held"; it.holder = p.id; it.holder2 = "";
+      } else if (it.mode === "held" && !it.holder2 && it.holder !== p.id) {
+        it.holder2 = p.id;
+      } else {
+        return this.emit({ t: "whiff", p: p.id, reason: "taken" });
+      }
+      p.hand = it.id;
+      this.touch(it);
+      this.updateCarry(p);
+      for (const hid of [it.holder, it.holder2]) { const h = this.players.get(hid); if (h) this.updateCarry(h); }
+      p.actionCd = ACTION_COOLDOWN;
+      return this.emit({ t: "grab", p: p.id, item: it.id, to: "carry" });
+    }
+
+    if (it.mode !== "free") return this.emit({ t: "whiff", p: p.id, reason: "taken" });
+    if (def.size === "small") {
+      const slot = p.pockets.indexOf("");
+      if (slot >= 0) {
+        p.pockets[slot] = it.id;
+        it.mode = "pocket"; it.holder = p.id;
+        this.touch(it);
+        p.actionCd = ACTION_COOLDOWN;
+        if (it.shop >= 0) this.props.onShopGrab(p, it);
+        return this.emit({ t: "grab", p: p.id, item: it.id, to: "pocket" });
+      }
+      if (p.hand) return this.emit({ t: "whiff", p: p.id, reason: "full" });
+    } else if (p.hand) {
+      return this.emit({ t: "whiff", p: p.id, reason: "hands" });
+    }
+    p.hand = it.id;
+    it.mode = "held"; it.holder = p.id;
+    this.touch(it);
+    this.updateCarry(p);
+    p.actionCd = ACTION_COOLDOWN;
+    if (it.shop >= 0) this.props.onShopGrab(p, it);
+    this.emit({ t: "grab", p: p.id, item: it.id, to: "hand" });
+  }
+
+  /** Which item would an action use? Hands first, then the selected pocket, then any pocket. */
+  private activeItem(p: PlayerSim): { item: ItemSim; from: "hand" | number } | null {
+    if (p.hand) { const it = this.items.get(p.hand); if (it) return { item: it, from: "hand" }; p.hand = ""; }
+    const order = [p.sel, ...[0, 1, 2].filter((i) => i !== p.sel)];
+    for (const i of order) {
+      const id = p.pockets[i];
+      if (!id) continue;
+      const it = this.items.get(id);
+      if (it) return { item: it, from: i };
+      p.pockets[i] = "";
+    }
+    return null;
+  }
+
+  private release(p: PlayerSim, from: "hand" | number) {
+    if (from === "hand") p.hand = ""; else p.pockets[from] = "";
+    this.updateCarry(p);
+  }
+
+  private drop(p: PlayerSim) {
+    const a = this.activeItem(p);
+    if (!a) return;
+    const it = a.item;
+    const m = p.move;
+    if (lootDef(it.type).size === "giant" && it.holder2) {
+      // one of two carriers lets go: the other keeps dragging it
+      this.letGoOfGiant(it, p);
+      p.actionCd = ACTION_COOLDOWN;
+      return this.emit({ t: "drop", p: p.id, item: it.id });
+    }
+    this.release(p, a.from);
+    const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw);
+    const r = lootDef(it.type).radius;
+    this.freeItem(it, m.x + fx * (PLAYER.radius + r + 0.15), m.y + Math.max(0.6, r + 0.2), m.z + fz * (PLAYER.radius + r + 0.15), m.vx * 0.5, 0, m.vz * 0.5);
+    it.holder = ""; it.holder2 = "";
+    p.actionCd = ACTION_COOLDOWN;
+    this.emit({ t: "drop", p: p.id, item: it.id });
+  }
+
+  private throwItem(p: PlayerSim, charge: number, yaw: number, pitch: number) {
+    const a = this.activeItem(p);
+    if (!a) return;
+    const it = a.item;
+    const def = lootDef(it.type);
+    if (def.size === "giant") return this.emit({ t: "whiff", p: p.id, reason: "hands" }); // too big to throw
+    const c = Number.isFinite(charge) ? Math.max(0, Math.min(1, charge)) : 0;
+    const y = Number.isFinite(yaw) ? yaw : p.move.yaw;
+    const pt = Number.isFinite(pitch) ? Math.max(-1.5, Math.min(1.5, pitch)) : 0;
+    this.release(p, a.from);
+    const speed = throwSpeed(def, c);
+    const v = throwVelocity(y, pt, speed);
+    const e = this.eye(p);
+    const m = p.move;
+    it.holder = ""; it.holder2 = "";
+    this.freeItem(it, e.x + v.dx * 0.55, e.y - 0.15 + v.dy * 0.55, e.z + v.dz * 0.55, v.vx + m.vx * 0.5, v.vy, v.vz + m.vz * 0.5);
+    it.body.spin = (this.rng() * 2 - 1) * 8;
+    it.lastThrower = p.id;
+    it.thrownT = 0;
+    p.actionCd = ACTION_COOLDOWN;
+    this.emit({ t: "throw", p: p.id, item: it.id, speed });
+  }
+
+  private letGoOfGiant(it: ItemSim, p: PlayerSim) {
+    if (it.holder === p.id) { it.holder = it.holder2; }
+    it.holder2 = "";
+    p.hand = "";
+    this.updateCarry(p);
+    const other = this.players.get(it.holder);
+    if (other) this.updateCarry(other);
+  }
+
+  freeItem(it: ItemSim, x: number, y: number, z: number, vx: number, vy: number, vz: number) {
+    it.mode = "free";
+    const b = it.body;
+    b.x = x; b.y = y; b.z = z; b.vx = vx; b.vy = vy; b.vz = vz;
+    b.resting = false;
+    this.touch(it);
+  }
+
+  private dropEverything(p: PlayerSim) {
+    let guard = 0;
+    while (this.activeItem(p) && guard++ < 10) {
+      const a = this.activeItem(p)!;
+      const it = a.item;
+      if (lootDef(it.type).size === "giant" && it.holder2) { this.letGoOfGiant(it, p); continue; }
+      this.release(p, a.from);
+      const ang = this.rng() * Math.PI * 2;
+      this.freeItem(it, p.move.x + Math.sin(ang) * 0.5, p.move.y + 1, p.move.z + Math.cos(ang) * 0.5, Math.sin(ang) * 2, 3, Math.cos(ang) * 2);
+      it.holder = ""; it.holder2 = "";
+      this.emit({ t: "drop", p: p.id, item: it.id });
+    }
+    p.hand = "";
+    p.pockets.fill("");
+    this.updateCarry(p);
+  }
+
+  /** Recompute movement modifiers from what the player carries. */
+  private updateCarry(p: PlayerSim) {
+    const m = p.move;
+    const it = p.hand ? this.items.get(p.hand) : undefined;
+    if (!it) { m.carryMul = 1; m.carryHeavy = false; m.handsFull = false; return; }
+    const def = lootDef(it.type);
+    const carriers = def.size === "giant" ? (it.holder && it.holder2 ? 2 : 1) : 1;
+    m.carryMul = carrySpeedMul(def, carriers);
+    m.carryHeavy = !!def.heavy || def.size === "giant";
+    m.handsFull = def.size !== "small";
+  }
+
+  /** Someone handled it: reset idle cleanup and the fort-bank timer (dropping it starts the 10 s again). */
+  private touch(it: ItemSim) { it.idleT = 0; it.bankT = 0; it.fort = -1; it.locked = false; }
+
+  // ------------------------------------------------------------------ simulation
+  tick(dt = SIM_DT) {
+    this.time += dt;
+    for (const p of this.players.values()) {
+      p.actionCd = Math.max(0, p.actionCd - dt);
+      if (p.queued && p.actionCd <= 0) { const q = p.queued; p.queued = null; this.action(p.id, q); }
+      p.punchCd = Math.max(0, p.punchCd - dt);
+      if (p.hitsDecayT > 0) { p.hitsDecayT -= dt; if (p.hitsDecayT <= 0) p.hitsTaken = 0; }
+      if (p.knockWindowT > 0) { p.knockWindowT -= dt; if (p.knockWindowT <= 0) p.knockCount = 0; }
+      if (!p.connected) continue;
+      p.credit = Math.min(p.credit + 1, MAX_INPUTS_PER_TICK);
+      while (p.credit >= 1 && p.queue.length) {
+        const inp = p.queue.shift()!;
+        stepMovement(p.move, inp, this.arena);
+        p.lastSeq = inp.seq;
+        p.credit -= 1;
+      }
+    }
+    this.npc.tick(dt);
+    this.recycleTimer += dt;
+    if (this.recycleTimer >= 5) { this.recycleTimer = 0; this.npc.recycle(); }
+    this.updateHeldItems();
+    this.stepFreeItems(dt);
+    this.match.tick(dt);
+    this.props.tick(dt);
+    this.traffic.tick(dt);
+    this.police.tick(dt);
+    if (this.spawnLoot) {
+      this.stockTimer += dt;
+      if (this.stockTimer >= 15) { this.stockTimer = 0; this.stockShops(false); }
+    }
+    if (this.spawnLoot) {
+      this.spawnTimer += dt;
+      if (this.spawnTimer >= 6) { this.spawnTimer = 0; this.topUpLoot(1); }
+    }
+  }
+
+  private updateHeldItems() {
+    for (const it of this.items.values()) {
+      if (it.mode === "pocket") {
+        const h = this.players.get(it.holder);
+        if (!h || !h.pockets.includes(it.id)) { it.mode = "free"; it.holder = ""; it.body.resting = false; continue; }
+        it.body.x = h.move.x; it.body.y = h.move.y + 1; it.body.z = h.move.z;
+        continue;
+      }
+      if (it.mode !== "held") continue;
+      const def = lootDef(it.type);
+      const thief = this.npc.npcs.get(it.holder);
+      if (thief) {
+        // a raccoon running off with it, carried over its head
+        it.body.x = thief.move.x; it.body.z = thief.move.z; it.body.y = thief.move.y + 0.75 + def.radius;
+        it.body.vx = thief.move.vx; it.body.vy = 0; it.body.vz = thief.move.vz; it.body.rot = thief.move.yaw;
+        continue;
+      }
+      const h1 = this.players.get(it.holder);
+      if (!h1) { this.freeItem(it, it.body.x, it.body.y, it.body.z, 0, 0, 0); it.holder = ""; it.holder2 = ""; continue; }
+      const m = h1.move;
+      const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw);
+      if (def.size === "giant") {
+        const h2 = it.holder2 ? this.players.get(it.holder2) : undefined;
+        if (h2) {
+          const gap = Math.hypot(h1.move.x - h2.move.x, h1.move.z - h2.move.z);
+          if (gap > GIANT_TETHER) {
+            // pulled apart: it tumbles to the ground and both let go
+            it.holder = ""; it.holder2 = "";
+            h1.hand = ""; h2.hand = "";
+            this.updateCarry(h1); this.updateCarry(h2);
+            this.freeItem(it, (h1.move.x + h2.move.x) / 2, 1.2, (h1.move.z + h2.move.z) / 2, 0, 2, 0);
+            it.body.spin = 3;
+            this.emit({ t: "tumble", item: it.id });
+            continue;
+          }
+          it.body.x = (h1.move.x + h2.move.x) / 2;
+          it.body.z = (h1.move.z + h2.move.z) / 2;
+          it.body.y = Math.max(h1.move.y, h2.move.y) + 1.0;
+          it.body.rot = Math.atan2(h2.move.x - h1.move.x, h2.move.z - h1.move.z) + Math.PI / 2;
+        } else {
+          // dragging alone: it scrapes along the ground in front of you
+          it.body.x = m.x + fx * (PLAYER.radius + def.radius + 0.1);
+          it.body.z = m.z + fz * (PLAYER.radius + def.radius + 0.1);
+          it.body.y = m.y + def.radius;
+          it.body.rot = m.yaw;
+        }
+      } else {
+        it.body.x = m.x + fx * 0.55;
+        it.body.z = m.z + fz * 0.55;
+        it.body.y = m.y + 1.1;
+        it.body.rot = m.yaw;
+      }
+      it.body.vx = m.vx; it.body.vy = 0; it.body.vz = m.vz;
+    }
+  }
+
+  private stepFreeItems(dt: number) {
+    for (const it of this.items.values()) {
+      if (it.mode !== "free") continue;
+      const def = lootDef(it.type);
+      it.thrownT += dt;
+      if (it.body.resting) {
+        it.idleT += dt;
+        // cleanup: long-ignored common junk quietly disappears (keeps the city fresh)
+        if (it.idleT > 240 && def.rarity === "common" && it.fort < 0 && this.items.size > ITEM_TARGET * 0.6) this.items.delete(it.id);
+        continue;
+      }
+      const res = stepItem(it.body, def.radius, def.bounce, this.arena, dt);
+      if (it.chute) {
+        // floating down under a parachute
+        if (it.body.vy < -3.5) it.body.vy = -3.5;
+        it.body.vx *= 0.9; it.body.vz *= 0.9;
+        if (it.body.resting || it.body.y < def.radius + 0.05) it.chute = false;
+      }
+      if (res.impact > 2.5) this.emit({ t: "impact", item: it.id, speed: res.impact, x: it.body.x, y: it.body.y, z: it.body.z });
+      if (res.outOfBounds) this.respawnItem(it);
+      // thrown items bonk players (a comedy shove; stuns + loot drops may come later)
+      const sp = Math.hypot(it.body.vx, it.body.vy, it.body.vz);
+      if (sp > 6 && it.thrownT < 2 && it.lastThrower) {
+        for (const n of this.npc.npcs.values()) {
+          if (n.state === "ko" || n.state === "stunned") continue;
+          const dx = it.body.x - n.move.x, dz = it.body.z - n.move.z, dy = it.body.y - (n.move.y + 0.9);
+          if (Math.hypot(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
+            const r = this.npc.hit(n.id, it.lastThrower, it.body.x - it.body.vx * 0.1, it.body.z - it.body.vz * 0.1);
+            if (r === "hit") this.emit({ t: "npcHit", npc: n.id, by: it.lastThrower, how: "throw" });
+            it.body.vx *= -0.3; it.body.vz *= -0.3;
+            it.thrownT = 2;
+            break;
+          }
+        }
+      }
+      if (sp > 6 && it.thrownT < 2) {
+        for (const p of this.players.values()) {
+          if (!p.connected || (p.id === it.lastThrower && it.thrownT < 0.4)) continue;
+          const m = p.move;
+          const cy = m.y + 0.9;
+          const dx = it.body.x - m.x, dz = it.body.z - m.z, dy = it.body.y - cy;
+          if (Math.hypot(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
+            const nx = -dx, nz = -dz, nl = Math.max(0.001, Math.hypot(nx, nz));
+            m.vx += (nx / nl) * 3; m.vz += (nz / nl) * 3; // shove
+            it.body.vx *= -0.3; it.body.vz *= -0.3;
+            it.thrownT = 2; // one bonk per throw
+            this.emit({ t: "bonk", item: it.id, p: p.id, by: it.lastThrower });
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ loot spawning
+  private fillLoot() {
+    for (let i = 0; i < ITEM_TARGET; i++) this.spawnOne();
+  }
+
+  private topUpLoot(n: number) {
+    let free = 0;
+    for (const it of this.items.values()) if (it.mode === "free") free++;
+    for (let i = 0; i < n && free < ITEM_TARGET && this.items.size < ITEM_MAX; i++, free++) this.spawnOne();
+  }
+
+  private pickType(zone: LootZone, groundLevel: boolean, allowGiant: boolean): LootDef {
+    const boost = ZONE_RARE_BOOST[zone];
+    const pool = LOOT.filter((d) => !d.npcOnly && (d.size !== "giant" || (allowGiant && groundLevel && (zone === "plaza" || zone === "yard"))));
+    let total = 0;
+    const w = pool.map((d) => {
+      const rareish = d.rarity !== "common" && d.rarity !== "uncommon";
+      const x = d.spawnWeight * (rareish ? boost : 1);
+      total += x;
+      return x;
+    });
+    let r = this.rng() * total;
+    for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; }
+    return pool[pool.length - 1];
+  }
+
+  /** Spawn one item at a random free spawn point. Returns its id (or "" if none placed). */
+  spawnOne(forceType?: string): string {
+    const spawns = this.arena.lootSpawns ?? [];
+    if (!spawns.length || this.items.size >= ITEM_MAX) return "";
+    let giants = 0;
+    for (const it of this.items.values()) if (lootDef(it.type).size === "giant") giants++;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const sp = spawns[Math.floor(this.rng() * spawns.length)];
+      if (sp.pool) continue; // shop shelves are stocked separately
+      let busy = false;
+      for (const it of this.items.values()) {
+        if (it.mode === "free" && Math.hypot(it.body.x - sp.x, it.body.z - sp.z) < 1.6 && Math.abs(it.body.y - sp.y) < 2) { busy = true; break; }
+      }
+      if (busy) continue;
+      const def = forceType ? lootDef(forceType) : this.pickType(sp.zone, sp.y === 0, giants < GIANT_MAX);
+      const id = "i" + this.nextItem++;
+      const jx = (this.rng() - 0.5) * 0.6, jz = (this.rng() - 0.5) * 0.6;
+      this.items.set(id, {
+        id, type: def.type, value: rollValue(def, this.rng),
+        body: { x: sp.x + jx, y: sp.y + def.radius + 0.4, z: sp.z + jz, vx: 0, vy: 0, vz: 0, rot: this.rng() * Math.PI * 2, spin: 0, resting: false },
+        mode: "free", holder: "", holder2: "", lastThrower: "", thrownT: 99, idleT: 0,
+        fort: -1, bankT: 0, locked: false, mult: 1, chute: false, shop: -1,
+      });
+      this.emit({ t: "spawn", item: id });
+      return id;
+    }
+    return "";
+  }
+
+  /** Test/debug helper: move a player (keeps what they carry). */
+  debugTeleport(id: string, x: number, z: number, yaw: number) {
+    const p = this.players.get(id);
+    if (!p) return;
+    const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
+    p.move = { ...makeMoveState(x, z, yaw), ...keep };
+    p.queue.length = 0;
+  }
+
+  /** Test/debug helper: put a specific item somewhere (skips the spawn cap on purpose). */
+  placeItem(type: string, x: number, y: number, z: number): string {
+    const def = lootDef(type);
+    const id = "i" + this.nextItem++;
+    this.items.set(id, {
+      id, type, value: rollValue(def, this.rng),
+      body: { x, y: y + def.radius, z, vx: 0, vy: 0, vz: 0, rot: 0, spin: 0, resting: false },
+      mode: "free", holder: "", holder2: "", lastThrower: "", thrownT: 99, idleT: 0,
+      fort: -1, bankT: 0, locked: false, mult: 1, chute: false, shop: -1,
+    });
+    return id;
+  }
+
+  private respawnItem(it: ItemSim) {
+    const spawns = this.arena.lootSpawns ?? [];
+    const sp = spawns.length ? spawns[Math.floor(this.rng() * spawns.length)] : { x: 0, y: 0, z: 0 };
+    const def = lootDef(it.type);
+    this.freeItem(it, sp.x, sp.y + def.radius + 0.5, sp.z, 0, 0, 0);
+    this.emit({ t: "spawn", item: it.id });
+  }
+
+  // ------------------------------------------------------------------ events
+  emit(e: WorldEvent) { this.events.push(e); }
+  takeEvents(): WorldEvent[] { const e = this.events; this.events = []; return e; }
+}
+
+/** Throw speed for an item at a given charge (0..1). Heavier items fly slower. */
+export function throwSpeed(def: LootDef, charge: number): number {
+  const heavy = def.size === "giant" ? 1 : def.weight;
+  return (THROW_MIN_SPEED + (THROW_MAX_SPEED - THROW_MIN_SPEED) * charge) * (1 - heavy * 0.8);
+}
+
+/** Direction + velocity of a throw from a look direction (a slight upward lob is added). */
+export function throwVelocity(yaw: number, pitch: number, speed: number) {
+  const cp = Math.cos(pitch);
+  const dx = Math.sin(yaw) * cp, dy = -Math.sin(pitch), dz = Math.cos(yaw) * cp;
+  return { dx, dy, dz, vx: dx * speed, vy: dy * speed + speed * 0.18, vz: dz * speed };
+}
