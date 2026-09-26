@@ -1,0 +1,21 @@
+// Test-only tools used by the automated tests (never reachable in a normal game):
+// the server enables them with DEV_TOOLS=1, a browser host only in ?test=1 mode.
+import type { World } from "./world.js";
+
+export function applyDebug(world: World, id: string, m: any): void {
+  if (!m || typeof m !== "object") return;
+  if (m.op === "teleport") world.debugTeleport(id, Number(m.x), Number(m.z), Number(m.yaw));
+  if (m.op === "spawn") world.placeItem(String(m.type), Number(m.x), 0.3, Number(m.z));
+  if (m.op === "npc") world.npc.place(m.kind, Number(m.x), Number(m.z), Number(m.yaw) || 0);
+  if (m.op === "event") world.match.trigger(m.kind);
+  if (m.op === "time" && world.match.phase !== "lobby") world.match.timeLeft = Math.max(0.1, Number(m.t) || 1);
+  if (m.op === "noEvents") world.match.cancelPlannedEvents();
+  if (m.op === "wipeout") { const p = world.players.get(id); if (p) world.traffic.wipeout(p, world.traffic.cars[0]); }
+  if (m.op === "clearNpcs") world.npc.removeNear(Number(m.x), Number(m.z), Number(m.r) || 10);
+  const me = world.players.get(id);
+  if (me && m.op === "heat") { me.notoriety = 0; world.addHeat(me, Number(m.v) || 0); }
+  if (me && m.op === "bust") world.police.bust(me, "dbg", false);
+  if (me && m.op === "jailTime" && me.jailT > 0) me.jailT = Math.max(0.1, Number(m.t) || 1);
+  if (m.op === "clearCops") world.police.reset();
+  if (m.op === "bigShot") world.npc.spawnBigShot(m.kind || undefined);
+}

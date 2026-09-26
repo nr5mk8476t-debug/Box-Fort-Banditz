@@ -2,7 +2,7 @@
 
 A chaotic first-person 3D browser party game for 2–4 players (plus solo), set in the city of **Trashington**.
 
-**Status: Phase 4.6 (police, jail, big shots; online games are hosted in the room creator's browser).** Placeholder art and sound. See `docs/design-decisions.md` for the agreed design and `docs/test-plan.md` for how everything is tested.
+**Status: Phase 5A (the cycle loop: day scavenge, NIGHT scavenge with fort raids, pawn shop; tasers; tug of war). Online games are hosted in the room creator's browser.** Placeholder art and sound. See `docs/design-decisions.md` for the agreed design and `docs/test-plan.md` for how everything is tested.
 
 ## Tech
 
@@ -28,7 +28,7 @@ Open http://localhost:5173. For multiplayer testing, click **Create Room**, then
 ## Controls
 
 - Click **CLICK TO PLAY** to capture the mouse (ESC releases it and opens the menu)
-- **WASD** / arrow keys move, **Shift** sprint (uses stamina), **Space** jump / climb a ledge you face, **C** crouch (sprint + C = belly slide), **Q** dodge, **E** grab / pocket / search a dumpster, **HOLD R** rob a shop till, **G** drop, **left click** punch or smash (empty hands), **hold left click** (holding something) or **F** charge a throw, **right click** / wheel cycle pockets, **ENTER** start the match (host / solo)
+- **WASD** / arrow keys move, **Shift** sprint (uses stamina), **Space** jump / climb a ledge you face, **C** crouch (sprint + C = belly slide), **Q** dodge, **E** grab / pocket / search a dumpster (mash **E** in a tug of war), **HOLD R** rob a shop till, **G** drop, **left click** punch or smash (empty hands), **hold left click** (holding something) or **F** charge a throw, **right click** / wheel cycle pockets, **ENTER** start the match (host / solo)
 - **In jail:** the **mouse** moves your lock pick: **click** a pin to select it, then **click** / **SPACE** when its top is in the green (**A / D** also choose pins)
 - If a page refuses mouse capture, the game falls back to **hold left mouse + drag** to look
 

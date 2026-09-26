@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Box Fort Banditz</title>
+  <meta name="description" content="A chaotic 3D multiplayer party game about building a ridiculous cardboard empire in the city of Trashington." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='8' y='18' width='48' height='38' rx='3' fill='%23c9955b' stroke='%231b1420' stroke-width='5'/><path d='M8 18 L20 6 L44 6 L56 18' fill='%23a8743f' stroke='%231b1420' stroke-width='5'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet" />
+  
+</head>
+<body>
+  <div id="fatal" class="fatal hidden" role="alert"></div>
+  <canvas id="game" tabindex="0" aria-label="Box Fort Banditz game view"></canvas>
+
+  <!-- TITLE -->
+  <section id="title" class="screen">
+    <div class="title-panel">
+      <h1 class="logo" aria-label="Box Fort Banditz">
+        <span class="logo-line l1">BOX FORT</span>
+        <span class="logo-line l2">BANDITZ</span>
+      </h1>
+      <p class="tagline">From one soggy box to the Mayor's office of <b>Trashington</b>.</p>
+
+      <label class="field">
+          <span>Your bandit name</span>
+          <input id="name-input" maxlength="16" autocomplete="off" spellcheck="false" placeholder="SneakyRaccoon" />
+        </label>
+
+      <div id="invite-card" class="card invite hidden">
+        <div class="invite-label">You've been invited to room</div>
+        <div id="invite-code" class="code-big">-----</div>
+        <button id="btn-accept-invite" class="btn btn-go">JOIN THE FORT PARTY</button>
+        <button id="btn-decline-invite" class="btn-link">no thanks, show the main menu</button>
+      </div>
+
+      <div id="main-menu" class="menu">
+        <button id="btn-solo" class="btn">PLAY SOLO</button>
+        <button id="btn-create" class="btn btn-go">CREATE ROOM</button>
+        <div class="join-row">
+          <input id="code-input" maxlength="6" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code" />
+          <button id="btn-join" class="btn btn-small">JOIN</button>
+        </div>
+        <button id="btn-settings" class="btn btn-quiet">SETTINGS</button>
+      </div>
+      <p id="title-status" class="status" role="status" aria-live="polite"></p>
+    </div>
+    <div class="title-footer">
+      <span class="badge">PHASE 0 PROTOTYPE</span> Placeholder art &amp; sound. Nothing is final.
+      <span id="sound-hint" class="sound-hint">Click anywhere to enable sound</span>
+    </div>
+  </section>
+
+  <!-- LOADING -->
+  <section id="loading" class="screen hidden">
+    <div class="loading-box">
+      <div class="spinner-box"></div>
+      <p id="loading-text">Folding cardboard...</p>
+    </div>
+  </section>
+
+  <!-- HUD -->
+  <section id="hud" class="hidden">
+    <div id="fx-knocked" class="fx fx-knocked hidden" aria-hidden="true"><div class="daze">* * *</div></div>
+    <div id="fx-swarm" class="fx fx-swarm hidden" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <div id="fx-flash" class="fx fx-flash hidden" aria-hidden="true"></div>
+    <div id="fx-zap" class="fx fx-zap hidden" aria-hidden="true"><div class="zap-text">ZZZT!</div></div>
+    <div id="crosshair"></div>
+    <!-- Phase 3: round loop -->
+    <div id="match-hud" class="match-hud"><div id="mh-round" class="mh-round"></div><div id="mh-time" class="mh-time">LOBBY</div><div id="mh-sub" class="mh-sub"></div></div>
+    <div id="event-hud" class="event-hud hidden"></div>
+    <div id="home-arrow" class="home-arrow hidden"><div id="ha-arrow" class="ha-arrow"></div><span id="ha-text"></span></div>
+    <ol id="scores" class="scores" aria-label="Scores"></ol>
+    <div id="big-banner" class="big-banner hidden" aria-live="assertive"><div id="bb-title"></div><div id="bb-sub"></div></div>
+    <div id="wipeout" class="wipeout hidden"><div class="wo-title">WIPED OUT!</div><div id="wipeout-sub"></div></div>
+    <div id="tally" class="tally card hidden"><h2 id="tally-title"></h2><table id="tally-table"></table><p id="tally-foot"></p></div>
+    <div id="lobby-panel" class="card hud-card">
+      <div class="lp-title" id="lp-title">LOBBY</div>
+      <div id="lp-code-row" class="lp-code-row">
+        <span>Room</span> <b id="lp-code">-----</b>
+        <button id="btn-copy" class="btn btn-tiny">COPY LINK</button>
+      </div>
+      <ul id="lp-players"></ul>
+      <div id="lp-hint" class="lp-hint"></div>
+    </div>
+    <div id="mode-badge" class="badge hud-badge">PHASE 0 TEST ARENA</div>
+    <div id="toasts" aria-live="polite"></div>
+    <div id="reconnect-banner" class="banner hidden">Connection lost... trying to reconnect</div>
+    <div id="debug" class="debug hidden"></div>
+    <div id="stamina" class="stamina full" aria-label="Stamina"><div id="stamina-fill"></div><span class="winded-label">WINDED!</span></div>
+    <div id="heat" class="heat cold" title="Heat: how much trouble you've caused. 1 star = a cop, 2 = two, 3 = the cop car too. Break line of sight to cool off.">
+      <span class="heat-label">HEAT</span><span class="heat-bar"><span id="heat-fill"></span><i style="left:30%"></i><i style="left:60%"></i><i style="left:90%"></i></span>
+      <span id="stars" class="stars"><b>★</b><b>★</b><b>★</b></span>
+    </div>
+    <div id="tug" class="tug hidden" aria-live="assertive"><div class="tug-label">TUG OF WAR! MASH <span class="key">E</span></div><div class="tug-bar"><span class="tug-them">THEM</span><div id="tug-knob" class="tug-knob"></div><span class="tug-you">YOU</span></div></div>
+    <div id="dodge-pip" class="dodge-pip ready" title="Dodge (Q) ready">Q</div>
+    <div id="charge" class="charge hidden" aria-hidden="true"></div>
+    <div id="prompt" class="prompt hidden" aria-live="polite"></div>
+    <div id="flash" class="flash hidden" aria-live="assertive"></div>
+    <div id="pockets" class="pockets" aria-label="Inventory">
+      <div class="slot-wrap"><span class="slot-label">HANDS</span><div id="slot-hand" class="slot hand">empty</div></div>
+      <div class="slot-wrap"><span class="slot-label">1</span><div id="slot-0" class="slot">empty</div></div>
+      <div class="slot-wrap"><span class="slot-label">2</span><div id="slot-1" class="slot">empty</div></div>
+      <div class="slot-wrap"><span class="slot-label">3</span><div id="slot-2" class="slot">empty</div></div>
+    </div>
+    <div id="controls-hint" class="controls-hint">WASD move / SHIFT sprint / SPACE jump + climb / C crouch / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / CLICK punch + smash / HOLD CLICK or F throw / RIGHT CLICK pockets / ESC menu</div>
+  </section>
+
+  <!-- PHASE 5A: PAWN SHOP (shop round) -->
+  <section id="shop" class="overlay hidden" aria-label="Pawn shop">
+    <div class="card shop-card">
+      <div class="shop-head">
+        <div id="sal-face" class="sal-face" aria-hidden="true"></div>
+        <div class="shop-title">
+          <h2>PAWN-O-RAMA</h2>
+          <div class="sal-name">"Honest" Sal</div>
+          <div id="sal-line" class="sal-line">Whaddaya got for me?</div>
+        </div>
+        <div id="shop-timer" class="shop-timer">1:00</div>
+      </div>
+      <div id="shop-list" class="shop-list"></div>
+      <div class="shop-foot">
+        <span class="shop-cash">CASH <b id="shop-cash">$0</b></span>
+        <button id="btn-sell-all" class="btn btn-small">SELL ALL</button>
+        <button id="btn-shop-done" class="btn btn-go btn-small">DONE</button>
+      </div>
+      <p class="small shop-note">Read Sal's face: the happier he looks, the more room to haggle. Push too far and he gets offended. Anything you don't sell goes in the dumpster when the shop closes.</p>
+    </div>
+  </section>
+
+  <!-- PHASE 5A: UPGRADES (placeholder until 5B) -->
+  <section id="upgrades" class="overlay side hidden" aria-label="Upgrades">
+    <div class="card upg-card">
+      <h2>UPGRADES</h2>
+      <p class="small">Coming in the next update! Soon you'll spend your cash here, watching your fort transform.</p>
+      <div class="upg-grid">
+        <div class="upg"><b>BANDIT GEAR</b><span>bigger pockets, stamina, sprint, lockpick kit, taser-proof jacket</span></div>
+        <div class="upg"><b>FORT DEFENCES</b><span>guard dog, tin-can tripwire, spring boxing glove, a lock</span></div>
+        <div class="upg"><b>FORT PRESTIGE</b><span>cardboard, plywood, tin mansion, gold palace</span></div>
+        <div class="upg"><b>DIRTY TRICKS</b><span>banana peel, fake siren, smoke bomb, bribe a cop</span></div>
+      </div>
+      <div class="upg-foot"><span id="upg-timer" class="shop-timer">1:00</span><button id="btn-upg-done" class="btn btn-go btn-small">READY</button></div>
+      <p id="upg-wait" class="small"></p>
+    </div>
+  </section>
+
+  <!-- PAUSE -->
+  <section id="pause" class="screen dim hidden">
+    <div class="card pause-card">
+      <h2>PAUSED-ISH</h2>
+      <p class="small">The game keeps running for everyone else.</p>
+      <button id="btn-resume" class="btn btn-go">CLICK TO PLAY</button>
+      <button id="btn-pause-copy" class="btn">COPY INVITE LINK</button>
+      <button id="btn-start" class="btn btn-go">START MATCH</button>
+      <button id="btn-pause-settings" class="btn btn-quiet">SETTINGS</button>
+      <button id="btn-leave" class="btn btn-danger">LEAVE</button>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings" class="screen dim hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="card settings-card">
+      <h2 id="settings-title">SETTINGS</h2>
+      <div class="settings-grid">
+        <label>Master volume <input type="range" min="0" max="1" step="0.05" data-setting="masterVolume" /></label>
+        <label>Music volume <input type="range" min="0" max="1" step="0.05" data-setting="musicVolume" /></label>
+        <label>Sound effects volume <input type="range" min="0" max="1" step="0.05" data-setting="sfxVolume" /></label>
+        <label class="check"><input type="checkbox" data-setting="muted" /> Mute everything</label>
+        <label>Mouse sensitivity <input type="range" min="0.2" max="3" step="0.05" data-setting="mouseSensitivity" /></label>
+        <label class="check"><input type="checkbox" data-setting="invertY" /> Invert mouse Y</label>
+        <label>Field of view <span class="val" data-val="fov"></span> <input type="range" min="70" max="110" step="1" data-setting="fov" /></label>
+        <label>Screen shake <input type="range" min="0" max="1" step="0.1" data-setting="screenShake" /></label>
+        <label class="check"><input type="checkbox" data-setting="reducedMotion" /> Reduced motion (no head bob / camera sway)</label>
+        <label class="check"><input type="checkbox" data-setting="showFps" /> Show FPS &amp; ping</label>
+        <label class="check"><input type="checkbox" data-setting="lowGraphics" /> Performance mode (no shadows, lower resolution; for older laptops)</label>
+      </div>
+      <button id="btn-settings-close" class="btn btn-go">DONE</button>
+    </div>
+  </section>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

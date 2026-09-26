@@ -1,0 +1,270 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  World, buildTrashington, inRect, fortAt, nearBoxes, PROP_RADIUS, ROB_TIME, WIPEOUT_TIME, CAR_HALF_LEN,
+  type WorldEvent, type MoveInput, type PropDef,
+} from "../src/index.js";
+
+const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
+  ({ seq, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false, ...p });
+function run(w: World, seconds: number, ev?: WorldEvent[]) {
+  for (let i = 0; i < Math.round(seconds * 60); i++) {
+    for (const p of w.players.values()) w.pushInputs(p.id, [inp(p.lastSeq + 1, { yaw: p.move.yaw })]);
+    w.tick();
+    const e = w.takeEvents();
+    if (ev) ev.push(...e);
+  }
+}
+function world() {
+  const w = new World({ seed: 5 });
+  const p = w.addPlayer("a", "Bandit");
+  return { w, p };
+}
+/** Stand in front of a prop, facing it. */
+function faceProp(w: World, id: string, d: PropDef, gap = 1.0) {
+  const r = PROP_RADIUS[d.kind];
+  const x = d.x + Math.sin(d.yaw) * (r + gap), z = d.z + Math.cos(d.yaw) * (r + gap);
+  w.debugTeleport(id, x, z, d.yaw + Math.PI);
+}
+const propsOf = (w: World, kind: string) => (w.arena.props ?? []).filter((p) => p.kind === kind);
+const count = (w: World, type: string) => [...w.items.values()].filter((i) => i.type === type).length;
+
+test("city: ~200 m, roads with crosswalks, 4 shops with cashiers, every kind of loot source", () => {
+  const c = buildTrashington();
+  assert.equal(c.halfSize, 100);
+  assert.ok(c.boxes.filter((b) => b.kind === "tower").length >= 8, "downtown high-rises");
+  assert.ok(Math.max(...c.boxes.filter((b) => b.kind === "tower").map((b) => b.h)) >= 35, "some are really tall");
+  assert.equal(c.shops!.length, 4);
+  for (const sh of c.shops!) {
+    assert.ok(inRect(sh.rect, sh.cashier.x, sh.cashier.z), `${sh.name}: cashier inside`);
+    assert.ok(c.lootSpawns!.filter((s) => s.shop === sh.id && inRect(sh.rect, s.x, s.z)).length >= 6, `${sh.name}: stocked shelves`);
+  }
+  for (const k of ["dumpster", "bin", "phone", "vending", "meter", "newsbox", "car", "till"]) assert.ok(c.props!.some((p) => p.kind === k), k);
+  // nothing that should be on foot sits in a road; props and loot are reachable
+  const onRoad = (x: number, z: number) => c.roads!.some((r) => inRect(r, x, z));
+  for (const s of c.lootSpawns!) assert.ok(!onRoad(s.x, s.z), `loot spawn on a road at ${s.x},${s.z}`);
+  for (const f of c.forts!) assert.ok(!onRoad(f.padX, f.padZ) && fortAt(c, f.padX, f.padZ) === f.slot);
+  for (const p of c.props!) if (p.kind !== "car") assert.ok(!onRoad(p.x, p.z), `${p.id} in the road`);
+  for (const cw of c.crosswalks!) assert.ok(c.roads!.some((r) => inRect(r, (cw.minX + cw.maxX) / 2, (cw.minZ + cw.maxZ) / 2)), "crosswalks are on roads");
+  // traffic lanes run on the asphalt
+  for (const l of c.traffic!) for (const pt of l.points) assert.ok(onRoad(pt.x, pt.z), `lane corner ${pt.x},${pt.z} on the road`);
+  // the landmarks tests rely on are open ground
+  const solid = c.boxes.filter((b) => b.y + b.h / 2 > 0.4);
+  for (const [name, lm] of Object.entries(c.landmarks!)) {
+    assert.ok(!solid.some((b) => Math.abs(lm.x - b.x) < b.w / 2 + 0.4 && Math.abs(lm.z - b.z) < b.d / 2 + 0.4 && b.y - b.h / 2 < 1.8), `landmark ${name} is clear`);
+  }
+});
+
+test("dumpsters and bins: search with E for random junk, then they're empty until they refill", () => {
+  const { w, p } = world();
+  const d = propsOf(w, "dumpster")[0];
+  faceProp(w, "a", d);
+  const before = w.items.size;
+  const ev: WorldEvent[] = [];
+  w.action("a", { a: "use", prop: d.id });
+  run(w, 0.2, ev);
+  const found = ev.find((e) => e.t === "search");
+  assert.ok(found && found.t === "search" && found.found >= 2, "2-3 items");
+  assert.ok(w.items.size >= before + 2);
+  p.actionCd = 0;
+  w.action("a", { a: "use", prop: d.id });
+  run(w, 0.1, ev);
+  assert.ok(ev.some((e) => e.t === "empty" && e.prop === d.id), "already searched");
+  run(w, 51);
+  assert.ok(w.props.props.get(d.id)!.ready, "refilled");
+  // too far away = nothing
+  w.debugTeleport("a", d.x + 8, d.z, 0);
+  const n = w.items.size;
+  w.action("a", { a: "use", prop: d.id });
+  assert.equal(w.items.size, n);
+});
+
+test("smash-and-grab: phone booth -> handset, vending -> snacks, meter -> change, newsbox -> paper; heat goes up", () => {
+  for (const [kind, type] of [["phone", "phone_handset"], ["vending", ""], ["meter", "coin_pile"], ["newsbox", "newspaper"]] as const) {
+    const { w, p } = world();
+    const d = propsOf(w, kind)[0];
+    faceProp(w, "a", d, 0.7);
+    const before = new Set(w.items.keys());
+    w.action("a", { a: "punch", yaw: p.move.yaw, pitch: 0 });
+    const got = [...w.items.values()].filter((i) => !before.has(i.id));
+    assert.ok(got.length >= 1, `${kind}: something popped out`);
+    if (type) assert.ok(got.some((i) => i.type === type), `${kind}: ${type} (got ${got.map((i) => i.type)})`);
+    else assert.ok(got.some((i) => ["candy_bar", "soda_can", "energy_drink"].includes(i.type)), "snacks");
+    assert.ok(p.notoriety > 0, "heat");
+    assert.equal(w.props.props.get(d.id)!.ready, false, "broken for a while");
+  }
+});
+
+test("parked cars: punch the window for what's on the seat, and the alarm goes off", () => {
+  const { w, p } = world();
+  const car = propsOf(w, "car")[0];
+  // stand beside the driver's door
+  const sx = Math.cos(car.yaw), sz = -Math.sin(car.yaw);
+  w.debugTeleport("a", car.x + sx * 2.0, car.z + sz * 2.0, Math.atan2(-sx, -sz));
+  const ev: WorldEvent[] = [];
+  const before = w.items.size;
+  w.action("a", { a: "punch", yaw: p.move.yaw, pitch: 0 });
+  run(w, 0.1, ev);
+  assert.ok(w.items.size > before, "loot from the seat");
+  assert.ok(ev.some((e) => e.t === "alarm" && e.kind === "car"), "car alarm");
+  assert.ok(w.props.stateOf(car.id).alarm);
+});
+
+test("hold-up: hold E at the till for 3 s -> a bundle of cash, the cashier cowers, alarm + heat", () => {
+  const { w, p } = world();
+  const till = propsOf(w, "till")[0];
+  faceProp(w, "a", till, 1.0);
+  const ev: WorldEvent[] = [];
+  w.action("a", { a: "use", prop: till.id });
+  run(w, 0.5, ev);
+  assert.ok(ev.some((e) => e.t === "robStart"));
+  const cashier = w.npc.cashierOf(till.shop!)!;
+  assert.equal(cashier.state, "cower", "hands up!");
+  run(w, ROB_TIME, ev);
+  const done = ev.find((e) => e.t === "robDone");
+  assert.ok(done, "robbed");
+  assert.ok(count(w, "cash_bundle") >= 1);
+  assert.ok(ev.some((e) => e.t === "alarm" && e.kind === "shop"));
+  assert.ok(p.notoriety >= 18, `heat ${p.notoriety}`); // (heat cools a little every second)
+  // the till is empty for a while
+  w.action("a", { a: "use", prop: till.id });
+  run(w, 0.1, ev);
+  assert.ok(ev.some((e) => e.t === "empty" && e.prop === till.id));
+});
+
+test("hold-up gets cancelled if you walk away or let go", () => {
+  const { w, p } = world();
+  const till = propsOf(w, "till")[1];
+  faceProp(w, "a", till, 1.0);
+  const ev: WorldEvent[] = [];
+  w.action("a", { a: "use", prop: till.id });
+  run(w, 1, ev);
+  w.action("a", { a: "robStop" });
+  run(w, 3, ev);
+  assert.ok(ev.some((e) => e.t === "robCancel") && !ev.some((e) => e.t === "robDone"), "let go of E");
+  p.actionCd = 0;
+  w.action("a", { a: "use", prop: till.id });
+  run(w, 0.5, ev);
+  w.debugTeleport("a", p.move.x + Math.sin(till.yaw) * 3, p.move.z + Math.cos(till.yaw) * 3, 0);
+  run(w, 3, ev);
+  assert.ok(!ev.some((e) => e.t === "robDone"), "walked away");
+});
+
+test("go loud: grab the whole cash register (alarm, big heat); shelf items make the cashier yell", () => {
+  const { w, p } = world();
+  const till = propsOf(w, "till")[2];
+  const reg = [...w.items.values()].find((i) => i.type === "cash_register" && Math.hypot(i.body.x - till.x, i.body.z - till.z) < 1)!;
+  assert.ok(reg, "a register sits on every counter");
+  faceProp(w, "a", till, 0.9);
+  const ev: WorldEvent[] = [];
+  run(w, 0.3);
+  w.action("a", { a: "grab", item: reg.id });
+  run(w, 0.1, ev);
+  assert.equal(p.hand, reg.id, "carrying the till");
+  assert.ok(ev.some((e) => e.t === "alarm" && e.kind === "shop"));
+  assert.ok(p.notoriety >= 24, `heat ${p.notoriety}`);
+  // shoplifting
+  const q = world();
+  const shop = q.w.arena.shops![0];
+  const shelfItem = [...q.w.items.values()].find((i) => i.shop === shop.id && i.type !== "cash_register" && i.body.y < 0.6)!;
+  assert.ok(shelfItem, "stock on the shelves");
+  q.w.debugTeleport("a", shelfItem.body.x + 0.3, shelfItem.body.z + 0.3, 0);
+  q.p.move.yaw = Math.atan2(shelfItem.body.x - q.p.move.x, shelfItem.body.z - q.p.move.z);
+  const ev2: WorldEvent[] = [];
+  q.w.action("a", { a: "grab", item: shelfItem.id });
+  run(q.w, 0.1, ev2);
+  assert.ok(q.p.hand === shelfItem.id || q.p.pockets.includes(shelfItem.id), "swiped it");
+  assert.ok(ev2.some((e) => e.t === "shoplift"), "cashier saw that");
+  assert.ok(q.p.notoriety >= 7.9, `heat ${q.p.notoriety}`);
+});
+
+test("punching the cashier: cash drops once, they cower, shop alarm", () => {
+  const { w, p } = world();
+  const shop = w.arena.shops![3];
+  const c = w.npc.cashierOf(shop.id)!;
+  w.debugTeleport("a", c.move.x - Math.sin(c.move.yaw) * -1.2, c.move.z - Math.cos(c.move.yaw) * -1.2, 0);
+  // stand right next to the cashier, facing them (behind the counter is fine for this rule test)
+  w.debugTeleport("a", c.move.x + 1.0, c.move.z, -Math.PI / 2);
+  const ev: WorldEvent[] = [];
+  w.action("a", { a: "punch", yaw: -Math.PI / 2, pitch: 0 });
+  run(w, 0.2, ev);
+  assert.ok(ev.some((e) => e.t === "npcHit" && e.npc === c.id));
+  assert.equal(c.state, "cower");
+  assert.ok(count(w, "cash_bundle") >= 1);
+  assert.ok(ev.some((e) => e.t === "alarm"));
+  assert.ok(p.notoriety >= 19, `heat ${p.notoriety}`);
+});
+
+test("traffic: cars drive their lanes, keep their distance, and stop for pedestrians", () => {
+  const w = new World({ seed: 2, spawnLoot: false });
+  assert.equal(w.traffic.cars.length, 14);
+  const start = w.traffic.cars.map((c) => ({ x: c.x, z: c.z }));
+  let minGap = 99;
+  for (let i = 0; i < 60 * 30; i++) {
+    w.tick(); w.takeEvents();
+    if (i % 10) continue;
+    for (const a of w.traffic.cars) for (const b of w.traffic.cars) if (a !== b && a.loop === b.loop) minGap = Math.min(minGap, Math.hypot(a.x - b.x, a.z - b.z));
+    for (const c of w.traffic.cars) assert.ok(w.arena.roads!.some((r) => inRect(r, c.x, c.z, 0.5)), `car ${c.id} left the road at ${c.x.toFixed(1)},${c.z.toFixed(1)}`);
+  }
+  assert.ok(w.traffic.cars.every((c, i) => Math.hypot(c.x - start[i].x, c.z - start[i].z) > 1), "they move");
+  assert.ok(minGap > CAR_HALF_LEN * 2, `no pile-ups (closest ${minGap.toFixed(1)} m)`);
+  // a pedestrian standing in the lane ahead: the car stops before reaching them
+  const car = w.traffic.cars.find((c) => c.loop === 2)!;
+  const px = car.x + Math.sin(car.yaw) * 14, pz = car.z + Math.cos(car.yaw) * 14;
+  const ped = w.npc.place("tourist", px, pz, 0);
+  for (let i = 0; i < 60 * 5; i++) { ped.move.x = px; ped.move.z = pz; ped.state = "idle"; ped.stateT = 999; w.tick(); w.takeEvents(); }
+  assert.ok(Math.hypot(car.x - px, car.z - pz) > CAR_HALF_LEN + 0.3, "didn't hit them");
+  assert.ok(car.v < 0.5, `stopped for the pedestrian (v=${car.v.toFixed(2)})`);
+});
+
+test("hit by a car: wiped out, your loot spills on the road, respawn at your fort after 10 s", () => {
+  const { w, p } = world();
+  // hold something, then stand in the lane in front of a moving car
+  const tv = w.placeItem("crt_tv", p.move.x, 1, p.move.z + 1);
+  run(w, 0.3);
+  w.action("a", { a: "grab", item: tv });
+  assert.equal(p.hand, tv);
+  const ev: WorldEvent[] = [];
+  let hit = false;
+  for (let k = 0; k < w.traffic.cars.length && !hit; k++) {
+    const c = w.traffic.cars[(7 + k) % w.traffic.cars.length];
+    w.debugTeleport("a", c.x + Math.sin(c.yaw) * 12, c.z + Math.cos(c.yaw) * 12, c.yaw + Math.PI);
+    run(w, 2.5, ev);
+    hit = ev.some((e) => e.t === "wipeout" && e.p === "a");
+  }
+  assert.ok(hit, "wiped out");
+  assert.equal(p.hand, "", "dropped everything");
+  assert.equal(w.items.get(tv)?.mode, "free", "the TV is lying in the road");
+  assert.ok(p.respawnT > 0 && p.move.knockT > 0);
+  w.action("a", { a: "punch", yaw: 0, pitch: 0 });
+  run(w, WIPEOUT_TIME + 0.2, ev);
+  assert.ok(ev.some((e) => e.t === "respawn" && e.p === "a"), "respawned");
+  const pad = w.arena.forts!.find((f) => f.slot === p.colorIdx)!;
+  assert.ok(Math.hypot(p.move.x - pad.padX, p.move.z - pad.padZ) < 1, "back home");
+  assert.ok(p.move.immuneT > 0, "brief safety after respawning");
+});
+
+test("cars honk at bandits in the road (they won't stop for you!)", () => {
+  const { w } = world();
+  const car = w.traffic.cars[0];
+  const ev: WorldEvent[] = [];
+  w.debugTeleport("a", car.x + Math.sin(car.yaw) * 12, car.z + Math.cos(car.yaw) * 12, 0);
+  run(w, 0.3, ev);
+  assert.ok(ev.some((e) => e.t === "honk"));
+});
+
+test("collision broadphase: near-box lookup never misses a box and keeps the original order", () => {
+  const c = buildTrashington();
+  let seed = 7;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 2000; k++) {
+    const x = (r() - 0.5) * 210, z = (r() - 0.5) * 210, rad = r() * 5;
+    const near = nearBoxes(c, x, z, rad);
+    const idx = near.map((b) => c.boxes.indexOf(b));
+    for (let i = 1; i < idx.length; i++) assert.ok(idx[i] > idx[i - 1], "original order");
+    for (const b of c.boxes) {
+      const touches = Math.abs(b.x - x) <= b.w / 2 + rad && Math.abs(b.z - z) <= b.d / 2 + rad;
+      if (touches) assert.ok(near.includes(b), `missed ${b.kind} at ${b.x},${b.z} for ${x.toFixed(1)},${z.toFixed(1)} r${rad.toFixed(1)}`);
+    }
+  }
+});
