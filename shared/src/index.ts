@@ -16,3 +16,4 @@ export * from "./props.js";
 export * from "./traffic.js";
 export * from "./police.js";
 export * from "./lockpick.js";
+export * from "./debug.js";

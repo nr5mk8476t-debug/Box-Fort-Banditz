@@ -18,15 +18,16 @@ export class LocalSession {
   private copCarsV = new Map<string, CopCarView>();
   private acc = 0;
 
-  constructor(name: string) {
+  /** `id` is the local player's id (a browser host uses its own id, solo uses "me"). */
+  constructor(name: string, readonly id = SOLO_ID) {
     this.world = new World({ seed: (Math.random() * 2 ** 31) | 0 });
-    this.world.addPlayer(SOLO_ID, name);
-    this.view = { players: this.players, items: this.items, npcs: this.npcs, props: this.propsV, cars: this.carsV, copCars: this.copCarsV, phase: "arena", ownerId: SOLO_ID, code: "" };
+    this.world.addPlayer(id, name);
+    this.view = { players: this.players, items: this.items, npcs: this.npcs, props: this.propsV, cars: this.carsV, copCars: this.copCarsV, phase: "arena", ownerId: id, code: "" };
     this.refresh();
   }
 
-  sendInputs(batch: MoveInput[]) { if (batch.length) this.world.pushInputs(SOLO_ID, batch); }
-  sendAction(a: WorldAction) { this.world.action(SOLO_ID, a); }
+  sendInputs(batch: MoveInput[]) { if (batch.length) this.world.pushInputs(this.id, batch); }
+  sendAction(a: WorldAction) { this.world.action(this.id, a); }
   start() { return this.world.startMatch(); }
 
   /** Advance the world in fixed 60 Hz steps; returns what happened (for sounds/effects). */
@@ -40,12 +41,14 @@ export class LocalSession {
     return this.world.takeEvents();
   }
 
-  private refresh() {
+  /** Copy the World into the plain view objects the game reads. */
+  refresh() {
     matchView(this.world, this.view as unknown as Record<string, any>);
     for (const id of this.world.players.keys()) {
       const v = this.players.get(id) ?? ({} as PlayerView);
       this.players.set(id, playerView(this.world, id, v));
     }
+    for (const id of [...this.players.keys()]) if (!this.world.players.has(id)) this.players.delete(id);
     for (const id of this.world.items.keys()) {
       const v = this.items.get(id) ?? ({} as ItemView);
       this.items.set(id, itemView(this.world, id, v));
@@ -70,7 +73,7 @@ export class LocalSession {
 
   // ---- test helpers (used by automated tests with ?test=1) ----
   teleport(x: number, z: number, yaw: number) {
-    const p = this.world.players.get(SOLO_ID);
+    const p = this.world.players.get(this.id);
     if (!p) return;
     const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
     p.move = { ...makeMoveState(x, z, yaw), ...keep };

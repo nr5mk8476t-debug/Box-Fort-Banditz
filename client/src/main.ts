@@ -1,18 +1,18 @@
 import "./styles.css";
-import type { Room } from "@colyseus/sdk";
 import { Engine } from "./game/babylon.ts";
 import { TitleScene } from "./game/titleScene.ts";
 import { ArenaScene } from "./game/arenaScene.ts";
 import { LocalSession, SOLO_ID } from "./localSession.ts";
+import { HOST_LEFT } from "./p2p/peerRoom.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
 import {
-  createRoom, joinRoom, friendlyError, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
+  createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
 } from "./net.ts";
 import {
   MSG, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington,
-  lootDef, RARITY_COLOR, starsOf, NPC_DEFS, pinPos as pinPosOf, type WorldView, type WorldEvent,
+  lootDef, RARITY_COLOR, starsOf, type MoveInput, NPC_DEFS, pinPos as pinPosOf, type WorldView, type WorldEvent,
 } from "@bfb/shared";
 
 // Both the server and this client build the same city from the same shared code.
@@ -80,7 +80,7 @@ type Screen = "title" | "loading" | "playing";
 let screen: Screen = "title";
 let title: TitleScene | null = null;
 let arena: ArenaScene | null = null;
-let room: Room | null = null;
+let room: GameRoom | null = null;
 let mode: "solo" | "online" | null = null;
 let dropped = false;
 let leaving = false;
@@ -158,7 +158,7 @@ async function startSolo() {
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
   $("lp-hint").textContent = "Press ENTER to start. Bring loot home to your fort's yard: it locks in after 10 s. Anything you're carrying away from home when time runs out is lost!";
-  $("mode-badge").textContent = "PHASE 4.5 BIG SHOTS / SOLO";
+  $("mode-badge").textContent = "PHASE 4.6 / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -363,7 +363,7 @@ async function goOnline(kind: "create" | "join", code?: string) {
   }
 }
 
-function waitForFirstState(r: Room): Promise<void> {
+function waitForFirstState(r: GameRoom): Promise<void> {
   return new Promise((resolve, reject) => {
     const ready = () => (r.state as any)?.players?.get?.(r.sessionId);
     if (ready()) return resolve();
@@ -378,7 +378,7 @@ function waitForFirstState(r: Room): Promise<void> {
   });
 }
 
-async function enterOnline(r: Room) {
+async function enterOnline(r: GameRoom) {
   leaveTitle();
   room = r;
   mode = "online";
@@ -402,7 +402,7 @@ async function enterOnline(r: Room) {
   $("lp-title").textContent = "LOBBY";
   show("lp-code-row");
   $("lp-code").textContent = r.roomId;
-  $("mode-badge").textContent = "PHASE 4.5 BIG SHOTS / ONLINE";
+  $("mode-badge").textContent = r.isHost ? "PHASE 4.6 / HOSTING" : "PHASE 4.6 / ONLINE";
 
   r.onMessage(MSG.ANNOUNCE, (m: { text: string }) => toast(m.text));
   r.onDrop(() => {
@@ -421,7 +421,9 @@ async function enterOnline(r: Room) {
     forgetRoom();
     setUrlRoom(null);
     sfx.error();
-    enterTitle(`You were disconnected from the room (code ${code}). You can create or join a new one.`, true);
+    enterTitle(code === HOST_LEFT
+      ? "The host ended the game (the game runs in their browser). Create a room to host your own!"
+      : `You were disconnected from the room (code ${code}). You can create or join a new one.`, true);
   });
   onRoomState(r.state);
 }
@@ -452,7 +454,7 @@ function onRoomState(state: any) {
     });
     const isOwner = state.ownerId === room.sessionId;
     $("lp-hint").textContent = state.phase === "lobby"
-      ? (isOwner ? `${state.players.size}/4 bandits. Press ENTER (or ESC > START MATCH) when everyone's here.` : "Waiting for the host to start. Explore meanwhile!")
+      ? (isOwner ? `${state.players.size}/4 bandits. Press ENTER (or ESC > START MATCH) when everyone's here.${room.isHost ? " You're hosting: the game runs in this tab, so keep it open!" : ""}` : "Waiting for the host to start. Explore meanwhile!")
       : "Bring loot back to your fort's yard. It locks in after 10 s. Watch the traffic!";
   }
 }
@@ -778,6 +780,8 @@ let pocketsSig = "";
 // Main loop
 let debugTimer = 0;
 /** worst-case milliseconds per part of the frame (for performance tests) */
+let netOut: MoveInput[] = [];
+let lastNetSend = 0;
 const perf = { update: 0, world: 0, apply: 0, events: 0, render: 0, hud: 0, frame: 0 };
 let fpsSmooth = 60;
 engine.runRenderLoop(() => {
@@ -801,8 +805,15 @@ engine.runRenderLoop(() => {
       const t3 = performance.now();
       if (ev.length) arena.handleEvents(ev);
       perf.update = Math.max(perf.update, t1 - t0); perf.world = Math.max(perf.world, t2 - t1); perf.apply = Math.max(perf.apply, t3 - t2); perf.events = Math.max(perf.events, performance.now() - t3);
-    } else if (room && !dropped && out.length) {
-      try { room.send(MSG.INPUT, out); } catch { /* connection mid-drop: reconciliation fixes it */ }
+    } else if (room && !dropped) {
+      // batch inputs: at most ~30 packets a second (every input is still sent, just grouped),
+      // which halves the server's per-message work on the small hosting plan
+      if (out.length) netOut.push(...out);
+      if (netOut.length && (room.isHost || now - lastNetSend >= 33)) {
+        lastNetSend = now;
+        const batch = netOut; netOut = [];
+        try { room.send(MSG.INPUT, batch); } catch { /* connection mid-drop: reconciliation fixes it */ }
+      }
     }
     const tr = performance.now();
     arena.scene.render();
@@ -831,6 +842,13 @@ const applyScaling = () => engine.setHardwareScalingLevel(settings.lowGraphics ?
 applyScaling();
 onSettingsChange(applyScaling);
 setInterval(() => { if (room && !dropped) room.ping((ms: number) => { ping = Math.round(ms); }); }, 2000);
+
+// Hosting: the game lives in this tab, so warn before a refresh/close ends it for everyone,
+// and say goodbye to the other players if the tab closes anyway.
+window.addEventListener("beforeunload", (e) => {
+  if (room?.isHost && (room as any).connectedPeers > 0 && !TEST_MODE) { e.preventDefault(); e.returnValue = ""; }
+});
+window.addEventListener("pagehide", () => { if (room?.isHost) void room.leave(true); });
 
 // ---------------------------------------------------------------------------
 // Boot
@@ -874,7 +892,8 @@ enterTitle();
     perf: (reset = false) => { const o = { ...perf }; if (reset) for (const k in perf) (perf as any)[k] = 0; return o; },
     move: () => arena?.moveState ?? null,
     scene: () => (title?.scene ?? arena?.scene),
-    dropConnection: () => { (room as any)?.connection?.close?.(); },
+    dropConnection: () => { if (room?.testDrop) room.testDrop(); else (room as any)?.connection?.close?.(); },
+    hostStats: () => (room as any)?.stats ? { ...(room as any).stats, peers: (room as any).connectedPeers } : null,
     npcs: () => { const out: any[] = []; const v: any = local ? local.view : room?.state; v?.npcs?.forEach((n: any, id: string) => out.push({ id, kind: n.kind, x: n.x, y: n.y, z: n.z, state: n.state, target: n.target, robbed: n.robbed })); return out; },
     placeNpc: (kind: string, x: number, z: number, yaw = 0) => { if (local) return local.placeNpc(kind, x, z, yaw); room?.send("dbg", { op: "npc", kind, x, z, yaw }); return null; },
     clearNpcs: (x: number, z: number, r: number) => { if (local) local.world.npc.removeNear(x, z, r); else room?.send("dbg", { op: "clearNpcs", x, z, r }); },

@@ -1,6 +1,6 @@
 import { Room, type Client } from "colyseus";
 import {
-  World, playerView, itemView, npcView, matchView, propView, carView, copCarView, MSG, MAX_PLAYERS, SIM_HZ, PATCH_HZ, type JoinOptions, type WorldEvent,
+  World, playerView, itemView, npcView, matchView, propView, carView, copCarView, MSG, MAX_PLAYERS, SIM_HZ, PATCH_HZ, applyDebug, type JoinOptions, type WorldEvent,
 } from "@bfb/shared";
 import { FortRoomState, PlayerState, ItemState, NpcState, PropState, CarState, CopCarState } from "./schema.ts";
 import { claimRoomCode, releaseRoomCode } from "./roomCodes.ts";
@@ -37,22 +37,7 @@ export class FortRoom extends Room<{ state: FortRoomState }> {
     });
     // Test-only tools (automated tests start the server with DEV_TOOLS=1). Never enabled in production.
     if (process.env.DEV_TOOLS === "1") {
-      this.onMessage("dbg", (client, m: any) => {
-        if (m?.op === "teleport") this.world.debugTeleport(client.sessionId, Number(m.x), Number(m.z), Number(m.yaw));
-        if (m?.op === "spawn") this.world.placeItem(String(m.type), Number(m.x), 0.3, Number(m.z));
-        if (m?.op === "npc") this.world.npc.place(m.kind, Number(m.x), Number(m.z), Number(m.yaw) || 0);
-        if (m?.op === "event") this.world.match.trigger(m.kind);
-        if (m?.op === "time" && this.world.match.phase !== "lobby") this.world.match.timeLeft = Math.max(0.1, Number(m.t) || 1);
-        if (m?.op === "noEvents") this.world.match.cancelPlannedEvents();
-        if (m?.op === "wipeout") { const p = this.world.players.get(client.sessionId); if (p) this.world.traffic.wipeout(p, this.world.traffic.cars[0]); }
-        if (m?.op === "clearNpcs") this.world.npc.removeNear(Number(m.x), Number(m.z), Number(m.r) || 10);
-        const me = this.world.players.get(client.sessionId);
-        if (me && m?.op === "heat") { me.notoriety = 0; this.world.addHeat(me, Number(m.v) || 0); }
-        if (me && m?.op === "bust") this.world.police.bust(me, "dbg", false);
-        if (me && m?.op === "jailTime" && me.jailT > 0) me.jailT = Math.max(0.1, Number(m.t) || 1);
-        if (m?.op === "clearCops") this.world.police.reset();
-        if (m?.op === "bigShot") this.world.npc.spawnBigShot(m.kind || undefined);
-      });
+      this.onMessage("dbg", (client, m: any) => applyDebug(this.world, client.sessionId, m));
     }
     this.syncAll();
   }
@@ -98,13 +83,17 @@ export class FortRoom extends Room<{ state: FortRoomState }> {
 
   private tick() {
     this.world.tick();
-    this.syncAll();
     const ev = this.world.takeEvents();
     if (ev.length) this.pendingEvents.push(...ev);
   }
 
-  /** Events go out once per patch (not every tick) to keep messages small. */
+  /**
+   * Runs right before each network patch (20 per second). The World simulates at 60 Hz, but the
+   * synced state only needs copying when it's about to be sent: copying it every tick used most
+   * of the server's CPU (and the free hosting plan only has a tenth of a core).
+   */
   onBeforePatch() {
+    this.syncAll();
     if (this.pendingEvents.length) {
       this.broadcast(MSG.EVENTS, this.pendingEvents);
       this.pendingEvents = [];

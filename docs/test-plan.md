@@ -176,6 +176,17 @@ Note on the automated browser test: it renders 3D on the CPU, so it runs at sing
 | Grab | pressing E always uses a fresh look target (a slow frame could send an item you already pocketed -> false "Too slow!") | e2e | pass |
 | Totals | 108 shared unit + 1 client + server smoke + 175 browser checks; also 175/175 at 110 ms lag | all | pass |
 
+| Browser hosting | creator hosts in the browser, 2 friends connect directly, host upload measured and modest (~14 KB/s per friend) | e2e | pass |
+| | state sync: full snapshot + deltas rebuild the host's view; players exact, other numbers to 1 mm | client unit | pass |
+| | joiner drop -> seat held + automatic reconnect; refresh -> same seat; 5th player "full"; host leaves -> everyone told, code stops working | e2e | pass |
+| Totals (4.6) | 108 shared unit + 2 client unit + server smoke + 178 browser checks (online now runs browser-hosted) | all | pass |
+
+## Manual checklist for Blake (Phase 4.6)
+
+- [ ] Host a room, have 1-3 friends join by link. Does it feel smoother than before?
+- [ ] Have a different friend host once too.
+- [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
+
 ## Manual checklist for Blake (Phase 4.5)
 
 - [ ] Police: better now? Still too many?

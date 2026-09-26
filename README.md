@@ -2,14 +2,15 @@
 
 A chaotic first-person 3D browser party game for 2–4 players (plus solo), set in the city of **Trashington**.
 
-**Status: Phase 4.5 (police + jail, tuned; big shots: millionaire, armored courier, celebrity, crypto bro).** Placeholder art and sound. See `docs/design-decisions.md` for the agreed design and `docs/test-plan.md` for how everything is tested.
+**Status: Phase 4.6 (police, jail, big shots; online games are hosted in the room creator's browser).** Placeholder art and sound. See `docs/design-decisions.md` for the agreed design and `docs/test-plan.md` for how everything is tested.
 
 ## Tech
 
 | Part | What | Why |
 |---|---|---|
 | `client/` | Babylon.js 9 + TypeScript + Vite | 3D in the browser with animation, physics, particles, audio |
-| `server/` | Colyseus 0.18 (Node) | Authoritative multiplayer rooms, share codes, reconnection |
+| `server/` | Colyseus 0.18 (Node) | Matchmaking: room codes + introducing players to the host's browser (and optional server-hosted rooms with `?net=server`) |
+| `client/src/p2p/` | WebRTC data channels | The room creator's browser runs the game; friends connect straight to it |
 | `shared/` | Plain TypeScript | Game rules used by BOTH sides (movement, loot, pedestrians, punching), so client and server always agree |
 
 ## Run it on your computer
@@ -43,6 +44,8 @@ Screenshots from the browser test land in `test-output/`.
 
 ## Configuration
 
-- `VITE_SERVER_URL` (client build): address of the game server, e.g. `https://bfb-server.onrender.com`. Defaults to the same machine on port 2567.
+- `VITE_TURN_URL`, `VITE_TURN_USER`, `VITE_TURN_PASS` (client build, optional): a TURN relay for friends whose network blocks direct connections.
+- `?net=server` (in the game address): play a server-hosted room instead of hosting in the browser.
+- `VITE_SERVER_URL` (client build): address of the game server (matchmaking), e.g. `https://bfb-server.onrender.com`. Defaults to the same machine on port 2567.
 - `PORT` (server): defaults to 2567.
 - `COLYSEUS_LATENCY` (server, testing only): simulated round-trip lag in ms.

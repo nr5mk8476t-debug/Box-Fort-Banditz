@@ -14,7 +14,7 @@ const rampDist = (t, vmax, a = 20) => { const tr = vmax / a; return t < tr ? 0.5
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const browser = await chromium.launch({
-  args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"],
+  args: ["--disable-features=WebRtcHideLocalIpsWithMdns", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"],
 });
 
 async function openPage(name, query = "?test=1") {
@@ -541,6 +541,13 @@ try {
     ok(Object.keys(x.players).length === 3 && x.remotes === 2, `${p.label}: sees 3 players (${x.remotes} others drawn)`);
   }
   ok(!(await B.isVisible("#btn-start")), "non-host does not see START MATCH");
+  // Phase 4.6: A hosts the game in their browser; B and C are connected straight to A
+  const hs = await A.evaluate(() => window.__bfb.hostStats());
+  ok(hs && hs.peers === 2, `A is hosting in the browser with 2 players connected directly (${JSON.stringify(hs)})`);
+  ok(/HOSTING/.test(await A.textContent("#mode-badge")), "host's badge says HOSTING");
+  await sleep(1500);
+  const hs2 = await A.evaluate(() => window.__bfb.hostStats());
+  ok(hs2.upRate > 0 && hs2.upRate < 150000, `host upload is modest: ${(hs2.upRate / 1024).toFixed(1)} KB/s for 2 players`);
   ok(Object.values((await info(A)).players).some((p) => p.name === "Bob"), "invited player could set their name (Bob)");
 
   console.log("\n# Movement sync");
@@ -720,14 +727,20 @@ try {
   await A.click("#btn-leave");
   await sleep(600);
   ok((await info(A)).screen === "title", "host returned to title");
-  const bInfo = await info(B);
-  ok(Object.keys(bInfo.players).length === 2, "remaining players stay in the room");
-  const hostNow = await B.evaluate(() => document.getElementById("lp-players").textContent);
-  ok(/HOST/.test(hostNow), "someone else became host automatically");
+  // Phase 4.6: the game ran in the host's browser, so everyone else is told the host ended it
+  const bBack = await B.waitForFunction(() => window.__bfb.info().screen === "title", null, { timeout: 15000 }).then(() => true, () => false);
+  const bMsg = await B.textContent("#title-status");
+  ok(bBack && /host ended/i.test(bMsg), `players get a clear message when the host leaves: "${bMsg}"`);
+  // and the room code is gone: nobody can join a game that no longer exists
+  await B.fill("#code-input", code);
+  await B.click("#btn-join");
+  await B.waitForFunction(() => /exist/i.test(document.getElementById("title-status").textContent), null, { timeout: 30000 }).catch(() => {});
+  ok(/exist/i.test(await B.textContent("#title-status")), "the closed room's code no longer works");
 
   console.log("\n# Console errors");
   for (const p of [A, B, C, D]) {
-    const errs = p.errors.filter((e) => !/favicon|fonts\.g/.test(e));
+    // (B deliberately tried the closed room's code: the matchmaker answers "not found" = HTTP 522)
+    const errs = p.errors.filter((e) => !/favicon|fonts\.g/.test(e) && !(p === B && /status of 522/.test(e)));
     ok(errs.length === 0, `${p.label}: no JS errors${errs.length ? " -> " + errs.slice(0, 3).join(" | ") : ""}`);
   }
 } catch (e) {

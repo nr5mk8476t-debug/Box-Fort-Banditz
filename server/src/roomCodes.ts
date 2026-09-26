@@ -18,3 +18,10 @@ export function claimRoomCode(): string {
 export function releaseRoomCode(code: string): void {
   active.delete(code);
 }
+
+/** Claim a specific code (a browser host re-registering after the server restarted). */
+export function claimSpecificCode(code: string): boolean {
+  if (active.has(code)) return false;
+  active.add(code);
+  return true;
+}

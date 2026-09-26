@@ -1,6 +1,7 @@
 import { defineServer, defineRoom, WebSocketTransport } from "colyseus";
-import { ROOM_NAME } from "@bfb/shared";
+import { ROOM_NAME, SIGNAL_ROOM } from "@bfb/shared";
 import { FortRoom } from "./FortRoom.ts";
+import { SignalRoom } from "./SignalRoom.ts";
 
 const port = Number(process.env.PORT) || 2567;
 
@@ -9,7 +10,8 @@ const server = defineServer({
   // browser was busy loading the big city. 5 s x 4 = ~20 s before a silent client is dropped.
   transport: new WebSocketTransport({ pingInterval: 5000, pingMaxRetries: 4 }),
   rooms: {
-    [ROOM_NAME]: defineRoom(FortRoom),
+    [ROOM_NAME]: defineRoom(FortRoom), // server-hosted game (still available with ?net=server)
+    [SIGNAL_ROOM]: defineRoom(SignalRoom), // browser-hosted games: only introduces players to the host
   },
   // Hosting health check (Render pings this to know the server is up) + a friendly root page.
   express: (app) => {
