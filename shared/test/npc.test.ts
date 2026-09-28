@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   World, buildNavGraph, buildTrashington, inRect, lootDef, PLAYER, NPC_DEFS, PUNCH_COOLDOWN, KNOCK_TIMES, NPC_COUNT, KNOCK_IMMUNITY,
-  type MoveInput, type WorldEvent,
+  HEALTH, throwImpact, LOOT, type MoveInput, type WorldEvent,
 } from "../src/index.js";
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
@@ -136,7 +136,7 @@ test("joggers sometimes sidestep your punch", () => {
   assert.ok(dodges >= 5 && hits >= 15, `dodges ${dodges}, hits ${hits}`);
 });
 
-test("gym bro fights back: chases you, telegraphs swings, 2 hits knock you down and you drop your stuff", () => {
+test("gym bro fights back: chases you, telegraphs swings, his hits (25 each) knock you down at 0 HP and you drop your stuff", () => {
   const { w, p } = quiet();
   const bro = w.npc.place("gym_bro", 0, -18.8, Math.PI);
   const ch = w.placeItem("rubber_chicken", 0.3, 0, -19.5);
@@ -148,7 +148,7 @@ test("gym bro fights back: chases you, telegraphs swings, 2 hits knock you down 
   // stand there and take it, checking every 1/10 s
   for (let k = 0; k < 60 && !ev.some((e) => e.t === "knockdown"); k++) idle(w, "a", 0.1, {}, ev);
   assert.ok(ev.some((e) => e.t === "npcAttack"), "he swung at you");
-  assert.ok(ev.some((e) => e.t === "knockdown" && e.p === "a" && e.by === bro.id), "knocked down after 2 hits");
+  assert.ok(ev.some((e) => e.t === "knockdown" && e.p === "a" && e.by === bro.id), "knocked down once his hits took all your health");
   assert.equal(p.pockets[0], "", "dropped your pocket loot");
   assert.equal(bro.state, "gloat", "he gloats over you (regression: used to be overwritten by chase -> huff)");
 });
@@ -167,32 +167,68 @@ test("beat a fighter to 2 hits first: KO with stars + bonus loot", () => {
   assert.ok(w.players.get("a")!.notoriety >= 45, "mall cop hits count extra");
 });
 
-test("PvP punch: full knockdown, drop everything, then immunity; repeat knockdowns get shorter", () => {
+test("5A.1 PvP punches: 34 damage each and knock your HAND item loose; the 3rd punch knocks you down; immunity; repeat knockdowns shorter", () => {
   const w = new World({ seed: 3, npcs: 0, spawnLoot: false });
   const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
   a.move.x = 0; a.move.z = -20; b.move.x = 0; b.move.z = -18.9;
   const tv = w.placeItem("crt_tv", 0.9, 0, -18.3);
+  const ch = w.placeItem("rubber_chicken", -0.6, 0, -18.3);
   settle(w, 1);
   b.move.yaw = 0.8;
   w.action("b", { a: "grab", item: tv });
-  assert.equal(b.hand, tv);
-  w.action("a", { a: "punch", yaw: 0, pitch: 0 });
-  assert.equal(b.move.knockT, KNOCK_TIMES[0]);
-  assert.equal(b.hand, "", "dropped the TV");
+  b.move.yaw = -0.8; b.actionCd = 0;
+  w.action("b", { a: "grab", item: ch });
+  assert.equal(b.hand, tv); assert.equal(b.pockets[0], ch);
+  const hitB = () => { b.move.x = 0; b.move.z = -18.9; b.move.vx = 0; b.move.vz = 0; a.punchCd = 0; w.action("a", { a: "punch", yaw: 0, pitch: 0 }); };
+  hitB();
+  assert.equal(b.hp, HEALTH.max - HEALTH.punch, "first punch: 34 damage");
+  assert.equal(b.move.knockT, 0, "still standing");
+  assert.equal(b.hand, "", "the TV was knocked out of their hands");
+  assert.equal(b.pockets[0], ch, "pockets stay");
   assert.equal(w.items.get(tv)!.mode, "free");
+  hitB();
+  assert.equal(b.hp, HEALTH.max - 2 * HEALTH.punch);
+  hitB();
+  assert.equal(b.move.knockT, KNOCK_TIMES[0], "third punch: knocked down");
+  assert.equal(b.pockets[0], "", "knockdown drops everything");
+  assert.equal(b.hp, 0);
   // knocked players can't act
   w.action("b", { a: "grab", item: tv });
   assert.equal(b.hand, "");
-  // immune right after: a second punch is blocked
-  // (timers tick as the victim's client keeps sending input, like a real client at 60 Hz)
+  // immune right after: a punch is blocked; back to full health once up
   idle(w, "b", 2.1);
-  b.move.x = 0; b.move.z = -18.9; b.move.vx = 0; b.move.vz = 0; // (the knockdown shoved B away)
-  w.action("a", { a: "punch", yaw: 0, pitch: 0 });
+  assert.equal(b.hp, HEALTH.max, "up again at full health");
+  hitB();
   assert.ok(w.takeEvents().some((e) => e.t === "punch" && e.hit === "blocked"));
   idle(w, "b", KNOCK_IMMUNITY + 0.5);
-  b.move.x = 0; b.move.z = -18.9; b.move.vx = 0; b.move.vz = 0;
-  w.action("a", { a: "punch", yaw: 0, pitch: 0 });
+  for (let i = 0; i < 3; i++) hitB();
   assert.equal(b.move.knockT, KNOCK_TIMES[1], "second knockdown within 12 s is shorter");
+});
+
+test("5A.1 health regenerates 10/s after 5 s without being hurt; thrown items hurt (5-30) but never knock you out", () => {
+  const w = new World({ seed: 3, npcs: 0, spawnLoot: false });
+  const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
+  a.move.x = 0; a.move.z = -20; b.move.x = 0; b.move.z = -18.9;
+  settle(w, 0.5);
+  w.action("a", { a: "punch", yaw: 0, pitch: 0 });
+  assert.equal(b.hp, 66);
+  idle(w, "b", 4.5);
+  assert.equal(b.hp, 66, "no regen for 5 s");
+  idle(w, "b", 2);
+  assert.ok(b.hp > 66 + 5 && b.hp < 66 + 25, `regenerating: ${b.hp.toFixed(0)}`);
+  idle(w, "b", 5);
+  assert.equal(b.hp, HEALTH.max);
+  // impact numbers: a chicken barely hurts, a TV hurts a lot, a heaved duck hurts and shoves hardest
+  const chick = throwImpact(lootDef("rubber_chicken"), 16), tv = throwImpact(lootDef("crt_tv"), 11.5), duck = throwImpact(lootDef("rubber_duck"), 7);
+  assert.ok(chick.dmg >= 5 && chick.dmg <= 8, `chicken ${chick.dmg}`);
+  assert.ok(tv.dmg >= 20 && tv.dmg <= 30, `tv ${tv.dmg}`);
+  assert.ok(duck.dmg >= 18 && duck.knock > tv.knock && tv.knock > chick.knock, `duck ${duck.dmg} knock ${duck.knock}`);
+  for (const d of LOOT) assert.ok(throwImpact(d, 16).dmg <= HEALTH.throwMax);
+  // thrown things can't finish you off
+  b.hp = 3;
+  w.hurt(b, 30, "a", { canKO: false });
+  assert.equal(b.hp, 1);
+  assert.equal(b.move.knockT, 0);
 });
 
 test("the mime traps you in an invisible box, then fights", () => {

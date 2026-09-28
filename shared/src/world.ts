@@ -22,6 +22,10 @@ import { PoliceSystem, type PoliceEvent } from "./police.js";
 import type { LockRun } from "./lockpick.js";
 
 export const POCKETS = 3;
+/** 5A.1: selection slot meaning "empty hands / fists" (pockets are 0..2). Keys 1-3 = pockets, 4 = fists. */
+export const FISTS = POCKETS;
+/** Giant items: a clumsy two-handed heave (Blake 5A.1): short, heavy, and you stagger afterwards. */
+export const HEAVE = { minSpeed: 4, maxSpeed: 7, stagger: 0.5 };
 /** Server-side grab reach (a bit generous: the server sees you ~0.1 s in the past). */
 export const GRAB_RANGE = 2.9;
 /** Client-side reach used for the look prompt. */
@@ -32,18 +36,32 @@ export const TUG_STEP = 0.12;
 export const TUG_MAX_TIME = 8;
 const TUG_PRESS_CD = 0.06;
 const RAID_ALARM_CD = 6;
+/** C1: the "raider in your yard" alarm goes off at most this often */
+export const RAID_ENTER_CD = 15;
 export const THROW_MIN_SPEED = 5;
 export const THROW_MAX_SPEED = 16;
 export const ITEM_TARGET = 55; // loose items the World tries to keep in the city (200 m city)
 export const ITEM_TARGET_NIGHT = 22; // night: loot is scarce (but worth double)
 export const ITEM_MAX = 95;
 export const GIANT_MAX = 2;
+/** Slice 2A: shop shelves are stocked on top of the loose-loot cap (15 shops) */
+export const SHELF_MAX = 110;
+/** Slice 2A: chance each shelf spot is stocked at the start of a scavenge */
+export const STOCK_FILL = 0.4;
 const ACTION_COOLDOWN = 0.18; // seconds between grab/drop/throw (anti-spam)
 export const PUNCH_COOLDOWN = 0.55;
 export const PVP_PUNCH_COOLDOWN = 2.0; // after knocking a PLAYER down (anti-grief)
 export const KNOCK_TIMES = [1.5, 1.0, 0.6]; // repeat knockdowns within 12 s get shorter (anti-grief)
 export const KNOCK_IMMUNITY = 3; // seconds of immunity after getting up
-export const NPC_COUNT = 20; // Blake: 15-20 (was 35); top of the range now the city is bigger
+export const NPC_COUNT = 20;
+/**
+ * 5A.1 health (Blake): 100 HP. A player punch does 34 (3 = knockdown), a fighting pedestrian's hit 25.
+ * 0 HP = knocked down (drop everything); you get up at full health with 3 s of immunity (as before).
+ * Health comes back at 10/s after 5 s without being hurt. A punch that doesn't knock you down still
+ * knocks what's in your hands loose. Thrown items do 5-30 by weight x speed and can never knock you out.
+ * Cars (wipeout) and the garbage truck still flatten you outright; a taser stuns without damage.
+ */
+export const HEALTH = { max: 100, punch: 34, npcHit: 25, regenDelay: 5, regenRate: 10, throwMin: 5, throwMax: 30 }; // Blake: 15-20 (was 35); top of the range now the city is bigger
 
 export type ItemMode = "free" | "held" | "pocket";
 
@@ -88,8 +106,9 @@ export interface PlayerSim {
   punchCd: number;
   /** heat 0..100 (wanted stars at 30 / 60 / 90) */
   notoriety: number;
-  hitsTaken: number; // hits from a fighting pedestrian (2 = knocked down)
-  hitsDecayT: number;
+  /** 5A.1 health 0..100 (0 while knocked down), world time you were last hurt */
+  hp: number;
+  hurtT: number;
   knockCount: number; // recent knockdowns (for diminishing returns)
   knockWindowT: number;
   /** Phase 3: money from previous rounds this match */
@@ -114,6 +133,8 @@ export interface PlayerSim {
   /** Phase 5A: last tug-of-war press, last raid alarm on YOUR fort */
   tugCd: number;
   raidAlarmT: number;
+  /** C1: which fort yard this player is standing in (-1 = none), and the last "raider in your yard" alarm on YOUR fort */
+  inFort: number; raidEnterT: number;
 }
 
 export type WorldEvent =
@@ -127,6 +148,7 @@ export type WorldEvent =
   | { t: "spawn"; item: string }
   | { t: "punch"; p: string; hit: "none" | "npc" | "player" | "blocked" | "prop"; target: string }
   | { t: "knockdown"; p: string; by: string; time: number }
+  | { t: "hurt"; p: string; by: string; dmg: number; hp: number }
   | { t: "npcHit"; npc: string; by: string; how: "punch" | "throw" }
   | { t: "npcSay"; npc: string; line: string }
   | { t: "npcAttack"; npc: string; p: string; hit: boolean }
@@ -143,6 +165,8 @@ export type WorldEvent =
   // Phase 5A
   | { t: "cash"; p: string; item: string; type: string; value: number }
   | { t: "raid"; p: string; owner: string; item: string; x: number; z: number }
+  /** C1: a rival walked into your fort's compound at night (the loud alert; "raid" follows when they take something) */
+  | { t: "raidEnter"; p: string; owner: string; slot: number; x: number; z: number }
   | { t: "tug"; item: string; stage: "start" | "win" | "tumble"; winner: string; loser: string }
   | { t: "pawn"; p: string; item: string; r: "up" | "offended" | "sold"; offer: number }
   | { t: "cityEvent"; kind: CityEventKind; stage: "warn" | "live" | "end"; x: number; z: number; detail: string }
@@ -158,7 +182,8 @@ export type WorldAction =
   | { a: "grab"; item: string }
   | { a: "drop" }
   | { a: "throw"; charge: number; yaw: number; pitch: number }
-  | { a: "cycle" }
+  | { a: "cycle"; dir?: number } // mouse wheel: next / previous carried item (or fists)
+  | { a: "select"; slot: number } // keys 1-3 pockets, 4 fists
   | { a: "punch"; yaw: number; pitch: number }
   | { a: "use"; prop: string } // search a dumpster / bin (E), or start a hold-up at a till (hold R)
   | { a: "robStop" }
@@ -180,7 +205,7 @@ export function makeRng(seed: number) {
 }
 
 /** Rarity boost per spawn zone: the plaza, rooftops and shops are high-risk, high-reward. */
-const ZONE_RARE_BOOST: Record<LootZone, number> = { plaza: 3, rooftop: 2.2, shop: 2, yard: 1, alley: 1, street: 0.7 };
+const ZONE_RARE_BOOST: Record<LootZone, number> = { plaza: 3, rooftop: 2.2, shop: 2, yard: 1, alley: 1, street: 0.7, room: 1.6 };
 
 export interface WorldOptions { seed?: number; arena?: ArenaLayout; spawnLoot?: boolean; npcs?: number; }
 
@@ -201,7 +226,6 @@ export class World {
   readonly traffic: TrafficSystem;
   readonly police: PoliceSystem;
   readonly pawn: PawnSystem;
-  private stockTimer = 0;
 
   constructor(opts: WorldOptions = {}) {
     this.arena = opts.arena ?? buildTrashington();
@@ -211,7 +235,7 @@ export class World {
     this.npc = new NpcSystem(this.npcHost(), opts.npcs ?? (opts.arena ? 0 : NPC_COUNT));
     this.match = new MatchSystem(this);
     this.props = new PropSystem(this);
-    this.traffic = new TrafficSystem(this);
+    this.traffic = new TrafficSystem(this, undefined, opts.seed ?? 12345);
     this.police = new PoliceSystem(this);
     this.pawn = new PawnSystem(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
@@ -236,8 +260,8 @@ export class World {
   /** Busted: everything carried is taken away for good. Returns how much. */
   confiscateAll(p: PlayerSim): { count: number; value: number } {
     let count = 0, value = 0, guard = 0;
-    while (this.activeItem(p) && guard++ < 10) {
-      const a = this.activeItem(p)!;
+    while (this.anyItem(p) && guard++ < 10) {
+      const a = this.anyItem(p)!;
       const it = a.item;
       if (lootDef(it.type).size === "giant" && it.holder2) { this.letGoOfGiant(it, p); continue; } // your partner keeps dragging it
       this.release(p, a.from);
@@ -249,13 +273,17 @@ export class World {
     return { count, value };
   }
 
-  /** Fill shop shelves: every empty shelf spot (full) or one random empty spot per shop. */
+  /**
+   * Fill shop shelves at the start of a scavenge. Slice 2A: 15 shops, so each shelf spot is stocked
+   * with a STOCK_FILL chance (shops look lived-in, and the city's loot value stays sensible).
+   * full=false: one random empty spot per shop (debug / tests).
+   */
   stockShops(full: boolean) {
     const spots = (this.arena.lootSpawns ?? []).filter((s) => s.pool && s.shop !== undefined);
     const empty = spots.filter((sp) => ![...this.items.values()].some((it) => it.mode === "free" && Math.hypot(it.body.x - sp.x, it.body.z - sp.z) < 0.6 && Math.abs(it.body.y - sp.y) < 1));
-    const pick = full ? empty : (this.arena.shops ?? []).map((sh) => { const e = empty.filter((x) => x.shop === sh.id); return e[Math.floor(this.rng() * e.length)]; }).filter(Boolean);
+    const pick = full ? empty.filter(() => this.rng() < STOCK_FILL) : (this.arena.shops ?? []).map((sh) => { const e = empty.filter((x) => x.shop === sh.id); return e[Math.floor(this.rng() * e.length)]; }).filter(Boolean);
     for (const sp of pick) {
-      if (this.items.size >= ITEM_MAX + 30) break;
+      if (this.items.size >= ITEM_MAX + SHELF_MAX) break;
       const type = sp.pool![Math.floor(this.rng() * sp.pool!.length)];
       const id = this.placeItem(type, sp.x, sp.y, sp.z);
       const it = this.items.get(id)!;
@@ -296,7 +324,7 @@ export class World {
       p.move = makeMoveState(sp.x, sp.z, sp.yaw);
       p.lastSeq = keepSeq;
       p.queue.length = 0;
-      p.notoriety = 0; p.hitsTaken = 0; p.knockCount = 0; p.stolenThisRound = 0; p.rob = null; p.respawnT = 0;
+      p.notoriety = 0; p.hp = HEALTH.max; p.knockCount = 0; p.stolenThisRound = 0; p.rob = null; p.respawnT = 0;
       this.updateCarry(p);
     }
   }
@@ -318,14 +346,13 @@ export class World {
     it.fort = p.colorIdx; it.locked = true; it.bankT = LOCK_TIME;
   }
 
-  /** Taser hit: drop whatever is in your hands (pockets stay). */
+  /** Taser hit / a punch: drop whatever is in your hands (other pockets stay). */
   dropHand(p: PlayerSim) {
-    if (!p.hand) return;
-    const it = this.items.get(p.hand);
-    if (!it) { p.hand = ""; return; }
+    const a = this.activeItem(p); // what you hold, or the pocket item you have out
+    if (!a) return;
+    const it = a.item;
     if (lootDef(it.type).size === "giant" && it.holder2) { this.letGoOfGiant(it, p); return; }
-    p.hand = "";
-    this.updateCarry(p);
+    this.release(p, a.from);
     const ang = this.rng() * Math.PI * 2;
     this.freeItem(it, p.move.x + Math.sin(ang) * 0.5, p.move.y + 1, p.move.z + Math.cos(ang) * 0.5, Math.sin(ang) * 2, 3, Math.cos(ang) * 2);
     it.holder = ""; it.holder2 = "";
@@ -358,17 +385,16 @@ export class World {
       npcHitPlayer: (npcId, pid) => {
         const p = w.players.get(pid);
         if (!p || p.move.knockT > 0 || p.move.immuneT > 0) return;
-        p.hitsTaken += 1;
-        p.hitsDecayT = 5;
         const n = w.npc.npcs.get(npcId);
         if (n) { const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, Math.hypot(dx, dz)); p.move.vx += (dx / l) * 3.5; p.move.vz += (dz / l) * 3.5; }
-        if (p.hitsTaken >= 2) { p.hitsTaken = 0; w.knockdown(p, npcId); w.npc.gloat(npcId); }
+        if (w.hurt(p, HEALTH.npcHit, npcId, { dropHand: true })) w.npc.gloat(npcId);
       },
       npcDropLoot: (_npcId, type, x, y, z, ax, az) => { w.popLoot(type, x, y, z, ax, az); },
       shopAlarm: (shopId) => { const t = [...w.props.props.values()].find((x) => x.def.kind === "till" && x.def.shop === shopId); if (t) { t.alarmT = 6; w.emit({ t: "alarm", kind: "shop", prop: t.def.id, x: t.def.x, z: t.def.z }); } },
       npcEvent: (e) => w.emit(e),
       addNotoriety: (pid, n) => { const p = w.players.get(pid); if (p) w.addHeat(p, n); },
       copBrain: (n, dt) => w.police.brain(n, dt),
+      cars: () => [...(w.traffic?.cars ?? []), ...(w.police?.cars ?? [])],
       applyToPlayer: (pid, effect) => {
         const p = w.players.get(pid);
         if (!p) return;
@@ -437,8 +463,24 @@ export class World {
     this.dropEverything(p);
     p.move.knockT = time;
     p.move.immuneT = time + KNOCK_IMMUNITY;
+    p.hp = 0; p.hurtT = this.time;
     p.move.mantleT = 0; p.move.slideT = 0; p.move.dodgeT = 0;
     this.emit({ t: "knockdown", p: p.id, by, time });
+  }
+
+  /**
+   * Damage a player. Returns true if it knocked them down. Nothing happens while they're down,
+   * immune (just got up), jailed or respawning. `canKO: false` (thrown items) stops at 1 HP.
+   * `dropHand`: a hit that doesn't knock you down still knocks what's in your hands loose.
+   */
+  hurt(p: PlayerSim, dmg: number, by: string, opts: { canKO?: boolean; dropHand?: boolean } = {}): boolean {
+    if (p.jailT > 0 || p.respawnT > 0 || p.move.knockT > 0 || p.move.immuneT > 0 || dmg <= 0 || p.hp <= 0) return false;
+    p.hp = Math.max(opts.canKO === false ? 1 : 0, p.hp - dmg);
+    p.hurtT = this.time;
+    this.emit({ t: "hurt", p: p.id, by, dmg, hp: Math.ceil(p.hp) });
+    if (p.hp <= 0) { this.knockdown(p, by); return true; }
+    if (opts.dropHand) this.dropHand(p);
+    return false;
   }
 
   // ------------------------------------------------------------------ players
@@ -450,11 +492,11 @@ export class World {
     const p: PlayerSim = {
       id, name: sanitizeName(rawName), colorIdx, connected: true,
       move: makeMoveState(sp.x, sp.z, sp.yaw), lastSeq: -1, queue: [], credit: 0,
-      hand: "", pockets: Array(POCKETS).fill(""), sel: 0, actionCd: 0, queued: null,
-      punchCd: 0, notoriety: 0, hitsTaken: 0, hitsDecayT: 0, knockCount: 0, knockWindowT: 0,
+      hand: "", pockets: Array(POCKETS).fill(""), sel: FISTS, actionCd: 0, queued: null,
+      punchCd: 0, notoriety: 0, hp: HEALTH.max, hurtT: -99, knockCount: 0, knockWindowT: 0,
       cash: 0, stolenThisRound: 0, rob: null, respawnT: 0,
       jailT: 0, jailCell: -1, lock: null, lockSeed: 0, lockT0: 0, seenT: -99, knownX: 0, knownZ: 0, crimeT: -99,
-      tugCd: 0, raidAlarmT: -99,
+      tugCd: 0, raidAlarmT: -99, inFort: -1, raidEnterT: -99,
     };
     this.players.set(id, p);
     return p;
@@ -516,7 +558,9 @@ export class World {
     if (act.a === "punch") { this.punch(p, Number((act as any).yaw), Number((act as any).pitch)); return; }
     if (act.a === "robStop") { this.props.cancelRob(p); return; }
     if (act.a === "use") { this.props.use(p, String((act as any).prop ?? "")); return; }
-    if (p.actionCd > 0 && act.a !== "cycle") {
+    if (act.a === "cycle") { this.cycleSel(p, Number((act as any).dir) < 0 ? -1 : 1); return; }
+    if (act.a === "select") { this.selectSlot(p, Number((act as any).slot)); return; }
+    if (p.actionCd > 0) {
       // Pressed a moment too early (e.g. G right after E): remember it and do it when allowed.
       if (!p.queued) p.queued = act; else this.emit({ t: "whiff", p: id, reason: "cooldown" });
       return;
@@ -525,7 +569,6 @@ export class World {
       case "grab": this.grab(p, String((act as any).item ?? "")); break;
       case "drop": this.drop(p); break;
       case "throw": this.throwItem(p, Number((act as any).charge), Number((act as any).yaw), Number((act as any).pitch)); break;
-      case "cycle": p.sel = (p.sel + 1) % POCKETS; break;
     }
   }
 
@@ -536,7 +579,7 @@ export class World {
 
   /** Punch whoever is in front of you (pedestrian or player). Only with empty hands. */
   private punch(p: PlayerSim, yaw: number, pitch: number) {
-    if (p.punchCd > 0 || p.hand) return;
+    if (p.punchCd > 0 || this.activeItem(p)) return; // (something in your hands: a click throws it instead)
     p.punchCd = PUNCH_COOLDOWN;
     const aim = Number.isFinite(yaw) ? yaw : p.move.yaw;
     void pitch;
@@ -578,9 +621,11 @@ export class World {
     this.emit({ t: "punch", p: p.id, hit: "player", target: b.id });
     const dx = victim.move.x - m.x, dz = victim.move.z - m.z, l = Math.max(0.01, Math.hypot(dx, dz));
     victim.move.vx += (dx / l) * 4; victim.move.vz += (dz / l) * 4;
-    this.knockdown(victim, p.id);
-    p.punchCd = PVP_PUNCH_COOLDOWN;
-    this.addHeat(p, 5);
+    victim.move.stumbleT = Math.max(victim.move.stumbleT, 0.2); // flinch
+    if (this.hurt(victim, HEALTH.punch, p.id, { dropHand: true })) {
+      p.punchCd = PVP_PUNCH_COOLDOWN; // (anti-grief pause after a knockdown, as before)
+      this.addHeat(p, 5);
+    }
   }
 
   private grab(p: PlayerSim, itemId: string) {
@@ -652,6 +697,20 @@ export class World {
     this.emit({ t: "grab", p: p.id, item: it.id, to: "hand" });
   }
 
+  /** C1: a rival stepping into your compound at night sets off the alarm straight away. */
+  private raidWatch() {
+    for (const p of this.players.values()) {
+      const slot = p.connected && p.jailT <= 0 && p.respawnT <= 0 ? fortAt(this.arena, p.move.x, p.move.z) : -1;
+      if (slot === p.inFort) continue;
+      p.inFort = slot;
+      if (slot < 0 || !this.match.night) continue;
+      const owner = this.match.ownerOf(slot);
+      if (!owner || owner.id === p.id || this.time - owner.raidEnterT < RAID_ENTER_CD) continue;
+      owner.raidEnterT = this.time;
+      this.emit({ t: "raidEnter", p: p.id, owner: owner.id, slot, x: p.move.x, z: p.move.z });
+    }
+  }
+
   /** Night raid: taking loot out of a RIVAL's fort sets off their alarm. */
   private raidCheck(p: PlayerSim, it: ItemSim) {
     if (!this.match.night) return;
@@ -689,11 +748,25 @@ export class World {
     this.emit({ t: "tug", item: it.id, stage: "win", winner: winnerId, loser: loserId });
   }
 
-  /** Which item would an action use? Hands first, then the selected pocket, then any pocket. */
+  /**
+   * The item in your hands right now: whatever you're holding, else the pocket item you've
+   * selected (it's drawn in your hand). Fists selected = nothing (a click punches).
+   */
   private activeItem(p: PlayerSim): { item: ItemSim; from: "hand" | number } | null {
     if (p.hand) { const it = this.items.get(p.hand); if (it) return { item: it, from: "hand" }; p.hand = ""; }
-    const order = [p.sel, ...[0, 1, 2].filter((i) => i !== p.sel)];
-    for (const i of order) {
+    if (p.sel >= 0 && p.sel < POCKETS && p.pockets[p.sel]) {
+      const it = this.items.get(p.pockets[p.sel]);
+      if (it) return { item: it, from: p.sel };
+      p.pockets[p.sel] = ""; p.sel = FISTS;
+    }
+    return null;
+  }
+
+  /** Anything you carry (hands first, then any pocket): G drops these one by one, knockdowns drop them all. */
+  private anyItem(p: PlayerSim): { item: ItemSim; from: "hand" | number } | null {
+    const a = this.activeItem(p);
+    if (a) return a;
+    for (let i = 0; i < POCKETS; i++) {
       const id = p.pockets[i];
       if (!id) continue;
       const it = this.items.get(id);
@@ -704,12 +777,26 @@ export class World {
   }
 
   private release(p: PlayerSim, from: "hand" | number) {
-    if (from === "hand") p.hand = ""; else p.pockets[from] = "";
+    if (from === "hand") p.hand = ""; else { p.pockets[from] = ""; if (p.sel === from) p.sel = FISTS; }
     this.updateCarry(p);
   }
 
+  /** Mouse wheel: step through fists + every filled pocket. Locked while something big is in your hands. */
+  private cycleSel(p: PlayerSim, dir: number) {
+    if (p.hand) return;
+    const opts = [FISTS, ...[0, 1, 2].filter((i) => p.pockets[i])];
+    const k = Math.max(0, opts.indexOf(p.sel));
+    p.sel = opts[(k + dir + opts.length) % opts.length];
+  }
+
+  /** Keys 1-3 (a filled pocket) or 4 (fists). */
+  private selectSlot(p: PlayerSim, slot: number) {
+    if (p.hand || !Number.isInteger(slot)) return;
+    if (slot === FISTS || (slot >= 0 && slot < POCKETS && p.pockets[slot])) p.sel = slot;
+  }
+
   private drop(p: PlayerSim) {
-    const a = this.activeItem(p);
+    const a = this.anyItem(p);
     if (!a) return;
     const it = a.item;
     const m = p.move;
@@ -733,17 +820,23 @@ export class World {
     if (!a) return;
     const it = a.item;
     const def = lootDef(it.type);
-    if (def.size === "giant") return this.emit({ t: "whiff", p: p.id, reason: "hands" }); // too big to throw
+    const giant = def.size === "giant";
+    if (giant && it.holder2) return this.emit({ t: "whiff", p: p.id, reason: "hands" }); // mid tug of war
     const c = Number.isFinite(charge) ? Math.max(0, Math.min(1, charge)) : 0;
     const y = Number.isFinite(yaw) ? yaw : p.move.yaw;
-    const pt = Number.isFinite(pitch) ? Math.max(-1.5, Math.min(1.5, pitch)) : 0;
+    // (a giant heave always goes roughly forward and a bit up, whatever you're looking at)
+    const pt = giant ? -0.35 : Number.isFinite(pitch) ? Math.max(-1.5, Math.min(1.5, pitch)) : 0;
     this.release(p, a.from);
     const speed = throwSpeed(def, c);
     const v = throwVelocity(y, pt, speed);
     const e = this.eye(p);
     const m = p.move;
     it.holder = ""; it.holder2 = "";
-    this.freeItem(it, e.x + v.dx * 0.55, e.y - 0.15 + v.dy * 0.55, e.z + v.dz * 0.55, v.vx + m.vx * 0.5, v.vy, v.vz + m.vz * 0.5);
+    if (giant) {
+      // heave it from in front of you (where you were dragging it), then stagger from the effort
+      this.freeItem(it, m.x + Math.sin(y) * (PLAYER.radius + def.radius + 0.2), m.y + def.radius + 0.4, m.z + Math.cos(y) * (PLAYER.radius + def.radius + 0.2), v.vx + m.vx * 0.3, v.vy, v.vz + m.vz * 0.3);
+      m.stumbleT = Math.max(m.stumbleT, HEAVE.stagger);
+    } else this.freeItem(it, e.x + v.dx * 0.55, e.y - 0.15 + v.dy * 0.55, e.z + v.dz * 0.55, v.vx + m.vx * 0.5, v.vy, v.vz + m.vz * 0.5);
     it.body.spin = (this.rng() * 2 - 1) * 8;
     it.lastThrower = p.id;
     it.thrownT = 0;
@@ -770,8 +863,8 @@ export class World {
 
   private dropEverything(p: PlayerSim) {
     let guard = 0;
-    while (this.activeItem(p) && guard++ < 10) {
-      const a = this.activeItem(p)!;
+    while (this.anyItem(p) && guard++ < 10) {
+      const a = this.anyItem(p)!;
       const it = a.item;
       if (lootDef(it.type).size === "giant" && it.holder2) { this.letGoOfGiant(it, p); continue; }
       this.release(p, a.from);
@@ -782,6 +875,7 @@ export class World {
     }
     p.hand = "";
     p.pockets.fill("");
+    p.sel = FISTS;
     this.updateCarry(p);
   }
 
@@ -808,7 +902,9 @@ export class World {
       if (p.queued && p.actionCd <= 0) { const q = p.queued; p.queued = null; this.action(p.id, q); }
       p.punchCd = Math.max(0, p.punchCd - dt);
       p.tugCd = Math.max(0, p.tugCd - dt);
-      if (p.hitsDecayT > 0) { p.hitsDecayT -= dt; if (p.hitsDecayT <= 0) p.hitsTaken = 0; }
+      // health: back to full once you're up after a knockdown; otherwise regenerates after a quiet spell
+      if (p.hp <= 0) { if (p.move.knockT <= 0) p.hp = HEALTH.max; }
+      else if (p.hp < HEALTH.max && this.time - p.hurtT >= HEALTH.regenDelay) p.hp = Math.min(HEALTH.max, p.hp + HEALTH.regenRate * dt);
       if (p.knockWindowT > 0) { p.knockWindowT -= dt; if (p.knockWindowT <= 0) p.knockCount = 0; }
       if (!p.connected) continue;
       p.credit = Math.min(p.credit + 1, MAX_INPUTS_PER_TICK);
@@ -828,10 +924,8 @@ export class World {
     this.props.tick(dt);
     this.traffic.tick(dt);
     this.police.tick(dt);
-    if (this.spawnLoot) {
-      this.stockTimer += dt;
-      if (this.stockTimer >= 15) { this.stockTimer = 0; this.stockShops(false); }
-    }
+    this.raidWatch();
+    // (Slice 2A, Blake: shops restock at the start of each scavenge only; a shop you cleaned out stays empty)
     if (this.spawnLoot) {
       this.spawnTimer += dt;
       if (this.spawnTimer >= 6) { this.spawnTimer = 0; this.topUpLoot(1); }
@@ -932,7 +1026,7 @@ export class World {
           }
         }
       }
-      if (sp > 6 && it.thrownT < 2) {
+      if (sp > (def.size === "giant" ? 3 : 6) && it.thrownT < 2) {
         for (const p of this.players.values()) {
           if (!p.connected || (p.id === it.lastThrower && it.thrownT < 0.4)) continue;
           const m = p.move;
@@ -940,10 +1034,13 @@ export class World {
           const dx = it.body.x - m.x, dz = it.body.z - m.z, dy = it.body.y - cy;
           if (Math.hypot(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
             const nx = -dx, nz = -dz, nl = Math.max(0.001, Math.hypot(nx, nz));
-            m.vx += (nx / nl) * 3; m.vz += (nz / nl) * 3; // shove
+            const hit = throwImpact(def, sp);
+            m.vx += (nx / nl) * hit.knock; m.vz += (nz / nl) * hit.knock; // heavier = shoved harder
+            if (hit.stagger) m.stumbleT = Math.max(m.stumbleT, hit.stagger);
             it.body.vx *= -0.3; it.body.vz *= -0.3;
             it.thrownT = 2; // one bonk per throw
             this.emit({ t: "bonk", item: it.id, p: p.id, by: it.lastThrower });
+            this.hurt(p, hit.dmg, it.lastThrower, { canKO: false });
             break;
           }
         }
@@ -958,9 +1055,12 @@ export class World {
 
   private topUpLoot(n: number) {
     let free = 0;
-    for (const it of this.items.values()) if (it.mode === "free") free++;
-    for (let i = 0; i < n && free < this.itemTarget && this.items.size < ITEM_MAX; i++, free++) this.spawnOne();
+    for (const it of this.items.values()) if (it.mode === "free" && it.shop < 0) free++;
+    for (let i = 0; i < n && free < this.itemTarget && this.looseCount() < ITEM_MAX; i++, free++) this.spawnOne();
   }
+
+  /** Items that aren't shop stock (Slice 2A: shelves are capped separately by SHELF_MAX). */
+  private looseCount() { let n = 0; for (const it of this.items.values()) if (it.shop < 0) n++; return n; }
 
   private pickType(zone: LootZone, groundLevel: boolean, allowGiant: boolean): LootDef {
     const boost = ZONE_RARE_BOOST[zone];
@@ -980,7 +1080,7 @@ export class World {
   /** Spawn one item at a random free spawn point. Returns its id (or "" if none placed). */
   spawnOne(forceType?: string): string {
     const spawns = this.arena.lootSpawns ?? [];
-    if (!spawns.length || this.items.size >= ITEM_MAX) return "";
+    if (!spawns.length || this.looseCount() >= ITEM_MAX) return "";
     let giants = 0;
     for (const it of this.items.values()) if (lootDef(it.type).size === "giant") giants++;
     for (let attempt = 0; attempt < 12; attempt++) {
@@ -1041,9 +1141,22 @@ export class World {
   takeEvents(): WorldEvent[] { const e = this.events; this.events = []; return e; }
 }
 
+/** How "massive" an item feels when it hits you (0..1): giant 1, big 0.3 + weight, small 0.05 + weight. */
+export function itemMass(def: LootDef): number {
+  return def.size === "giant" ? 1 : Math.min(1, (def.size === "big" ? 0.3 : 0.05) + def.weight);
+}
+
+/** What a thrown item does to a player it hits: damage 5-30 (never a knockout), shove, stagger for heavy stuff. */
+export function throwImpact(def: LootDef, speed: number): { dmg: number; knock: number; stagger: number } {
+  const m = itemMass(def);
+  const dmg = Math.round(Math.min(HEALTH.throwMax, HEALTH.throwMin + (HEALTH.throwMax - HEALTH.throwMin) * Math.min(1, (m * speed) / 10)));
+  return { dmg, knock: 2 + 6 * m, stagger: m > 0.5 ? 0.3 : 0 };
+}
+
 /** Throw speed for an item at a given charge (0..1). Heavier items fly slower. */
 export function throwSpeed(def: LootDef, charge: number): number {
-  const heavy = def.size === "giant" ? 1 : def.weight;
+  if (def.size === "giant") return HEAVE.minSpeed + (HEAVE.maxSpeed - HEAVE.minSpeed) * charge;
+  const heavy = def.weight;
   return (THROW_MIN_SPEED + (THROW_MAX_SPEED - THROW_MIN_SPEED) * charge) * (1 - heavy * 0.8);
 }
 

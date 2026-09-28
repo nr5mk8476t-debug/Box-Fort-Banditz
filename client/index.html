@@ -69,6 +69,7 @@
     </div>
     <div id="fx-flash" class="fx fx-flash hidden" aria-hidden="true"></div>
     <div id="fx-zap" class="fx fx-zap hidden" aria-hidden="true"><div class="zap-text">ZZZT!</div></div>
+    <div id="fx-hurt" class="fx fx-hurt hidden" aria-hidden="true"></div>
     <div id="crosshair"></div>
     <!-- Phase 3: round loop -->
     <div id="match-hud" class="match-hud"><div id="mh-round" class="mh-round"></div><div id="mh-time" class="mh-time">LOBBY</div><div id="mh-sub" class="mh-sub"></div></div>
@@ -91,23 +92,36 @@
     <div id="toasts" aria-live="polite"></div>
     <div id="reconnect-banner" class="banner hidden">Connection lost... trying to reconnect</div>
     <div id="debug" class="debug hidden"></div>
-    <div id="stamina" class="stamina full" aria-label="Stamina"><div id="stamina-fill"></div><span class="winded-label">WINDED!</span></div>
+    <!-- 5A.1: health + stamina, bottom-left -->
+    <div id="vitals" class="vitals">
+      <div id="health" class="vital health" aria-label="Health">
+        <svg class="vicon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.1 5.2 3 1.6-1.9 3.1-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z" fill="#ff4a5a" stroke="#1b1420" stroke-width="2"/></svg>
+        <div class="vbar"><div id="hp-lag" class="vlag"></div><div id="hp-fill" class="vfill"></div></div>
+        <span id="hp-num" class="vnum">100</span>
+      </div>
+      <div id="stamina" class="vital stamina" aria-label="Stamina">
+        <svg class="vicon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 1.5 4 13.5h6.2L8.8 22.5 20 9.5h-6.4z" fill="#ffd23c" stroke="#1b1420" stroke-width="2" stroke-linejoin="round"/></svg>
+        <div class="vbar"><div id="stamina-fill" class="vfill"></div></div>
+        <span id="dodge-pip" class="dodge-chip ready" title="Dodge (Q) ready">Q</span>
+        <span class="winded-label">WINDED!</span>
+      </div>
+    </div>
     <div id="heat" class="heat cold" title="Heat: how much trouble you've caused. 1 star = a cop, 2 = two, 3 = the cop car too. Break line of sight to cool off.">
       <span class="heat-label">HEAT</span><span class="heat-bar"><span id="heat-fill"></span><i style="left:30%"></i><i style="left:60%"></i><i style="left:90%"></i></span>
       <span id="stars" class="stars"><b>★</b><b>★</b><b>★</b></span>
     </div>
     <div id="tug" class="tug hidden" aria-live="assertive"><div class="tug-label">TUG OF WAR! MASH <span class="key">E</span></div><div class="tug-bar"><span class="tug-them">THEM</span><div id="tug-knob" class="tug-knob"></div><span class="tug-you">YOU</span></div></div>
-    <div id="dodge-pip" class="dodge-pip ready" title="Dodge (Q) ready">Q</div>
     <div id="charge" class="charge hidden" aria-hidden="true"></div>
     <div id="prompt" class="prompt hidden" aria-live="polite"></div>
     <div id="flash" class="flash hidden" aria-live="assertive"></div>
-    <div id="pockets" class="pockets" aria-label="Inventory">
-      <div class="slot-wrap"><span class="slot-label">HANDS</span><div id="slot-hand" class="slot hand">empty</div></div>
+    <div id="pockets" class="pockets" aria-label="Inventory (mouse wheel or 1-4 to choose)">
+      <div id="slot-hand-wrap" class="slot-wrap hidden"><span class="slot-label">IN HANDS</span><div id="slot-hand" class="slot hand">empty</div></div>
       <div class="slot-wrap"><span class="slot-label">1</span><div id="slot-0" class="slot">empty</div></div>
       <div class="slot-wrap"><span class="slot-label">2</span><div id="slot-1" class="slot">empty</div></div>
       <div class="slot-wrap"><span class="slot-label">3</span><div id="slot-2" class="slot">empty</div></div>
+      <div class="slot-wrap"><span class="slot-label">4</span><div id="slot-fists" class="slot fists">FISTS</div></div>
     </div>
-    <div id="controls-hint" class="controls-hint">WASD move / SHIFT sprint / SPACE jump + climb / C crouch / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / CLICK punch + smash / HOLD CLICK or F throw / RIGHT CLICK pockets / ESC menu</div>
+    <div id="controls-hint" class="controls-hint">WASD move / SHIFT sprint / SPACE jump + climb / C crouch / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / WHEEL or 1-4 choose item / CLICK punch (fists) or HOLD CLICK throw / ESC menu</div>
   </section>
 
   <!-- PHASE 5A: PAWN SHOP (shop round) -->

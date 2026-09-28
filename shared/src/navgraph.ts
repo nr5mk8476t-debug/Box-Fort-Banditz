@@ -1,7 +1,7 @@
 // Walking routes for pedestrians, built automatically from the city layout:
 // a grid of candidate points along the streets; points inside anything solid are dropped,
 // and neighbours are linked only if the straight walk between them is clear.
-import { inRect, type ArenaLayout } from "./arena.js";
+import { inRect, nearBoxes, onRoadAt, type ArenaLayout } from "./arena.js";
 
 export interface NavNode { id: number; x: number; z: number; links: number[]; }
 
@@ -9,7 +9,8 @@ const DEFAULT_LINES = [-41, -37, -27, -15, -11, -8, -4.5, 0, 4.5, 8, 11, 15, 27,
 const CLEARANCE = 0.55; // pedestrian radius + a little room
 
 function blockedAt(arena: ArenaLayout, x: number, z: number): boolean {
-  for (const b of arena.boxes) {
+  if (arena.water?.some((r) => inRect(r, x, z, CLEARANCE))) return true; // (the pond: walk round it)
+  for (const b of nearBoxes(arena, x, z, CLEARANCE + 0.1)) {
     const top = b.y + b.h / 2;
     const bottom = b.y - b.h / 2;
     if (top <= 0.4) continue; // curbs/sidewalks are walkable
@@ -27,36 +28,61 @@ function segmentClear(arena: ArenaLayout, ax: number, az: number, bx: number, bz
     const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
     if (blockedAt(arena, x, z)) return false;
     // pedestrians only cross roads at crosswalks (cars stop for them there)
-    if (arena.roads?.some((r) => inRect(r, x, z)) && !arena.crosswalks?.some((c) => inRect(c, x, z, 0.3))) return false;
+    if (onRoadAt(arena, x, z) && !arena.crosswalks?.some((c) => inRect(c, x, z, 0.3))) return false;
   }
   return true;
 }
 
 export function buildNavGraph(arena: ArenaLayout): NavNode[] {
-  const LINES = arena.navLines ?? DEFAULT_LINES;
+  const XL = arena.navLines ?? DEFAULT_LINES, ZL = arena.navLinesZ ?? XL;
   const nodes: NavNode[] = [];
   const at = new Map<string, number>();
-  for (const x of LINES) for (const z of LINES) {
+  for (const x of XL) for (const z of ZL) {
     if (blockedAt(arena, x, z)) continue;
-    if (arena.roads?.some((r) => inRect(r, x, z))) continue; // never stand around in the road
+    if (onRoadAt(arena, x, z)) continue; // never stand around in the road
     at.set(x + "," + z, nodes.length);
     nodes.push({ id: nodes.length, x, z, links: [] });
   }
   const link = (a: number, b: number) => { nodes[a].links.push(b); nodes[b].links.push(a); };
   // connect each node to its nearest valid neighbour along the row and along the column
   for (const n of nodes) {
-    const xi = LINES.indexOf(n.x), zi = LINES.indexOf(n.z);
-    for (let k = xi + 1; k < LINES.length; k++) {
-      const m = at.get(LINES[k] + "," + n.z);
+    const xi = XL.indexOf(n.x), zi = ZL.indexOf(n.z);
+    for (let k = xi + 1; k < XL.length; k++) {
+      const m = at.get(XL[k] + "," + n.z);
       if (m === undefined) continue;
       if (segmentClear(arena, n.x, n.z, nodes[m].x, nodes[m].z)) link(n.id, m);
       break;
     }
-    for (let k = zi + 1; k < LINES.length; k++) {
-      const m = at.get(n.x + "," + LINES[k]);
+    for (let k = zi + 1; k < ZL.length; k++) {
+      const m = at.get(n.x + "," + ZL[k]);
       if (m === undefined) continue;
       if (segmentClear(arena, n.x, n.z, nodes[m].x, nodes[m].z)) link(n.id, m);
       break;
+    }
+  }
+  // Slice 2A: extra routes (into shops): consecutive points linked, the first one joined to the street
+  // (C1: chain points at the same spot as an earlier chain point are the same point, so chains can
+  //  share a loop; the first point of each chain joins the street routes)
+  const gridCount = nodes.length;
+  const chainAt = new Map<string, number>();
+  for (const chain of arena.navChains ?? []) {
+    const ids: number[] = [];
+    for (const p of chain) {
+      if (blockedAt(arena, p.x, p.z)) break;
+      const key = p.x.toFixed(2) + "," + p.z.toFixed(2);
+      let id = chainAt.get(key);
+      if (id === undefined) { id = nodes.length; nodes.push({ id, x: p.x, z: p.z, links: [] }); chainAt.set(key, id); }
+      ids.push(id);
+    }
+    if (ids.length < 2) continue;
+    for (let i = 1; i < ids.length; i++) if (!nodes[ids[i - 1]].links.includes(ids[i])) link(ids[i - 1], ids[i]);
+    const head = nodes[ids[0]];
+    const near = nodes.filter((n) => n.id < gridCount && Math.hypot(n.x - head.x, n.z - head.z) < 20)
+      .sort((a, b) => Math.hypot(a.x - head.x, a.z - head.z) - Math.hypot(b.x - head.x, b.z - head.z));
+    let joined = 0;
+    for (const n of near) {
+      if (joined >= 2) break;
+      if (segmentClear(arena, head.x, head.z, n.x, n.z)) { link(head.id, n.id); joined++; }
     }
   }
   // keep only the biggest connected piece (so nobody gets stranded)

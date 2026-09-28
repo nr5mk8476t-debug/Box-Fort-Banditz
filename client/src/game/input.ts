@@ -2,7 +2,7 @@
 // so WASD works on AZERTY/QWERTZ keyboards too.
 import { settings } from "../settings.ts";
 
-export type LootAction = "grab" | "grabEnd" | "drop" | "cycle" | "chargeStart" | "chargeEnd" | "robStart" | "robEnd";
+export type LootAction = "grab" | "grabEnd" | "drop" | "cycleNext" | "cyclePrev" | "select0" | "select1" | "select2" | "select3" | "special" | "chargeStart" | "chargeEnd" | "robStart" | "robEnd";
 
 export interface Axes { mx: number; mz: number; sprint: boolean; jump: boolean; crouch: boolean; dodge: boolean; }
 
@@ -17,7 +17,11 @@ export class FpInput {
   dragLook = false;
   /** Test hook (only used by automated tests with ?test=1): forces movement axes. */
   override: Axes | null = null;
-  /** Loot controls: E grab, G drop, left mouse = punch (empty hands) or hold to throw, F = throw, right mouse / wheel cycles pockets. */
+  /**
+   * Loot controls (5A.1): E grab, G drop, LEFT mouse = punch (fists out) or hold to throw what's in your hands,
+   * F = throw, mouse WHEEL = next/previous item, keys 1-3 = pockets, 4 = fists. RIGHT mouse is reserved
+   * for special items later (it no longer cycles).
+   */
   /** src says whether a charge came from the mouse (empty hands = punch) or the F key (always throws). */
   onAction: ((a: LootAction, src?: "mouse" | "key") => void) | null = null;
   private charging: "mouse" | "key" | null = null;
@@ -48,7 +52,7 @@ export class FpInput {
     if (!this.enabled) return;
     if (this.frozen) { if (e.button === 0) this.jailKeys?.("Mouse0"); return; }
     if (e.button === 0 && this.locked && !this.charging) { this.charging = "mouse"; this.onAction?.("chargeStart", "mouse"); }
-    if (e.button === 2) this.onAction?.("cycle");
+    if (e.button === 2) this.onAction?.("special"); // (reserved: does nothing yet)
   };
   private onMouseUp = (e: PointerEvent) => {
     if (e.button === 0 && this.charging === "mouse") { this.charging = null; if (this.enabled) this.onAction?.("chargeEnd", "mouse"); }
@@ -58,7 +62,7 @@ export class FpInput {
     if (!this.enabled) return;
     if (this.frozen) { this.jailKeys?.(e.deltaY > 0 ? "WheelDown" : "WheelUp"); return; }
     this.wheelAcc += e.deltaY;
-    if (Math.abs(this.wheelAcc) >= 60) { this.wheelAcc = 0; this.onAction?.("cycle"); }
+    if (Math.abs(this.wheelAcc) >= 60) { const down = this.wheelAcc > 0; this.wheelAcc = 0; this.onAction?.(down ? "cycleNext" : "cyclePrev"); }
   };
 
   /** Freeze / unfreeze (jail). Drops held keys and any throw charge so nothing sticks. */
@@ -128,6 +132,10 @@ export class FpInput {
     if (e.code === "KeyE") this.onAction?.("grab");
     else if (e.code === "KeyG") this.onAction?.("drop");
     else if (e.code === "KeyR") this.onAction?.("robStart"); // hold R at a shop till
+    else if (e.code === "Digit1" || e.code === "Numpad1") this.onAction?.("select0");
+    else if (e.code === "Digit2" || e.code === "Numpad2") this.onAction?.("select1");
+    else if (e.code === "Digit3" || e.code === "Numpad3") this.onAction?.("select2");
+    else if (e.code === "Digit4" || e.code === "Numpad4") this.onAction?.("select3");
     else if (e.code === "KeyF" && !this.charging) { this.charging = "key"; this.onAction?.("chargeStart", "key"); }
   };
   private onKeyUp = (e: KeyboardEvent) => {

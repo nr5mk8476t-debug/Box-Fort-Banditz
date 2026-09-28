@@ -5,7 +5,7 @@ Every phase adds to this plan. Nothing is reported as working unless one of thes
 ## Layers
 
 1. **Unit tests** (`npm test`, no browser): the shared game rules. Fast, exact, run on every change.
-2. **Server smoke test** (`tests/server-smoke.ts`): two headless clients talk to a real server. No rendering.
+2. **Server smoke tests**: `tests/signal-smoke.ts` checks matchmaking (the only job the live server has since games are browser-hosted). `tests/server-smoke.ts` covers the old server-hosted mode (`?net=server`), which is retired from the regular test matrix.
 3. **Browser end-to-end** (`scripts-run-e2e.sh`): up to 5 real headless Chrome windows, real server, real 3D rendering (software GPU), screenshots for visual review. Also run with `LATENCY=110` to simulate Australia → Singapore ping.
 4. **Manual play checks** by Blake on real hardware (feel, fun, performance), with the checklist below.
 
@@ -189,6 +189,91 @@ Note on the automated browser test: it renders 3D on the CPU, so it runs at sing
 | Tasers | 3 stars: aim (warning) -> hit = stun + drop hands -> cuffed; dodge = miss | unit | pass |
 | Tug of war | solo drag x0.4; rival grabs = tug; harder masher wins; timeout = holder; knockdown frees it | unit + e2e (online) | pass |
 | Totals (5A) | 115 shared unit + 2 client unit + server smoke + 208/208 browser checks (solo + 4 browser-hosted online windows) | all | pass |
+
+## Overhaul Slice 1 (5A.1) checks: traffic fix, controls, throwing, health, HUD (2026-09-27)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Traffic | 5-min city soak x3 seeds: no pedestrian stuck > 20 s, none inside anything, no car stopped > 12 s (before the fix: 119 stuck reports, a car stopped 586 s) | unit | pass |
+| | soak with 3-star bandits (cops + cop cars running around): traffic still flows | unit | pass |
+| | knocked-out pedestrian in the lane: car stops, honks, body slid to the curb (not into anything), traffic resumes | unit | pass |
+| | pedestrians wait at the curb for an oncoming car; nobody steps right in front of a fast car | unit | pass |
+| Controls | wheel cycles fists + filled pockets; keys 1-3 pockets, 4 fists; can't cycle with something in your hands; right click does nothing (reserved) | unit + e2e | pass |
+| | left click punches only with fists out; selected pocket item shows in hands and can be thrown | e2e | pass |
+| Throwing | every item throwable; giants heaved 3-4 m with a slow wind-up + self-stagger; damage 5-30 by weight x speed; a throw never KOs | unit | pass |
+| Health | 100 HP; punch 34 (3rd = knockdown); NPC hit 25; regen 10/s after 5 s; knockdown -> up at full HP | unit + e2e (online: one punch = 66 HP, 3rd punch knocks down) | pass |
+| HUD | health + stamina bars bottom-left (heart, yellow bolt), Q dodge chip beside stamina, crosshair kept, blue centre Q gone | e2e + screenshot 41 | pass |
+| Hands | no gold patch mesh, white tape wraps present, unlit two-tone shading | e2e + screenshot review | pass |
+| Matchmaking | `tests/signal-smoke.ts`: room code, host told of arrivals, offer/answer relay, joiners can't message each other, bad code refused, host leaving closes the room | smoke | 8/8 pass |
+| Totals | 122 shared unit + 2 client unit + matchmaking smoke 8/8 + browser e2e **219/219** (final run) | all | pass |
+| | earlier runs: 218/219 (normal) and 218/219 at 110 ms lag, each failing one too-short test wait (see note); the 110 ms run was not repeated after the final test fixes | e2e | noted |
+
+Note: the one failure in each e2e run was a test wait that was too short for this very slow test box (the truck's 5 s warning took ~50 s of real time; the charge ring check sampled before a frame had drawn). Later runs also exposed test (not game) timing issues: an unconfirmed drop before the tug test, a KO check reading C's body a moment before it caught up, and a joiner tab stalling past the 8 s silence limit and auto-reconnecting. All were fixed in the test (it now waits/retries and logs what happened, e.g. C's health after each landed punch: 100 -> 66 -> 32 -> 0). The final full run passed 219/219.
+
+## City Redesign C1 checks: layout grey-box (2026-09-28)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Roads | all straight + axis-aligned (the ring is the only curve); every road lane leads on (no dead ends); from any road you can drive to every other; every lane point on the asphalt; lights only at the 2 Mile crossings, 4 roundabout entries, give way elsewhere | unit (layout.test) | pass |
+| Traffic | 22 cars, 7 seeds x 5 min without pedestrians: no two cars ever closer than 2.6 m, every road lane driven, longest stop 22-27 s (one red light); with pedestrians, 3-seed 5-min soak + wanted-bandit soak: nobody stuck > 20 s, no car stopped > 35 s, nobody inside anything, every road driven | unit + scratch soaks | pass |
+| Blocks | 85 street sides checked: longest blank stretch 11.5 m (limit 15); 0 bare ground samples on a 2 m grid; 20 landmark shells present and none over half its block | unit | pass |
+| Alleys | every bit of walkable ground (0.5 m grid) connects to the streets, except the jail cells | unit | pass |
+| Tent Town | 4 compounds 66 m apart under the 10 m highway, 2.5 m walls, gate + squeeze gap open; lookout ramp and car-park ramp climbable | unit | pass |
+| Fairness | walk to the nearest quarter of the richest 20% of loot: 204 / 209 / 210 / 203 m (3.4% spread, limit 5%). Average to all of it: 280 / 289 / 251 / 255 m (15.3%): open question for Blake | unit | pass (with the open question) |
+| Raid alert | a rival entering your compound at night alarms you at once, names them, not by day, not for the owner, not again within 15 s; online: A's banner names the raider and the item, red edge + arrow home | unit + e2e | pass |
+| Old tests | moved onto the new map (build yard = the old plaza for tests); stale server-smoke counts fixed (35 people, 22 cars, props >= 60) | all | pass |
+| Speed | host tick 0.31 ms (2A 0.28); city load 9.0-10.3 s (2A 9.5-10 s); host upload 37.6 KB/s for 2 players (2A 34.1) | measured | recorded |
+| Screenshots | 23-view tour (aerials, Tent Town, compound gate, lookout, the Yards, the Mile lights, roundabout, park, precinct, Old Brick, Market Row, Uptown Ave, City Hall, casino, station, marina, build yard, arches, skyscraper, Corner Mart, bus depot, noodle gate) | visual | reviewed |
+| Totals | 135 shared unit + 2 client unit + matchmaking smoke 8/8 + server smoke (all) + browser e2e 230/230 and 230/230 at 110 ms lag | all | pass |
+
+Notes on the C1 browser runs: earlier runs failed on test problems, each fixed and rerun: the tunnel (the yard's gravel is 0.15 m up), the car count (18 -> 22), the crowd-culling check (now waits in the park), the solo raid overlay (the check read it before the next frame), the multiplayer raid banner text, and the tug of war picking up a *different* giant duck that had spawned elsewhere (now it uses the one it dropped). One 110 ms run timed out reloading a tab with 3 other windows open (8 min); it passed on the rerun and the city loads in 9-10 s, the same as 2A. After the final runs, only UI wording changed (the airdrop bar no longer says "plaza"; the district names helper): type-checked, unit tests and the preview rebuild passed, the browser suite was not rerun for that.
+
+## Overhaul Slice 2A checks: the new city (2026-09-27)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Layout | 230 m city, mostly towers, 20 street-level buildings (14 walk-in shops, 2 lobbies, 4 closed fronts), 15 shops with cashiers incl. the taco truck, every loot source, nothing on the road, landmarks clear | unit | pass |
+| Walk-in | every shop and lobby can be walked into from the street and out the back door | unit (movement rules) + e2e (Corner Mart) | pass |
+| Upstairs | all 7 upper floors reachable: inside stairs (2 stockrooms, offices, apartments) and fire escapes (2 apartments, gym) | unit (movement rules) | pass |
+| Shoplifting | only counts on the shop floor, not from the stockroom above | unit | pass |
+| Pond | you wade at 45% speed (e2e measured 2.3 m/s vs 5 walking); pedestrians never walk into it | unit + e2e | pass |
+| Pedestrians | wander into shops and back out (3+ shops visited in 3 min) | unit | pass |
+| Traffic | 5-minute soak x3 seeds + wanted-bandit soak on the new map: nobody stuck, no car stopped > 12 s, nobody inside anything | unit | pass |
+| Loot | at least 70% of loot value indoors; loot upstairs | unit | pass (measured ~83%, see decisions) |
+| Performance | interiors drawn only within 42 m (0 drawn from the plaza centre, 5 inside a shop) | e2e | pass |
+| Screenshots | 20 views reviewed (shopfronts, 4 interiors, stairs, fire escape, 3 upstairs, taco truck, statue, pond, corner block, alley, bank shutters, night street) | visual | reviewed |
+| Speed | world tick 0.28 ms (5A.1 city: 0.17 ms) on this box; city load 9.5-10 s vs 7.9 s (software rendering); in view: ~205k triangles on a shopping street vs ~126k, similar mesh count | measured | recorded |
+| Host upload | 34.1 KB/s for 2 players (5A.1: 31 KB/s) | e2e | pass |
+| Totals | 128 shared unit + 2 client unit + matchmaking smoke 8/8 + browser e2e 224/224 and 224/224 at 110 ms lag | all | pass |
+
+Note on the browser test for 2A: earlier runs failed on test problems (not game bugs), all fixed in the test: the cashier count (4 -> 15), the police station's cell position (it moved), waits too short for the heavier city on this CPU-only test box (respawn, joining, refresh), a punch check that didn't allow for healing between missed clicks, and a test-only seat-hold override (?seathold=) because reloading the city here can take over 2 minutes. Friends' test windows now render at 800x450 so 4 windows fit on the box.
+
+## Manual checklist for Blake (City Redesign C1)
+
+- [ ] Fly round the new city: do the three tiers read (plain south, nicer middle, fancy north)?
+- [ ] Stand at the Mile x Yards Rd lights for a minute: do the lights and the queues look right?
+- [ ] Drive your eye round the roundabout: do cars give way properly, anything clip the kerb?
+- [ ] Walk from your fort to Uptown from each corner: does any fort feel unfair?
+- [ ] Tent Town: compound size, the gate, the squeeze gap, the highway overhead. Cosy or cramped?
+- [ ] With a friend at night: walk into their compound. Is the alert loud enough? Too much?
+- [ ] FPS on your PC on Uptown Ave (the tallest part now).
+
+## Manual checklist for Blake (Overhaul Slice 2A)
+
+- [ ] Does the city feel full now? Too many / too few shops on each street?
+- [ ] Walk into a few shops. Big enough? Easy to find the loot?
+- [ ] Climb to an upstairs (Pixel Palace back room, Lawyers 4 Less, the fire escapes behind the donut / pizza / sneaker shops).
+- [ ] The plaza: pond, statue, taco truck, fountain. Does it read as a park?
+- [ ] FPS on your PC walking down a shopping street (this is the heaviest part of the new city).
+
+## Manual checklist for Blake (Overhaul Slice 1)
+
+- [ ] Traffic: watch a few crossings. Any car stuck behind a pedestrian for more than a few seconds?
+- [ ] Wheel + 1-4: does switching feel quick? Is "4 = fists" natural?
+- [ ] Hands: do the white wraps and lower position look right? Held items a sensible size?
+- [ ] Health: do 3 punches to knock down feel right? Is the regen noticeable?
+- [ ] Throw a giant item (heave). Fun or annoying?
+- [ ] HUD: can you read health/stamina at a glance? Is the Q chip clear?
 
 ## Manual checklist for Blake (Phase 5A)
 

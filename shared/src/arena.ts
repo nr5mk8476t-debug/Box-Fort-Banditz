@@ -17,6 +17,10 @@ export interface Box {
   color?: string;
   sign?: string;
   windows?: boolean;
+  /** Slice 2A: which way the sign faces (unit vector on x/z); default = toward the city centre */
+  face?: [number, number];
+  /** Slice 2A: drawn only when the camera is near this building (interiors); see ArenaLayout.units */
+  unit?: number;
 }
 
 export type BoxKind =
@@ -26,7 +30,11 @@ export type BoxKind =
   // Phase 3.5 city overhaul
   | "tower" | "plaza" | "shelf" | "fridge" | "shopfloor" | "bin" | "phone" | "vending" | "meter" | "newsbox" | "car" | "statue"
   // Phase 4 police station
-  | "bars";
+  | "bars"
+  // Slice 2A city overhaul: storefront glass, stairs, shop fixtures, upstairs furniture, street clutter
+  | "glass" | "step" | "arcade" | "washer" | "rack" | "case" | "table" | "chair" | "cage"
+  | "bed" | "sofa" | "desk" | "cooler" | "gymbench" | "boxes" | "plinth" | "rim" | "dock" | "truck"
+  | "hydrant" | "mailbox" | "bikerack" | "board" | "pot" | "bags" | "pallet" | "portaloo" | "mixer" | "trolley";
 
 export interface SpawnPoint {
   x: number; y: number; z: number; zone: LootZone;
@@ -34,6 +42,8 @@ export interface SpawnPoint {
   pool?: string[];
   /** shop this spot belongs to (cashier yells if you swipe it) */
   shop?: number;
+  /** City Redesign C1: 0 = low (south, cheap), 1 = medium, 2 = high (north, richest) */
+  tier?: number;
 }
 
 export interface Rect { minX: number; maxX: number; minZ: number; maxZ: number; }
@@ -43,7 +53,9 @@ export const inRect = (r: Rect, x: number, z: number, pad = 0) => x >= r.minX - 
 export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "newsbox" | "car" | "till";
 export interface PropDef { id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string; }
 
-export type ShopType = "mart" | "pawn" | "bakery" | "gadget";
+export type ShopType = "mart" | "pawn" | "bakery" | "gadget"
+  // Slice 2A
+  | "donut" | "pharmacy" | "pizza" | "taco" | "arcade" | "thrift" | "sneaker" | "jeweller" | "phone" | "laundry" | "barber" | "pet";
 export interface ShopDef {
   id: number; name: string; type: ShopType;
   /** inside of the shop (for "caught shoplifting" checks) */
@@ -53,6 +65,29 @@ export interface ShopDef {
   /** till on the counter (the register item sits here) */
   till: { x: number; y: number; z: number };
   floorColor: string; wallColor: string;
+  /** Slice 2A: the shop floor is at ground level; anyone higher up (the floor above) isn't "in the shop" */
+  maxY?: number;
+}
+
+/**
+ * Slice 2A: a building plot along a street. Ground floor = a walk-in shop / lobby (or a closed
+ * front for things that open in later slices: the bank, clubs, the bar), maybe a floor above.
+ * The renderer uses this to draw each interior only when you're near it.
+ */
+export interface UnitDef {
+  id: number;
+  name: string;
+  /** "shop" | "lobby" (stairs up, no cashier) | "closed" */
+  use: "shop" | "lobby" | "closed";
+  shop?: number;
+  /** footprint (world rectangle) and centre */
+  rect: Rect; x: number; z: number;
+  /** direction out of the front door (unit vector) and the door centre on the front face */
+  out: [number, number]; doorX: number; doorZ: number;
+  /** what's upstairs, and how you get there */
+  upper?: "stock" | "office" | "apart" | "gym";
+  access?: "inside" | "fire";
+  wallColor: string; floorColor: string;
 }
 
 /** A closed driving loop (lane centre line, corners in driving order) and how many cars use it. */
@@ -72,7 +107,47 @@ export interface StationDef {
 /** Road centre-line network (cop cars drive it): points + straight links between them. */
 export interface RoadGraph { nodes: { x: number; z: number }[]; edges: [number, number][]; }
 
-export type LootZone = "plaza" | "street" | "alley" | "rooftop" | "shop" | "yard";
+/**
+ * City Redesign C1: the real road network traffic drives. Junctions (nodes) joined by roads (edges).
+ * Straight roads are axis-aligned; the roundabout ring is made of arcs (one-way, counter-clockwise).
+ * Traffic keeps right; lanes are built from this by the TrafficSystem.
+ */
+export interface RoadNode {
+  id: number; x: number; z: number;
+  /** light = traffic lights (one approach at a time), give = give way (first come, one approach at a time),
+   *  round = a roundabout entry (cars on the ring go first), end = a road end (no junction) */
+  ctl: "light" | "give" | "round" | "end";
+  name?: string;
+}
+export interface RoadEdge {
+  a: number; b: number;
+  /** half-width of the road surface (two-way roads: one lane each side of the centre line) */
+  hw: number;
+  /** one-way from a to b */
+  oneway?: boolean;
+  /** where the road actually starts / ends if not at the node centre (e.g. the jog at the Mile) */
+  pa?: [number, number]; pb?: [number, number];
+  /** an arc around (cx, cz), counter-clockwise from a to b, lane centre radius r */
+  arc?: { cx: number; cz: number; r: number };
+  name?: string;
+}
+export interface RoadNet { nodes: RoadNode[]; edges: RoadEdge[]; }
+
+/** A city block: ground between streets, lined with buildings. Used by the layout checks and loot tiers. */
+export interface BlockDef {
+  name: string; rect: Rect; tier: number;
+  /** street sides that are allowed to be open (a park, a plaza, a forecourt) */
+  open?: ("N" | "S" | "E" | "W")[];
+  /** the sides that face a street (optionally only part of a side) */
+  sides?: { dir: "N" | "S" | "E" | "W"; from?: number; to?: number }[];
+}
+
+/** Which tier a z position is in (0 low / south, 1 medium, 2 high / north). */
+export function tierAt(z: number): number { return z > 46 ? 2 : z < -46 ? 0 : 1; }
+
+export type LootZone = "plaza" | "street" | "alley" | "rooftop" | "shop" | "yard"
+  // Slice 2A: indoors, upstairs (apartments, offices, the gym, stockrooms)
+  | "room";
 
 export interface FortLot {
   slot: number;
@@ -86,6 +161,8 @@ export interface FortLot {
   zone: { minX: number; maxX: number; minZ: number; maxZ: number };
   /** a spot in the back alley behind the fort (raccoons come from here) */
   backX: number; backZ: number;
+  /** C1: walled compound: the squeeze gap in the back wall (raccoons sneak in and out through it) */
+  gapX?: number; gapZ?: number;
 }
 
 /** Which fort yard (slot) a point is in, or -1. */
@@ -106,9 +183,13 @@ export interface ArenaLayout {
   forts?: FortLot[];
   // Phase 3.5: the bigger city
   roads?: Rect[];
+  /** C1: round road surfaces (the roundabout): r0..r1 from the centre */
+  roadRings?: { x: number; z: number; r0: number; r1: number }[];
   crosswalks?: Rect[];
   /** grid lines pedestrians walk along (x and z) */
   navLines?: number[];
+  /** C1: separate z lines (navLines are then the x lines) */
+  navLinesZ?: number[];
   props?: PropDef[];
   shops?: ShopDef[];
   traffic?: TrafficLoop[];
@@ -119,9 +200,37 @@ export interface ArenaLayout {
   station?: StationDef;
   roadGraph?: RoadGraph;
   /** purely visual extras (streetlights, lane paint, parked police cars...) */
-  decor?: { kind: "streetlight" | "hydrant" | "dash" | "zebra" | "grass" | "copcar"; x: number; z: number; w?: number; d?: number; yaw?: number }[];
+  decor?: { kind: "streetlight" | "hydrant" | "dash" | "zebra" | "grass" | "copcar" | "cone" | "wetfloor" | "scaffold" | "umbrella"; x: number; z: number; w?: number; d?: number; h?: number; yaw?: number; text?: string }[];
+  // Slice 2A
+  /** shallow water (the pond): you wade slowly, pedestrians walk around it */
+  water?: Rect[];
+  /** extra walking routes for pedestrians (e.g. into shops): consecutive points are linked,
+   *  the first point also links to the nearest street route points */
+  navChains?: { x: number; z: number }[][];
+  units?: UnitDef[];
+  /** C1: the road network cars drive, and the city blocks */
+  roadNet?: RoadNet;
+  blocks?: BlockDef[];
+  /** C1: purely visual scenery the renderer draws (highway deck, rails, canal...) */
+  scenery?: { kind: "highway" | "rail" | "canal" | "light" | "grassdisc" | "pillar" | "clock"; x: number; z: number; w?: number; d?: number; h?: number; r?: number; yaw?: number; node?: number; approach?: number }[];
   /** named places, used by tests and tutorials */
   landmarks?: Record<string, { x: number; z: number; yaw: number; [extra: string]: number }>;
+}
+
+/** On the road surface (straight roads or the roundabout ring)? */
+export function onRoadAt(arena: ArenaLayout, x: number, z: number, pad = 0): boolean {
+  const roads = arena.roads;
+  if (roads) for (let i = 0; i < roads.length; i++) { const r = roads[i]; if (x >= r.minX - pad && x <= r.maxX + pad && z >= r.minZ - pad && z <= r.maxZ + pad) return true; }
+  const rings = arena.roadRings;
+  if (rings) for (const g of rings) { const d = Math.hypot(x - g.x, z - g.z); if (d >= g.r0 - pad && d <= g.r1 + pad) return true; }
+  return false;
+}
+
+/** Slice 2A: standing in water (the pond)? */
+export function inWater(arena: ArenaLayout, x: number, z: number): boolean {
+  if (!arena.water) return false;
+  for (const r of arena.water) if (inRect(r, x, z)) return true;
+  return false;
 }
 
 export function box(x: number, z: number, w: number, d: number, h: number, kind: Box["kind"], baseY = 0): Box {
@@ -185,10 +294,11 @@ export function buildTestArena(): ArenaLayout {
 // just the boxes near a point. Boxes come back in their ORIGINAL order, so results are
 // identical to checking the full list (client prediction and server stay in lock-step).
 const CELL = 8;
-const grids = new WeakMap<ArenaLayout, { cells: Map<number, number[]>; boxes: Box[] }>();
+interface Grid { cells: Map<number, number[]>; cellBoxes: Map<number, Box[]>; boxes: Box[]; stamp: Uint32Array; gen: number; }
+const grids = new WeakMap<ArenaLayout, Grid>();
 const key = (cx: number, cz: number) => (cx + 1000) * 4096 + (cz + 1000);
 
-function gridOf(arena: ArenaLayout) {
+function gridOf(arena: ArenaLayout): Grid {
   let g = grids.get(arena);
   if (!g || g.boxes !== arena.boxes) {
     const cells = new Map<number, number[]>();
@@ -201,11 +311,14 @@ function gridOf(arena: ArenaLayout) {
         if (list) list.push(i); else cells.set(k, [i]);
       }
     });
-    g = { cells, boxes: arena.boxes };
+    const cellBoxes = new Map<number, Box[]>();
+    for (const [k, list] of cells) cellBoxes.set(k, list.map((i) => arena.boxes[i]));
+    g = { cells, cellBoxes, boxes: arena.boxes, stamp: new Uint32Array(arena.boxes.length), gen: 0 };
     grids.set(arena, g);
   }
   return g;
 }
+const NONE: Box[] = [];
 
 /** Boxes whose footprint could touch the square (x +- r, z +- r), in original order. */
 export function nearBoxes(arena: ArenaLayout, x: number, z: number, r: number): Box[] {
@@ -213,13 +326,20 @@ export function nearBoxes(arena: ArenaLayout, x: number, z: number, r: number): 
   const g = gridOf(arena);
   const x0 = Math.floor((x - r) / CELL), x1 = Math.floor((x + r) / CELL);
   const z0 = Math.floor((z - r) / CELL), z1 = Math.floor((z + r) / CELL);
-  const seen = new Set<number>();
+  // (Slice 2A: many more boxes; one cell = a ready-made list, no set/sort)
+  if (x0 === x1 && z0 === z1) return g.cellBoxes.get(key(x0, z0)) ?? NONE;
+  if (++g.gen === 0xffffffff) { g.stamp.fill(0); g.gen = 1; }
+  const gen = g.gen, stamp = g.stamp;
+  const idx: number[] = [];
   for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
     const list = g.cells.get(key(cx, cz));
-    if (list) for (const i of list) seen.add(i);
+    if (!list) continue;
+    for (let j = 0; j < list.length; j++) { const i = list[j]; if (stamp[i] !== gen) { stamp[i] = gen; idx.push(i); } }
   }
-  const idx = [...seen].sort((a, b) => a - b);
-  return idx.map((i) => g.boxes[i]);
+  idx.sort((a, b) => a - b);
+  const out = new Array<Box>(idx.length);
+  for (let j = 0; j < idx.length; j++) out[j] = g.boxes[idx[j]];
+  return out;
 }
 
 /** A view of the arena holding only the boxes near a point (for one collision step). */

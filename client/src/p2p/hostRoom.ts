@@ -10,6 +10,8 @@ import { Listeners, randomId, backgroundTimer } from "./emitter";
 
 /** How long a player who lost connection keeps their seat (seconds). */
 export const SEAT_HOLD_S = 120;
+/** (tests only: ?test=1&seathold=N; a very slow test machine can take longer than 2 minutes to reload the city) */
+const SEAT_HOLD = (() => { try { const q = new URLSearchParams(location.search); return q.has("test") && Number(q.get("seathold")) > 0 ? Number(q.get("seathold")) : SEAT_HOLD_S; } catch { return SEAT_HOLD_S; } })();
 const SEND_EVERY_MS = 50; // 20 updates a second, like the server
 const SILENT_DROP_MS = 8000; // no word from a player for this long = connection lost
 
@@ -240,7 +242,7 @@ export class HostRoom {
       else if (p.id && now - p.link.lastHeard > SILENT_DROP_MS) p.link.close(); // went silent
     }
     for (const [id, seat] of [...this.seats]) {
-      if (!seat.peer && seat.dropT && now - seat.dropT > SEAT_HOLD_S * 1000) {
+      if (!seat.peer && seat.dropT && now - seat.dropT > SEAT_HOLD * 1000) {
         const name = this.world.players.get(id)?.name ?? seat.name;
         this.removeSeat(id);
         this.announce(`${name} left`);

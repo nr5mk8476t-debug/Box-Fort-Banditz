@@ -115,7 +115,7 @@ input:focus-visible { box-shadow: 0 0 0 3px var(--go), 3px 3px 0 var(--ink); }
 @keyframes pop { from { transform: scale(0.6) rotate(-4deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
 .banner { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; font: 400 20px "Bungee"; padding: 10px 18px; border: 3px solid var(--ink); border-radius: 10px; box-shadow: var(--shadow); }
 .debug { position: absolute; right: 14px; bottom: 40px; background: rgba(0,0,0,0.6); color: #aef; font: 12px monospace; padding: 6px 8px; border-radius: 6px; white-space: pre; }
-.controls-hint { position: absolute; bottom: 8px; left: 50%; max-width: min(640px, 60vw); text-align: center; font-size: 12px !important; transform: translateX(-50%); color: #fff; font-weight: 800; font-size: 13px; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); opacity: 0.85; }
+.controls-hint { position: absolute; bottom: 8px; left: 50%; max-width: min(760px, 62vw); text-align: center; font-size: 12px !important; transform: translateX(-50%); color: #fff; font-weight: 800; font-size: 13px; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); opacity: 0.85; }
 
 /* ---------- Pause + Settings ---------- */
 .pause-card, .settings-card { display: flex; flex-direction: column; gap: 10px; width: min(380px, 92vw); }
@@ -136,14 +136,14 @@ h2 { margin: 0; font: 400 28px "Bungee", sans-serif; }
 .fatal { position: fixed; left: 16px; right: 16px; bottom: 48px; z-index: 100; background: #b8321c; color: #fff; font: 800 15px "Nunito", sans-serif; padding: 10px 14px; border: 3px solid var(--ink); border-radius: 10px; box-shadow: var(--shadow); white-space: pre-wrap; }
 
 /* Stamina bar under the crosshair: fades out when full */
-.stamina { position: absolute; left: 22px; bottom: 44px; width: 180px; height: 14px; background: rgba(27, 20, 32, 0.55); border: 2px solid var(--ink); border-radius: 7px; overflow: visible; transition: opacity 0.4s; }
-.stamina.full { opacity: 0; }
+.stamina-old { position: absolute; left: 22px; bottom: 44px; width: 180px; height: 14px; background: rgba(27, 20, 32, 0.55); border: 2px solid var(--ink); border-radius: 7px; overflow: visible; transition: opacity 0.4s; }
+
 #stamina-fill { height: 100%; width: 100%; background: #7fe07a; border-radius: 4px; }
 .stamina.winded #stamina-fill { background: var(--danger); }
 .winded-label { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); font: 400 13px "Bungee", sans-serif; color: var(--danger); text-shadow: 1px 1px 0 var(--ink); opacity: 0; white-space: nowrap; }
 .stamina.winded .winded-label { opacity: 1; animation: pant 0.5s ease-in-out infinite; }
 @keyframes pant { 50% { transform: translateX(-50%) scale(1.15); } }
-.dodge-pip { position: absolute; left: calc(50% + 72px); top: calc(50% + 29px); width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); background: #6f6a78; color: #fff; font: 400 11px "Bungee", sans-serif; display: flex; align-items: center; justify-content: center; opacity: 0.5; transition: opacity 0.2s, background 0.2s; }
+.dodge-pip-old { position: absolute; left: calc(50% + 72px); top: calc(50% + 29px); width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); background: #6f6a78; color: #fff; font: 400 11px "Bungee", sans-serif; display: flex; align-items: center; justify-content: center; opacity: 0.5; transition: opacity 0.2s, background 0.2s; }
 .dodge-pip.ready { background: var(--blue); opacity: 0.9; }
 @media (prefers-reduced-motion: reduce) { .stamina.winded .winded-label { animation: none; } }
 
@@ -156,7 +156,7 @@ h2 { margin: 0; font: 400 28px "Bungee", sans-serif; }
 .flash { position: absolute; left: 50%; top: calc(50% - 70px); transform: translateX(-50%); font: 400 22px "Bungee", sans-serif; color: #fff; text-shadow: 2px 2px 0 var(--ink); animation: pop 0.2s ease-out; white-space: nowrap; }
 .flash.bad { color: #ffb4a3; }
 .flash.good { color: #9dff95; }
-.pockets { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); display: flex; gap: 8px; align-items: flex-end; }
+.pockets { position: absolute; left: 50%; bottom: 62px; transform: translateX(-50%); display: flex; gap: 8px; align-items: flex-end; }
 .slot-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .slot-label { font: 400 10px "Bungee", sans-serif; color: #fff; text-shadow: 1px 1px 0 var(--ink); }
 .slot { width: 104px; height: 40px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 2px 6px; font: 800 11px "Nunito", sans-serif; line-height: 1.1; color: rgba(255,255,255,0.55); background: rgba(27, 20, 32, 0.55); border: 3px solid rgba(27, 20, 32, 0.8); border-radius: 8px; overflow: hidden; }
@@ -315,3 +315,28 @@ body.jailed #prompt, body.jailed #charge, body.jailed .crosshair { display: none
 .upg b { font: 400 13px "Bungee", sans-serif; }
 .upg-foot { display: flex; justify-content: space-between; align-items: center; }
 body.night .match-hud .mh-time { color: #bfd0ff; }
+
+/* ---- 5A.1 vitals (bottom-left): health heart + stamina bolt ---- */
+.vitals { position: absolute; left: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.vital { position: relative; display: flex; align-items: center; gap: 8px; }
+.vicon { width: 26px; height: 26px; flex: none; filter: drop-shadow(1px 1px 0 var(--ink)); }
+.vbar { position: relative; width: 190px; height: 16px; border: 3px solid var(--ink); border-radius: 9px; background: rgba(27,20,32,0.6); overflow: hidden; }
+.vfill, .vlag { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; border-radius: 5px; }
+.vfill { transition: width 0.12s linear; }
+.health .vfill { background: linear-gradient(180deg, #ff7b87, #e8323f); }
+.health .vlag { background: #ffd1d5; }
+#stamina #stamina-fill { background: linear-gradient(180deg, #ffe46b, #f2b705); }
+#stamina.winded #stamina-fill { background: #9a8f7a; }
+.vnum { min-width: 30px; color: #fff; font: 400 14px "Bungee", sans-serif; text-shadow: 1px 1px 0 var(--ink); }
+.health.low .vicon { animation: heartbeat 0.6s ease-in-out infinite; }
+@keyframes heartbeat { 50% { transform: scale(1.2); } }
+.dodge-chip { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--ink); background: #6f6a78; color: #fff; opacity: 0.45; display: flex; align-items: center; justify-content: center; font: 400 11px "Bungee", sans-serif; transition: opacity 0.2s, background 0.2s; }
+.dodge-chip.ready { background: #ffd23c; color: var(--ink); opacity: 1; }
+.vitals .winded-label { position: absolute; left: 40px; top: -16px; transform: none; }
+.stamina.winded .winded-label { opacity: 1; animation: none; }
+.fx-hurt { background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(220,30,50,0.55) 100%); opacity: 0; }
+.fx-hurt.on { animation: hurtPulse 0.5s ease-out forwards; }
+@keyframes hurtPulse { 0% { opacity: 1; } 100% { opacity: 0; } }
+.slot.fists { width: 76px; color: rgba(255,255,255,0.8); }
+.pockets.locked .slot:not(.hand) { opacity: 0.45; }
+@media (prefers-reduced-motion: reduce) { .health.low .vicon { animation: none; } }

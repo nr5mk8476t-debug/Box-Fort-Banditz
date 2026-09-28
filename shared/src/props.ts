@@ -189,7 +189,7 @@ export class PropSystem {
       return;
     }
     // shoplifting: only counts if the cashier is awake and you're inside the shop
-    if (!cashier || cashier.state === "ko" || !inRect(shop.rect, p.move.x, p.move.z, 0.5)) return;
+    if (!cashier || cashier.state === "ko" || !inRect(shop.rect, p.move.x, p.move.z, 0.5) || p.move.y > (shop.maxY ?? 99)) return;
     this.w.addHeat(p, 8);
     this.w.npc.cashierSay(cashier.id, "yell");
     this.w.emit({ t: "shoplift", p: p.id, shop: shop.id, npc: cashier.id });

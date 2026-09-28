@@ -29,6 +29,7 @@ export const PlayerState = schema({
   lockT: t.float32(),
   shop: t.string(),
   ready: t.boolean(),
+  hp: t.uint8(),
   ...moveFields,
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState> & Record<string, any>;
@@ -66,6 +67,7 @@ export type NpcState = SchemaType<typeof NpcState> & Record<string, any>;
 
 export const PropState = schema({
   ready: t.boolean(),
+  hp: t.uint8(),
   alarm: t.boolean(),
 }, "PropState");
 export type PropState = SchemaType<typeof PropState> & Record<string, any>;
@@ -104,6 +106,7 @@ export const FortRoomState = schema({
   truckX: t.float32(),
   truckZ: t.float32(),
   truckYaw: t.float32(),
+  lightT: t.float32(),
   players: t.map(PlayerState),
   items: t.map(ItemState),
   npcs: t.map(NpcState),

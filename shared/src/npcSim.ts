@@ -5,7 +5,7 @@ import { makeMoveState, stepMovement, type MoveState, type MoveInput } from "./m
 import { PLAYER, SIM_DT } from "./constants.js";
 import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, BYSTANDER_SCREAMS, pickWeighted, pickLine, type NpcKind } from "./npc.js";
 import { buildNavGraph, type NavNode } from "./navgraph.js";
-import { nearBoxes, type ArenaLayout } from "./arena.js";
+import { nearBoxes, onRoadAt, type ArenaLayout } from "./arena.js";
 
 export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup" | "gloat" | "ko" | "film" | "huff"
   // raccoon heist (Phase 3): sneak to a fort, grab loot, escape along the back alley; scram = running off empty-handed
@@ -50,6 +50,11 @@ export interface NpcSimData {
   leader: string; robbedT: number;
   /** police: seconds until this cop's taser has recharged */
   taserCd: number;
+  /** watchdog (5A.1): where this walker was a while ago (going back and forth without getting anywhere = stuck) */
+  progX: number; progZ: number; progT: number;
+  /** traffic safety (5A.1): seconds spent waiting at the curb for cars; a short detour off the road (asked by a blocked car) */
+  waitT: number;
+  detour: { x: number; z: number; t: number } | null;
   // raccoons only
   carry: string; // item id being stolen
   path: { x: number; z: number }[]; // escape route (last point = gone)
@@ -79,6 +84,8 @@ export interface NpcHost {
   raccoonGone(npcId: string, itemId: string, slot: number): void;
   /** police AI (Phase 4): where a cop wants to go this step (null = not a cop / nothing to do) */
   copBrain(n: NpcSimData, dt: number): { tx: number; tz: number; speed: number; face: number | null } | null;
+  /** every car on the road (traffic + police), so pedestrians can wait for a gap */
+  cars(): { x: number; z: number; yaw: number; v: number }[];
 }
 
 /** Big shots (Phase 4.5): arrive (announced), get hit (jackpot), or leave town. */
@@ -171,10 +178,12 @@ export class NpcSystem {
     const k = kind ?? pickWeighted(NPC_KINDS.map((k) => [k, NPC_DEFS[k].spawnWeight] as [NpcKind, number]), () => this.rng());
     const def = NPC_DEFS[k];
     const id = "n" + this.next++;
-    const move = makeMoveState(n.x + (this.rng() - 0.5), n.z + (this.rng() - 0.5), this.rng() * Math.PI * 2);
+    let jx = n.x + (this.rng() - 0.5), jz = n.z + (this.rng() - 0.5);
+    if (this.solidAt(jx, jz, 0, PLAYER.radius)) { jx = n.x; jz = n.z; } // (a route point close to a wall: no jitter)
+    const move = makeMoveState(jx, jz, this.rng() * Math.PI * 2);
     const npc: NpcSimData = {
       id, kind: k, move, state: "walk", stateT: 0, node, prevNode: node, hp: def.hp, robbed: false,
-      item: pickWeighted(def.loot, () => this.rng()), target: "", chaseT: 0, attackCd: 0, taserCd: 0, stuckT: 0, lastDist: 99, avoidSide: 1, avoidT: 0, sees: false, losT: 0, lostT: 0, lastX: 0, lastZ: 0, leader: "", robbedT: -1,
+      item: pickWeighted(def.loot, () => this.rng()), target: "", chaseT: 0, attackCd: 0, taserCd: 0, waitT: 0, detour: null, progX: 0, progZ: 0, progT: 0, stuckT: 0, lastDist: 99, avoidSide: 1, avoidT: 0, sees: false, losT: 0, lostT: 0, lastX: 0, lastZ: 0, leader: "", robbedT: -1,
       sayCd: 3 + this.rng() * 10, fromX: 0, fromZ: 0,
       pace: 0.85 + this.rng() * 0.3, lane: (this.rng() - 0.5), curSpeed: 0, lookYaw: 0, lookT: 0,
       carry: "", path: [], fortSlot: -1, lifeT: 0, post: null, shop: -1,
@@ -190,6 +199,15 @@ export class NpcSystem {
     if (!f) return null;
     const n = this.spawn("raccoon");
     if (!n) return null;
+    if (f.gapX !== undefined && f.gapZ !== undefined) {
+      // C1 walled compound: squeezes in through the gap in the back wall, and out the same way,
+      // then off along the strip behind the compounds (toward the middle of Tent Town)
+      const side = f.gapX < 0 ? 1 : -1, inZ = f.gapZ + 1.6;
+      n.move = makeMoveState(f.gapX, inZ, f.yaw);
+      n.state = "sneak"; n.fortSlot = slot; n.lifeT = 0; n.robbed = true; n.pace = 1; n.lane = 0;
+      n.path = [{ x: f.gapX, z: inZ }, { x: f.gapX, z: f.backZ }, { x: f.gapX + side * 44, z: f.backZ }];
+      return n;
+    }
     // sideways along the back alley (perpendicular to the direction the fort faces)
     const lx = Math.cos(f.yaw), lz = -Math.sin(f.yaw);
     const side = this.rng() < 0.5 ? -1 : 1;
@@ -373,7 +391,7 @@ export class NpcSystem {
     const kinds = BIG_SHOTS;
     const k = kind ?? pickWeighted(kinds.map((x) => [x, NPC_DEFS[x].bigShot!.weight] as [NpcKind, number]), () => this.rng());
     const players = this.host.playersForNpcs().filter((p) => p.connected);
-    const nodes = this.graph.filter((g) => players.every((p) => Math.hypot(p.x - g.x, p.z - g.z) >= 30) && Math.abs(g.x) < 68 && Math.abs(g.z) < 68);
+    const nodes = this.graph.filter((g) => players.every((p) => Math.hypot(p.x - g.x, p.z - g.z) >= 30) && Math.abs(g.x) < 78 && Math.abs(g.z) < 78); // downtown (inside ring B)
     const pool = nodes.length ? nodes : this.graph;
     if (!pool.length) return null;
     const g = pool[Math.floor(this.rng() * pool.length)];
@@ -473,8 +491,18 @@ export class NpcSystem {
           // walk slightly to one side of the route line (like a real sidewalk), and start turning
           // toward the next corner a little early so paths curve instead of snapping 90 degrees
           const sx = g.x - pg.x, sz = g.z - pg.z, sl = Math.hypot(sx, sz);
-          const ox = sl > 0.01 ? (sz / sl) * n.lane : 0, oz = sl > 0.01 ? (-sx / sl) * n.lane : 0;
+          let ox = sl > 0.01 ? (sz / sl) * n.lane : 0, oz = sl > 0.01 ? (-sx / sl) * n.lane : 0;
+          // (a route running close to a wall: walk the middle, not into the wall)
+          if ((ox || oz) && (this.solidAt(g.x + ox, g.z + oz, n.move.y, PLAYER.radius + 0.15) || this.solidAt(pg.x + ox, pg.z + oz, n.move.y, PLAYER.radius + 0.15))) { ox = 0; oz = 0; }
           tx = g.x + ox; tz = g.z + oz; speed = def.walk * n.pace;
+          // about to step off the curb? wait for a gap in the traffic (and never stand in the road waiting)
+          if (this.mustWait(n, tx, tz)) {
+            speed = 0; face = Math.atan2(tx - n.move.x, tz - n.move.z);
+            n.waitT += dt;
+            if (n.waitT > 9) { const k = n.node; n.node = n.prevNode; n.prevNode = k; n.waitT = 0; } // give up, go back the other way
+            break;
+          }
+          n.waitT = 0;
           if (Math.hypot(tx - n.move.x, tz - n.move.z) < 1.3) {
             n.prevNode = n.node;
             n.node = this.pickNext(n);
@@ -598,6 +626,20 @@ export class NpcSystem {
         case "ko": if (n.stateT <= 0) this.startFlee(n, n.move.x + 1, n.move.z, n.target, 3); break;
       }
 
+      // a blocked car asked us to get off the road: step onto the sidewalk first
+      if (n.detour) {
+        n.detour.t -= dt;
+        const d = n.detour;
+        if (d.t <= 0 || Math.hypot(d.x - n.move.x, d.z - n.move.z) < 0.5) n.detour = null;
+        else if (n.state === "ko" || n.state === "stunned") {
+          // lying in the road: slid gently to the curb (never into a wall)
+          const dx = d.x - n.move.x, dz = d.z - n.move.z, l = Math.hypot(dx, dz), step = Math.min(l, 1.5 * dt);
+          this.nudge(n.move, (dx / l) * step, (dz / l) * step);
+        } else if (n.kind !== "cop" || n.state === "leave" || n.state === "patrol") {
+          tx = d.x; tz = d.z; speed = Math.max(speed, NPC_DEFS[n.kind].walk * 1.4); face = null;
+        }
+      }
+
       // steer toward (tx, tz) using the same movement rules as players
       const m = n.move;
       const dx = tx - m.x, dz = tz - m.z;
@@ -617,6 +659,17 @@ export class NpcSystem {
       const input: MoveInput = { seq: 0, mx: 0, mz: n.curSpeed > 0.05 ? 1 : 0, yaw: m.yaw, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false };
       if (n.state === "ko" || n.state === "stunned") { input.mz = 0; n.curSpeed = 0; }
       stepMovement(m, input, this.host.arena, dt);
+
+      // watchdog: a walker that hasn't got 2 m anywhere in 12 s (e.g. dithering at a corner) re-routes
+      if (n.state === "walk" && speed > 0) {
+        n.progT += dt;
+        if (Math.hypot(m.x - n.progX, m.z - n.progZ) > 2) { n.progX = m.x; n.progZ = m.z; n.progT = 0; }
+        else if (n.progT > 12) {
+          n.progT = 0; n.lane = 0;
+          n.node = this.nearestClearNode(m.x, m.z, n.node);
+          n.prevNode = n.node;
+        }
+      } else { n.progX = m.x; n.progZ = m.z; n.progT = 0; }
 
       // stuck? (walked into something for too long) -> pick another route
       if (speed > 0) {
@@ -658,6 +711,62 @@ export class NpcSystem {
     if (!n) return;
     n.state = "gloat"; n.stateT = 2;
     this.say(n, NPC_DEFS[n.kind].lines.win, true);
+  }
+
+  /** Standing on the road surface (not the sidewalk)? */
+  onRoad(x: number, z: number, pad = 0): boolean {
+    return onRoadAt(this.host.arena, x, z, pad);
+  }
+
+  /** A walker about to step off the curb waits while a car is coming (or parked across the crossing). */
+  private mustWait(n: NpcSimData, tx: number, tz: number): boolean {
+    const m = n.move;
+    if (this.onRoad(m.x, m.z)) return false; // already crossing: keep going (cars stop for you)
+    const dx = tx - m.x, dz = tz - m.z, l = Math.hypot(dx, dz);
+    if (l < 0.01) return false;
+    const ax = m.x + (dx / l) * 1.2, az = m.z + (dz / l) * 1.2;
+    if (!this.onRoad(ax, az)) return false;
+    // the crossing: from here to where the road ends along our path (roads are ~8 m wide)
+    for (const c of this.host.cars()) {
+      const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw);
+      for (let k = 1; k <= 9; k += 2) {
+        const px = m.x + (dx / l) * k, pz = m.z + (dz / l) * k;
+        const rx = px - c.x, rz = pz - c.z;
+        const along = rx * fx + rz * fz, side = rx * fz - rz * fx;
+        if (Math.abs(along) < 3.2 && Math.abs(side) < 1.8) return true; // a car sits on the crossing
+        if (c.v > 0.5 && along > 0 && along < 6 + c.v * 1.6 && Math.abs(side) < 1.8) return true; // one is coming
+      }
+    }
+    return false;
+  }
+
+  /** A car has been stuck behind this pedestrian: get them off the road (to the nearest clear sidewalk spot). */
+  clearRoad(id: string, carYaw: number, carX: number, carZ: number) {
+    const n = this.npcs.get(id);
+    if (!n || n.detour) return;
+    // (C1: try all round, nearest first: the nearest pavement you can walk to without going past the car's nose)
+    const fx = Math.sin(carYaw), fz = Math.cos(carYaw);
+    let best: { x: number; z: number } | null = null, bestD = Infinity;
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2, dx = Math.sin(a), dz = Math.cos(a);
+      for (let d = 1; d <= 9; d += 0.5) {
+        const x = n.move.x + dx * d, z = n.move.z + dz * d;
+        if (this.solidAt(x, z, n.move.y, PLAYER.radius)) break;
+        // never through or in front of the car
+        let hits = false;
+        const side0 = Math.abs((n.move.x - carX) * fz - (n.move.z - carZ) * fx);
+        for (let t = 0.1; t <= 1; t += 0.1) {
+          const px = n.move.x + dx * d * t - carX, pz = n.move.z + dz * d * t - carZ;
+          const along = px * fx + pz * fz, side = Math.abs(px * fz - pz * fx);
+          if (side < 1.6 && side <= side0 + 0.01 && along > -2.8 && along < 4.5) { hits = true; break; } // (stepping away sideways is fine)
+        }
+        if (hits) break;
+        if (this.onRoad(x, z, 0.4)) continue;
+        if (d < bestD) { bestD = d; best = { x, z }; }
+        break;
+      }
+    }
+    if (best) n.detour = { x: best.x, z: best.z, t: 6 };
   }
 
   /** Is anything solid (car, bench, wall...) at body height around this point? */

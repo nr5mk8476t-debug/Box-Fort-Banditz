@@ -25,6 +25,8 @@ export interface PlayerView extends Record<string, any> {
   /** Phase 5A: pawn shop offers for your fort loot (JSON of OfferView[], "" = none); READY pressed */
   shop: string;
   ready: boolean;
+  /** 5A.1 health 0..100 */
+  hp: number;
 }
 export interface ItemView {
   type: string;
@@ -64,6 +66,8 @@ export interface MatchView {
   results: string;
   evKind: string; evStage: string; evX: number; evZ: number; evR: number; evT: number;
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
+  /** C1: the traffic-light clock (seconds, wraps every 10 min) */
+  lightT: number;
 }
 
 /** Phase 3.5: dynamic state of a static prop (dumpster emptied, phone booth smashed, alarm ringing). */
@@ -103,6 +107,7 @@ export function playerView(w: World, id: string, out: Record<string, any> = {}):
   out.lockT = p.jailT > 0 ? Math.floor((w.time - p.lockT0) * 20) / 20 : 0;
   out.shop = w.pawn.viewJson(id);
   out.ready = w.match.ready.has(id);
+  out.hp = Math.ceil(p.hp);
   return out as PlayerView;
 }
 
@@ -135,6 +140,7 @@ let lastResults: unknown = null, lastResultsJson = "[]";
 export function matchView(w: World, out: Record<string, any>): MatchView {
   const m = w.match;
   out.phase = m.phase; out.round = m.round; out.rounds = ROUNDS;
+  out.lightT = Math.round((w.traffic.clock % 600) * 10) / 10;
   out.timeLeft = Math.ceil(m.timeLeft * 10) / 10;
   if (m.results !== lastResults) { lastResults = m.results; lastResultsJson = JSON.stringify(m.results); }
   out.results = lastResultsJson;

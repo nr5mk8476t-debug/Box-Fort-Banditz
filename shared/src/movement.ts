@@ -8,7 +8,10 @@
 //   mantle (locks everything) > stumble (limits) > slide > dodge > normal movement.
 
 import { PLAYER, SIM_DT } from "./constants.js";
-import { localArena, type ArenaLayout, type Box } from "./arena.js";
+import { localArena, inWater, type ArenaLayout, type Box } from "./arena.js";
+
+/** Slice 2A: speed while wading through the pond */
+export const WADE_SPEED = 0.45;
 
 export interface MoveInput {
   /** increasing sequence number, used for reconciliation */
@@ -391,6 +394,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   if (backwards && !s.crouching) speed *= PLAYER.backwardFactor;
   speed *= s.carryMul;
   if (s.swarmT > 0) speed *= 0.6; // pigeons everywhere
+  if (s.y < 0.3 && inWater(fullArena, s.x, s.z)) speed *= WADE_SPEED; // Slice 2A: wading through the pond
   const wishX = dirX * speed;
   const wishZ = dirZ * speed;
 

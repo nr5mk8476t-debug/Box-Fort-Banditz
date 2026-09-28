@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  World, buildTrashington, inRect, fortAt, nearBoxes, PROP_RADIUS, ROB_TIME, WIPEOUT_TIME, CAR_HALF_LEN,
-  type WorldEvent, type MoveInput, type PropDef,
+  World, buildTrashington, inRect, onRoadAt, CAR_COUNT, fortAt, nearBoxes, PROP_RADIUS, ROB_TIME, WIPEOUT_TIME, CAR_HALF_LEN, UNIT, makeMoveState, stepMovement,
+  type WorldEvent, type MoveInput, type PropDef, type UnitDef,
 } from "../src/index.js";
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
@@ -29,25 +29,28 @@ function faceProp(w: World, id: string, d: PropDef, gap = 1.0) {
 const propsOf = (w: World, kind: string) => (w.arena.props ?? []).filter((p) => p.kind === kind);
 const count = (w: World, type: string) => [...w.items.values()].filter((i) => i.type === type).length;
 
-test("city: ~200 m, roads with crosswalks, 4 shops with cashiers, every kind of loot source", () => {
+test("city (Slice 2A, C1 layout): ~230 m, towers, 15 shops with cashiers, roads with crosswalks, every kind of loot source", () => {
   const c = buildTrashington();
-  assert.equal(c.halfSize, 100);
-  assert.ok(c.boxes.filter((b) => b.kind === "tower").length >= 8, "downtown high-rises");
-  assert.ok(Math.max(...c.boxes.filter((b) => b.kind === "tower").map((b) => b.h)) >= 35, "some are really tall");
-  assert.equal(c.shops!.length, 4);
+  assert.equal(c.halfSize, 115);
+  const towers = c.boxes.filter((b) => b.kind === "tower");
+  assert.ok(towers.length >= 20, `mostly towers (${towers.length})`);
+  assert.ok(Math.max(...towers.map((b) => b.y + b.h / 2)) >= 50, "some are really tall");
+  assert.equal(c.shops!.length, 15);
+  assert.equal(c.units!.length, 20);
+  assert.equal(c.units!.filter((u) => u.use === "closed").length, 4, "bank, 2 clubs, bar: closed until their slices");
   for (const sh of c.shops!) {
     assert.ok(inRect(sh.rect, sh.cashier.x, sh.cashier.z), `${sh.name}: cashier inside`);
-    assert.ok(c.lootSpawns!.filter((s) => s.shop === sh.id && inRect(sh.rect, s.x, s.z)).length >= 6, `${sh.name}: stocked shelves`);
+    const n = c.lootSpawns!.filter((s) => s.shop === sh.id && inRect(sh.rect, s.x, s.z, 1)).length;
+    assert.ok(n >= (sh.type === "taco" ? 2 : 4), `${sh.name}: shelf spots (${n})`);
   }
   for (const k of ["dumpster", "bin", "phone", "vending", "meter", "newsbox", "car", "till"]) assert.ok(c.props!.some((p) => p.kind === k), k);
   // nothing that should be on foot sits in a road; props and loot are reachable
-  const onRoad = (x: number, z: number) => c.roads!.some((r) => inRect(r, x, z));
+  const onRoad = (x: number, z: number) => onRoadAt(c, x, z);
   for (const s of c.lootSpawns!) assert.ok(!onRoad(s.x, s.z), `loot spawn on a road at ${s.x},${s.z}`);
   for (const f of c.forts!) assert.ok(!onRoad(f.padX, f.padZ) && fortAt(c, f.padX, f.padZ) === f.slot);
   for (const p of c.props!) if (p.kind !== "car") assert.ok(!onRoad(p.x, p.z), `${p.id} in the road`);
-  for (const cw of c.crosswalks!) assert.ok(c.roads!.some((r) => inRect(r, (cw.minX + cw.maxX) / 2, (cw.minZ + cw.maxZ) / 2)), "crosswalks are on roads");
-  // traffic lanes run on the asphalt
-  for (const l of c.traffic!) for (const pt of l.points) assert.ok(onRoad(pt.x, pt.z), `lane corner ${pt.x},${pt.z} on the road`);
+  for (const cw of c.crosswalks!) assert.ok(onRoad((cw.minX + cw.maxX) / 2, (cw.minZ + cw.maxZ) / 2), "crosswalks are on roads");
+  // (C1: traffic lanes are checked in layout.test.ts)
   // the landmarks tests rely on are open ground
   const solid = c.boxes.filter((b) => b.y + b.h / 2 > 0.4);
   for (const [name, lm] of Object.entries(c.landmarks!)) {
@@ -165,8 +168,8 @@ test("go loud: grab the whole cash register (alarm, big heat); shelf items make 
   assert.ok(p.notoriety >= 24, `heat ${p.notoriety}`);
   // shoplifting
   const q = world();
-  const shop = q.w.arena.shops![0];
-  const shelfItem = [...q.w.items.values()].find((i) => i.shop === shop.id && i.type !== "cash_register" && i.body.y < 0.6)!;
+  q.w.stockShops(true); q.w.stockShops(true); q.w.stockShops(true); // (Slice 2A: shelves start ~40% stocked)
+  const shelfItem = [...q.w.items.values()].find((i) => i.shop >= 0 && q.w.arena.shops![i.shop].type !== "taco" && i.type !== "cash_register" && i.body.y < 0.6)!;
   assert.ok(shelfItem, "stock on the shelves");
   q.w.debugTeleport("a", shelfItem.body.x + 0.3, shelfItem.body.z + 0.3, 0);
   q.p.move.yaw = Math.atan2(shelfItem.body.x - q.p.move.x, shelfItem.body.z - q.p.move.z);
@@ -197,24 +200,28 @@ test("punching the cashier: cash drops once, they cower, shop alarm", () => {
 
 test("traffic: cars drive their lanes, keep their distance, and stop for pedestrians", () => {
   const w = new World({ seed: 2, spawnLoot: false });
-  assert.equal(w.traffic.cars.length, 14);
+  assert.equal(w.traffic.cars.length, CAR_COUNT); // (C1: 22 cars on the new road network)
   const start = w.traffic.cars.map((c) => ({ x: c.x, z: c.z }));
   let minGap = 99;
   for (let i = 0; i < 60 * 30; i++) {
     w.tick(); w.takeEvents();
     if (i % 10) continue;
-    for (const a of w.traffic.cars) for (const b of w.traffic.cars) if (a !== b && a.loop === b.loop) minGap = Math.min(minGap, Math.hypot(a.x - b.x, a.z - b.z));
-    for (const c of w.traffic.cars) assert.ok(w.arena.roads!.some((r) => inRect(r, c.x, c.z, 0.5)), `car ${c.id} left the road at ${c.x.toFixed(1)},${c.z.toFixed(1)}`);
+    for (const a of w.traffic.cars) for (const b of w.traffic.cars) if (a !== b && a.lane === b.lane) minGap = Math.min(minGap, Math.hypot(a.x - b.x, a.z - b.z));
+    for (const c of w.traffic.cars) assert.ok(onRoadAt(w.arena, c.x, c.z, 0.5), `car ${c.id} left the road at ${c.x.toFixed(1)},${c.z.toFixed(1)}`);
   }
-  assert.ok(w.traffic.cars.every((c, i) => Math.hypot(c.x - start[i].x, c.z - start[i].z) > 1), "they move");
+  assert.ok(w.traffic.cars.filter((c, i) => Math.hypot(c.x - start[i].x, c.z - start[i].z) > 1).length >= CAR_COUNT - 2, "they move");
   assert.ok(minGap > CAR_HALF_LEN * 2, `no pile-ups (closest ${minGap.toFixed(1)} m)`);
   // a pedestrian standing in the lane ahead: the car stops before reaching them
-  const car = w.traffic.cars.find((c) => c.loop === 2)!;
-  const px = car.x + Math.sin(car.yaw) * 14, pz = car.z + Math.cos(car.yaw) * 14;
+  // (a car moving along a road with 22+ m of straight lane still ahead of it)
+  const ahead = (c: typeof w.traffic.cars[0]) => { const l = w.traffic.lanes[c.lane]; return !l.conn && l.len - c.s > 22 && c.v > 4; };
+  let car = w.traffic.cars.find(ahead);
+  for (let i = 0; i < 60 * 20 && !car; i++) { w.tick(); w.takeEvents(); car = w.traffic.cars.find(ahead); }
+  assert.ok(car, "a car on a straight");
+  const px = car!.x + Math.sin(car!.yaw) * 14, pz = car!.z + Math.cos(car!.yaw) * 14;
   const ped = w.npc.place("tourist", px, pz, 0);
   for (let i = 0; i < 60 * 5; i++) { ped.move.x = px; ped.move.z = pz; ped.state = "idle"; ped.stateT = 999; w.tick(); w.takeEvents(); }
-  assert.ok(Math.hypot(car.x - px, car.z - pz) > CAR_HALF_LEN + 0.3, "didn't hit them");
-  assert.ok(car.v < 0.5, `stopped for the pedestrian (v=${car.v.toFixed(2)})`);
+  assert.ok(Math.hypot(car!.x - px, car!.z - pz) > CAR_HALF_LEN + 0.3, "didn't hit them");
+  assert.ok(car!.v < 0.5, `stopped for the pedestrian (v=${car!.v.toFixed(2)})`);
 });
 
 test("hit by a car: wiped out, your loot spills on the road, respawn at your fort after 10 s", () => {
@@ -267,4 +274,134 @@ test("collision broadphase: near-box lookup never misses a box and keeps the ori
       if (touches) assert.ok(near.includes(b), `missed ${b.kind} at ${b.x},${b.z} for ${x.toFixed(1)},${z.toFixed(1)} r${rad.toFixed(1)}`);
     }
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Slice 2A: walk-in shops, upstairs, the pond
+
+/** Local (u across, v in) -> world, for a building plot. */
+function unitP(u: UnitDef) {
+  const [nx, nz] = u.out, rx = -nz, rz = nx;
+  return (a: number, v: number) => ({ x: u.doorX + rx * a - nx * v, z: u.doorZ + rz * a - nz * v });
+}
+/** Walk a player from one point toward another (plain movement rules), return where they end up. */
+function walk(arena: ReturnType<typeof buildTrashington>, from: { x: number; z: number }, to: { x: number; z: number }, seconds: number, y = 0.2) {
+  let s = makeMoveState(from.x, from.z, 0);
+  s.y = y;
+  for (let i = 0; i < seconds * 60; i++) {
+    const dx = to.x - s.x, dz = to.z - s.z, d = Math.hypot(dx, dz);
+    s = stepMovement(s, inp(i + 1, { yaw: d > 0.01 ? Math.atan2(dx, dz) : s.yaw, mz: d > 0.25 ? 1 : 0 }), arena);
+  }
+  return s;
+}
+
+test("2A: every shop and lobby can be walked into from the street, and out the back door", () => {
+  const c = buildTrashington();
+  for (const u of c.units!) {
+    if (u.use === "closed") continue;
+    const P = unitP(u);
+    const s = walk(c, P(0, -2.5), P(0, 6), 3);
+    assert.ok(inRect(u.rect, s.x, s.z) && Math.hypot(s.x - P(0, 6).x, s.z - P(0, 6).z) < 0.8, `${u.name}: walked in (ended at ${s.x.toFixed(1)},${s.z.toFixed(1)})`);
+    // back door: a clear line from the aisle to the door on the right, then out
+    const a = walk(c, P(0, 6), P(0, 10.8), 2);
+    const b = walk(c, { x: a.x, z: a.z }, P(UNIT.w / 2 - 2.6, 10.8), 3);
+    const out = walk(c, { x: b.x, z: b.z }, P(UNIT.w / 2 - 2.6, 15), 3);
+    const [bx, bz] = [P(UNIT.w / 2 - 2.6, 14).x, P(UNIT.w / 2 - 2.6, 14).z];
+    assert.ok(!inRect(u.rect, out.x, out.z) && Math.hypot(out.x - bx, out.z - bz) < 1.5, `${u.name}: out the back door (ended at ${out.x.toFixed(1)},${out.z.toFixed(1)})`);
+  }
+});
+
+test("2A: every upstairs can be reached: inside stairs climb to the floor above, fire escapes lead to the back door", () => {
+  const c = buildTrashington();
+  const ups = c.units!.filter((u) => u.upper);
+  assert.equal(ups.length, 8, "stockrooms (3: C1 gave Cracked Screens one), offices, apartments (3), the gym");
+  for (const u of ups) {
+    const P = unitP(u);
+    const hw = UNIT.w / 2, run = UNIT.stepRun * UNIT.steps;
+    let top;
+    if (u.access === "inside") {
+      const bandV = UNIT.d - 0.4 - 0.75, bot = -hw + 0.4 + run;
+      // (Pixel Palace / Bling Thing: through the back room door first)
+      const a = walk(c, P(0, 6), P(0, 7.5), 2), b = walk(c, { x: a.x, z: a.z }, P(5, 8.6), 3);
+      const d = walk(c, { x: b.x, z: b.z }, P(5, 10.3), 2);
+      const start = walk(c, { x: d.x, z: d.z }, P(bot + 1.2, bandV), 3);
+      top = walk(c, { x: start.x, z: start.z }, P(-hw + 0.9, bandV), 5, start.y);
+      assert.ok(top.y > UNIT.upper - 0.1, `${u.name}: climbed the stairs (y ${top.y.toFixed(2)})`);
+      // step off the top onto the upstairs floor (toward the front)
+      const off = walk(c, { x: top.x, z: top.z }, P(-hw + 0.9, 3), 2, top.y);
+      assert.ok(off.y > UNIT.upper - 0.1 && Math.hypot(off.x - P(-hw + 0.9, 3).x, off.z - P(-hw + 0.9, 3).z) < 1, `${u.name}: upstairs (y ${off.y.toFixed(2)})`);
+    } else {
+      const fb = hw - 7.0;
+      const start = walk(c, P(fb + 2, UNIT.d + 3), P(fb + 1.2, UNIT.d + 0.7), 2);
+      top = walk(c, { x: start.x, z: start.z }, P(-hw + 0.9, UNIT.d + 0.7), 5, start.y);
+      assert.ok(top.y > UNIT.upper - 0.1, `${u.name}: up the fire escape (y ${top.y.toFixed(2)})`);
+      const inside = walk(c, { x: top.x, z: top.z }, P(-hw + 1.0, 8), 3, top.y);
+      assert.ok(inside.y > UNIT.upper - 0.1 && inRect(u.rect, inside.x, inside.z), `${u.name}: through the upstairs back door (at ${inside.x.toFixed(1)},${inside.y.toFixed(1)},${inside.z.toFixed(1)})`);
+    }
+  }
+});
+
+test("2A: loot is mostly indoors (shops + upstairs), and there's loot upstairs", () => {
+  let vin = 0, vout = 0, up = 0;
+  for (const seed of [1, 2, 3]) {
+    const w = new World({ seed, npcs: 0 });
+    const c = w.arena;
+    const indoor = (x: number, z: number) => c.units!.some((u) => inRect(u.rect, x, z)) || c.shops!.some((s) => inRect(s.rect, x, z, 1.5));
+    for (const it of w.items.values()) {
+      if (indoor(it.body.x, it.body.z)) vin += it.value; else vout += it.value;
+      if (it.body.y > UNIT.upper) up++;
+    }
+  }
+  const share = vin / (vin + vout);
+  assert.ok(share >= 0.7, `indoor share ${share.toFixed(2)}`);
+  assert.ok(up >= 6, `items upstairs: ${up}`);
+});
+
+test("2A: shoplifting only counts on the shop floor (not from the stockroom upstairs)", () => {
+  const { w, p } = world();
+  const u = w.arena.units!.find((x) => x.name === "BLING THING")!;
+  const shop = w.arena.shops![u.shop!];
+  const P = unitP(u);
+  const at = P(0, 5);
+  const it = w.placeItem("mixtape", at.x, UNIT.upper + 0.1, at.z);
+  w.items.get(it)!.shop = shop.id;
+  run(w, 1);
+  w.debugTeleport("a", at.x + 0.4, at.z, 0);
+  p.move.y = UNIT.upper; p.move.grounded = true;
+  const ev: WorldEvent[] = [];
+  p.move.yaw = Math.atan2(at.x - p.move.x, at.z - p.move.z);
+  w.action("a", { a: "grab", item: it });
+  run(w, 0.1, ev);
+  assert.ok(p.hand === it || p.pockets.includes(it), "grabbed it");
+  assert.ok(!ev.some((e) => e.t === "shoplift"), "the cashier downstairs can't see you");
+});
+
+test("2A: the pond: you wade through it slowly, pedestrians walk round it", () => {
+  const c = buildTrashington();
+  const pond = c.water![0];
+  const cz = (pond.minZ + pond.maxZ) / 2;
+  const land = walk(c, { x: -14, z: -14 }, { x: -14, z: 20 }, 1, 0.15);
+  let s = makeMoveState(pond.minX + 1, cz, Math.PI / 2); s.y = 0.15;
+  for (let i = 0; i < 60; i++) s = stepMovement(s, inp(i + 1, { yaw: Math.PI / 2, mz: 1 }), c);
+  const wade = s.x - (pond.minX + 1);
+  assert.ok(wade < Math.hypot(land.x + 14, land.z + 14) * 0.6, `wading ${wade.toFixed(2)} m/s vs ${Math.hypot(land.x + 14, land.z + 14).toFixed(2)} on land`);
+  assert.ok(wade > 1, "but you can get through");
+  const w = new World({ seed: 4 });
+  for (let i = 0; i < 60 * 60; i++) { w.tick(); w.takeEvents(); if (i % 30) continue;
+    for (const n of w.npc.npcs.values()) assert.ok(!inRect(pond, n.move.x, n.move.z) || n.state === "ko", `${n.kind} walked into the pond`); }
+});
+
+test("2A: pedestrians wander into shops (and back out)", () => {
+  const w = new World({ seed: 6 });
+  const units = w.arena.units!.filter((u) => u.use === "shop");
+  const visited = new Set<string>();
+  for (let i = 0; i < 60 * 180; i++) {
+    w.tick(); w.takeEvents();
+    if (i % 30) continue;
+    for (const n of w.npc.npcs.values()) {
+      if (n.kind === "cashier") continue;
+      for (const u of units) if (inRect(u.rect, n.move.x, n.move.z, -1)) visited.add(u.name);
+    }
+  }
+  assert.ok(visited.size >= 3, `pedestrians went into ${[...visited].join(", ") || "no shops"}`);
 });

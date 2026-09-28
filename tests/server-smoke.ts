@@ -1,6 +1,6 @@
 // Headless multiplayer smoke test: no browser. Two SDK clients join one room by code.
 import { Client } from "@colyseus/sdk";
-import { ROOM_NAME, MSG } from "@bfb/shared";
+import { ROOM_NAME, MSG, CAR_COUNT } from "@bfb/shared";
 
 const url = process.env.SERVER_URL ?? "http://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -58,11 +58,11 @@ assert(evs.some((e) => e.t === "whiff" && e.p === a.sessionId), "grabbing a far 
 
 // Phase 2.5: pedestrians are synced
 const npcCount = (b.state as any).npcs.size;
-assert(npcCount === 24, `pedestrians + cashiers synced to clients: ${npcCount}`);
+assert(npcCount === 35, `pedestrians + cashiers synced to clients: ${npcCount} (20 + 15 cashiers since Slice 2A)`);
 {
   const st2: any = a.state;
-  assert(st2.cars.size === 14, `traffic synced: ${st2.cars.size} cars`);
-  assert(st2.props.size > 90, `props synced: ${st2.props.size}`);
+  assert(st2.cars.size === CAR_COUNT, `traffic synced: ${st2.cars.size} cars`);
+  assert(st2.props.size >= 60, `props synced: ${st2.props.size}`); // (C1 layout: 82; slice C4 adds the street mess)
 }
 let anNpc: any = null;
 (b.state as any).npcs.forEach((n: any) => { if (!anNpc) anNpc = n; });

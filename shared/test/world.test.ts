@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  World, buildTrashington, LOOT, lootDef, PLAYER, GIANT_DRAG_MUL, TUG_MAX_TIME, ITEM_MAX,
+  World, buildTrashington, LOOT, lootDef, PLAYER, GIANT_DRAG_MUL, TUG_MAX_TIME, FISTS, ITEM_MAX,
   type MoveInput, type ArenaLayout, type Box,
 } from "../src/index.js";
 
@@ -33,12 +33,12 @@ test("city: loot spawns and player spawns are not inside walls", () => {
     Math.abs(x - b.x) < b.w / 2 + r - 0.05 && Math.abs(z - b.z) < b.d / 2 + r - 0.05 && y + 0.05 < b.y + b.h / 2 && y + 1.2 > b.y - b.h / 2;
   for (const sp of city.lootSpawns!) {
     for (const b of city.boxes) {
-      if (b.kind === "sidewalk" || b.kind === "curb") continue;
+      if (b.kind === "sidewalk" || b.kind === "curb" || b.y + b.h / 2 <= 0.2) continue; // (ground)
       assert.ok(!inside(sp.x, sp.y + 0.05, sp.z, 0.3, b), `loot spawn ${sp.zone} ${sp.x},${sp.y},${sp.z} inside ${b.kind} at ${b.x},${b.z}`);
     }
   }
   for (const sp of city.spawns) for (const b of city.boxes) {
-    if (b.kind === "sidewalk" || b.kind === "curb") continue;
+    if (b.kind === "sidewalk" || b.kind === "curb" || b.y + b.h / 2 <= 0.2) continue; // (ground)
     assert.ok(!inside(sp.x, 0, sp.z, PLAYER.radius, b), `player spawn inside ${b.kind}`);
   }
   assert.equal(city.forts!.length, 4);
@@ -54,36 +54,25 @@ test("city: every loot spawn settles to rest without leaving the world", () => {
   }
 });
 
-test("city: every dumpster is against a low roof you can climb onto", () => {
-  const w = new World({ seed: 1, spawnLoot: false });
-  const dumpsters = w.arena.boxes.filter((b) => b.kind === "dumpster");
-  assert.ok(dumpsters.length >= 8);
-  for (const d of dumpsters) {
-    const p = w.addPlayer("a", "Climber");
-    const m = p.move;
-    // which wall is it against? find the low building/roof touching its short side
-    const along = d.d > d.w ? "z" : "x"; // long axis runs along the alley
-    const dirs = along === "z" ? [[1, 0], [-1, 0]] : [[0, 1], [0, -1]];
-    let wallDir: number[] | null = null;
-    for (const [ux, uz] of dirs) {
-      const px = d.x + ux * (d.w / 2 + 0.1), pz = d.z + uz * (d.d / 2 + 0.1);
-      if (w.arena.boxes.some((b) => (b.kind === "building" || b.kind === "wall" || b.kind === "roof") && Math.abs(b.y + b.h / 2 - 3.2) < 0.01
-        && Math.abs(px - b.x) <= b.w / 2 + 0.05 && Math.abs(pz - b.z) <= b.d / 2 + 0.05)) wallDir = [ux, uz];
-    }
-    assert.ok(wallDir, `dumpster at ${d.x},${d.z} is against a low roof`);
-    const [ux, uz] = wallDir!;
-    // stand on the alley side, facing the dumpster and the wall behind it
-    m.x = d.x - ux * (d.w / 2 + 0.5); m.z = d.z - uz * (d.d / 2 + 0.5); m.y = 0; m.grounded = true;
-    const yaw = Math.atan2(ux, uz);
-    drive(w, "a", 3, { yaw }); // settle onto the sidewalk surface first
-    let climbedRoof = false;
-    for (let i = 0; i < 240 && !climbedRoof; i++) {
-      drive(w, "a", 1, { yaw, mz: 1, jump: i % 2 === 0 }); // walking forward, tapping SPACE
-      climbedRoof = m.grounded && Math.abs(m.y - 3.2) < 1e-6;
-    }
-    assert.ok(climbedRoof, `climbed dumpster at ${d.x},${d.z} onto the roof (y=${m.y.toFixed(2)})`);
-    w.removePlayer("a");
-  }
+test("C1 climbing: run up Tent Town's broken ramp to the lookout, and the car park ramp to level 2", () => {
+  const w = new World({ seed: 1, spawnLoot: false, npcs: 0 });
+  const p = w.addPlayer("a", "Climber");
+  // the broken highway ramp: stepped, rising east, ends in a lookout 7.8 m up
+  w.debugTeleport("a", -19.5, -112.5, Math.PI / 2);
+  drive(w, "a", 20, { yaw: Math.PI / 2 });
+  let top = 0;
+  for (let i = 0; i < 60 * 6; i++) { drive(w, "a", 1, { yaw: Math.PI / 2, mz: 1 }); top = Math.max(top, p.move.y); }
+  assert.ok(top > 7.7, `reached the lookout (${top.toFixed(2)} m up)`);
+  // the car park: steps up to the deck
+  const deck = w.arena.boxes.find((b) => b.sign?.includes("PARK-O-RAMA"))!;
+  const stepTop = w.arena.boxes.filter((b) => b.kind === "step" && Math.abs(b.z - (deck.z - deck.d / 2 + 1.5)) < 0.1 && b.x > deck.x);
+  assert.ok(stepTop.length >= 10, "a stepped ramp");
+  const start = Math.max(...stepTop.map((b) => b.x)) + 1.5;
+  w.debugTeleport("a", start, stepTop[0].z, -Math.PI / 2);
+  drive(w, "a", 20, { yaw: -Math.PI / 2 });
+  top = 0;
+  for (let i = 0; i < 60 * 4; i++) { drive(w, "a", 1, { yaw: -Math.PI / 2, mz: 1 }); top = Math.max(top, p.move.y); }
+  assert.ok(top > deck.y + deck.h / 2 - 0.05, `onto level 2 (${top.toFixed(2)} m)`);
 });
 
 test("grab: big items go to hands and slow you down; heavy blocks sprint", () => {
@@ -179,8 +168,74 @@ test("throw: charge controls distance; pocket items can be thrown too", () => {
   settle(w, 0.3);
   assert.equal(p.pockets[0], ch);
   w.action("a", { a: "throw", charge: 0.5, yaw: 0, pitch: 0 });
+  assert.equal(p.pockets[0], ch, "fists selected: nothing to throw");
+  w.action("a", { a: "select", slot: 0 }); // key 1: take the chicken out
+  w.action("a", { a: "throw", charge: 0.5, yaw: 0, pitch: 0 });
   assert.equal(p.pockets[0], "");
   assert.equal(w.items.get(ch)!.mode, "free");
+  assert.equal(p.sel, FISTS, "back to fists once it's gone");
+});
+
+test("5A.1 item cycling: wheel steps through fists + filled pockets; keys pick a slot; a big item in hands locks it", () => {
+  const w = flatWorld();
+  const p = w.addPlayer("a", "A");
+  const ids = [w.placeItem("rubber_chicken", 0, 0, 1.2), w.placeItem("mixtape", 0.3, 0, 1.2), w.placeItem("snow_globe", -0.3, 0, 1.2)];
+  settle(w, 1);
+  for (const id of ids) { p.actionCd = 0; w.action("a", { a: "grab", item: id }); }
+  assert.deepEqual(p.pockets, ids);
+  assert.equal(p.sel, FISTS, "starts on fists");
+  const seen: number[] = [];
+  for (let i = 0; i < 4; i++) { w.action("a", { a: "cycle", dir: 1 }); seen.push(p.sel); }
+  assert.deepEqual(seen, [0, 1, 2, FISTS], "wheel down: 1, 2, 3, fists");
+  w.action("a", { a: "cycle", dir: -1 });
+  assert.equal(p.sel, 2, "wheel up goes back");
+  w.action("a", { a: "select", slot: FISTS });
+  assert.equal(p.sel, FISTS);
+  // empty pockets are skipped
+  w.action("a", { a: "select", slot: 1 });
+  p.actionCd = 0; w.action("a", { a: "drop" });
+  assert.equal(p.pockets[1], "");
+  assert.equal(p.sel, FISTS);
+  w.action("a", { a: "cycle", dir: 1 }); w.action("a", { a: "cycle", dir: 1 });
+  assert.equal(p.sel, 2, "skipped the empty pocket 2");
+  w.action("a", { a: "select", slot: 1 });
+  assert.equal(p.sel, 2, "can't select an empty pocket");
+  // a TV in your hands locks cycling
+  const tv = w.placeItem("crt_tv", 0, 0, 1.2);
+  settle(w, 1);
+  p.actionCd = 0; w.action("a", { a: "grab", item: tv });
+  assert.equal(p.hand, tv);
+  const before = p.sel;
+  w.action("a", { a: "cycle", dir: 1 });
+  assert.equal(p.sel, before, "locked while holding something big");
+});
+
+test("5A.1 every item is throwable: a giant item is a short clumsy heave and you stagger", () => {
+  const w = flatWorld();
+  const p = w.addPlayer("a", "A");
+  const duck = w.placeItem("rubber_duck", 0, 0, 1.6);
+  settle(w, 1);
+  w.action("a", { a: "grab", item: duck });
+  settle(w, 0.3);
+  w.action("a", { a: "throw", charge: 1, yaw: 0, pitch: 0 });
+  const it = w.items.get(duck)!;
+  assert.equal(it.mode, "free", "heaved");
+  assert.ok(p.move.stumbleT > 0, "you stagger from the effort");
+  settle(w, 4);
+  assert.ok(it.body.z > 2.5 && it.body.z < 6.5, `landed ${it.body.z.toFixed(1)} m ahead (a 3-4 m heave)`);
+  // every loot type leaves your hands when thrown
+  for (const d of LOOT) {
+    const w2 = flatWorld();
+    const q = w2.addPlayer("a", "A");
+    const id = w2.placeItem(d.type, 0, 0, 1.3);
+    settle(w2, 1);
+    w2.action("a", { a: "grab", item: id });
+    if (d.money) continue; // (cash goes straight into your wallet)
+    if (q.pockets.includes(id)) w2.action("a", { a: "select", slot: q.pockets.indexOf(id) });
+    settle(w2, 0.3);
+    w2.action("a", { a: "throw", charge: 0.6, yaw: 0, pitch: 0 });
+    assert.equal(w2.items.get(id)!.mode, "free", `${d.type} is throwable`);
+  }
 });
 
 test("thrown item bonks another player (shove + event), not the thrower", () => {
@@ -233,9 +288,9 @@ test("tug of war: time runs out -> the holder keeps it; punching the dragger fre
   const arc = w.placeItem("arcade_machine", 0, 0, 1.6);
   settle(w, 1);
   w.action("a", { a: "grab", item: arc }); settle(w, 0.3);
-  w.action("a", { a: "throw", charge: 1, yaw: 0, pitch: 0 });
-  assert.equal(w.items.get(arc)!.mode, "held", "can't throw a giant item");
   w.action("b", { a: "grab", item: arc });
+  w.action("a", { a: "throw", charge: 1, yaw: 0, pitch: 0 });
+  assert.equal(w.items.get(arc)!.mode, "held", "can't heave it away mid tug of war");
   settle(w, TUG_MAX_TIME + 0.5);
   const it = w.items.get(arc)!;
   assert.equal(it.holder, "a"); assert.equal(it.holder2, ""); assert.equal(b.hand, "");
@@ -283,7 +338,7 @@ test("items never end up inside walls after lots of random throwing (fuzz)", () 
     for (const b of w.arena.boxes) {
       const inX = Math.abs(it.body.x - b.x) < b.w / 2 - 0.02, inZ = Math.abs(it.body.z - b.z) < b.d / 2 - 0.02;
       const inY = Math.abs(it.body.y - b.y) < b.h / 2 - 0.02;
-      assert.ok(!(inX && inY && inZ), `${it.type} stuck inside ${b.kind}`);
+      assert.ok(!(inX && inY && inZ), `${it.type} stuck inside ${b.kind} at ${it.body.x.toFixed(2)},${it.body.y.toFixed(2)},${it.body.z.toFixed(2)} box ${b.x},${b.y},${b.z} ${b.w}x${b.h}x${b.d}`);
     }
     assert.ok(Math.abs(it.body.x) <= w.arena.halfSize + 2 && Math.abs(it.body.z) <= w.arena.halfSize + 2 && it.body.y >= def.radius - 0.01, `${it.type} in bounds`);
   }
@@ -291,10 +346,11 @@ test("items never end up inside walls after lots of random throwing (fuzz)", () 
 
 test("the spawner never exceeds the item cap", () => {
   const w = new World({ seed: 5 });
+  const loose = () => [...w.items.values()].filter((i) => i.shop < 0).length; // (shop shelves have their own cap)
   for (let i = 0; i < 300; i++) w.spawnOne();
-  assert.ok(w.items.size <= ITEM_MAX, `${w.items.size} items`);
+  assert.ok(loose() <= ITEM_MAX, `${loose()} items`);
   settle(w, 30); // top-ups over time also respect the cap
-  assert.ok(w.items.size <= ITEM_MAX);
+  assert.ok(loose() <= ITEM_MAX);
 });
 
 test("spawning: fills the city, rare stuff shows up more in the plaza, respects caps", () => {

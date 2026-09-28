@@ -190,6 +190,28 @@ test("night raids: banked loot can be taken at night, and the owner's alarm goes
   assert.ok(ev.some((e) => e.t === "raid" && e.owner === a.id && e.p === b.id), "alarm for the owner");
 });
 
+test("C1 raid alert: a rival walking into your compound at night sets off your alarm at once (not by day, not your own)", () => {
+  const { w, ps } = quiet(2);
+  toScavenge(w);
+  const [a, b] = ps;
+  const fa = yard(w, a.colorIdx);
+  const alarms = (step: () => void) => { const ev: WorldEvent[] = []; step(); run(w, 0.2, ev); return ev.filter((e) => e.t === "raidEnter"); };
+  const outside = () => w.debugTeleport(b.id, fa.padX, fa.zone.maxZ + 3, Math.PI);
+  const inside = () => w.debugTeleport(b.id, fa.padX, fa.padZ, Math.PI);
+  alarms(outside);
+  assert.equal(alarms(inside).length, 0, "by day: no alarm");
+  alarms(outside);
+  w.match.timeLeft = 0.01; run(w, DUSK_TIME + 0.2);
+  assert.equal(w.match.phase, "night");
+  assert.equal(alarms(() => w.debugTeleport(a.id, fa.padX + 2, fa.padZ, 0)).length, 0, "the owner at home: no alarm");
+  alarms(() => w.debugTeleport(a.id, 0, -80, 0));
+  const ev = alarms(inside);
+  assert.equal(ev.length, 1);
+  assert.ok(ev[0].t === "raidEnter" && ev[0].owner === a.id && ev[0].p === b.id && ev[0].slot === a.colorIdx, "names the raider, for the owner");
+  alarms(outside);
+  assert.equal(alarms(inside).length, 0, "not again straight away (15 s)");
+});
+
 test("pawn shop: offers below value, haggle up or offend him, SELL = cash, unsold loot is lost", () => {
   const { w, ps } = quiet(1);
   toScavenge(w);
@@ -272,26 +294,29 @@ test("happy hour: loot in the zone is worth double; grab it in time to keep the 
 test("garbage truck: warns, drives the ring road, hoovers loose loot, flattens players, leaves banked loot", () => {
   const { w, ps } = quiet(1);
   toScavenge(w);
+  w.traffic.cars.length = 0; // (a rule test for the truck: no other traffic to wipe you out or shove the loot first)
   w.match.trigger("truck");
   const e = w.match.ev!;
   const mid = { x: (e.ax! + e.bx!) / 2, z: (e.az! + e.bz!) / 2 };
-  const onRoad = w.placeItem("crt_tv", mid.x, 0.3, mid.z);
   const offRoad = w.placeItem("crt_tv", mid.x * 0.4, 0.3, mid.z * 0.4); // back toward the centre, well off the road
   const p = ps[0];
-  w.debugTeleport(p.id, (e.ax! * 3 + e.bx!) / 4, (e.az! * 3 + e.bz!) / 4, 0);
   const ev: WorldEvent[] = [];
   run(w, 5.1, ev);
   assert.ok(w.match.truck.on, "truck rolling after the warning");
+  // (Slice 2A: 18 cars now; drop the loot just ahead of the truck so passing traffic can't shove it aside first)
+  const len = Math.hypot(e.bx! - e.ax!, e.bz! - e.az!), ux = (e.bx! - e.ax!) / len, uz = (e.bz! - e.az!) / len;
+  const onRoad = w.placeItem("crt_tv", w.match.truck.x + ux * 5, 0.3, w.match.truck.z + uz * 5);
+  w.debugTeleport(p.id, w.match.truck.x + ux * 12, w.match.truck.z + uz * 12, 0); // (and the player: cars could have wiped them out already)
   run(w, Math.hypot(e.bx! - e.ax!, e.bz! - e.az!) / TRUCK_SPEED + 1, ev);
   assert.ok(!w.items.has(onRoad), "loot on the road got swept");
   assert.ok(w.items.has(offRoad), "loot off the road is safe");
   assert.ok(ev.some((x) => x.t === "swept"));
-  assert.ok(ev.some((x) => x.t === "knockdown" && x.p === p.id && x.by === "truck"), "player in the road got flattened");
+  assert.ok(ev.some((x) => x.t === "knockdown" && x.p === p.id && x.by === "truck"), "player in the road got flattened: " + JSON.stringify(ev.filter((x) => x.t === "knockdown" || x.t === "wipeout" || x.t === "hurt")));
   assert.equal(w.match.ev, null, "event over when the truck leaves");
   assert.equal(w.match.truck.on, false);
 });
 
-test("airdrop: a giant legendary crate parachutes slowly into the plaza", () => {
+test("airdrop: a giant legendary crate parachutes slowly onto one of the open squares", () => {
   const { w } = quiet(1);
   toScavenge(w);
   w.match.trigger("airdrop");
@@ -305,7 +330,7 @@ test("airdrop: a giant legendary crate parachutes slowly into the plaza", () => 
   assert.ok(crate.body.vy >= -3.6, "slow fall");
   run(w, 12);
   assert.equal(crate.chute, false, "landed");
-  assert.ok(Math.abs(crate.body.x) < 23 && Math.abs(crate.body.z) < 23, "in the plaza");
+  assert.ok(w.arena.airdropSpots!.some(([x, z]) => Math.hypot(crate.body.x - x, crate.body.z - z) < 4), `on a drop spot (${crate.body.x.toFixed(1)},${crate.body.z.toFixed(1)})`);
   assert.equal(w.match.ev, null);
 });
 

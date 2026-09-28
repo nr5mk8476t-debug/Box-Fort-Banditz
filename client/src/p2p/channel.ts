@@ -19,6 +19,8 @@ export function newPeerConnection(): RTCPeerConnection {
 }
 
 const CHUNK = 15000;
+/** Tests only (?test=1&lag=110): delay everything this page sends by half the round trip. */
+const LAG_MS = (() => { try { const q = new URLSearchParams(location.search); return q.has("test") ? (Number(q.get("lag")) || 0) / 2 : 0; } catch { return 0; } })();
 
 /** Signaling payloads passed through the matchmaking server. */
 export type SignalData = { sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit | null };
@@ -106,6 +108,12 @@ export class PeerLink {
   send(m: unknown) {
     if (!this.open) return;
     const s = typeof m === "string" ? m : JSON.stringify(m);
+    if (LAG_MS > 0) { setTimeout(() => this.sendNow(s), LAG_MS); return; } // (same delay for every message: order is kept)
+    this.sendNow(s);
+  }
+
+  private sendNow(s: string) {
+    if (!this.open) return;
     try {
       if (s.length <= CHUNK) { this.dc!.send(s); return; }
       for (let i = 0; i < s.length; i += CHUNK) {

@@ -2,7 +2,7 @@
 
 A chaotic first-person 3D browser party game for 2–4 players (plus solo), set in the city of **Trashington**.
 
-**Status: Phase 5A (the cycle loop: day scavenge, NIGHT scavenge with fort raids, pawn shop; tasers; tug of war). Online games are hosted in the room creator's browser.** Placeholder art and sound. See `docs/design-decisions.md` for the agreed design and `docs/test-plan.md` for how everything is tested.
+**Status: Overhaul Slice 2A (the new 230 m city: towers with 15 walk-in shops, upstairs floors, the plaza park + pond) on top of Phase 5A (day/night cycle, fort raids, pawn shop). Online games are hosted in the room creator's browser.** Placeholder art and sound. See `docs/design-decisions.md` for the agreed design and `docs/test-plan.md` for how everything is tested.
 
 ## Tech
 
@@ -28,7 +28,8 @@ Open http://localhost:5173. For multiplayer testing, click **Create Room**, then
 ## Controls
 
 - Click **CLICK TO PLAY** to capture the mouse (ESC releases it and opens the menu)
-- **WASD** / arrow keys move, **Shift** sprint (uses stamina), **Space** jump / climb a ledge you face, **C** crouch (sprint + C = belly slide), **Q** dodge, **E** grab / pocket / search a dumpster (mash **E** in a tug of war), **HOLD R** rob a shop till, **G** drop, **left click** punch or smash (empty hands), **hold left click** (holding something) or **F** charge a throw, **right click** / wheel cycle pockets, **ENTER** start the match (host / solo)
+- **WASD** / arrow keys move, **Shift** sprint (uses stamina), **Space** jump / climb a ledge you face, **C** crouch (sprint + C = belly slide), **Q** dodge, **E** grab / pocket / search a dumpster (mash **E** in a tug of war), **HOLD R** rob a shop till, **G** drop, **mouse wheel** or **1-4** choose what's in your hands (1-3 pockets, 4 = fists), **left click** punch with your left fist (fists out) or **hold left click** / **F** to wind up and throw what you're holding (every item, even giant ones: a clumsy heave), **right click** reserved for special items, **ENTER** start the match (host / solo)
+- **Health** (heart) and **stamina** (lightning bolt) are bottom-left; the yellow **Q** chip lights up when a dodge is ready
 - **In jail:** the **mouse** moves your lock pick: **click** a pin to select it, then **click** / **SPACE** when its top is in the green (**A / D** also choose pins)
 - If a page refuses mouse capture, the game falls back to **hold left mouse + drag** to look
 
@@ -38,6 +39,7 @@ Open http://localhost:5173. For multiplayer testing, click **Create Room**, then
 npm test                 # movement + naming rules (fast, no browser)
 ./scripts-run-e2e.sh     # real headless Chrome windows + real server (about 2 min)
 LATENCY=110 ./scripts-run-e2e.sh   # same, with ~110 ms simulated lag (Sydney -> Singapore)
+npx tsx tests/signal-smoke.ts      # matchmaking smoke test (needs the server running)
 ```
 
 Screenshots from the browser test land in `test-output/`.

@@ -220,6 +220,8 @@ export const sfx = {
   unlock() { blip(900, 0.05, "square", 0.1); blip(600, 0.3, "triangle", 0.1, 1200, 0.06); [784, 988, 1318].forEach((f, i) => blip(f, 0.1, "triangle", 0.09, undefined, 0.3 + i * 0.08)); },
   // ---- Phase 5A
   raidAlarm() { for (let i = 0; i < 4; i++) { blip(1100, 0.16, "square", 0.09, 700, i * 0.34); blip(700, 0.16, "square", 0.09, 1100, i * 0.34 + 0.17); } },
+  /** C1: the raid siren wailing across Tent Town (g = loudness by distance) */
+  raidSiren(g = 1) { for (let i = 0; i < 3; i++) blip(620, 0.55, "sawtooth", 0.07 * g, 1250, i * 0.6); },
   tugStart() { blip(180, 0.25, "sawtooth", 0.1, 260); voice([0.8, 1.1], 0.9, 0.06); },
   tugPull() { blip(160 + Math.random() * 40, 0.06, "triangle", 0.07, 220); noise(0.04, 0.05, 900); },
   tugWin() { [523, 784, 1046].forEach((f, i) => blip(f, 0.1, "square", 0.09, undefined, i * 0.07)); },

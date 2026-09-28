@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  World, buildTrashington, inRect, starsOf, JAIL_TIME, BREAKOUT_HEAT, COP_RUN, PLAYER, makeLock, newLockRun, lockPress, lockUpdate,
+  World, buildTrashington, inRect, onRoadAt, starsOf, JAIL_TIME, BREAKOUT_HEAT, COP_RUN, PLAYER, makeLock, newLockRun, lockPress, lockUpdate,
   pinPos, bindingPin, LOCK, type MoveInput, type WorldEvent, type LockRun,
 } from "../src/index.js";
 
@@ -10,7 +10,7 @@ const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
 function quiet(seed = 21) {
   const w = new World({ seed, npcs: 0, spawnLoot: false });
   const p = w.addPlayer("a", "A");
-  w.movePlayer(p, 0, -20, 0);
+  w.movePlayer(p, -106, -82, 0);
   return { w, p };
 }
 function run(w: World, id: string, seconds: number, p: Partial<MoveInput> = {}, collect?: WorldEvent[], each?: () => void) {
@@ -54,7 +54,7 @@ test("the station: 4 barred cells inside, door and back alley outside, road netw
   // every road link runs down the middle of a road
   for (const [a, b] of g.edges) for (let k = 0; k <= 1; k += 0.05) {
     const x = g.nodes[a].x + (g.nodes[b].x - g.nodes[a].x) * k, z = g.nodes[a].z + (g.nodes[b].z - g.nodes[a].z) * k;
-    assert.ok(c.roads!.some((r) => inRect(r, x, z)), `road link off the road at ${x},${z}`);
+    assert.ok(onRoadAt(c, x, z), `road link off the road at ${x},${z}`);
   }
   const seen = new Set([0]), st2 = [0];
   while (st2.length) { const n = st2.pop()!; for (const [a, b] of g.edges) { const o = a === n ? b : b === n ? a : -1; if (o >= 0 && !seen.has(o)) { seen.add(o); st2.push(o); } } }
@@ -91,9 +91,9 @@ test("dispatch: 1 star = 1 cop, 2 = 2, 3 = 3 + a cop car; cops arrive from out o
 test("stand still with a star: a cop walks up, FREEZE, busted -> loot confiscated, heat 0, 30 s in a cell", () => {
   const w = new World({ seed: 8, npcs: 0, spawnLoot: false });
   const p = w.addPlayer("a", "A");
-  w.movePlayer(p, 0, -20, 0);
-  const watch = w.placeItem("rolecks_watch", 0, 0.2, -19.4);
-  const lint = w.placeItem("pocket_lint", 0.3, 0.2, -19.4);
+  w.movePlayer(p, -106, -82, 0);
+  const watch = w.placeItem("rolecks_watch", -106, 0.2, -81.4);
+  const lint = w.placeItem("pocket_lint", -105.7, 0.2, -81.4);
   run(w, "a", 0.5);
   w.action("a", { a: "grab", item: lint }); run(w, "a", 0.3);
   w.action("a", { a: "grab", item: watch }); run(w, "a", 0.3);
@@ -216,17 +216,26 @@ test("break out: pick the lock -> back alley, still wanted (1 star); presses fro
 
 test("hiding: buildings block the view, crouching behind a parked car hides you, heat cools once they lose you", () => {
   const { w, p } = quiet();
-  const car = w.arena.boxes.find((b) => b.kind === "car" && b.d > b.w)!; // long side along z
+  // a parked car (long side along z) with open ground 12 m to one side (Slice 2A: the city is denser now)
+  const solidsOn = (x0: number, x1: number, z: number, skip: object) => w.arena.boxes.some((b) => b !== skip && b.y + b.h / 2 > 0.4 && b.y - b.h / 2 < 2
+    && Math.abs(z - b.z) < b.d / 2 + 0.4 && Math.max(x0, x1) > b.x - b.w / 2 - 0.4 && Math.min(x0, x1) < b.x + b.w / 2 + 0.4);
+  let car = w.arena.boxes[0], side = 1;
+  for (const b of w.arena.boxes) {
+    if (b.kind !== "car" || b.d <= b.w) continue;
+    const s = [1, -1].find((k) => !solidsOn(b.x + k * (b.w / 2 + 0.2), b.x + k * (b.w / 2 + 1), b.z, b) && !solidsOn(b.x - k * (b.w / 2 + 0.2), b.x - k * 12.5, b.z, b));
+    if (s) { car = b; side = s; break; }
+  }
+  assert.equal(car.kind, "car", "found a parked car in the open");
   // player crouched right behind the car, cop 12 m away on the other side
-  w.movePlayer(p, car.x + car.w / 2 + 0.6, car.z, 0);
+  w.movePlayer(p, car.x + side * (car.w / 2 + 0.6), car.z, 0);
   p.notoriety = 40;
-  const c = w.police.spawnCop(p, { x: car.x - 12, z: car.z })!;
+  const c = w.police.spawnCop(p, { x: car.x - side * 12, z: car.z })!;
   p.move.crouching = true;
   assert.equal(w.police.canSee(c, p), false, "crouched behind the car");
   p.move.crouching = false;
   assert.equal(w.police.canSee(c, p), true, "standing up");
   // a tower between you and the cop
-  const tower = w.arena.boxes.find((b) => b.kind === "tower")!;
+  const tower = w.arena.boxes.find((b) => b.kind === "tower" && b.y - b.h / 2 < 0.5)!; // (a whole tower, not one sitting on a shop)
   w.movePlayer(p, tower.x + tower.w / 2 + 2, tower.z, 0);
   c.move.x = tower.x - tower.w / 2 - 2; c.move.z = tower.z;
   assert.equal(w.police.canSee(c, p), false);
@@ -234,11 +243,11 @@ test("hiding: buildings block the view, crouching behind a parked car hides you,
 
 test("lose them: commit a crime, slip away out of sight -> cops search the crime scene, heat cools, they give up", () => {
   const { w, p } = quiet(9);
-  w.movePlayer(p, 0, -20, 0);
+  w.movePlayer(p, -106, -82, 0);
   w.addHeat(p, 65); // reported right here
   run(w, "a", 1);
   // sneak off behind a tower on the far side of downtown
-  const tower = w.arena.boxes.find((b) => b.kind === "tower" && b.x > 0 && b.z > 0)!;
+  const tower = w.arena.boxes.find((b) => b.kind === "tower" && b.x > 0 && b.z > 0 && b.y - b.h / 2 < 0.5)!;
   w.movePlayer(p, tower.x + tower.w / 2 + 1.2, tower.z + 3, 0);
   const ev: WorldEvent[] = [];
   let searched = false;
@@ -254,7 +263,7 @@ test("cops are faster than walking, slower than sprinting; a dodge at the right 
   assert.ok(COP_RUN > PLAYER.walkSpeed && COP_RUN < PLAYER.sprintSpeed);
   const { w, p } = quiet();
   p.notoriety = 40;
-  const c = w.police.spawnCop(p, { x: 0, z: -17 }, true)!;
+  const c = w.police.spawnCop(p, { x: -106, z: -79 }, true)!;
   let dodged = false;
   const ev: WorldEvent[] = [];
   for (let i = 0; i < 60 * 3 && !dodged; i++) {
@@ -270,12 +279,12 @@ test("cops are faster than walking, slower than sprinting; a dodge at the right 
 test("punch a cop: they stagger (+heat), 3 punches = down for a few seconds, drops a donut", () => {
   const { w, p } = quiet();
   p.notoriety = 35;
-  const c = w.police.spawnCop(p, { x: 0, z: -18.8 }, false)!;
+  const c = w.police.spawnCop(p, { x: -106, z: -80.8 }, false)!;
   c.state = "search"; c.lostT = 0;
   const h0 = p.notoriety;
   const ev: WorldEvent[] = [];
   for (let k = 0; k < 3; k++) {
-    c.move.x = 0; c.move.z = -18.8; c.state = "search"; c.stateT = 0;
+    c.move.x = -106; c.move.z = -80.8; c.state = "search"; c.stateT = 0;
     w.action("a", { a: "punch", yaw: 0, pitch: 0 });
     run(w, "a", 0.7, {}, ev);
   }
@@ -364,12 +373,12 @@ test("night: twice the cops per star (2/4/6) and a cop car from 2 stars", () => 
 
 test("taser at 3 stars: the cop aims (warning), hits = stunned + drops what's in your hands, then cuffed", () => {
   const { w, p } = quiet();
-  const tv = w.placeItem("crt_tv", 0, 0.3, -19);
+  const tv = w.placeItem("crt_tv", -106, 0.3, -81);
   run(w, "a", 0.5);
   w.action("a", { a: "grab", item: tv });
   assert.equal(p.hand, tv);
   p.notoriety = 95;
-  w.police.spawnCop(p, { x: 0, z: -15.5 }, true);
+  w.police.spawnCop(p, { x: -106, z: -77.5 }, true);
   const ev: WorldEvent[] = [];
   run(w, "a", 1.2, {}, ev, () => { p.notoriety = 95; });
   assert.ok(ev.some((e) => e.t === "taser" && e.stage === "aim"), "aims first (telegraphed)");
@@ -383,7 +392,7 @@ test("taser at 3 stars: the cop aims (warning), hits = stunned + drops what's in
 test("taser: dodging while he fires makes it miss", () => {
   const { w, p } = quiet();
   p.notoriety = 95;
-  const c = w.police.spawnCop(p, { x: 0, z: -15.5 }, true)!;
+  const c = w.police.spawnCop(p, { x: -106, z: -77.5 }, true)!;
   const ev: WorldEvent[] = [];
   let dodged = false;
   for (let i = 0; i < 60 * 1.5 && !ev.some((e) => e.t === "taser" && e.stage !== "aim"); i++) {

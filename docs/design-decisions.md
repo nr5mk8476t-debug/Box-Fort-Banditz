@@ -154,6 +154,16 @@ Build order: **5A** loop + night + cash auto-bank + pawn shop + fort raids + tas
 - **Money bag** (courier) must be carried home; only small money (coins, cash bundles, wallets...) auto-banks.
 - **City resets** (fresh loot + props) at the start of **every** scavenge, day and night; fort banked loot untouched.
 
+## City, Combat, Nightlife & Physical Selling Overhaul (Blake, 2026-09-27)
+Working rules (Blake): ask before any design/balance/control/visual/technical/scope decision not explicitly specified; numbered questions with what each affects; approach + risks + test plan before big features; honest progress + results only.
+Slices (one upload each): **1** fixes + feel (traffic/pedestrians, controls, throw everything, health, arms/wraps/HUD, 110 ms test mode for browser hosting) -> **2** city overhaul -> **3** physical selling (alley pawn shop, storefronts, safe zones) -> **4** bank -> **5** nightlife + black market.
+Blake accepted all recommendations (Q1-26) except:
+- **Q18 unsold storefront goods**: player chooses per item: default = back to the fort (raidable next night); a CLEARANCE bin on the stall dumps an item for 30% (sad trombone).
+- **Q6 crosshair**: KEEP the white crosshair; REMOVE the blue "Q" dodge circle. **Dodge ready** = a small "Q" chip next to the stamina bar (bottom-left).
+- **Q7 hand wraps**: clean white boxer tape, same for everyone; remove the gold sleeve cuffs.
+- Blake: "don't be afraid to add comedic things."
+Accepted recommendations (summary): 100 HP; player punch 34 (3 = knockdown); NPC fighter hit 25; knockdown at 0 HP drops everything, get up at full HP, 3 s immunity; regen 10 HP/s after 5 s unhit; car = instant wipeout; taser = stun, no damage. A non-KO punch drops the victim's HAND item only. Throw damage by weight x speed 5-30, a throw can never KO; knockback by weight. Giant items: clumsy 3-4 m heave, slow wind-up, 0.5 s self-stagger. Wheel cycles hands + 3 pockets; selecting a pocket item puts it in your hand; a big/giant item in hands locks cycling; keys 1-3 pockets, 4 empty hands. Right mouse reserved. City: keep 200 m footprint, ring roads, 4 fort lots; ~60-70% buildings enterable (ground floor; some stores with 2nd floor); ~70% loot value indoors; <= ~40 simulated NPCs, club dancers mostly cosmetic. Fisherman: ambient + buy a junk fish + push him in the pond (heat). Pawn shop in an alley open during scavenges too; Sal's mood haggling at the counter; pawn 100-125% of value, 3 wanted items/cycle x1.75, storefronts net ~70-90%; stall auto-filled from fort loot (8 slots) with CHEAP/FAIR/GREEDY mode; yard + stall safe by day and in the shop phase, raidable at night, carried loot outside the yard always vulnerable; shop phase 90 s. Bank: guards (baton + taser), hard vault lock game -> alarm -> 3 stars, heavy money bags, night x2 + more guards, one vault per cycle, open for 30 s to others; busted = bags taken, knocked down = bags dropped. Nightlife: 2 clubs + 1 bar at night; bouncers throw fighters out (knockdown + hand drop), hit back 40, no giant items inside. Black market (3/night): Wing Fizz (5 s flight), Ghost Gum (cops blind 8 s), Mega Mitts (3 double punches), Sneaky Socks (no heat 15 s), Banana Boomerang (slip); dealer also buys "hot" items at a premium. Testing: retire ?net=server from the test matrix (keep a matchmaking smoke test).
+
 ## Phase 4.6: host from your browser (Blake, 2026-09-26)
 The live game felt laggy: the free Render server (0.1 CPU, in Singapore) could only send ~10 updates/s. Blake chose **B: host from your own browser** (free, lowest ping, only friends play):
 - Whoever clicks **Create Room** hosts: the whole game (the same shared World) runs in their browser tab. Friends join with the same invite link/code and connect **directly** to the host (WebRTC data channel). Anyone can host.
@@ -196,3 +206,65 @@ The live game felt laggy: the free Render server (0.1 CPU, in Singapore) could o
 - Known Phase 5A limitations: upgrades are a placeholder screen; AURA/leaderboard/statue (5B) and the Mayor round + AI rivals (5C) not built yet; cash is the only score; a player who joins mid-shop sees an empty shop until the next cycle.
 - Known Phase 4.6 limitations: host refresh ends the game; no relay for strict networks; the host's upload carries everyone (~15-30 KB/s per friend, fine on NBN).
 - Known Phase 4 limitations: cops only chase on foot or in the car (no roadblocks / helicopters); friends can't break you out yet; the lock-picking game is client-timed (the server checks the presses make sense and can't be from the future, but a determined cheater could script it); cops can't climb onto roofs (standing on a low roof keeps them below you, they'll wait and search).
+- **Overhaul Slice 1 / 5A.1 DONE (2026-09-27)**: traffic + pedestrian deadlock fix (curb waiting, honk then slide blockers to the curb, walker watchdog); left-fist punch, right click reserved, wheel/1-4 selection (4 = fists), every item throwable incl. giant heave; 100 HP health (punch 34, regen); health + stamina bottom-left with Q chip; lower hands, unlit two-tone shading, clean white tape; ?lag= test mode; matchmaking smoke test. 122 shared + 2 client unit, smoke 8/8, 219/219 browser checks. Preview artifact v10.
+
+### Slice 2 (city overhaul) decisions (Blake, 2026-09-27)
+- **Skyline:** mostly towers (high-rise with a shop on the ground floor). No rooftop routes. 2nd floors are reached by inside stairs or outside fire-escape ladders.
+- **Size:** the city grows to ~230 m so every shop gets its own building (forts move out a little; runs home ~15% longer; the 3-min day is retested).
+- **Shops (15 + pawn):**
+  - Kept: Corner Mart, Bagel Barn, Gizmo Garage.
+  - New: Leaning Tower of Pizza, Hole Lotta Donuts, taco truck (parked in the plaza), Second Hand Stan's thrift, Spin Cycle laundromat, Kicks R Us, Pixel Palace arcade, Pet Peeves (snitching parrot), Cracked Screens, Drug-ish Mart (parody only), Bling Thing jeweller, Hair Today barber.
+  - Pawn-O-Rama moves to the alley (Slice 3). The bank, 2 clubs and a bar come in later slices.
+- **Interiors:** mixed. Most shops are one quick room (aisles, counter, back door); flagships (jeweller, arcade) get a back room.
+- **Shopkeepers:** each has a personality (the cook throws dough, the barber chases with clippers, the jeweller has a panic button, the parrot squawks for the cops).
+- **2nd floors:** apartments (a sleeping resident who wakes on noise), shop stockrooms (a crackable safe), offices (water cooler, yelling boss), a gym (dumbbells, gym bros).
+- **Night:** mixed. Corner Mart, the pharmacy and the donut shop are open 24/7; the rest are closed and broken into (smash a window or pick the back lock), which sets off a burglar alarm (heat).
+- **Crowds:** cars 14 -> 18, pedestrians 18 -> ~24, plus shopkeepers; stays under ~40 simulated NPCs.
+- **Restock:** at the dawn of each cycle.
+- **Windows:** big shop windows (loot and staff visible), open doorways.
+- **Plaza:** smaller green, pond (comedy dunk: wade slowly, hand item floats away), fisherman (buy a junk fish, push him in = heat, he chases you with his rod), trees, benches, taco truck, Mayor statue (the winner's face goes on it), busker (steal his tip hat), pigeon fountain (coins, wet + slow), food cart row (carts are giant stealable items).
+- **Loot:** 3-4 new themed items per shop (~40 new).
+- **Clutter (all 4 kinds):**
+  - Junk: trash bags, bins, rideable trolleys, cones, pallets.
+  - Street furniture: bus stops, hydrants (punch = spray knockback), mailboxes, bike racks.
+  - Signs of life: cafe tables, sandwich boards, plants, wet-floor signs.
+  - Construction: scaffolding (climb to a 2nd floor), portaloo, cement mixer.
+- **Hiding:** a few comedy spots (portaloo, dumpster, thrift changing rooms, arcade mascot costume). Heat drops faster while hidden; a cop who saw you go in checks.
+- **Jeweller:** mini-bank (smashing a case = instant 1 star, panic button = 2 stars, baton guard).
+
+### Slice 2A: what was built (2026-09-27)
+- City is 230 m (fence at +-115). Ring A at +-30, ring B moved out to +-80; the edge band (forts, warehouses, parking, junkyard, construction yard, police station) moved out 14 m. Fort pads are ~96 m from the centre (was 82).
+- 20 street-level buildings downtown (15 x 13 m each): 3 shopfronts per side block facing the plaza, 2 per corner block. Towers sit on top of them. The back of each side block has 2 more towers on ring B, with an alley between them.
+- 14 walk-in shops + the taco truck = 15 shops with cashiers. Glass fronts you can see through (they still block you), open doorways, a back door to the alley. The bank, 2 clubs and the bar are shuttered ("OPENING SOON").
+- Pawn-O-Rama is no longer a walk-in shop downtown: it moves to the alley in Slice 3. The shop-phase pawn menu still works as before until then.
+- Upstairs: Pixel Palace + Bling Thing stockrooms (inside stairs in a staff back room), Lawyers 4 Less offices and The Crumbling Arms apartments (inside stairs in the lobby), apartments above the donut and pizza shops and a gym above Kicks R Us (fire escapes out back).
+- Plaza: open paved square (SW quarter, events/airdrops land there), the park + pond with lily pads (NE, you wade at 45% speed; pedestrians walk round), the fisherman's dock (the fisherman comes in 2B), the Mayor's statue ("OUR MAYOR (FOR NOW)"), the pigeon fountain, the taco truck (hold-up at the hatch), kiosk, bus stops.
+- Street clutter: pot plants, sandwich boards with jokes, cafe tables + umbrellas at the food shops, trolleys at Corner Mart, bike racks, mailboxes, hydrants, cones, trash bags, pallets, scaffolding + portaloo + cement mixer in the south alley, a wet-floor sign in every shop. (Interactive clutter: 2B.)
+- Loot: shelves are stocked at the start of each scavenge (day and night) with a 40% chance per shelf spot; no trickle restock (a cleaned-out shop stays empty). Loose loot now also spawns upstairs (zone "room"). Measured: ~83% of the city's loot value is indoors (target was ~70%) and the city holds ~6,300 of loot at the start of a scavenge (5A.1 city: ~4,000). NEEDS BLAKE'S CALL.
+- Crowds: 18 cars. Pedestrians stay at 20 (not 24): with 15 cashiers, 24 would push the simulated NPC count past the ~40 budget. NEEDS BLAKE'S CALL.
+- Performance: building interiors are only drawn within 42 m of the camera. Collision lookups got a faster path for the bigger city.
+- Moved to 2B: shopkeeper personalities, night shop hours + break-ins, the fisherman, busker, food cart row (stealable), residents, scaffolding climbing, trolley riding, hydrant spray, hiding spots, jeweller as a mini-bank. Moved to 2C: themed loot for the new shops (they use existing items for now), crackable stockroom safe.
+- **Overhaul Slice 2A DONE (2026-09-27)**: the new city (see "Slice 2A: what was built"). 128 shared + 2 client unit, matchmaking smoke 8/8, 224/224 browser checks (also 224/224 at 110 ms). Preview artifact v11.
+
+## City Redesign (slices C1-C6), agreed 2026-09-27
+- The full brief lives in the Claude doc "Trashington City Redesign Brief": https://claude.ai/code/artifact/964b440e-3cc5-40aa-8347-0f8d528d0861
+- Key decisions:
+  - Forts all on the south edge in walled compounds under an overhead highway (Tent Town), one in each back corner and two evenly between them.
+  - Three tiers south to north: low (average buildings), medium (medium-high end), high (fancy, richest loot, most cops).
+  - Straight roads only: Mayor's Mile boulevard, a roundabout around the park, 2 crosstown streets, an Uptown grid, a one-way loop, and an edge ring. Traffic lights where the Mile crosses the crosstown streets; give-way elsewhere.
+  - Every block holds several buildings wall to wall, with an alley or courtyard behind. About 21 landmarks; every other block gets a unique hook.
+  - Casino: the TRASHMATIC slot machine (about 90% payback), a Ride the Bus table (x1.9 / x2.6 / x3.9 / x15, a 5-11% house edge from a 200k-hand simulation), and a hard heist built after the bank.
+  - All 11 open-point recommendations were accepted (see the brief).
+- Order of work: C1 layout blockout -> C2 buildings -> C3 park -> C4 mess (props) -> C5 life -> C6 traversal + shops. Then Slice 3 (physical selling), Slice 4 (bank + casino heist), Slice 5 (nightlife).
+
+## City Redesign slice C1 (layout grey-box), built 2026-09-27
+- The whole city was rebuilt from a road-network list (junctions + straight roads + the roundabout's quarter arcs). Road surfaces, zebra crossings, lane paint, street lights, cop-car routes and pedestrian route lines are all worked out from that list, so later road changes are one-line edits.
+- Traffic is a lane system: a lane each way on every road (one on one-way streets and the ring), curved connectors through junctions, random routes. Lights at the two Mile crossings give one approach at a time (5 s green, 1.5 s amber, 0.5 s all-red; 28 s round). Give-way junctions are first come, first served, one approach at a time. Cars on the ring go first. Cars never enter a junction without room on the far side; a short road between two junctions holds one car. A car jammed 6 s (2.5 s of green at a light) takes another way. Cars stop behind the zebra crossing, not on it.
+- Pedestrians: if one won't get off the road, the car honks (2 s), asks them to move (3.5 s), then creeps forward and nudges them aside (9 s). This stopped the "pedestrian and car both wait forever" deadlocks the soak tests found.
+- Blocks are filled by rules, not by hand: buildings wall to wall along every street side (width 5-10 m low tier, 6-12 medium, 8-14 high), 4 m pavements, an alley gap and a 1.5 m squeeze gap into the courtyard, units and landmarks placed first. Checked by tests (no blank frontage over 15 m, no empty ground, no sealed courtyards, landmarks at most half a block).
+- The 20 street-level units from 2A moved into the new blocks (Corner Mart + Stan's + Pixel Palace + the pizza place + The Dive in the Yards; Old Brick and Market Row get the rest; Bling Thing and Cracked Screens in Uptown). Cracked Screens gained an upstairs stockroom so the rich loot isn't all on the west side.
+- The taco truck became a small taco cart on the park promenade by Market Row (the full cart behaviour is slice C5).
+- Fort compounds: 2.5 m walls, a 4 m gate facing the city, a 1.6 m squeeze gap in the back wall (raccoons use it too). Slot order: 0 and 1 are the corners, 2 and 3 the middle two.
+- Raid alert: a rival stepping into your compound at night sets it off straight away (at most every 15 s): siren, red screen edge, a banner naming the raider, an arrow home with the distance. Taking something sends a second banner naming the item. Everyone in Tent Town (or within 80 m) hears the siren.
+- The movement playground and the browser tests' open ground moved to the build yard at the south end of the rail yard.
+- Fairness (open question for Blake): from every fort, the walk to the nearest quarter of the richest 20% of loot is within 3.4%, but the average walk to all of it differs by 15% (corners are further from the middle of Uptown). See the C1 report for options.

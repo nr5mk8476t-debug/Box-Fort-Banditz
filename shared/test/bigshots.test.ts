@@ -11,7 +11,7 @@ function run(w: World, seconds: number, collect?: WorldEvent[]) {
 function setup(seed = 3) {
   const w = new World({ seed, npcs: 0, spawnLoot: false });
   const p = w.addPlayer("a", "A");
-  w.movePlayer(p, 0, -60, 0);
+  w.movePlayer(p, -106, -82, 0); // (C1: the build yard, out of the way)
   return { w, p };
 }
 /** Stand right in front of an NPC and punch it. */

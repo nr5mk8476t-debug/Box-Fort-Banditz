@@ -382,7 +382,7 @@ export class PoliceSystem {
     if (p.jailT > 0 || p.respawnT > 0) return;
     w.props.cancelRob(p);
     const { count, value } = w.confiscateAll(p);
-    p.notoriety = 0; p.hitsTaken = 0; p.seenT = -99;
+    p.notoriety = 0; p.seenT = -99;
     const cells = w.arena.station?.cells ?? [];
     const taken = new Set([...w.players.values()].filter((o) => o !== p && o.jailT > 0).map((o) => o.jailCell));
     let cell = p.colorIdx % Math.max(1, cells.length);

@@ -7,10 +7,42 @@
 // target positions, and every hand bone eases toward its target. Because we always ease
 // toward "the pose for the current state", poses can never conflict, freeze or get stuck:
 // changing state simply changes the target. One-off impulses (landing dip) are springs on top.
-import { Scene, MeshBuilder, TransformNode, Mesh, Vector3, type Camera } from "./babylon.ts";
-import { toon, ink, PALETTE } from "./look.ts";
+import { Scene, MeshBuilder, TransformNode, Mesh, Vector3, Color3, Matrix, StandardMaterial, VertexBuffer, type Camera } from "./babylon.ts";
+import { ink, PALETTE } from "./look.ts";
+
+/**
+ * 5A.1: the hands used the world's cel-shaded lighting, so whole faces went near-black whenever you
+ * looked up or turned (the "strange dark blocks" on the arms). Now each part gets its own fixed
+ * two-tone shading baked into vertex colours (light from over your shoulder), drawn unlit: the hands
+ * always read clearly, day or night.
+ */
+const VM_LIGHT = new Vector3(0.35, 0.85, -0.4).normalize();
+const vmMats = new Map<string, StandardMaterial>();
+function shadedPart(scene: Scene, m: Mesh, hex: string) {
+  let mat = vmMats.get(scene.uid);
+  if (!mat) {
+    mat = new StandardMaterial("vmFlat", scene);
+    mat.disableLighting = true;
+    mat.emissiveColor = Color3.White();
+    vmMats.set(scene.uid, mat);
+  }
+  const c = Color3.FromHexString(hex);
+  const rot = Matrix.RotationYawPitchRoll(m.rotation.y, m.rotation.x, m.rotation.z);
+  const nrm = m.getVerticesData(VertexBuffer.NormalKind) ?? [];
+  const n = m.getTotalVertices();
+  const cols = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const v = Vector3.TransformNormal(new Vector3(nrm[i * 3] ?? 0, nrm[i * 3 + 1] ?? 1, nrm[i * 3 + 2] ?? 0), rot);
+    const d = Vector3.Dot(v, VM_LIGHT);
+    const k = d > 0.35 ? 1 : d > -0.2 ? 0.86 : 0.72; // three soft cartoon bands, never black
+    cols[i * 4] = c.r * k; cols[i * 4 + 1] = c.g * k; cols[i * 4 + 2] = c.b * k; cols[i * 4 + 3] = 1;
+  }
+  m.setVerticesData(VertexBuffer.ColorKind, cols);
+  m.useVertexColors = true;
+  m.material = mat;
+}
 import { buildLootModel } from "./models.ts";
-import type { MovePose } from "@bfb/shared";
+import { lootDef, type MovePose } from "@bfb/shared";
 import { Spring } from "./spring.ts";
 
 interface HandRig {
@@ -25,19 +57,20 @@ const PUNCH_T = 0.26;
 const V = (x: number, y: number, z: number): [number, number, number] => [x, y, z];
 
 // Base poses in camera space (x right, y up, z forward). Rotations are radians (pitch, yaw, roll).
+// (5A.1: every pose sits 5 cm lower than before so the hands cover less of the screen.)
 const POSES: Record<MovePose, Pose> = {
-  idle:       { lp: V(-0.30, -0.30, 0.55), lr: V(0.1, 0.25, -0.3), rp: V(0.30, -0.30, 0.55), rr: V(0.1, -0.25, 0.3) },
-  walk:       { lp: V(-0.31, -0.32, 0.54), lr: V(0.1, 0.25, -0.3), rp: V(0.31, -0.32, 0.54), rr: V(0.1, -0.25, 0.3) },
-  sprint:     { lp: V(-0.30, -0.36, 0.50), lr: V(0.5, 0.35, -0.5), rp: V(0.30, -0.36, 0.50), rr: V(0.5, -0.35, 0.5) },
-  crouch:     { lp: V(-0.26, -0.34, 0.50), lr: V(0.3, 0.3, -0.2), rp: V(0.26, -0.34, 0.50), rr: V(0.3, -0.3, 0.2) },
-  crouchWalk: { lp: V(-0.26, -0.35, 0.50), lr: V(0.3, 0.3, -0.2), rp: V(0.26, -0.35, 0.50), rr: V(0.3, -0.3, 0.2) },
-  slide:      { lp: V(-0.42, -0.12, 0.45), lr: V(-0.6, 0.5, -1.0), rp: V(0.42, -0.12, 0.45), rr: V(-0.6, -0.5, 1.0) },
-  dodge:      { lp: V(-0.38, -0.22, 0.50), lr: V(-0.2, 0.6, -0.9), rp: V(0.38, -0.22, 0.50), rr: V(-0.2, -0.6, 0.9) },
-  mantle:     { lp: V(-0.22, -0.05, 0.62), lr: V(-0.9, 0.1, -0.1), rp: V(0.22, -0.05, 0.62), rr: V(-0.9, -0.1, 0.1) },
-  air:        { lp: V(-0.34, -0.20, 0.52), lr: V(-0.2, 0.3, -0.5), rp: V(0.34, -0.20, 0.52), rr: V(-0.2, -0.3, 0.5) },
-  stumble:    { lp: V(-0.40, -0.15, 0.48), lr: V(-0.4, 0.4, -1.2), rp: V(0.40, -0.15, 0.48), rr: V(-0.4, -0.4, 1.2) },
+  idle:       { lp: V(-0.30, -0.35, 0.55), lr: V(0.1, 0.25, -0.3), rp: V(0.30, -0.35, 0.55), rr: V(0.1, -0.25, 0.3) },
+  walk:       { lp: V(-0.31, -0.37, 0.54), lr: V(0.1, 0.25, -0.3), rp: V(0.31, -0.37, 0.54), rr: V(0.1, -0.25, 0.3) },
+  sprint:     { lp: V(-0.30, -0.41, 0.50), lr: V(0.5, 0.35, -0.5), rp: V(0.30, -0.41, 0.50), rr: V(0.5, -0.35, 0.5) },
+  crouch:     { lp: V(-0.26, -0.39, 0.50), lr: V(0.3, 0.3, -0.2), rp: V(0.26, -0.39, 0.50), rr: V(0.3, -0.3, 0.2) },
+  crouchWalk: { lp: V(-0.26, -0.40, 0.50), lr: V(0.3, 0.3, -0.2), rp: V(0.26, -0.40, 0.50), rr: V(0.3, -0.3, 0.2) },
+  slide:      { lp: V(-0.42, -0.17, 0.45), lr: V(-0.6, 0.5, -1.0), rp: V(0.42, -0.17, 0.45), rr: V(-0.6, -0.5, 1.0) },
+  dodge:      { lp: V(-0.38, -0.27, 0.50), lr: V(-0.2, 0.6, -0.9), rp: V(0.38, -0.27, 0.50), rr: V(-0.2, -0.6, 0.9) },
+  mantle:     { lp: V(-0.22, -0.10, 0.62), lr: V(-0.9, 0.1, -0.1), rp: V(0.22, -0.10, 0.62), rr: V(-0.9, -0.1, 0.1) },
+  air:        { lp: V(-0.34, -0.25, 0.52), lr: V(-0.2, 0.3, -0.5), rp: V(0.34, -0.25, 0.52), rr: V(-0.2, -0.3, 0.5) },
+  stumble:    { lp: V(-0.40, -0.20, 0.48), lr: V(-0.4, 0.4, -1.2), rp: V(0.40, -0.20, 0.48), rr: V(-0.4, -0.4, 1.2) },
   // flat on your back: hands flop up in front of your face
-  knocked:    { lp: V(-0.50, -0.30, 0.42), lr: V(-0.7, 0.6, -1.4), rp: V(0.52, -0.32, 0.44), rr: V(-0.8, -0.5, 1.5) },
+  knocked:    { lp: V(-0.50, -0.35, 0.42), lr: V(-0.7, 0.6, -1.4), rp: V(0.52, -0.37, 0.44), rr: V(-0.8, -0.5, 1.5) },
 };
 
 export class Viewmodel {
@@ -58,7 +91,8 @@ export class Viewmodel {
   private charge = 0; // 0..1 while winding up a throw
   private throwT = 0; // >0 right after a throw (follow-through)
   private punchT = 0; // >0 during a jab
-  private punchSide: 1 | -1 = 1;
+  /** 5A.1 (Blake): left click = a jab with the LEFT fist, every time */
+  private punchSide: 1 | -1 = -1;
 
   constructor(scene: Scene, camera: Camera, color: string) {
     this.rootNode = new TransformNode("viewmodel", scene);
@@ -82,7 +116,7 @@ export class Viewmodel {
     const parts: Mesh[] = [];
     const add = (m: Mesh, mat: string, outline = 0.007) => {
       m.parent = root;
-      m.material = toon(scene, mat, "vm");
+      queueMicrotask(() => shadedPart(scene, m, mat)); // (after the caller has set its rotation)
       ink(m, outline);
       m.renderingGroupId = 2;
       m.isPickable = false;
@@ -90,28 +124,33 @@ export class Viewmodel {
       return m;
     };
     const WRAP = "#f4f1ea";
+    const WRAP_SHADE = "#dcd6c8";
     // sleeve (patched jacket) going back toward the body
     const sleeve = add(MeshBuilder.CreateCylinder("sleeve", { diameterTop: 0.12, diameterBottom: 0.13, height: 0.15, tessellation: 10 }, scene), "#5a4d6e");
     sleeve.rotation.x = Math.PI / 2;
     sleeve.position.set(0, -0.02, -0.13);
-    const patch = add(MeshBuilder.CreateBox("patch", { width: 0.06, height: 0.05, depth: 0.07 }, scene), PALETTE.mustard, 0.004);
-    patch.position.set(side * 0.06, 0.02, -0.12);
-    patch.rotation.z = side * 0.4;
-    // wrapped wrist
-    const wrist = add(MeshBuilder.CreateCylinder("wrist", { diameter: 0.115, height: 0.09, tessellation: 10 }, scene), WRAP, 0.006);
-    wrist.rotation.x = Math.PI / 2;
-    wrist.position.set(0, -0.01, -0.035);
+    // 5A.1 clean boxer tape (Blake): layered wrist wraps, snug bands round the palm, a knuckle pad,
+    // (The old mustard sleeve patch is gone; tape has no ink lines of its own, only the hand does.)
+    for (const [z, d, c] of [[-0.06, 0.118, WRAP_SHADE], [-0.03, 0.122, WRAP], [0.0, 0.116, WRAP_SHADE]] as const) {
+      const ring = add(MeshBuilder.CreateCylinder("wristWrap", { diameter: d, height: 0.032, tessellation: 12 }, scene), c, 0);
+      ring.renderOutline = d > 0.12; // one outline round the whole wrist wrap, not every layer
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0, -0.01, z);
+    }
     // bare cartoon hand (palm)
-    const palm = add(MeshBuilder.CreateBox("palm", { width: 0.15, height: 0.075, depth: 0.15 }, scene), PALETTE.skin);
+    // (thin ink: the outline shell is written into the depth buffer, so the tape must sit outside it)
+    const palm = add(MeshBuilder.CreateBox("palm", { width: 0.15, height: 0.075, depth: 0.15 }, scene), PALETTE.skin, 0.004);
     palm.position.set(0, 0, 0.05);
-    // simple white wraps: two bands around the palm and one across the knuckles
-    for (const [z, h] of [[0.0, 0.03], [0.055, 0.028]] as const) {
-      const band = add(MeshBuilder.CreateBox("wrap", { width: 0.158, height: 0.083, depth: h }, scene), WRAP, 0.004);
+    // two snug tape bands round the palm (only a hair bigger than the hand: tape, not blocks)
+    for (const [z, h] of [[0.008, 0.03], [0.055, 0.028]] as const) {
+      const band = add(MeshBuilder.CreateBox("wrap", { width: 0.166, height: 0.093, depth: h }, scene), WRAP, 0);
+      band.renderOutline = false; // (outlines on thin tape read as black stripes)
       band.position.set(0, 0, z);
     }
-    const knuckle = add(MeshBuilder.CreateBox("wrapK", { width: 0.155, height: 0.03, depth: 0.04 }, scene), WRAP, 0.004);
-    knuckle.position.set(0, 0.03, 0.105);
-    knuckle.rotation.z = side * 0.06;
+    // padded knuckles
+    const knuckle = add(MeshBuilder.CreateBox("wrapK", { width: 0.164, height: 0.03, depth: 0.052 }, scene), WRAP, 0);
+    knuckle.renderOutline = false;
+    knuckle.position.set(0, 0.034, 0.1);
     // fingers + thumb (bare)
     for (let i = 0; i < 4; i++) {
       const f = add(MeshBuilder.CreateCapsule("finger", { radius: 0.021, height: 0.09, tessellation: 6 }, scene), PALETTE.skin, 0.005);
@@ -133,7 +172,8 @@ export class Viewmodel {
     const { root, meshes } = buildLootModel(this.scene, type);
     for (const m of meshes) { m.renderingGroupId = 2; if (m.renderOutline) m.outlineWidth = Math.min(m.outlineWidth, 0.012); }
     root.parent = this.holdNode;
-    root.scaling.setAll(size === "small" ? 1.1 : 0.62);
+    // small things in your fist are shown about fist-sized (5A.1: a big snow globe used to fill the screen)
+    root.scaling.setAll(size === "small" ? Math.max(0.3, Math.min(1.1, 0.075 / lootDef(type).radius)) : 0.62);
     this.held = { type, size, root };
   }
 
@@ -145,7 +185,7 @@ export class Viewmodel {
   throwAnim() { this.throwT = 0.28; this.charge = 0; }
 
   /** Cartoon jab: alternates hands each punch. */
-  punchAnim() { this.punchT = PUNCH_T; this.punchSide = this.punchSide === 1 ? -1 : 1; }
+  punchAnim() { this.punchT = PUNCH_T; this.punchSide = -1; }
 
   /** Landing / impact dip (bigger impact = deeper dip). */
   /** Hide the hands (upgrades screen looks at your fort from outside). */

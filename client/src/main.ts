@@ -69,7 +69,7 @@ function showFatal(msg: string) {
 window.addEventListener("error", (e) => showFatal(e.message || String(e.error)));
 window.addEventListener("unhandledrejection", (e) => showFatal(String((e as PromiseRejectionEvent).reason?.message ?? (e as PromiseRejectionEvent).reason)));
 
-const CONTROLS_TEXT = "WASD move / SHIFT sprint / SPACE jump + climb / C crouch (sprint+C slide) / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / CLICK punch + smash / HOLD CLICK or F throw / RIGHT CLICK pockets / ESC menu";
+const CONTROLS_TEXT = "WASD move / SHIFT sprint / SPACE jump + climb / C crouch (sprint+C slide) / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / WHEEL or 1-4 choose item (4 = fists) / CLICK punch (fists out) or HOLD CLICK throw what you hold / ESC menu";
 
 // ---------------------------------------------------------------------------
 // Core objects
@@ -163,7 +163,7 @@ async function startSolo() {
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
   $("lp-hint").textContent = "Press ENTER to start. Each cycle: 3 min scavenge, 1 min NIGHT scavenge (x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
-  $("mode-badge").textContent = "PHASE 5A / SOLO";
+  $("mode-badge").textContent = "CITY C1 / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -263,7 +263,7 @@ function updateMatchHud(a: ArenaScene) {
     const zone = Math.abs(m.evX) < 1 && Math.abs(m.evZ) < 1 ? "THE PLAZA" : `THE ${m.evZ > 0 ? "NORTH" : "SOUTH"}-${m.evX > 0 ? "EAST" : "WEST"} BLOCK`;
     if (m.evKind === "happyhour") ev = m.evStage === "live" ? `HAPPY HOUR IN ${zone}: DOUBLE LOOT (GOLD RING) - ${m.evT}s` : `HAPPY HOUR IN ${zone}...`;
     if (m.evKind === "truck") { ev = m.evStage === "warn" ? `GARBAGE TRUCK IN ${m.evT}s - CLEAR THE ROAD!` : "GARBAGE TRUCK ON THE ROAD!"; bad = true; }
-    if (m.evKind === "airdrop") ev = m.evStage === "warn" ? `AIRDROP IN ${m.evT}s - PLAZA (RED TARGET)` : "AIRDROP CRATE FALLING INTO THE PLAZA!";
+    if (m.evKind === "airdrop") ev = m.evStage === "warn" ? `AIRDROP IN ${m.evT}s - WATCH FOR THE RED TARGET` : "AIRDROP CRATE FALLING - FIND THE RED TARGET!";
     if (m.evKind === "raccoons") { ev = m.evStage === "warn" ? "RACCOONS INCOMING..." : "RACCOONS ARE RAIDING THE FORTS!"; bad = true; }
   }
   if (ev + bad !== eventSig) {
@@ -358,7 +358,7 @@ function renderTally(a: ArenaScene, starter: boolean) {
 const fxTimers: Record<string, number> = {};
 const fxHistory: string[] = []; // for automated tests (effects can be over before a slow test looks)
 /** Full-screen HTML effects: camera flash, pigeon swarm, knocked-down daze. */
-function screenFx(fx: "flash" | "swarm" | "knocked" | "zap", seconds: number) {
+function screenFx(fx: "flash" | "swarm" | "knocked" | "zap" | "hurt", seconds: number) {
   if (fxHistory.push(fx) > 50) fxHistory.shift();
   const el = $("fx-" + fx);
   el.classList.remove("hidden", "on");
@@ -437,7 +437,7 @@ async function enterOnline(r: GameRoom) {
   $("lp-title").textContent = "LOBBY";
   show("lp-code-row");
   $("lp-code").textContent = r.roomId;
-  $("mode-badge").textContent = r.isHost ? "PHASE 5A / HOSTING" : "PHASE 5A / ONLINE";
+  $("mode-badge").textContent = r.isHost ? "CITY C1 / HOSTING" : "CITY C1 / ONLINE";
 
   r.onMessage(MSG.ANNOUNCE, (m: { text: string }) => toast(m.text));
   r.onDrop(() => {
@@ -692,8 +692,8 @@ window.addEventListener("keydown", (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// HUD: stamina bar (only visible when not full) + winded flash + dodge-ready pip
-let hudStaminaShown = -1;
+// HUD (5A.1): health (heart) + stamina (lightning bolt) bars bottom-left, dodge-ready "Q" chip
+let hudStaminaShown = -1, hudHpShown = -1, hpLag = 100;
 function updateHud(a: ArenaScene) {
   const h = a.hud();
   const pct = Math.round(h.stamina * 100);
@@ -701,9 +701,18 @@ function updateHud(a: ArenaScene) {
     hudStaminaShown = pct;
     $("stamina-fill").style.width = pct + "%";
   }
-  $("stamina").classList.toggle("full", pct >= 100 && !h.winded);
   $("stamina").classList.toggle("winded", h.winded);
   $("dodge-pip").classList.toggle("ready", h.dodgeReady);
+  // health: the bar snaps down, a pale "recent damage" bar drains after it
+  const hp = Math.max(0, Math.min(100, Math.round(a.hp)));
+  hpLag = hp >= hpLag ? hp : Math.max(hp, hpLag - 60 * (engine.getDeltaTime() / 1000));
+  if (hp !== hudHpShown) {
+    hudHpShown = hp;
+    $("hp-fill").style.width = hp + "%";
+    $("hp-num").textContent = String(hp);
+    $("health").classList.toggle("low", hp > 0 && hp <= 34);
+  }
+  $("hp-lag").style.width = hpLag.toFixed(1) + "%";
 
   // Look prompt: "[E] Grab Old CRT TV  $34"
   const t = a.lookTarget;
@@ -758,7 +767,7 @@ function updateHud(a: ArenaScene) {
     }
   }
 
-  // Pockets bar
+  // Pockets bar (5A.1): 1-3 pockets + 4 fists; the selected one is highlighted; a big item shows "in hands"
   const inv = a.inventory;
   const invSig = inv.hand + "|" + inv.pockets.join(",") + "|" + inv.sel;
   if (invSig !== pocketsSig) {
@@ -770,8 +779,11 @@ function updateHud(a: ArenaScene) {
       el.textContent = type ? lootDef(type).name : "empty";
       el.style.borderColor = type ? RARITY_COLOR[lootDef(type).mystery && lootDef(type).rarity !== "common" ? "mystery" : lootDef(type).rarity] : "";
     };
-    slot($("slot-hand"), inv.hand, false);
+    show("slot-hand-wrap", !!inv.hand);
+    slot($("slot-hand"), inv.hand, !!inv.hand);
     for (let i = 0; i < 3; i++) slot($("slot-" + i), inv.pockets[i], i === inv.sel && !inv.hand);
+    $("slot-fists").classList.toggle("sel", !inv.hand && (inv.sel === 3 || !inv.pockets[inv.sel]));
+    $("pockets").classList.toggle("locked", !!inv.hand);
   }
 
   // Heat meter + wanted stars (30 / 60 / 90 heat)
@@ -909,6 +921,11 @@ enterTitle();
     },
     setYaw: (y: number) => { input.yaw = y; },
     setPitch: (p: number) => { input.pitch = p; },
+    // Slice 2A: screenshot camera + how many building interiors are being drawn
+    camAt: (x: number, y: number, z: number, yaw: number, pitch: number) => { if (arena) arena.camOverride = { x, y, z, yaw, pitch }; },
+    camFree: () => { if (arena) arena.camOverride = null; },
+    interiors: () => arena?.city.interiorsDrawn ?? 0,
+    units: () => (arena as any)?.arena?.units?.map((u: any) => ({ id: u.id, name: u.name, use: u.use, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, upper: u.upper, access: u.access })) ?? [],
     teleport: (x: number, z: number, yaw: number) => {
       if (local) local.teleport(x, z, yaw); else room?.send("dbg", { op: "teleport", x, z, yaw });
       arena?.debugTeleport(x, z, yaw);
@@ -919,6 +936,11 @@ enterTitle();
     serverInventory: () => { const v: any = local ? local.view : room?.state; const p = v?.players?.get(local ? SOLO_ID : room?.sessionId); return p ? { hand: p.hand, pockets: [p.p0, p.p1, p.p2], sel: p.sel, carryMul: p.carryMul } : null; },
     lookTarget: () => arena?.lookTarget ? { id: arena.lookTarget.id, type: arena.lookTarget.def.type } : null,
     landmarks: () => CITY.landmarks,
+    /** C1: the open build yard the browser tests use as their origin (the old plaza) */
+    T: CITY.landmarks!.testYard,
+    raidAlert: () => !!(arena as any)?.raidAlert?.active,
+    fakeRaid: () => (arena as any)?.debugRaid(),
+    lights: () => (arena as any)?.city?.lampStates() ?? [],
     worldTime: () => local?.world.time ?? null,
     testInput: (on: boolean) => { input.assumeLocked = on; input.enabled = on; if (!on) input.clear(); show("pause", !on && screen === "playing"); },
     perf: (reset = false) => { const o = { ...perf }; if (reset) for (const k in perf) (perf as any)[k] = 0; return o; },
@@ -938,6 +960,7 @@ enterTitle();
     overlay: () => overlayOpen,
     fortView: () => arena?.fortView ?? false,
     tugPress: () => arena?.onAction?.({ a: "tug" }),
+    hp: () => arena?.hp ?? null,
     startMatch: () => startMatch(),
     triggerEvent: (kind: string) => { if (local) local.world.match.trigger(kind as never); else room?.send("dbg", { op: "event", kind }); },
     setTimeLeft: (t: number) => { if (local) { if (local.world.match.phase !== "lobby") local.world.match.timeLeft = t; } else room?.send("dbg", { op: "time", t }); },

@@ -12,6 +12,7 @@ import { RemotePlayers, type RemoteInfo, type CarryKind } from "./remotePlayers.
 import { Viewmodel } from "./viewmodel.ts";
 import { Spring } from "./spring.ts";
 import { CityRenderer } from "./cityRenderer.ts";
+import { RaidAlert } from "../ui/raidAlert.ts";
 import { ItemRenderer } from "./itemRenderer.ts";
 import { NpcRenderer } from "./npcRenderer.ts";
 import { EventRenderer } from "./eventRenderer.ts";
@@ -22,7 +23,7 @@ import { LockpickUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
 import {
   makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, type PropDef,
+  throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -53,18 +54,20 @@ export interface MatchHud {
   phase: string; round: number; rounds: number; timeLeft: number; results: string;
   evKind: string; evStage: string; evX: number; evZ: number; evR: number; evT: number;
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
+  lightT?: number;
 }
 export interface ScoreLine { id: string; name: string; colorIdx: number; cash: number; bank: number; connected: boolean; me: boolean; }
 /** Where home is, relative to where you're looking. */
 export interface HomeInfo { inside: boolean; dist: number; bearing: number; }
 
 /** Full-screen effects main.ts draws in HTML (camera flash, pigeon swarm, knocked-down vignette). */
-export type ScreenFx = "flash" | "swarm" | "knocked" | "zap";
+export type ScreenFx = "flash" | "swarm" | "knocked" | "zap" | "hurt";
 
 /** Your inventory as displayed (server truth + instant local feedback). */
 export interface Inventory { hand: string; pockets: string[]; sel: number; }
 
 const CHARGE_TIME = 0.8; // seconds to full throw power
+const HEAVE_TIME = 1.4; // giant items: a slow, clumsy wind-up
 const PUNCH_CD_MS = 550; // matches the server's punch cooldown (the server has the final say)
 const PUNCH_REACH = 2.2;
 /** Gibberish voice pitch per pedestrian type. */
@@ -82,12 +85,15 @@ const MAX_ROLL = 0.6;
 const clampAbs = (v: number, m: number) => Math.max(-m, Math.min(m, v));
 export const safePitch = (p: number) => clampAbs(p, MAX_PITCH);
 
-/** Rough place name for announcements. */
+/** Rough place name for announcements (C1 districts). */
 function areaName(x: number, z: number): string {
-  if (Math.abs(x) < 26 && Math.abs(z) < 26) return "the Plaza";
-  const ns = z > 20 ? "north" : z < -20 ? "south" : "", ew = x > 20 ? "east" : x < -20 ? "west" : "";
-  const dir = ns && ew ? `${ns}-${ew}` : ns || ew;
-  return Math.max(Math.abs(x), Math.abs(z)) > 74 ? `the ${dir} edge of town` : `downtown ${dir}`;
+  if (Math.hypot(x, z) < 30) return "the Park";
+  if (z < -90) return "Tent Town";
+  if (x < -95) return "the rail yard";
+  if (x > 95) return "the canal";
+  if (z > 46) return "Uptown";
+  if (z < -46) return "The Yards";
+  return x < 0 ? "Old Brick" : "Market Row";
 }
 
 export class ArenaScene {
@@ -129,12 +135,14 @@ export class ArenaScene {
   // Loot
   private items: ItemRenderer;
   private myId = "";
-  private serverInv: Inventory = { hand: "", pockets: ["", "", ""], sel: 0 };
+  private serverInv: Inventory = { hand: "", pockets: ["", "", ""], sel: FISTS };
   private optimistic: (Inventory & { until: number }) | null = null;
   private itemTypes = new Map<string, string>();
   private itemViews = new Map<string, { value: number; mode: string; holder: string; holder2: string; lock: number; fort: number; mult: number; tug: number }>();
   // Phase 5A: night, tug of war, pawn shop, fort view
   private night: NightRenderer;
+  /** the static city (Slice 2A: interiors drawn only near the camera) */
+  readonly city: CityRenderer;
   private wires: { m: Mesh; t: number }[] = [];
   /** tug of war you're in: balance from YOUR side (+1 = you win), or null */
   tug: { balance: number; rival: string } | null = null;
@@ -142,12 +150,16 @@ export class ArenaScene {
   onPawn: ((e: { item: string; r: string; offer: number }) => void) | null = null;
   /** upgrades round: look at your fort instead of through your eyes */
   fortView = false;
+  /** test/screenshot hook (Slice 2A): put the camera anywhere (null = normal first-person view) */
+  camOverride: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null;
 
   // Phase 3: round loop
-  match: MatchHud = { phase: "lobby", round: 0, rounds: ROUNDS, timeLeft: 0, results: "[]", evKind: "", evStage: "", evX: 0, evZ: 0, evR: 0, evT: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0 };
+  match: MatchHud = { phase: "lobby", round: 0, rounds: ROUNDS, timeLeft: 0, results: "[]", evKind: "", evStage: "", evX: 0, evZ: 0, evR: 0, evT: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, lightT: 0 };
   scores: ScoreLine[] = [];
   myColorIdx = 0;
   private events: EventRenderer;
+  /** C1: red screen edge + arrow home while your fort is being raided */
+  readonly raidAlert = new RaidAlert();
   private lastTickSec = -1;
   private rumbleT = 0;
   // Phase 3.5: props, traffic, hold-ups, wipeouts
@@ -194,6 +206,8 @@ export class ArenaScene {
   punchTarget: PunchTarget | null = null;
   /** my heat 0..100 (wanted stars at 30 / 60 / 90) */
   heat = 0;
+  /** 5A.1: my health 0..100 */
+  hp = 100;
   private firstWorld = true;
   /** Full-screen effect requests (main.ts draws them). */
   onScreenFx: ((fx: ScreenFx, seconds: number) => void) | null = null;
@@ -239,7 +253,7 @@ export class ArenaScene {
       scene.fogEnd = 150;
     }
 
-    new CityRenderer(scene, this.arena, shadows);
+    this.city = new CityRenderer(scene, this.arena, shadows);
     this.night = new NightRenderer(scene, this.arena, hemi, sun, cam);
     // Only the static city casts shadows, so draw the shadow map once instead of every frame
     const sm = shadows?.getShadowMap();
@@ -370,8 +384,9 @@ export class ArenaScene {
     view.players.forEach((p, id) => {
       if (id === myId) {
         this.reconcile(p as ServerPlayerView);
-        this.serverInv = { hand: p.hand ?? "", pockets: [p.p0 ?? "", p.p1 ?? "", p.p2 ?? ""], sel: p.sel ?? 0 };
+        this.serverInv = { hand: p.hand ?? "", pockets: [p.p0 ?? "", p.p1 ?? "", p.p2 ?? ""], sel: p.sel ?? FISTS };
         this.heat = p.heat ?? 0;
+        this.hp = p.hp ?? 100;
         this.respawnT = p.respawnT ?? 0;
         this.robT = p.robT ?? -1;
         this.jailT = p.jailT ?? 0;
@@ -638,6 +653,10 @@ export class ArenaScene {
           if (e.p === me && e.stage === "dispatch") { sfx.siren(1); this.onBanner?.("COP CAR INCOMING!", "Max heat. Get off the streets and out of sight!", "bad"); }
           if (e.stage === "deploy" && e.p === me) sfx.cellDoor(); // car doors slam
           break;
+        // ---- 5A.1 health
+        case "hurt":
+          if (e.p === me) { this.hp = e.hp; this.addTrauma(0.35); this.onScreenFx?.("hurt", 0.5); }
+          break;
         // ---- Phase 5A
         case "cash":
           if (e.p === me) {
@@ -647,8 +666,32 @@ export class ArenaScene {
             this.onFeedback?.(`+$${e.value} cash (${lootDef(e.type).name})`, "good");
           }
           break;
+        case "raidEnter": {
+          // C1: the loud, direct raid alert (the owner), and a siren everyone in Tent Town hears
+          const f = this.arena.forts?.find((x) => x.slot === e.slot);
+          const raider = this.scores.find((x) => x.id === e.p)?.name ?? "Someone";
+          if (e.owner === me) {
+            sfx.raidAlarm(); sfx.raidSiren(1);
+            if (f) this.raidAlert.start(f.x, f.z, 12);
+            this.onBanner?.(`${raider.toUpperCase()} IS RAIDING YOUR FORT!`, "They're in your compound. Follow the arrow home!", "bad");
+          } else if (e.p === me) {
+            const o = this.scores.find((x) => x.id === e.owner)?.name ?? "a rival";
+            this.onFeedback?.(`You're in ${o}'s compound. The siren's going: be quick!`, "good");
+          } else if (f) {
+            const d = Math.hypot(f.x - this.cur.x, f.z - this.cur.z);
+            if (d < 80 || this.cur.z < -85) sfx.raidSiren(Math.max(0.25, 1 - d / 120));
+          }
+          break;
+        }
         case "raid":
-          if (e.owner === me) { sfx.raidAlarm(); this.onBanner?.("YOUR FORT IS BEING RAIDED!", "Somebody is stealing your banked loot. Get home!", "bad"); }
+          if (e.owner === me) {
+            sfx.raidAlarm();
+            const t = this.itemTypes.get(e.item);
+            const raider = this.scores.find((x) => x.id === e.p)?.name ?? "Someone";
+            const f = this.arena.forts?.find((x) => x.slot === this.myColorIdx);
+            if (f) this.raidAlert.start(f.x, f.z, 10);
+            this.onBanner?.(`${raider.toUpperCase()} STOLE YOUR ${t ? lootDef(t).name.toUpperCase() : "LOOT"}!`, "Get home and get it back!", "bad");
+          }
           else if (e.p === me) { const o = this.scores.find((x) => x.id === e.owner)?.name ?? "a rival"; this.onFeedback?.(`Raiding ${o}'s fort! Their alarm is going off...`, "good"); }
           break;
         case "tug":
@@ -711,7 +754,7 @@ export class ArenaScene {
 
   private onCityEvent(kind: string, stage: string, detail: string) {
     if (stage === "warn") {
-      if (kind === "airdrop") { sfx.plane(); this.onBanner?.("AIRDROP INCOMING!", "A crate is parachuting into the plaza. It takes two to carry.", "good"); }
+      if (kind === "airdrop") { sfx.plane(); this.onBanner?.("AIRDROP INCOMING!", "A crate is parachuting onto an open square. It takes two to carry.", "good"); }
       if (kind === "truck") { sfx.truckHorn(); this.onBanner?.(`GARBAGE TRUCK: ${detail} ROAD`, "It hoovers up loot and flattens bandits. Move it!", "bad"); }
       if (kind === "happyhour") { sfx.happyHour(); this.onBanner?.("HAPPY HOUR!", `Loot in ${detail} is worth DOUBLE for 30 s. Grab it!`, "good"); }
       if (kind === "raccoons") { sfx.chitter(1); this.onBanner?.("RACCOON HEIST!", "Raccoons are sneaking into the forts. Bonk them!", "bad"); }
@@ -849,7 +892,9 @@ export class ArenaScene {
     const inv = this.inventory;
     const now = performance.now();
     // Left click with empty hands = punch (pocket items are thrown with F)
-    if (a === "chargeStart" && src === "mouse" && !inv.hand) { this.punch(now); return; }
+    // Left click with nothing in your hands (fists selected) = punch; with something in your hands = wind up a throw
+    if (a === "chargeStart" && src === "mouse" && !this.activeItem(inv)) { this.punch(now); return; }
+    if (a === "special") return; // right mouse: reserved for special items (5A.1)
     const hold = 600; // ms the optimistic guess is trusted before the server must confirm
     if (a === "grabEnd") return;
     if (a === "robEnd") {
@@ -879,7 +924,7 @@ export class ArenaScene {
       if (!t) return;
       if (t.note.startsWith("LOCKED")) { sfx.full(); this.onFeedback?.("Banked in a fort. Locked until NIGHT!", "info"); return; }
       const size = t.def.size;
-      if (t.def.money) {
+      if (t.def.money || size === "giant") {
         // cash goes straight into your wallet (the server confirms with a "cash" event)
       } else if (size === "small" && inv.pockets.includes("")) {
         const pockets = [...inv.pockets];
@@ -897,26 +942,39 @@ export class ArenaScene {
       }
       this.onAction?.({ a: "grab", item: t.id });
     } else if (a === "drop") {
-      const src = this.activeItem(inv);
+      const src = this.anyItem(inv);
       if (!src) return;
       this.optimistic = this.without(inv, src, now + hold);
       sfx.drop();
       this.onAction?.({ a: "drop" });
-    } else if (a === "cycle") {
-      const sel = (inv.sel + 1) % POCKETS;
+    } else if (a === "cycleNext" || a === "cyclePrev" || a.startsWith("select")) {
+      // wheel / keys 1-4: same rule as the server (fists + filled pockets; locked while holding something big)
+      if (inv.hand) { sfx.full(); this.onFeedback?.("Hands full! Drop (G) or throw it first", "bad"); return; }
+      let sel = inv.sel;
+      if (a.startsWith("select")) {
+        const slot = Number(a.slice(6));
+        if (slot !== FISTS && !inv.pockets[slot]) { sfx.full(); return; }
+        sel = slot;
+        this.onAction?.({ a: "select", slot });
+      } else {
+        const opts = [FISTS, ...[0, 1, 2].filter((i) => inv.pockets[i])];
+        const k = Math.max(0, opts.indexOf(inv.sel)), dir = a === "cycleNext" ? 1 : -1;
+        sel = opts[(k + dir + opts.length) % opts.length];
+        this.onAction?.({ a: "cycle", dir });
+      }
       this.optimistic = { ...inv, pockets: [...inv.pockets], sel, until: now + hold };
       sfx.uiHover();
-      this.onAction?.({ a: "cycle" });
+      this.viewmodel.kick(0.15);
     } else if (a === "chargeStart") {
       const src = this.activeItem(inv);
       if (!src) return;
-      const t = this.itemTypes.get(src.id);
-      if (t && lootDef(t).size === "giant") { this.onFeedback?.("Too big to throw!", "bad"); return; }
+      if (this.tug) return; // (mid tug of war: mash E)
       this.chargeStart = now;
       this.stopChargeTone = chargeTone();
     } else if (a === "chargeEnd") {
       if (!this.chargeStart) return;
-      const charge = Math.min(1, (now - this.chargeStart) / 1000 / CHARGE_TIME);
+      const src0 = this.activeItem(inv), t0 = src0 ? this.itemTypes.get(src0.id) : undefined;
+      const charge = Math.min(1, (now - this.chargeStart) / 1000 / (t0 && lootDef(t0).size === "giant" ? HEAVE_TIME : CHARGE_TIME));
       this.chargeStart = 0;
       this.stopChargeTone?.(); this.stopChargeTone = null;
       const src = this.activeItem(inv);
@@ -926,8 +984,8 @@ export class ArenaScene {
       this.onAction?.({ a: "throw", charge, yaw: this.input.yaw, pitch: this.input.pitch });
       this.viewmodel.throwAnim();
       sfx.throw(charge);
-      // Predict the flight locally with the same maths the server uses
-      if (type) {
+      // Predict the flight locally with the same maths the server uses (a giant heave is left to the server)
+      if (type && lootDef(type).size !== "giant") {
         const def = lootDef(type);
         const v = throwVelocity(this.input.yaw, this.input.pitch, throwSpeed(def, charge));
         const m = this.cur;
@@ -949,17 +1007,25 @@ export class ArenaScene {
     this.onAction?.({ a: "punch", yaw: this.input.yaw, pitch: this.input.pitch });
   }
 
-  /** Same priority as the server: hands first, then selected pocket, then any pocket. */
+  /** Same rule as the server: what you hold, else the pocket item you have out (fists = nothing). */
   private activeItem(inv: Inventory): { id: string; from: "hand" | number } | null {
     if (inv.hand) return { id: inv.hand, from: "hand" };
-    for (const i of [inv.sel, ...[0, 1, 2].filter((k) => k !== inv.sel)]) if (inv.pockets[i]) return { id: inv.pockets[i], from: i };
+    if (inv.sel >= 0 && inv.sel < POCKETS && inv.pockets[inv.sel]) return { id: inv.pockets[inv.sel], from: inv.sel };
+    return null;
+  }
+
+  /** G drops these one by one: hands / selected first, then any pocket. */
+  private anyItem(inv: Inventory): { id: string; from: "hand" | number } | null {
+    const a = this.activeItem(inv);
+    if (a) return a;
+    for (let i = 0; i < POCKETS; i++) if (inv.pockets[i]) return { id: inv.pockets[i], from: i };
     return null;
   }
 
   private without(inv: Inventory, src: { from: "hand" | number }, until: number): Inventory & { until: number } {
     const pockets = [...inv.pockets];
     if (src.from !== "hand") pockets[src.from] = "";
-    return { hand: src.from === "hand" ? "" : inv.hand, pockets, sel: inv.sel, until };
+    return { hand: src.from === "hand" ? "" : inv.hand, pockets, sel: src.from === inv.sel ? FISTS : inv.sel, until };
   }
 
   /** Find the item under the crosshair within reach. */
@@ -1166,7 +1232,9 @@ export class ArenaScene {
     this.lie += (lieBack - this.lie) * ease(8);
     this.camera.rotation.set(safePitch(this.input.pitch + shakeP + this.lie), this.input.yaw + shakeY, clampAbs(this.roll + shakeR, MAX_ROLL));
     if (this.fortView) this.aimAtFort();
-    this.viewmodel.setVisible(!this.fortView);
+    const co = this.camOverride;
+    if (co) { this.camera.position.set(co.x, co.y, co.z); this.camera.rotation.set(co.pitch, co.yaw, 0); }
+    this.viewmodel.setVisible(!this.fortView && !co);
     if (!Number.isFinite(this.camera.position.y) || !Number.isFinite(this.camera.rotation.z) || !Number.isFinite(this.camera.rotation.x)) {
       // last line of defence: never leave the camera broken
       this.camera.position.set(px, py + PLAYER.eyeHeight, pz);
@@ -1176,14 +1244,14 @@ export class ArenaScene {
 
     // Loot in hands (viewmodel), throw wind-up, look target
     const inv = this.inventory;
-    const heldId = inv.hand || (this.chargeStart ? this.activeItem(inv)?.id ?? "" : "");
+    const heldId = this.activeItem(inv)?.id ?? ""; // (the pocket item you have out is drawn in your hand)
     let heldType = heldId ? this.itemTypes.get(heldId) ?? null : null;
     // giant items stay in the world (dragged in front of you / carried between two players)
     if (heldType && lootDef(heldType).size === "giant") heldType = null;
     this.viewmodel.setHeld(heldType, heldType ? lootDef(heldType).size : "big");
     if (this.chargeStart) {
       if (!this.activeItem(inv)) { this.chargeStart = 0; this.stopChargeTone?.(); this.stopChargeTone = null; this.input.cancelCharge(); }
-      this.viewmodel.setCharge(this.chargeStart ? Math.min(1, (performance.now() - this.chargeStart) / 1000 / CHARGE_TIME) : 0);
+      this.viewmodel.setCharge(this.chargeStart ? this.throwCharge : 0);
     }
 
     const mantleFrac = cur.mantleT > 0 && this.mantleTotal > 0 ? 1 - cur.mantleT / this.mantleTotal : 0;
@@ -1200,6 +1268,9 @@ export class ArenaScene {
     });
     this.npcs.update(now, dt, this.camera);
     this.night.update(dt);
+    this.city.update(this.camera.position.x, this.camera.position.z);
+    this.city.updateLights(this.match.lightT ?? 0);
+    this.raidAlert.update(dt, this.camera.position.x, this.camera.position.z, this.camera.rotation.y);
     this.updateWires(dt);
     // tug of war (from my side: +1 = I'm winning)
     const hv = hand ? this.itemViews.get(hand) : undefined;
@@ -1216,7 +1287,7 @@ export class ArenaScene {
     this.matchSounds(dt);
     this.updateLookTarget();
     this.updateUseTarget();
-    this.updatePunchTarget(inv.hand);
+    this.updatePunchTarget(this.activeItem(inv)?.id ?? ""); // (a pocket item out in your hand = a click throws it, no punch prompt)
     this.updatePuffs(dt);
     this.updatePops(dt);
   }
@@ -1224,7 +1295,9 @@ export class ArenaScene {
   /** Throw power 0..1 while winding up (for the HUD), else -1. */
   get throwCharge(): number {
     if (this.robT >= 0) return Math.min(1, this.robT / ROB_TIME);
-    return this.chargeStart ? Math.min(1, (performance.now() - this.chargeStart) / 1000 / CHARGE_TIME) : -1;
+    if (!this.chargeStart) return -1;
+    const a = this.activeItem(this.inventory), t = a ? this.itemTypes.get(a.id) : undefined;
+    return Math.min(1, (performance.now() - this.chargeStart) / 1000 / (t && lootDef(t).size === "giant" ? HEAVE_TIME : CHARGE_TIME));
   }
 
   /** Sounds + one-off effects triggered by movement changes (only for real steps, never replays). */
@@ -1329,7 +1402,16 @@ export class ArenaScene {
   carCount() { return this.cars.count(); }
   carPositions() { return this.cars.positions(); }
 
+  /** Test hook: what the owner sees when a rival walks into their compound at night. */
+  debugRaid(name = "TEST BANDIT") {
+    const f = this.arena.forts?.find((x) => x.slot === this.myColorIdx);
+    sfx.raidAlarm(); sfx.raidSiren(1);
+    if (f) this.raidAlert.start(f.x, f.z, 12);
+    this.onBanner?.(`${name} IS RAIDING YOUR FORT!`, "They're in your compound. Follow the arrow home!", "bad");
+  }
+
   dispose() {
+    this.raidAlert.dispose();
     this.stopChargeTone?.();
     this.input.onAction = null;
     this.input.jailKeys = null;
