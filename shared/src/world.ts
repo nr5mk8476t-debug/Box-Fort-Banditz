@@ -15,12 +15,14 @@ import { sanitizeName } from "./names.js";
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt } from "./arena.js";
-import { PropSystem, PROP_RADIUS, SMASHABLE, type PropEvent } from "./props.js";
+import { fortAt, inDeepWater } from "./arena.js";
+import { PropSystem, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
 import { PoliceSystem, type PoliceEvent } from "./police.js";
 import type { LockRun } from "./lockpick.js";
 
+/** C4a: how far away a pedestrian notices you breaking something (they also need a clear line of sight) */
+export const WITNESS_RANGE = 20;
 export const POCKETS = 3;
 /** 5A.1: selection slot meaning "empty hands / fists" (pockets are 0..2). Keys 1-3 = pockets, 4 = fists. */
 export const FISTS = POCKETS;
@@ -144,6 +146,8 @@ export type WorldEvent =
   | { t: "throw"; p: string; item: string; speed: number }
   | { t: "impact"; item: string; speed: number; x: number; y: number; z: number }
   | { t: "bonk"; item: string; p: string; by: string }
+  // C4a: a loud noise (for sounds / debugging); r = how far it carries
+  | { t: "noise"; p: string; x: number; z: number; r: number }
   | { t: "tumble"; item: string }
   | { t: "spawn"; item: string }
   | { t: "punch"; p: string; hit: "none" | "npc" | "player" | "blocked" | "prop"; target: string }
@@ -167,6 +171,8 @@ export type WorldEvent =
   | { t: "raid"; p: string; owner: string; item: string; x: number; z: number }
   /** C1: a rival walked into your fort's compound at night (the loud alert; "raid" follows when they take something) */
   | { t: "raidEnter"; p: string; owner: string; slot: number; x: number; z: number }
+  /** C1.1: fell in the canal, lost your grip on what you were carrying */
+  | { t: "splash"; p: string; item: string; x: number; z: number }
   | { t: "tug"; item: string; stage: "start" | "win" | "tumble"; winner: string; loser: string }
   | { t: "pawn"; p: string; item: string; r: "up" | "offended" | "sold"; offer: number }
   | { t: "cityEvent"; kind: CityEventKind; stage: "warn" | "live" | "end"; x: number; z: number; detail: string }
@@ -249,6 +255,28 @@ export class World {
     if (n > 0) { p.knownX = p.move.x; p.knownZ = p.move.z; p.crimeT = this.time; this.police.onCrime(p); } // somebody calls it in
   }
 
+  /**
+   * C4a: a loud noise at (x, z) made by player p, heard r metres away: cops who hear it come and look,
+   * pedestrians nearby flinch. (C4b: it will also wake the old lady.)
+   */
+  noise(p: PlayerSim, x: number, z: number, r: number) {
+    this.police.hear(p, x, z, r);
+    this.npc.startle(x, z, r * 0.6);
+    this.emit({ t: "noise", p: p.id, x, z, r });
+  }
+
+  /** C4a: can anybody see this player right now (a cop, a pedestrian, a cashier)? Used for "heat only if seen". */
+  witnessed(p: PlayerSim): boolean {
+    const m = p.move;
+    for (const n of this.npc.npcs.values()) {
+      if (n.state === "ko" || n.kind === "raccoon") continue;
+      const d = Math.hypot(n.move.x - m.x, n.move.z - m.z);
+      if (d > WITNESS_RANGE || Math.abs(n.move.y - m.y) > 6) continue;
+      if (n.kind === "cop" ? this.police.canSee(n, p) : this.police.los(n.move.x, n.move.y + 1.6, n.move.z, m.x, m.y + 1.2, m.z)) return true;
+    }
+    return false;
+  }
+
   /** Teleport a player (jail, release). Keeps what they carry; clears queued inputs. */
   movePlayer(p: PlayerSim, x: number, z: number, yaw: number) {
     const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
@@ -316,7 +344,8 @@ export class World {
       if (keepForts && slot >= 0 && this.match.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; continue; }
       this.items.delete(it.id);
     }
-    if (this.spawnLoot) { this.fillLoot(); this.props.reset(); this.stockShops(true); }
+    if (this.spawnLoot) { this.fillLoot(); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only)
+    else this.props.reset(!keepForts);
     for (const p of this.players.values()) {
       p.hand = ""; p.pockets.fill(""); p.queued = null;
       const sp = this.arena.spawns[p.colorIdx % this.arena.spawns.length];
@@ -601,7 +630,8 @@ export class World {
     // smashable props (phone booths, vending machines, meters, newspaper boxes, parked cars)
     for (const ps of this.props.props.values()) {
       const d = ps.def;
-      if (!SMASHABLE.has(d.kind) || Math.hypot(d.x - m.x, d.z - m.z) > 5) continue;
+      if (!SMASHABLE.has(d.kind) || propSurfaceDist(d, m.x, m.z) > 3) continue;
+      if (BREAKABLE.has(d.kind)) { if (!ps.ready) continue; const n = propNearest(d, m.x, m.z); consider("prop", d.id, n.x, m.y, n.z, 0); continue; } // (C4a: the nearest bit of a bench / shop window)
       consider("prop", d.id, d.x, m.y, d.z, PROP_RADIUS[d.kind]);
     }
     const b = best as { kind: "npc" | "player" | "prop"; id: string; score: number } | null;
@@ -925,6 +955,14 @@ export class World {
     this.traffic.tick(dt);
     this.police.tick(dt);
     this.raidWatch();
+    // C1.1: fall in the canal and whatever's in your hands floats off
+    for (const p of this.players.values()) {
+      if (p.hand && inDeepWater(this.arena, p.move.x, p.move.z, p.move.y)) {
+        const id = p.hand;
+        this.dropHand(p);
+        this.emit({ t: "splash", p: p.id, item: id, x: p.move.x, z: p.move.z });
+      }
+    }
     // (Slice 2A, Blake: shops restock at the start of each scavenge only; a shop you cleaned out stays empty)
     if (this.spawnLoot) {
       this.spawnTimer += dt;
@@ -1011,6 +1049,20 @@ export class World {
       }
       if (res.impact > 2.5) this.emit({ t: "impact", item: it.id, speed: res.impact, x: it.body.x, y: it.body.y, z: it.body.z });
       if (res.outOfBounds) this.respawnItem(it);
+      // C4a: a thrown thing slamming into something smashable counts as the thrower's hit on it
+      if (res.impact > 4 && it.thrownT < 2 && it.lastThrower) {
+        const thrower = this.players.get(it.lastThrower);
+        if (thrower) for (const ps of this.props.props.values()) {
+          const d = ps.def;
+          if (!SMASHABLE.has(d.kind) || (BREAKABLE.has(d.kind) && !ps.ready)) continue;
+          if (propSurfaceDist(d, it.body.x, it.body.z) > def.radius + 0.3) continue;
+          const top = d.box !== undefined ? this.arena.boxes[d.box].y + this.arena.boxes[d.box].h / 2 : 2.2;
+          if (it.body.y > top + def.radius + 0.2) continue;
+          this.props.smash(thrower, d.id);
+          it.thrownT = 2;
+          break;
+        }
+      }
       // thrown items bonk players (a comedy shove; stuns + loot drops may come later)
       const sp = Math.hypot(it.body.vx, it.body.vy, it.body.vz);
       if (sp > 6 && it.thrownT < 2 && it.lastThrower) {
@@ -1051,20 +1103,27 @@ export class World {
   // ------------------------------------------------------------------ loot spawning
   private fillLoot() {
     for (let i = 0; i < this.itemTarget; i++) this.spawnOne();
+    // C4a: street junk back at its spots (chairs by the café tables, lids by the bins, bricks on the building site...)
+    for (const j of this.arena.junkSpots ?? []) {
+      if ([...this.items.values()].some((it) => it.type === j.type && it.mode === "free" && Math.hypot(it.body.x - j.x, it.body.z - j.z) < 0.8)) continue;
+      const id = this.placeItem(j.type, j.x, j.y ?? 0.15, j.z);
+      const it = this.items.get(id);
+      if (it) it.body.rot = j.yaw ?? 0;
+    }
   }
 
   private topUpLoot(n: number) {
     let free = 0;
-    for (const it of this.items.values()) if (it.mode === "free" && it.shop < 0) free++;
+    for (const it of this.items.values()) if (it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk) free++;
     for (let i = 0; i < n && free < this.itemTarget && this.looseCount() < ITEM_MAX; i++, free++) this.spawnOne();
   }
 
   /** Items that aren't shop stock (Slice 2A: shelves are capped separately by SHELF_MAX). */
-  private looseCount() { let n = 0; for (const it of this.items.values()) if (it.shop < 0) n++; return n; }
+  private looseCount() { let n = 0; for (const it of this.items.values()) if (it.shop < 0 && !lootDef(it.type).junk) n++; return n; }
 
   private pickType(zone: LootZone, groundLevel: boolean, allowGiant: boolean): LootDef {
     const boost = ZONE_RARE_BOOST[zone];
-    const pool = LOOT.filter((d) => !d.npcOnly && (d.size !== "giant" || (allowGiant && groundLevel && (zone === "plaza" || zone === "yard"))));
+    const pool = LOOT.filter((d) => !d.npcOnly && !d.junk && (d.size !== "giant" || (allowGiant && groundLevel && (zone === "plaza" || zone === "yard"))));
     let total = 0;
     const w = pool.map((d) => {
       const rareish = d.rarity !== "common" && d.rarity !== "uncommon";

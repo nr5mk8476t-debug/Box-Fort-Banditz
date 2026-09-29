@@ -271,7 +271,8 @@ export class TrafficSystem {
     const opts = l.outs.filter((o) => o !== avoid);
     if (!opts.length) return l.outs[0] ?? -1;
     let total = 0;
-    const wts = opts.map((o) => { const x = this.lanes[o].straight ? 1.6 : 1; total += x; return x; });
+    // (a nudge toward roads that have seen few cars, so traffic spreads over the whole network)
+    const wts = opts.map((o) => { const out = this.lanes[o].outLane; const x = (this.lanes[o].straight ? 1.6 : 1) * (1 + 2 / (1 + (this.laneUse[out] ?? 0))); total += x; return x; });
     let r = this.rnd() * total;
     for (let i = 0; i < opts.length; i++) { r -= wts[i]; if (r <= 0) return opts[i]; }
     return opts[opts.length - 1];

@@ -3,14 +3,14 @@
 // ink outlines, grimy-bright colours, shop signs, parody ads, windows.
 // Performance: static meshes are merged by material, so the whole city is a few dozen draw calls.
 import {
-  Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer,
+  Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer, Vector3, VertexData,
   type ShadowGenerator,
 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured } from "./look.ts";
-import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, type ArenaLayout, type Box } from "@bfb/shared";
+import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, type ArenaLayout, type Box } from "@bfb/shared";
+import { DynamicTexture } from "./babylon.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
 
-const BUILDING_COLORS = [PALETTE.brick, PALETTE.teal, PALETTE.mustard, PALETTE.grape, "#7b6d8d", "#c26b4a", "#5c7a9e", "#8a9a5b"];
 
 const KIND_COLOR: Partial<Record<Box["kind"], string>> = {
   wall: "#b8a38a", crate: PALETTE.cardboard, curb: PALETTE.greyB, "ramp-step": PALETTE.mustard, platform: PALETTE.teal,
@@ -29,7 +29,118 @@ const KIND_COLOR: Partial<Record<Box["kind"], string>> = {
 export const INTERIOR_DRAW_DIST = 42;
 /** Props are drawn by buildProps (static body here, changing parts in PropRenderer). */
 const PROP_BOX_KINDS = new Set<Box["kind"]>(["bin", "phone", "vending", "meter", "newsbox", "car", "statue"]);
-const TOWER_COLORS = ["#5c7a9e", "#7b6d8d", "#3d8f8a", "#8a9a5b", "#a86a4a", "#6b6f86", "#4f6b7a", "#9a7b5c"];
+
+// ---- C2: each tier has its own materials ----
+// low (south): grimy brick; medium: painted render; high (Uptown): stone walls + glass towers
+/** trim (cornices, sills, lintels) per tier */
+const TIER_TRIM = ["#5a3a2e", "#f4ecd8", "#f2eee4"];
+const AWNING_COLORS = [["#d6264a", "#f4f1ea"], ["#2f8f5a", "#f4f1ea"], ["#3d6fb5", "#f4f1ea"], ["#e8a13a", "#6b3a1e"], ["#6b4c9a", "#ffe14a"], ["#1b1420", "#ff8fa3"]];
+
+const inRectXZ = (r: { minX: number; maxX: number; minZ: number; maxZ: number }, x: number, z: number) => x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
+
+function shade(hex: string, f: number): string {
+  const c = Color3.FromHexString(hex);
+  const k = (v: number) => Math.max(0, Math.min(1, f < 0 ? v * (1 + f) : v + (1 - v) * f));
+  return new Color3(k(c.r), k(c.g), k(c.b)).toHexString();
+}
+
+function canvasTexture(scene: Scene, size: number, draw: (c: CanvasRenderingContext2D, r: () => number) => void, scale = 1): Texture {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = size * scale;
+  const c = cv.getContext("2d")!;
+  c.clearRect(0, 0, size * scale, size * scale);
+  c.scale(scale, scale);
+  let seed = size + 17;
+  draw(c, () => ((seed = (seed * 16807) % 2147483647) / 2147483647));
+  const t = new Texture(cv.toDataURL(), scene);
+  t.hasAlpha = true;
+  return t;
+}
+
+/** Low tier: brick courses drawn as see-through mortar lines over the wall's own colour (1 tile = 2 x 2 m). */
+function brickTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    const rowH = 16, brickW = 42;
+    for (let y = 0; y < 256; y += rowH) {
+      const off = (y / rowH) % 2 ? brickW / 2 : 0;
+      for (let x = -brickW; x < 256 + brickW; x += brickW) {
+        const v = r();
+        if (v < 0.22) { c.fillStyle = "rgba(0,0,0,0.16)"; c.fillRect(x + off + 2, y + 2, brickW - 3, rowH - 3); }
+        else if (v > 0.9) { c.fillStyle = "rgba(255,230,200,0.12)"; c.fillRect(x + off + 2, y + 2, brickW - 3, rowH - 3); }
+        c.fillStyle = "rgba(30,20,30,0.32)";
+        c.fillRect(x + off, y, 2, rowH);
+      }
+      c.fillStyle = "rgba(30,20,30,0.32)";
+      c.fillRect(0, y, 256, 2);
+    }
+    // soot streaks running down
+    for (let i = 0; i < 5; i++) { const g = c.createLinearGradient(0, 0, 0, 256); g.addColorStop(0, "rgba(20,15,25,0.18)"); g.addColorStop(1, "rgba(20,15,25,0)"); c.fillStyle = g; c.fillRect(r() * 240, 0, 6 + r() * 12, 120 + r() * 136); }
+  });
+}
+
+/** Medium tier: painted render with damp stains and hairline cracks (1 tile = 4 x 4 m). */
+function renderTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let i = 0; i < 26; i++) {
+      const x = r() * 256, y = r() * 256, rad = 6 + r() * 26;
+      const g = c.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, `rgba(60,40,40,${0.05 + r() * 0.07})`); g.addColorStop(1, "rgba(60,40,40,0)");
+      c.fillStyle = g; c.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+    c.strokeStyle = "rgba(40,30,40,0.35)"; c.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) { let x = r() * 256, y = r() * 256; c.beginPath(); c.moveTo(x, y); for (let j = 0; j < 5; j++) { x += (r() - 0.5) * 22; y += 6 + r() * 10; c.lineTo(x, y); } c.stroke(); }
+  });
+}
+
+/** High tier: dressed stone blocks (1 tile = 3 x 3 m). */
+function stoneTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let y = 0; y < 256; y += 64) {
+      const off = (y / 64) % 2 ? 64 : 0;
+      c.fillStyle = "rgba(60,50,60,0.22)"; c.fillRect(0, y, 256, 2);
+      for (let x = off; x < 256; x += 128) c.fillRect(x, y, 2, 64);
+      if (r() > 0.6) { c.fillStyle = "rgba(255,255,255,0.05)"; c.fillRect(off + 4, y + 4, 120, 56); }
+    }
+  });
+}
+
+/** High tier: glass curtain wall for towers (one pane per 1.6 x 2.2 m cell, like the windows). */
+function curtainTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const g = c.createLinearGradient(i * 64, j * 64, i * 64 + 64, j * 64 + 64);
+      const lit = r();
+      g.addColorStop(0, lit > 0.7 ? "#d9f4ff" : "#8fc4dc"); g.addColorStop(1, lit > 0.85 ? "#ffe9a8" : "#4f7f9e");
+      c.fillStyle = g; c.fillRect(i * 64, j * 64, 64, 64);
+      c.fillStyle = "rgba(255,255,255,0.35)"; c.beginPath(); c.moveTo(i * 64 + 8, j * 64 + 60); c.lineTo(i * 64 + 22, j * 64 + 60); c.lineTo(i * 64 + 52, j * 64 + 4); c.lineTo(i * 64 + 38, j * 64 + 4); c.fill();
+    }
+    c.fillStyle = "#2b3040";
+    for (let k = 0; k <= 256; k += 64) { c.fillRect(k - 3, 0, 6, 256); c.fillRect(0, k - 4, 256, 8); }
+  }, 2);
+}
+
+/** A shopfront bay (4 m wide, 3 m tall): two big display windows either side of a door. */
+function shopfrontTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    c.fillStyle = "#2b2433"; c.fillRect(0, 64, 256, 192);               // frame (the texture's top quarter is left empty)
+    const pane = (x: number, w: number) => {
+      const g = c.createLinearGradient(x, 80, x + w, 240);
+      g.addColorStop(0, "#bfe8ff"); g.addColorStop(1, "#5f8fae");
+      c.fillStyle = g; c.fillRect(x, 78, w, 150);
+      c.fillStyle = "rgba(255,255,255,0.45)"; c.beginPath(); c.moveTo(x + 8, 220); c.lineTo(x + 26, 220); c.lineTo(x + w - 10, 86); c.lineTo(x + w - 28, 86); c.fill();
+      // goods on display
+      const cols = ["#e14b4b", "#ffcf3a", "#43c7a6", "#ff8fa3", "#f4f1ea", "#6b4c9a"];
+      for (let k = 0; k < 4; k++) { c.fillStyle = cols[Math.floor(r() * cols.length)]; const bw = 10 + r() * 14, bh = 12 + r() * 22; c.fillRect(x + 8 + k * (w - 16) / 4, 226 - bh, bw, bh); }
+      c.fillStyle = "#2b2433"; c.fillRect(x, 190, w, 4); // shelf line
+    };
+    pane(10, 86); pane(160, 86);
+    c.fillStyle = "#6b3a1e"; c.fillRect(104, 92, 48, 164);                // door
+    c.fillStyle = "#9fe3ff"; c.fillRect(112, 102, 32, 58);
+    c.fillStyle = "#ffcf3a"; c.fillRect(140, 176, 7, 5);                   // handle
+    c.fillStyle = "#1b1420"; c.fillRect(0, 238, 256, 18);                  // kick plate
+  }, 2);
+}
+
 
 function hash(x: number, z: number) {
   const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
@@ -81,7 +192,17 @@ export class CityRenderer {
   /** textured interior planes (posters): toggled with their building */
   private unitPlanes = new Map<number, Mesh[]>();
 
-  constructor(private scene: Scene, private arena: ArenaLayout, private shadows: ShadowGenerator | null) {
+  /** C2: façade planes, one merged mesh per material */
+  private planes = { windows: [] as Mesh[], curtain: [] as Mesh[], brick: [] as Mesh[], render: [] as Mesh[], stone: [] as Mesh[], front: [] as Mesh[] };
+  /** C2: shop signs share a few big textures (one draw call per sheet instead of one per sign) */
+  private atlasSigns: { mesh: Mesh; text: string; bg: string }[] = [];
+  /** C2: small modelled façade detail (sills, fire escapes, awning stripes...); off in Performance mode */
+  readonly detail: boolean;
+  /** C2: how many façade detail pieces were built (perf tests) */
+  detailPieces = 0;
+
+  constructor(private scene: Scene, private arena: ArenaLayout, private shadows: ShadowGenerator | null, opts: { detail?: boolean } = {}) {
+    this.detail = opts.detail ?? true;
     this.root = new TransformNode("city", scene);
     this.buildGround();
     const winMat = new StandardMaterial("windows", scene);
@@ -95,7 +216,12 @@ export class CityRenderer {
     const windowPlanes: Mesh[] = [];
     const glassPanes: Mesh[] = [];
 
-    for (const b of arena.boxes) {
+    // C4a: which boxes are breakable props (their pieces are tagged so they can vanish when smashed)
+    const brkOfBox = new Map<number, string>();
+    for (const pd of arena.props ?? []) if (pd.box !== undefined) brkOfBox.set(pd.box, pd.id);
+    for (let bi = 0; bi < arena.boxes.length; bi++) {
+      const b = arena.boxes[bi];
+      this.brk = brkOfBox.get(bi) ?? "";
       if (b.kind === "fort") continue; // forts drawn separately (they will evolve in Phase 7)
       if (PROP_BOX_KINDS.has(b.kind)) continue;
       this.group = b.unit ?? -1;
@@ -103,28 +229,33 @@ export class CityRenderer {
         // Slice 2A: big see-through shop windows (they still block you)
         const g = MeshBuilder.CreateBox("glass", { width: b.w, height: b.h, depth: b.d }, scene);
         g.position.set(b.x, b.y, b.z);
+        if (this.brk) g.metadata = { brk: this.brk };
         glassPanes.push(g);
         const sill = MeshBuilder.CreateBox("sill", { width: b.w + 0.06, height: 0.35, depth: b.d + 0.1 }, scene);
         sill.position.set(b.x, b.y - b.h / 2 + 0.175, b.z);
         this.add(sill, "#3a3444", 0.02);
         continue;
       }
-      const color = b.color ?? (b.kind === "building" ? BUILDING_COLORS[Math.floor(hash(b.x, b.z) * BUILDING_COLORS.length)]
-        : b.kind === "tower" ? TOWER_COLORS[Math.floor(hash(b.z, b.x) * TOWER_COLORS.length)] : KIND_COLOR[b.kind] ?? PALETTE.greyA);
+      const tier = tierAt(b.z);
+      const color = b.color ?? (b.kind === "building" ? TIER_WALLS[tier][Math.floor(hash(b.x, b.z) * TIER_WALLS[tier].length)]
+        : b.kind === "tower" ? TIER_TOWERS[tier][Math.floor(hash(b.z, b.x) * TIER_TOWERS[tier].length)] : KIND_COLOR[b.kind] ?? PALETTE.greyA);
       if (b.kind === "tree") { this.tree(b); continue; }
       if (b.kind === "bars") { this.bars(b, color); continue; }
       const m = MeshBuilder.CreateBox("b", { width: b.w, height: b.h, depth: b.d }, scene);
       m.position.set(b.x, b.y, b.z);
       const flat = b.kind === "sidewalk" || b.kind === "curb" || b.kind === "plaza" || b.kind === "shopfloor";
       this.add(m, color, flat ? (b.kind === "shopfloor" ? 0 : 0.02) : b.kind === "tower" ? 0.08 : 0.05, !flat);
-      if ((b.kind === "building" || b.kind === "tower") && b.windows) windowPlanes.push(...this.windows(b));
+      if ((b.kind === "building" || b.kind === "tower") && b.windows) this.facade(b, color, tier);
       if (b.sign) this.sign(b);
       this.details(b);
     }
     this.group = -1;
+    this.brk = "";
     if (glassPanes.length) {
+      const ranges = this.rangesOf(glassPanes);
       const merged = Mesh.MergeMeshes(glassPanes, true, true);
       if (merged) {
+        this.trackRanges(merged, ranges);
         const gm = new StandardMaterial("shopGlass", scene);
         gm.diffuseColor = Color3.FromHexString("#9fe3ff"); gm.emissiveColor = Color3.FromHexString("#2a5a70");
         gm.specularColor = Color3.FromHexString("#ffffff"); gm.alpha = 0.28; gm.backFaceCulling = false;
@@ -136,10 +267,27 @@ export class CityRenderer {
     this.buildShops();
     this.buildDecor();
     this.buildScenery();
-    if (windowPlanes.length) {
-      const merged = Mesh.MergeMeshes(windowPlanes, true, true);
-      if (merged) { merged.material = winMat; merged.parent = this.root; merged.isPickable = false; }
+    this.buildPark();
+    this.planes.windows.push(...windowPlanes);
+    const planeMat = (name: string, tex: Texture, zo: number) => {
+      const m = new StandardMaterial(name, scene);
+      m.diffuseTexture = tex; m.emissiveTexture = tex; m.disableLighting = true;
+      m.useAlphaFromDiffuseTexture = true; m.backFaceCulling = false;
+      m.zOffset = zo; m.zOffsetUnits = zo * 2;
+      return m;
+    };
+    const mats: Record<keyof CityRenderer["planes"], StandardMaterial> = {
+      windows: winMat, curtain: planeMat("curtainWall", curtainTexture(scene), -2), front: planeMat("shopfront", shopfrontTexture(scene), -2),
+      brick: planeMat("brickWall", brickTexture(scene), -1), render: planeMat("renderWall", renderTexture(scene), -1), stone: planeMat("stoneWall", stoneTexture(scene), -1),
+    };
+    for (const k of Object.keys(this.planes) as (keyof CityRenderer["planes"])[]) {
+      const list = this.planes[k];
+      for (let i = 0; i < list.length; i += 1500) {
+        const merged = Mesh.MergeMeshes(list.slice(i, i + 1500), true, true);
+        if (merged) { merged.material = mats[k]; merged.parent = this.root; merged.isPickable = false; merged.freezeWorldMatrix(); }
+      }
     }
+    this.buildSignAtlas();
     this.buildForts();
     this.buildAds();
     this.flush();
@@ -148,10 +296,57 @@ export class CityRenderer {
   /** Queue a static mesh for merging (grouped by colour). */
   private add(m: Mesh, color: string, outline = 0.04, castShadow = true) {
     if (this.group >= 0) castShadow = false; // interiors: no shadow casting (they're drawn on and off)
+    if (this.brk) { m.metadata = { brk: this.brk }; castShadow = false; } // (C4a: breakables: the shadow map is drawn once)
     const key = color + "|" + outline + "|" + (castShadow ? 1 : 0) + "|" + this.group;
     (this.byMaterial.get(key) ?? this.byMaterial.set(key, []).get(key)!).push(m);
     m.isPickable = false;
   }
+
+  /** C4a: the breakable prop whose pieces are being built right now ("" = none) */
+  private brk = "";
+  /** C4a: where each breakable's vertices sit inside the merged city meshes (so a smash can hide them) */
+  private brkRanges = new Map<string, { mesh: Mesh; start: number; count: number }[]>();
+  private brkPos = new Map<Mesh, { pos: Float32Array; orig: Float32Array }>();
+  private brkBroken = new Set<string>();
+
+  /** vertex ranges of tagged meshes, in merge order */
+  private rangesOf(meshes: Mesh[]): { brk: string; start: number; count: number }[] {
+    const out: { brk: string; start: number; count: number }[] = [];
+    let v = 0;
+    for (const m of meshes) {
+      const n = m.getTotalVertices();
+      const b = (m.metadata as { brk?: string } | null)?.brk;
+      if (b) out.push({ brk: b, start: v, count: n });
+      v += n;
+    }
+    return out;
+  }
+  private trackRanges(merged: Mesh, ranges: { brk: string; start: number; count: number }[]) {
+    if (!ranges.length) return;
+    const pos = merged.getVerticesData(VertexBuffer.PositionKind);
+    if (!pos) return;
+    const arr = new Float32Array(pos);
+    merged.setVerticesData(VertexBuffer.PositionKind, arr, true); // (updatable: smashed pieces get collapsed)
+    this.brkPos.set(merged, { pos: arr, orig: new Float32Array(arr) });
+    for (const r of ranges) (this.brkRanges.get(r.brk) ?? this.brkRanges.set(r.brk, []).get(r.brk)!).push({ mesh: merged, start: r.start, count: r.count });
+  }
+
+  /** C4a: hide (smashed) or show (repaired at dawn) a breakable's pieces. */
+  setBroken(propId: string, broken: boolean) {
+    if (this.brkBroken.has(propId) === broken) return;
+    if (broken) this.brkBroken.add(propId); else this.brkBroken.delete(propId);
+    const touched = new Set<Mesh>();
+    for (const r of this.brkRanges.get(propId) ?? []) {
+      const st = this.brkPos.get(r.mesh);
+      if (!st) continue;
+      const a = r.start * 3, e = (r.start + r.count) * 3;
+      if (broken) { for (let k = a; k < e; k += 3) { st.pos[k] = st.orig[a]; st.pos[k + 1] = -5; st.pos[k + 2] = st.orig[a + 2]; } }
+      else st.pos.set(st.orig.subarray(a, e), a);
+      touched.add(r.mesh);
+    }
+    for (const m of touched) m.updateVerticesData(VertexBuffer.PositionKind, this.brkPos.get(m)!.pos);
+  }
+  get brokenCount() { return this.brkBroken.size; }
 
   /**
    * Merge everything queued so far. Colours are baked into vertex colours, so the whole static
@@ -177,8 +372,10 @@ export class CityRenderer {
       // MergeMeshes needs 32-bit indices for big batches; split very large groups to stay friendly to older GPUs
       for (let i = 0; i < meshes.length; i += 400) {
         const chunk = meshes.slice(i, i + 400);
+        const ranges = this.rangesOf(chunk);
         const merged = chunk.length > 1 ? Mesh.MergeMeshes(chunk, true, true) : chunk[0];
         if (!merged) continue;
+        this.trackRanges(merged, ranges);
         merged.parent = this.root;
         merged.material = toon(this.scene, "#ffffff", "cityvc");
         merged.useVertexColors = true;
@@ -211,7 +408,22 @@ export class CityRenderer {
 
   /** Slice 2A: the pond (you can wade in it). */
   private buildWater() {
+    // C1.1: the deep canal (dark, no lily pads; the water sits a bit lower than the pond's)
+    for (const r of this.arena.deepWater ?? []) {
+      const w = MeshBuilder.CreateGround("canal", { width: r.maxX - r.minX, height: r.maxZ - r.minZ }, this.scene);
+      w.position.set((r.minX + r.maxX) / 2, 0.3, (r.minZ + r.maxZ) / 2);
+      const m = new StandardMaterial("canalMat", this.scene);
+      m.diffuseColor = Color3.FromHexString("#2f6f9a"); m.emissiveColor = Color3.FromHexString("#0f2f45");
+      m.specularColor = Color3.FromHexString("#ffffff"); m.alpha = 0.85;
+      w.material = m; w.parent = this.root; w.isPickable = false;
+      const bed = MeshBuilder.CreateGround("canalbed", { width: r.maxX - r.minX, height: r.maxZ - r.minZ }, this.scene);
+      bed.position.set((r.minX + r.maxX) / 2, 0.02, (r.minZ + r.maxZ) / 2);
+      this.add(bed, "#1f3a4a", 0, false);
+    }
+    const shape = this.arena.pondShape ?? [];
+    const inShape = (r: { minX: number; maxX: number; minZ: number; maxZ: number }) => shape.some((c) => Math.hypot((r.minX + r.maxX) / 2 - c.x, (r.minZ + r.maxZ) / 2 - c.z) < c.r + 0.5);
     for (const r of this.arena.water ?? []) {
+      if (inShape(r)) continue; // (C3: the pear-shaped pond is drawn from its real shape in buildPark)
       const w = MeshBuilder.CreateGround("pond", { width: r.maxX - r.minX, height: r.maxZ - r.minZ }, this.scene);
       w.position.set((r.minX + r.maxX) / 2, 0.38, (r.minZ + r.maxZ) / 2);
       const m = new StandardMaterial("pondMat", this.scene);
@@ -222,7 +434,7 @@ export class CityRenderer {
       bed.position.set((r.minX + r.maxX) / 2, 0.16, (r.minZ + r.maxZ) / 2);
       this.add(bed, "#2f5a4a", 0, false);
       // lily pads (the pond, not the canal)
-      if ((r.maxX - r.minX) * (r.maxZ - r.minZ) > 300) continue;
+      if ((r.maxX - r.minX) * (r.maxZ - r.minZ) > 300 || inRectXZ(r, 0, 0)) continue; // (no lily pads in the canal or the fountain)
       for (let i = 0; i < 5; i++) {
         const pad = MeshBuilder.CreateCylinder("lily", { diameter: 0.6 + hash(i, r.minX) * 0.4, height: 0.02, tessellation: 10 }, this.scene);
         pad.position.set(r.minX + 1 + hash(i, 3) * (r.maxX - r.minX - 2), 0.4, r.minZ + 1 + hash(7, i) * (r.maxZ - r.minZ - 2));
@@ -255,30 +467,175 @@ export class CityRenderer {
 
   }
 
-  /** Window planes on all four sides of a building (UVs scaled so windows are a constant size). */
-  private windows(b: Box): Mesh[] {
-    const out: Mesh[] = [];
-    const top = b.y + b.h / 2;
-    const grounded = b.y - b.h / 2 < 0.5;
-    const h = b.kind === "tower" && grounded ? b.h - 5.2 : b.h - 1.2; // towers: lobby band at street level
-    if (h < 1.5) return out;
-    const cy = top - 0.5 - h / 2;
-    const faces: [number, number, number, number, number][] = [
-      // x, z, rotY, width, offset axis
-      [b.x, b.z - b.d / 2 - WIN_OFF, 0, b.w - 1, 0],
-      [b.x, b.z + b.d / 2 + WIN_OFF, Math.PI, b.w - 1, 0],
-      [b.x - b.w / 2 - WIN_OFF, b.z, Math.PI / 2, b.d - 1, 0],
-      [b.x + b.w / 2 + WIN_OFF, b.z, -Math.PI / 2, b.d - 1, 0],
-    ];
-    for (const [x, z, ry, w] of faces) {
-      if (w < 1.5) continue;
-      const p = MeshBuilder.CreatePlane("win", { width: w, height: h }, this.scene);
-      p.position.set(x, cy, z);
-      p.rotation.y = ry;
-      scaleUVs(p, Math.max(1, Math.round(w / 1.6)) / 4, Math.max(1, Math.round(h / 2.2)) / 4);
-      out.push(p);
+  /**
+   * C2: a building's façades. Every face gets its tier's wall material (brick / render / stone) and
+   * windows (glass curtain walls on Uptown towers). The street face of a shop gets a shopfront, an
+   * awning and a fascia sign; towers get a lobby. Small modelled detail (sills, lintels, pilasters,
+   * fire escapes, balconies, window AC units, cornices, roof clutter) is skipped in Performance mode.
+   * All of it is looks only: nothing here changes what you collide with.
+   */
+  private facade(b: Box, color: string, tier: number) {
+    const sc = this.scene;
+    const top = b.y + b.h / 2, bottom = b.y - b.h / 2;
+    const grounded = bottom < 0.5;
+    const tower = b.kind === "tower";
+    const thin = Math.min(b.w, b.d) < 2.5; // (upstairs room walls in walk-in shops)
+    const fx = b.face ? Math.round(b.face[0]) : 0, fz = b.face ? Math.round(b.face[1]) : 0;
+    // Uptown towers are glass, except landmark towers built in stone (the Mayor's tower)
+    const glass = tier === 2 && tower && (!!b.front || !!b.sign);
+    const H = (k: number) => hash(b.x * 1.3 + k * 7.1, b.z * 0.7 - k * 3.3);
+    const trim = tier === 0 ? shade(color, -0.35) : TIER_TRIM[tier];
+    const detail = this.detail && b.unit === undefined && !thin;
+    const piece = (m: Mesh, col: string, outline = 0.02, cast = false) => { this.add(m, col, outline, cast); this.detailPieces++; return m; };
+    const faces: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    for (const [nx, nz] of faces) {
+      const fw = nx ? b.d : b.w;
+      if (fw < 1.5) continue;
+      const street = nx === fx && nz === fz && (fx !== 0 || fz !== 0);
+      const ry = Math.atan2(-nx, -nz);
+      const ax = Math.cos(ry), az = -Math.sin(ry);            // along the face (the plane's local x)
+      const wx = b.x + nx * (b.w / 2), wz = b.z + nz * (b.d / 2); // centre of the wall surface
+      const at = (m: Mesh, along: number, y: number, out: number) => { m.position.set(wx + ax * along + nx * out, y, wz + az * along + nz * out); m.rotation.y = ry; return m; };
+      const shop = street && grounded && b.front === "shop";
+      const lobby = street && grounded && b.front === "lobby";
+      // a landmark's main entrance (glass doors in the middle of its signed face)
+      const entrance = street && grounded && !b.front && !!b.sign && b.h >= 6 && fw >= 6;
+      // ---- wall material ----
+      if (!thin && !glass) {
+        const tile = tier === 0 ? 2 : tier === 1 ? 4 : 3;
+        const p = at(MeshBuilder.CreatePlane("wallmat", { width: fw, height: b.h }, sc), 0, b.y, 0.12);
+        scaleUVs(p, fw / tile, b.h / tile);
+        (tier === 0 ? this.planes.brick : tier === 1 ? this.planes.render : this.planes.stone).push(p);
+      }
+      // ---- windows ----
+      const winBottom = shop || entrance ? bottom + 4.8 : tower && grounded ? bottom + 4.7 : bottom + 0.7;
+      const winTop = top - 0.5;
+      const ph = winTop - winBottom, pw = fw - 1;
+      let rows = 0, rowH = 0, cols = 0, cellW = 0;
+      if (ph >= 1.5 && pw >= 1.5) {
+        rows = Math.max(1, Math.round(ph / 2.2)); rowH = ph / rows;
+        cols = Math.max(1, Math.round(pw / 1.6)); cellW = pw / cols;
+        const p = at(MeshBuilder.CreatePlane("win", { width: pw, height: ph }, sc), 0, (winTop + winBottom) / 2, WIN_OFF);
+        scaleUVs(p, cols / 4, rows / 4);
+        (glass ? this.planes.curtain : this.planes.windows).push(p);
+      }
+      // ---- shopfront / lobby glazing ----
+      if (entrance) {
+        const ew = Math.min(fw - 2, 8);
+        const p = at(MeshBuilder.CreatePlane("entrance", { width: ew, height: 3 }, sc), 0, 1.75, 0.2);
+        scaleUVs(p, Math.max(1, Math.round(ew / 4)), 0.75);
+        this.planes.front.push(p);
+      }
+      if ((shop || lobby) && fw >= 3) {
+        const bays = Math.max(1, Math.round((fw - 0.8) / 4));
+        const p = at(MeshBuilder.CreatePlane("front", { width: fw - 0.8, height: 3 }, sc), 0, 1.75, lobby ? 0.27 : 0.2);
+        scaleUVs(p, bays, 0.75);
+        this.planes.front.push(p);
+      }
+      if (!detail) continue;
+      // ---- awning over a shop (striped) / canopy over a tower lobby ----
+      if (shop && fw >= 3) {
+        const aw = Math.min(fw - 0.6, 8), [c1, c2] = AWNING_COLORS[Math.floor(H(1) * AWNING_COLORS.length)];
+        const slope = 0.36, depth = 1.35;
+        const base = at(MeshBuilder.CreateBox("awning", { width: aw, height: 0.08, depth }, sc), 0, 3.45 - Math.sin(slope) * depth / 2, depth / 2 + 0.05);
+        base.rotation.x = slope; piece(base, c1, 0.025);
+        const n = Math.floor(aw / 0.7);
+        for (let i = 1; i < n; i += 2) {
+          const st = at(MeshBuilder.CreateBox("stripe", { width: aw / n, height: 0.02, depth: depth - 0.02 }, sc), -aw / 2 + (i + 0.5) * aw / n, 3.45 - Math.sin(slope) * depth / 2 + 0.05, depth / 2 + 0.05);
+          st.rotation.x = slope; piece(st, c2, 0);
+        }
+        piece(at(MeshBuilder.CreateBox("valance", { width: aw, height: 0.3, depth: 0.05 }, sc), 0, 3.45 - Math.sin(slope) * depth - 0.1, depth + 0.02), c1, 0.02);
+      }
+      if (lobby && fw >= 5) {
+        const cw = Math.min(fw * 0.5, 7);
+        piece(at(MeshBuilder.CreateBox("canopy", { width: cw, height: 0.3, depth: 2.4 }, sc), 0, 4.35, 1.3), tier === 2 ? "#2b2433" : trim, 0.03);
+        if (tier === 2) piece(at(MeshBuilder.CreateBox("canopytrim", { width: cw + 0.06, height: 0.1, depth: 2.46 }, sc), 0, 4.2, 1.3), "#d9a632", 0);
+        for (const sx of [-1, 1]) piece(at(MeshBuilder.CreateCylinder("canopypost", { diameter: 0.14, height: 4.2, tessellation: 6 }, sc), sx * (cw / 2 - 0.3), 2.1, 2.3), "#3a3444", 0.015);
+      }
+      // ---- per-window trim on the street face (and the back of low-tier buildings) ----
+      const trimFace = street || (tier === 0 && !tower && nx === -fx && nz === -fz);
+      if (rows && trimFace && !tower) {
+        for (let i = 0; i < rows; i++) {
+          const cellTop = winTop - i * rowH;
+          const sillY = cellTop - (54 / 64) * rowH - 0.05, lintY = cellTop - (12 / 64) * rowH + 0.08;
+          for (let c = 0; c < cols; c++) {
+            const along = -pw / 2 + (c + 0.5) * cellW;
+            piece(at(MeshBuilder.CreateBox("sill", { width: cellW * 0.62, height: 0.1, depth: 0.36 }, sc), along, sillY, 0.18), trim, 0.012);
+            if (tier === 1) piece(at(MeshBuilder.CreateBox("lintel", { width: cellW * 0.66, height: 0.16, depth: 0.32 }, sc), along, lintY, 0.16), trim, 0.012);
+            // window AC units hanging out of the cheap flats
+            if (tier === 0 && H(i * 31 + c) < 0.14 && sillY > 3) piece(at(MeshBuilder.CreateBox("winac", { width: 0.7, height: 0.45, depth: 0.5 }, sc), along, sillY + 0.3, 0.45), "#c8c4cc", 0.02);
+            // flower boxes in the middle tier
+            if (tier === 1 && H(i * 17 + c + 5) < 0.18) {
+              piece(at(MeshBuilder.CreateBox("flowerbox", { width: cellW * 0.6, height: 0.22, depth: 0.3 }, sc), along, sillY + 0.14, 0.34), "#8b5a2b", 0.012);
+              piece(at(MeshBuilder.CreateBox("flowers", { width: cellW * 0.55, height: 0.16, depth: 0.24 }, sc), along, sillY + 0.3, 0.34), H(c + i) > 0.5 ? "#ff8fa3" : "#ffe14a", 0);
+            }
+          }
+        }
+      }
+      // ---- belt courses on towers (every 4th floor) ----
+      if (rows && tower) for (let i = 4; i < rows; i += 4) piece(at(MeshBuilder.CreateBox("belt", { width: fw + 0.3, height: 0.22, depth: 0.4 }, sc), 0, winTop - i * rowH, 0.2), tier === 2 ? "#e8e2d4" : trim, 0.015);
+      // ---- pilasters at the corners of middle-tier fronts ----
+      if (street && tier === 1 && !tower && b.h > 4) for (const sx of [-1, 1]) piece(at(MeshBuilder.CreateBox("pilaster", { width: 0.45, height: b.h - 0.6, depth: 0.32 }, sc), sx * (fw / 2 - 0.22), bottom + (b.h - 0.6) / 2, 0.16), trim, 0.02);
+      // ---- fire escape (low + middle tier street fronts, 3+ floors) ----
+      if (street && tier < 2 && !tower && rows >= 2 && cols >= 2 && H(9) < 0.5) {
+        const c0 = Math.floor(H(10) * (cols - 1));
+        const along = -pw / 2 + (c0 + 1) * cellW, span = Math.min(cellW * 2 + 0.4, 3.4);
+        const iron = "#2b2433";
+        let prevY = -1;
+        for (let i = rows - 1; i >= 0; i--) {
+          const y = winTop - i * rowH - (54 / 64) * rowH - 0.12;
+          if (y < 4.2) continue;
+          piece(at(MeshBuilder.CreateBox("fe-deck", { width: span, height: 0.08, depth: 1.0 }, sc), along, y, 0.62), iron, 0.012);
+          piece(at(MeshBuilder.CreateBox("fe-rail", { width: span, height: 0.06, depth: 0.06 }, sc), along, y + 0.9, 1.1), iron, 0.008);
+          for (const sx of [-1, 1]) piece(at(MeshBuilder.CreateBox("fe-post", { width: 0.06, height: 0.9, depth: 0.06 }, sc), along + sx * span / 2, y + 0.45, 1.1), iron, 0.008);
+          if (prevY > 0) {
+            const run = y - prevY, st = at(MeshBuilder.CreateBox("fe-stair", { width: 0.55, height: 0.06, depth: Math.hypot(run, span * 0.7) }, sc), along, (y + prevY) / 2, 0.7);
+            st.rotation.set(Math.atan2(run, span * 0.7), ry + Math.PI / 2 * (i % 2 ? 1 : -1), 0);
+            piece(st, iron, 0.008);
+          } else {
+            // the drop ladder that stops out of reach (climbing comes in C6)
+            for (const sx of [-0.22, 0.22]) piece(at(MeshBuilder.CreateBox("fe-ladder", { width: 0.05, height: 2.2, depth: 0.05 }, sc), along + span / 2 - 0.4 + sx, y - 1.1, 1.05), iron, 0.006);
+          }
+          prevY = y;
+        }
+      }
+      // ---- balconies (middle + high tier) ----
+      if (street && tier >= 1 && !tower && rows >= 2 && H(11) < (tier === 2 ? 0.6 : 0.3)) {
+        for (let i = 0; i < rows - 1; i++) {
+          if (H(i + 40) < 0.4) continue;
+          const y = winTop - i * rowH - (54 / 64) * rowH - 0.1, c0 = Math.floor(H(i + 50) * cols), along = -pw / 2 + (c0 + 0.5) * cellW;
+          if (y < 4.2) continue;
+          piece(at(MeshBuilder.CreateBox("balcony", { width: cellW * 1.1, height: 0.14, depth: 0.9 }, sc), along, y, 0.47), trim, 0.015);
+          const rail = tier === 2 ? "#d9a632" : "#2b2433";
+          piece(at(MeshBuilder.CreateBox("balcrail", { width: cellW * 1.1, height: 0.06, depth: 0.06 }, sc), along, y + 0.9, 0.88), rail, 0.008);
+          for (const sx of [-1, 0, 1]) piece(at(MeshBuilder.CreateBox("baluster", { width: 0.05, height: 0.85, depth: 0.05 }, sc), along + sx * cellW * 0.52, y + 0.47, 0.88), rail, 0.006);
+        }
+      }
     }
-    return out;
+    if (b.sign) this.landmark(b, color);
+    if (!detail) return;
+    // ---- cornice round the top (not on towers: they have a parapet) ----
+    if (!tower && b.h > 3) piece((() => { const m = MeshBuilder.CreateBox("cornice", { width: b.w + 0.5, height: 0.45, depth: b.d + 0.5 }, sc); m.position.set(b.x, top - 0.28, b.z); return m; })(), trim, 0.03);
+    // ---- roof clutter on roofs you can't reach (low roofs stay clear: rooftop loot lives there) ----
+    if (!tower && b.h >= 9) {
+      if (H(20) < 0.45) {
+        const tx = b.x + (H(21) - 0.5) * b.w * 0.4, tz = b.z + (H(22) - 0.5) * b.d * 0.4;
+        const tank = MeshBuilder.CreateCylinder("tank", { diameter: 2, height: 1.9, tessellation: 12 }, sc); tank.position.set(tx, top + 1.6, tz); piece(tank, "#8b5a2b", 0.04);
+        const cone = MeshBuilder.CreateCylinder("tankroof", { diameterTop: 0, diameterBottom: 2.2, height: 0.7, tessellation: 12 }, sc); cone.position.set(tx, top + 2.9, tz); piece(cone, "#5a3a24", 0.03);
+        for (const [lx, lz] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) { const leg = MeshBuilder.CreateBox("tankleg", { width: 0.12, height: 0.7, depth: 0.12 }, sc); leg.position.set(tx + lx, top + 0.35, tz + lz); piece(leg, "#3a3444", 0.015); }
+      }
+      if (H(23) < 0.7) { const ac = MeshBuilder.CreateBox("ac", { width: 1.4, height: 0.9, depth: 1.1 }, sc); ac.position.set(b.x - b.w * 0.2, top + 0.45, b.z + b.d * 0.15); piece(ac, "#c8c4cc", 0.03); }
+    }
+    // ---- Uptown tower crowns: a setback and, on the tallest, a mast ----
+    if (tower && tier === 2 && b.h > 30 && Math.min(b.w, b.d) > 5) {
+      const crown = MeshBuilder.CreateBox("crown", { width: b.w * 0.62, height: 4.5, depth: b.d * 0.62 }, sc);
+      crown.position.set(b.x, top + 2.85, b.z); piece(crown, shade(color, -0.2), 0.05);
+      if (b.h > 45) {
+        const mast = MeshBuilder.CreateCylinder("mast", { diameterTop: 0.12, diameterBottom: 0.4, height: 9, tessellation: 6 }, sc);
+        mast.position.set(b.x, top + 9.6, b.z); piece(mast, "#c8c4cc", 0.02);
+        const tip = MeshBuilder.CreateSphere("masttip", { diameter: 0.5, segments: 4 }, sc); tip.position.set(b.x, top + 14.2, b.z); piece(tip, "#ff3a3a", 0);
+      }
+    }
   }
 
   /** Jail-cell bars: vertical rods with rails top, middle and bottom (you can see through them). */
@@ -309,22 +666,153 @@ export class CityRenderer {
     const len = nx ? b.d : b.w;
     const top = b.y + b.h / 2;
     let w = Math.min(len * 0.8, 7);
+    if (b.front === "shop") w = Math.min(len - 0.8, 5.2); // C2: fascia sign above the shopfront
     if (b.kind === "board") w = 0.9;
     if (b.face && b.kind === "wall" && b.h > 3) w = 5;
     else if (b.face && b.kind === "wall") w = Math.min(w, (b.h + 0.3) / 0.22);
     const p = MeshBuilder.CreatePlane("sign", { width: w, height: w * (b.kind === "board" ? 0.9 : 0.22) }, this.scene);
-    const y = b.kind === "board" ? 0.6 : b.face && b.kind === "building" ? top - 0.9 : b.face && b.kind !== "truck" ? b.y : b.kind === "truck" ? 2.55 : b.kind === "roof" ? top - 0.9 : b.kind === "tower" ? 5.5 : b.kind === "plinth" ? 0.6 : Math.min(top - 0.6, 2.9);
+    const y = b.front === "shop" ? Math.min(4.05, top - 0.5 - w * 0.11) : b.kind === "board" ? 0.6 : b.face && b.kind === "building" ? top - 0.9 : b.face && b.kind !== "truck" ? b.y : b.kind === "truck" ? 2.55 : b.kind === "roof" ? top - 0.9 : b.kind === "tower" ? 5.5 : b.kind === "plinth" ? 0.6 : Math.min(top - 0.6, 2.9);
     const off = b.kind === "board" || b.kind === "plinth" ? 0.03 : b.kind === "truck" ? 0.12 : 0.34;
     p.position.set(b.x + nx * (b.w / 2 + off), y, b.z + nz * (b.d / 2 + off)); // in front of the window planes
     p.rotation.y = Math.atan2(-nx, -nz);
     const bg = ["#f3e2b8", "#ffe14a", "#43c7a6", "#ff8fa3", "#9fe3ff"][Math.floor(hash(b.x, b.z) * 5)];
-    p.material = b.kind === "board"
-      ? unlitTextured(this.scene, textTexture(this.scene, b.sign!, { w: 256, h: 230, bg: "#2b2433", fg: "#f4f1ea" }), "boardMat")
-      : unlitTextured(this.scene, textTexture(this.scene, b.sign!, { w: 1024, h: 220, bg, fg: "#1b1420" }), "signMat");
+    p.isPickable = false;
+    if (b.kind !== "board") { this.atlasSigns.push({ mesh: p, text: b.sign!, bg }); return; } // C2: drawn on a shared sheet
+    p.material = unlitTextured(this.scene, textTexture(this.scene, b.sign!, { w: 256, h: 230, bg: "#2b2433", fg: "#f4f1ea" }), "boardMat");
     p.material.zOffset = -4; p.material.zOffsetUnits = -8; // beats the (biased) windows behind it
     ink(p, 0.05);
     p.parent = this.root;
-    p.isPickable = false;
+  }
+
+  /**
+   * C2: the landmarks' own features (always drawn, even in Performance mode: they're how you find
+   * your way). Looks only, like the rest of the façades.
+   */
+  private landmark(b: Box, color: string) {
+    const sc = this.scene, top = b.y + b.h / 2, name = b.sign ?? "";
+    const fx = b.face ? Math.round(b.face[0]) : 0, fz = b.face ? Math.round(b.face[1]) : -1;
+    const fw = fx ? b.d : b.w;
+    const ry = Math.atan2(-fx, -fz), ax = Math.cos(ry), az = -Math.sin(ry);
+    const wx = b.x + fx * (b.w / 2), wz = b.z + fz * (b.d / 2);
+    const put = <M extends Mesh>(m: M, along: number, y: number, out: number, col: string, outline = 0.03): M => {
+      m.position.set(wx + ax * along + fx * out, y, wz + az * along + fz * out); m.rotation.y = ry; this.add(m, col, outline, false); return m;
+    };
+    const roof = <M extends Mesh>(m: M, dx: number, y: number, dz: number, col: string, outline = 0.03): M => { m.position.set(b.x + dx, y, b.z + dz); this.add(m, col, outline, false); return m; };
+    const prism = (w: number, h: number, d: number) => { const m = MeshBuilder.CreateCylinder("pediment", { diameter: 1, height: 1, tessellation: 3 }, sc); m.scaling.set(h, w, d); m.rotation.z = Math.PI / 2; m.bakeCurrentTransformIntoVertices(); return m; };
+    const bulbs = (from: number, to: number, y: number, out: number, step = 0.7) => { for (let t = from; t <= to; t += step) put(MeshBuilder.CreateSphere("bulb", { diameter: 0.22, segments: 3 }, sc), t, y, out, "#fff2a8", 0); };
+    const flag = (along: number, y: number, col: string) => {
+      put(MeshBuilder.CreateCylinder("flagpole", { diameter: 0.08, height: 2.6, tessellation: 5 }, sc), along, y, 1.1, "#c8c4cc", 0.01).rotation.x = 0.9;
+      put(MeshBuilder.CreateBox("flag", { width: 0.05, height: 0.9, depth: 1.3 }, sc), along, y + 0.55, 2.3, col, 0.015);
+    };
+    if (name === "TRASHINGTON CITY HALL") {
+      // a pediment over the columns, gold trim, flags on the roof
+      put(MeshBuilder.CreateBox("entablature", { width: 17, height: 0.9, depth: 1.6 }, sc), 0, 10.45, 0.6, "#f4f1ea");
+      const ped = prism(17, 2.4, 1.4); put(ped, 0, 12.1, 0.6, "#f4f1ea");
+      put(MeshBuilder.CreateBox("goldband", { width: 18.2, height: 0.25, depth: 0.2 }, sc), 0, 9.9, 0.3, "#d9a632", 0.01);
+      for (const x of [-7, 7]) { roof(MeshBuilder.CreateCylinder("pole", { diameter: 0.12, height: 5, tessellation: 5 }, sc), x, top + 2.5, 1, "#c8c4cc", 0.01); roof(MeshBuilder.CreateBox("rflag", { width: 1.8, height: 1.1, depth: 0.05 }, sc), x + 0.95, top + 4.4, 1, x < 0 ? "#d6264a" : "#3d6fb5", 0.015); }
+    } else if (name === "GRAND HOTEL") {
+      put(MeshBuilder.CreateBox("carpetcanopy", { width: 4, height: 0.35, depth: 4 }, sc), 0, 4.3, 2, "#8a1f2e");
+      put(MeshBuilder.CreateBox("canopygold", { width: 4.1, height: 0.12, depth: 4.1 }, sc), 0, 4.1, 2, "#d9a632", 0);
+      for (const x of [-1.8, 1.8]) put(MeshBuilder.CreateCylinder("canopypost", { diameter: 0.16, height: 4.1, tessellation: 6 }, sc), x, 2.05, 3.9, "#d9a632", 0.015);
+      for (const x of [-3, 0, 3]) flag(x, 7, x === 0 ? "#d9a632" : "#8a1f2e");
+      roof(MeshBuilder.CreateBox("crownband", { width: b.w + 0.4, height: 1.2, depth: b.d + 0.4 }, sc), 0, top - 0.6, 0, "#d9a632", 0.03);
+    } else if (name === "TRASHCORP HQ") {
+      // a giant green trash can on the roof (the company logo)
+      roof(MeshBuilder.CreateCylinder("logocan", { diameterTop: 4.6, diameterBottom: 3.6, height: 5, tessellation: 14 }, sc), 0, top + 3.2, 0, "#3f8f4f", 0.06);
+      roof(MeshBuilder.CreateCylinder("logolid", { diameter: 5.2, height: 0.5, tessellation: 14 }, sc), 0, top + 6, 0, "#2f6f3f", 0.05).rotation.z = 0.25;
+      roof(MeshBuilder.CreateBox("logobase", { width: 5, height: 0.7, depth: 5 }, sc), 0, top + 0.35, 0, "#2b2433", 0.04);
+    } else if (name === "LUCKY DUMPSTER CASINO") {
+      bulbs(-5.2, 5.2, 4.5, 1.45, 0.65); bulbs(-5.2, 5.2, 5.05, 1.45, 0.65);
+      bulbs(-b.w / 2 + 0.3, b.w / 2 - 0.3, top - 0.2, 0.25, 0.8);
+      const dice = (x: number, r: number) => { const d = roof(MeshBuilder.CreateBox("dice", { size: 2.4 }, sc), x, top + 1.4, 0, "#f4f1ea", 0.05); d.rotation.set(r, r * 1.3, 0); };
+      dice(-3, 0.3); dice(3, -0.5);
+    } else if (name === "MUSEUM OF OLD STUFF") {
+      put(MeshBuilder.CreateBox("entablature", { width: 11, height: 0.8, depth: 1.8 }, sc), 0, 9.4, 0.7, "#f4f1ea");
+      put(prism(11, 2, 1.6), 0, 10.8, 0.7, "#f4f1ea");
+      put(MeshBuilder.CreateBox("frieze", { width: b.w, height: 0.5, depth: 0.25 }, sc), 0, top - 1.2, 0.12, "#d9a632", 0.01);
+    } else if (name.startsWith("LUXURY MALL")) {
+      ["#1b1420", "#d9a632", "#e8e2d4", "#d6264a"].forEach((col, i) => put(MeshBuilder.CreateBox("banner", { width: 1.6, height: 6, depth: 0.08 }, sc), -6.75 + i * 4.5, 9.5, 0.45, col, 0.02));
+      put(MeshBuilder.CreateBox("arcade", { width: b.w - 2, height: 0.4, depth: 3 }, sc), 0, 4.4, 1.5, "#e8e2d4");
+    } else if (name.startsWith("TRASHINGTON COUNTRY CLUB")) {
+      put(MeshBuilder.CreateBox("clubawning", { width: 6, height: 0.2, depth: 2.2 }, sc), 0, 3.3, 1.1, "#2f6f3f");
+      for (const x of [-4, 4]) { put(MeshBuilder.CreateSphere("topiary", { diameter: 1.4, segments: 6 }, sc), x, 1.3, 0.9, "#4f8a3a", 0.03); put(MeshBuilder.CreateBox("topiarypot", { size: 0.8 }, sc), x, 0.4, 0.9, "#e8e2d4", 0.02); }
+    } else if (name === "THE GILDED PIGEON RESIDENCES") {
+      roof(MeshBuilder.CreateBox("goldcrown", { width: b.w + 0.5, height: 1.4, depth: b.d + 0.5 }, sc), 0, top - 0.7, 0, "#d9a632", 0.03);
+      // a golden pigeon on the roof, very proud of itself
+      roof(MeshBuilder.CreateSphere("pigeonbody", { diameterX: 3, diameterY: 2.6, diameterZ: 4.4, segments: 8 }, sc), 0, top + 1.8, 0, "#e8b83a", 0.05);
+      roof(MeshBuilder.CreateSphere("pigeonhead", { diameter: 1.6, segments: 8 }, sc), 0, top + 3.6, -1.6, "#e8b83a", 0.04);
+      const beak = roof(MeshBuilder.CreateCylinder("pigeonbeak", { diameterTop: 0, diameterBottom: 0.5, height: 0.8, tessellation: 6 }, sc), 0, top + 3.5, -2.6, "#ff9a3c", 0.02); beak.rotation.x = -Math.PI / 2;
+    } else if (name === "MARKET ROW HALL") {
+      // a barrel roof: a long cylinder half sunk into the building (the hidden half is inside the walls)
+      const arch = roof(MeshBuilder.CreateCylinder("hallroof", { diameter: Math.min(b.d * 0.8, 2 * b.h - 1), height: b.w - 1, tessellation: 18 }, sc), 0, top, 0, "#8a4a3a", 0.05);
+      arch.rotation.z = Math.PI / 2;
+    } else if (name.startsWith("THE BIJOU")) {
+      put(MeshBuilder.CreateBox("marquee", { width: 9, height: 1.4, depth: 2.4 }, sc), 0, 4.2, 1.2, "#2b2433");
+      bulbs(-4.3, 4.3, 3.45, 2.42, 0.6); bulbs(-4.3, 4.3, 4.95, 2.42, 0.6);
+    } else if (name === "ST. DUMPSTER'S") {
+      // a steeple on the bell tower beside it (the tower box sits at -71, 32) and a round window
+      const st = MeshBuilder.CreateCylinder("steeple", { diameterTop: 0, diameterBottom: 5.4, height: 7, tessellation: 4 }, sc);
+      st.position.set(-71, 29.5, 32); st.rotation.y = Math.PI / 4; this.add(st, "#5a5163", 0.04, false);
+      const cross = MeshBuilder.CreateBox("cross", { width: 0.2, height: 1.6, depth: 0.2 }, sc); cross.position.set(-71, 33.8, 32); this.add(cross, "#d9a632", 0.01, false);
+      const disc = MeshBuilder.CreateCylinder("rosewin", { diameter: 3, height: 0.15, tessellation: 16 }, sc);
+      put(disc, 0, 7, 0.3, "#9f5fd6", 0.03).rotation.set(Math.PI / 2, ry, 0);
+    } else if (name === "TRASHINGTON GRAND STATION") {
+      for (const t of [-11, -5.5, 0, 5.5, 11]) {
+        put(MeshBuilder.CreateBox("archrecess", { width: 3.4, height: 5.5, depth: 0.2 }, sc), t, 3.1, 0.3, "#2b2433", 0.02);
+        const a = MeshBuilder.CreateCylinder("archtop", { diameter: 3.4, height: 0.22, tessellation: 12, arc: 0.5 }, sc); a.rotation.x = Math.PI / 2;
+        put(a, t, 5.85, 0.3, "#2b2433", 0.02).rotation.set(Math.PI / 2, ry, 0);
+      }
+    } else if (name === "MARINA OFFICE") {
+      put(MeshBuilder.CreateTorus("lifebuoy", { diameter: 1.1, thickness: 0.22, tessellation: 12 }, sc), 0.9, 1.9, 0.2, "#ff5a3c", 0.02).rotation.set(Math.PI / 2, ry, 0);
+      put(MeshBuilder.CreateBox("navystripe", { width: fw, height: 0.3, depth: 0.1 }, sc), 0, 2.7, 0.08, "#f4f1ea", 0);
+    }
+  }
+
+  /**
+   * C2: every shop sign is drawn onto a few shared 2048 x 2048 sheets (72 signs a sheet, 512 x 112 each)
+   * and the sign planes are merged per sheet: ~5 draw calls for ~300 signs, and a fraction of the
+   * texture memory one texture per sign used.
+   */
+  private buildSignAtlas() {
+    const CW = 512, CH = 112, SZ = 2048, PER_ROW = SZ / CW, PER_SHEET = PER_ROW * Math.floor(SZ / CH);
+    for (let s0 = 0; s0 < this.atlasSigns.length; s0 += PER_SHEET) {
+      const batch = this.atlasSigns.slice(s0, s0 + PER_SHEET);
+      const tex = new DynamicTexture("signSheet" + s0, { width: SZ, height: SZ }, this.scene, true);
+      const c = tex.getContext() as unknown as CanvasRenderingContext2D;
+      c.clearRect(0, 0, SZ, SZ);
+      batch.forEach((sg, i) => {
+        const x0 = (i % PER_ROW) * CW, y0 = Math.floor(i / PER_ROW) * CH;
+        c.fillStyle = sg.bg; c.fillRect(x0, y0, CW, CH);
+        c.strokeStyle = "#1b1420"; c.lineWidth = 6; c.strokeRect(x0 + 3, y0 + 3, CW - 6, CH - 6);
+        let size = Math.floor(CH * 0.6);
+        const font = (px: number) => `bold ${px}px "Bungee", "Arial Black", sans-serif`;
+        c.font = font(size);
+        while (size > 10 && c.measureText(sg.text).width > CW * 0.9) { size -= 2; c.font = font(size); }
+        c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#1b1420";
+        c.fillText(sg.text, x0 + CW / 2, y0 + CH / 2 + CH * 0.04);
+        // point the plane's UVs at its cell (the texture is flipped: canvas top = v 1)
+        const uv = sg.mesh.getVerticesData(VertexBuffer.UVKind);
+        if (uv) {
+          for (let k = 0; k < uv.length; k += 2) {
+            uv[k] = (x0 + uv[k] * CW) / SZ;
+            uv[k + 1] = 1 - (y0 + (1 - uv[k + 1]) * CH) / SZ;
+          }
+          sg.mesh.setVerticesData(VertexBuffer.UVKind, uv);
+        }
+      });
+      tex.update();
+      const merged = Mesh.MergeMeshes(batch.map((b) => b.mesh), true, true);
+      if (!merged) continue;
+      const m = unlitTextured(this.scene, tex, "signSheet");
+      m.useAlphaFromDiffuseTexture = false;
+      m.zOffset = -4; m.zOffsetUnits = -8;
+      merged.material = m;
+      ink(merged, 0.05);
+      merged.parent = this.root;
+      merged.isPickable = false;
+      merged.freezeWorldMatrix();
+    }
+    this.atlasSigns = [];
   }
 
   private details(b: Box) {
@@ -335,12 +823,13 @@ export class CityRenderer {
       const par = MeshBuilder.CreateBox("parapet", { width: b.w + 0.4, height: 0.6, depth: b.d + 0.4 }, sc);
       par.position.set(b.x, top + 0.3, b.z);
       this.add(par, "#4a4652", 0.05);
-      for (let i = 0; i < 3; i++) {
+      const crowned = this.detail && tierAt(b.z) === 2 && b.h > 30 && Math.min(b.w, b.d) > 5 && b.unit === undefined;
+      for (let i = 0; i < (crowned ? 0 : 3); i++) {
         const ac = MeshBuilder.CreateBox("ac", { width: 1.6, height: 1.0, depth: 1.2 }, sc);
         ac.position.set(b.x - b.w / 4 + i * 1.9 * (hash(b.x, i) > 0.5 ? 1 : -0.5), top + 0.5, b.z + (hash(i, b.z) - 0.5) * b.d * 0.5);
         this.add(ac, "#c8c4cc", 0.04);
       }
-      if (hash(b.x + 3, b.z) > 0.5) {
+      if (!crowned && hash(b.x + 3, b.z) > 0.5) {
         const tank = MeshBuilder.CreateCylinder("tank", { diameter: 2.4, height: 2.2, tessellation: 12 }, sc);
         tank.position.set(b.x + b.w / 4, top + 2.4, b.z - b.d / 4);
         this.add(tank, "#8b5a2b", 0.05);
@@ -357,7 +846,7 @@ export class CityRenderer {
       if (b.y - b.h / 2 > 0.5) return;
       const band = MeshBuilder.CreateBox("lobby", { width: b.w + 0.1, height: 4, depth: b.d + 0.1 }, sc);
       band.position.set(b.x, 2.15, b.z);
-      this.add(band, "#3a3444", 0.05);
+      this.add(band, tierAt(b.z) === 2 ? "#d8d0c4" : "#3a3444", 0.05); // (C2: polished stone base Uptown)
     } else if (b.kind === "shelf") {
       // products on three shelf levels
       const long = b.d > b.w;
@@ -601,12 +1090,20 @@ export class CityRenderer {
       // Phase 3: painted yard boundary. Loot resting inside it banks for this fort after 10 s.
       const z = f.zone;
       const w = z.maxX - z.minX, d = z.maxZ - z.minZ, cx = (z.minX + z.maxX) / 2, cz = (z.minZ + z.maxZ) / 2;
-      for (const [x, zz, sw, sd] of [[cx, z.minZ, w, 0.22], [cx, z.maxZ, w, 0.22], [z.minX, cz, 0.22, d], [z.maxX, cz, 0.22, d]]) {
+      // (C1.1: bold, on top of Tent Town's ground, with a flag post at each corner: your safe zone)
+      for (const [x, zz, sw, sd] of [[cx, z.minZ, w + 0.5, 0.5], [cx, z.maxZ, w + 0.5, 0.5], [z.minX, cz, 0.5, d], [z.maxX, cz, 0.5, d]]) {
         const line = MeshBuilder.CreateBox("yardline", { width: sw, height: 0.03, depth: sd }, this.scene);
-        line.position.set(x, 0.035, zz);
+        line.position.set(x, 0.17, zz);
         line.material = toon(this.scene, color, "yard");
         line.isPickable = false;
         line.parent = this.root;
+      }
+      for (const [x, zz] of [[z.minX, z.minZ], [z.maxX, z.minZ], [z.minX, z.maxZ], [z.maxX, z.maxZ]]) {
+        const post = MeshBuilder.CreateCylinder("yardpost", { diameter: 0.1, height: 1.8, tessellation: 6 }, this.scene);
+        post.position.set(x, 1.05, zz); post.material = toon(this.scene, "#3a3444"); post.parent = this.root; post.isPickable = false;
+        const flag = MeshBuilder.CreateBox("yardflag", { width: 0.5, height: 0.32, depth: 0.03 }, this.scene);
+        flag.position.set(x + (x < cx ? 0.27 : -0.27), 1.78, zz); flag.material = toon(this.scene, color, "yard"); flag.parent = this.root; flag.isPickable = false;
+        ink(flag, 0.015);
       }
     }
   }
@@ -671,19 +1168,136 @@ export class CityRenderer {
         }
       }
     }
-    // Slice 2A: the plaza statue is the Mayor of Trashington (a pompous gent in a top hat, for now)
+    // C3: the Golden Mayor of Trashington sits on a golden toilet on top of his column, reading the paper
     const st = this.arena.boxes.find((b) => b.kind === "statue");
     if (st) {
-      const base = st.y - st.h / 2, gold = "#d9a632";
-      const legs = MB.CreateBox("stlegs", { width: 0.7, height: 1.0, depth: 0.4 }, sc); legs.position.set(st.x, base + 0.5, st.z);
-      const body = MB.CreateSphere("stbody", { diameter: 1.15, segments: 10 }, sc); body.position.set(st.x, base + 1.45, st.z); body.scaling.set(1, 1.15, 0.85);
-      const head = MB.CreateSphere("sthead", { diameter: 0.62, segments: 10 }, sc); head.position.set(st.x, base + 2.25, st.z);
-      const brim = MB.CreateCylinder("stbrim", { diameter: 0.85, height: 0.06, tessellation: 12 }, sc); brim.position.set(st.x, base + 2.52, st.z);
-      const hat = MB.CreateCylinder("sthat", { diameter: 0.5, height: 0.55, tessellation: 12 }, sc); hat.position.set(st.x, base + 2.82, st.z);
-      const arm = MB.CreateCylinder("starm", { diameter: 0.2, height: 0.9, tessellation: 8 }, sc); arm.position.set(st.x + 0.55, base + 1.9, st.z - 0.1); arm.rotation.z = -2.3;
-      for (const m of [legs, body, head, brim, hat, arm]) this.add(m, gold, 0.04);
+      const base = st.y - st.h / 2, gold = "#d9a632", x = st.x, z = st.z;
+      const bowl = MB.CreateCylinder("loobowl", { diameterTop: 1.25, diameterBottom: 0.8, height: 0.75, tessellation: 16 }, sc); bowl.position.set(x, base + 0.38, z);
+      const seat = MB.CreateTorus("looseat", { diameter: 1.1, thickness: 0.16, tessellation: 16 }, sc); seat.position.set(x, base + 0.78, z);
+      const tank = MB.CreateBox("lootank", { width: 1.1, height: 0.95, depth: 0.42 }, sc); tank.position.set(x, base + 1.2, z + 0.62);
+      const lid = MB.CreateBox("lootanklid", { width: 1.2, height: 0.1, depth: 0.5 }, sc); lid.position.set(x, base + 1.72, z + 0.62);
+      const flush = MB.CreateBox("looflush", { width: 0.22, height: 0.06, depth: 0.08 }, sc); flush.position.set(x + 0.4, base + 1.55, z + 0.4);
+      const body = MB.CreateSphere("stbody", { diameter: 1.05, segments: 10 }, sc); body.position.set(x, base + 1.35, z + 0.05); body.scaling.set(1, 1.1, 0.85);
+      const head = MB.CreateSphere("sthead", { diameter: 0.58, segments: 10 }, sc); head.position.set(x, base + 2.12, z);
+      const brim = MB.CreateCylinder("stbrim", { diameter: 0.8, height: 0.06, tessellation: 12 }, sc); brim.position.set(x, base + 2.38, z);
+      const hat = MB.CreateCylinder("sthat", { diameter: 0.46, height: 0.5, tessellation: 12 }, sc); hat.position.set(x, base + 2.65, z);
+      const thighs = MB.CreateBox("stthighs", { width: 0.7, height: 0.3, depth: 0.8 }, sc); thighs.position.set(x, base + 0.95, z - 0.4);
+      const shins = MB.CreateBox("stshins", { width: 0.7, height: 0.8, depth: 0.28 }, sc); shins.position.set(x, base + 0.5, z - 0.72);
+      const paper = MB.CreateBox("stpaper", { width: 1.0, height: 0.7, depth: 0.04 }, sc); paper.position.set(x, base + 1.45, z - 0.55); paper.rotation.x = -0.35;
+      for (const m of [bowl, tank]) this.add(m, "#f4f1ea", 0.04); // (white porcelain, gold fittings, a golden Mayor)
+      for (const m of [seat, lid, flush, body, head, brim, hat, thighs, shins]) this.add(m, gold, 0.04);
+      this.add(paper, "#f4f1ea", 0.03);
     }
   }
+
+  /** C3: the park's pond (its real pear shape), bushes, the shark fin and the pigeons. */
+  private fin: Mesh | null = null;
+  private pigeons: { mesh: TransformNode; hx: number; hz: number; x: number; z: number; y: number; vx: number; vy: number; vz: number; flee: number; peck: number }[] = [];
+  private buildPark() {
+    const sc = this.scene, MB = MeshBuilder;
+    const shape = this.arena.pondShape ?? [];
+    if (shape.length) {
+      const waterMat = new StandardMaterial("pearPond", sc);
+      waterMat.diffuseColor = Color3.FromHexString("#3f8fc9"); waterMat.emissiveColor = Color3.FromHexString("#0e2a40");
+      waterMat.specularColor = Color3.FromHexString("#ffffff"); waterMat.alpha = 0.82; waterMat.backFaceCulling = false;
+      // the outline of the pear, marched out from the middle in every direction (the shape is star-shaped from there)
+      const cx = shape.reduce((a, c) => a + c.x, 0) / shape.length, cz = shape.reduce((a, c) => a + c.z, 0) / shape.length;
+      const inside = (x: number, z: number) => shape.some((c) => Math.hypot(x - c.x, z - c.z) < c.r);
+      const outline: [number, number][] = [];
+      for (let k = 0; k < 96; k++) {
+        const t = (k / 96) * Math.PI * 2, dx = Math.cos(t), dz = Math.sin(t);
+        let lo = 0, hi = 12;
+        for (let it = 0; it < 24; it++) { const m = (lo + hi) / 2; if (inside(cx + dx * m, cz + dz * m)) lo = m; else hi = m; }
+        outline.push([cx + dx * lo, cz + dz * lo]);
+      }
+      // one flat fan for the water (overlapping discs would show a darker seam) and one for the bed
+      const fan = (name: string, y: number) => {
+        const m = new Mesh(name, sc), vd = new VertexData();
+        const pos = [cx, y, cz], idx: number[] = [], nor = [0, 1, 0], uv = [0.5, 0.5];
+        outline.forEach(([x, z]) => { pos.push(x, y, z); nor.push(0, 1, 0); uv.push((x - cx) / 20 + 0.5, (z - cz) / 20 + 0.5); });
+        for (let k = 0; k < outline.length; k++) idx.push(0, 1 + k, 1 + ((k + 1) % outline.length));
+        vd.positions = pos; vd.indices = idx; vd.normals = nor; vd.uvs = uv; vd.applyToMesh(m); // (uvs: it's merged with meshes that have them)
+        return m;
+      };
+      const water = fan("pondwater", 0.3);
+      water.material = waterMat; water.parent = this.root; water.isPickable = false;
+      this.add(fan("pondbed", 0.1), "#2f5a4a", 0, false);
+      // the stone rim along the outline
+      const path = [...outline, outline[0]].map(([x, z]) => new Vector3(x, 0.2, z));
+      const rim = MB.CreateTube("pondrim", { path, radius: 0.22, tessellation: 8, cap: 0 }, sc);
+      this.add(rim, "#9aa3b5", 0.02, false);
+      // a shark fin circling in the big end (probably cardboard)
+      const fin = MB.CreateCylinder("sharkfin", { diameterTop: 0, diameterBottom: 0.7, height: 0.7, tessellation: 3 }, sc);
+      fin.scaling.set(0.25, 1, 1); fin.material = toon(sc, "#6f7a91"); ink(fin, 0.02); fin.parent = this.root; fin.isPickable = false;
+      this.fin = fin;
+    }
+    // bushes: clumps of round shrubs (walk into them, crouch, and you're hidden)
+    for (const r of this.arena.bushes ?? []) {
+      const x = (r.minX + r.maxX) / 2, z = (r.minZ + r.maxZ) / 2, w = r.maxX - r.minX;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + hash(x, z), rr = i === 0 ? 0 : w * 0.28;
+        const b = MB.CreateSphere("bush", { diameter: w * (i === 0 ? 0.75 : 0.55), segments: 7 }, sc);
+        b.position.set(x + Math.cos(a) * rr, 0.55 + (i === 0 ? 0.25 : 0), z + Math.sin(a) * rr); b.scaling.y = 0.8;
+        this.add(b, i % 2 ? "#3f7a3a" : "#4f8a3a", 0.03, false);
+      }
+    }
+    // pigeons round the fountain (just for looks: every screen has its own flock)
+    const pigeonBody = toon(sc, "#8a94a8"), pigeonHead = toon(sc, "#5a6478");
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + hash(i, 3), r = 4.5 + hash(i, 9) * 3;
+      const hx = Math.cos(a) * r, hz = Math.sin(a) * r;
+      if (shape.some((c) => Math.hypot(hx - c.x, hz - c.z) < c.r + 1)) continue;
+      const node = new TransformNode("pigeon", sc); node.parent = this.root;
+      const body = MB.CreateSphere("pbody", { diameterX: 0.22, diameterY: 0.2, diameterZ: 0.32, segments: 6 }, sc); body.material = pigeonBody; body.parent = node; body.position.y = 0.13;
+      const head = MB.CreateSphere("phead", { diameter: 0.13, segments: 6 }, sc); head.material = pigeonHead; head.parent = node; head.position.set(0, 0.26, 0.14);
+      for (const m of [body, head]) { ink(m, 0.012); m.isPickable = false; }
+      node.position.set(hx, 0, hz); node.rotation.y = hash(i, 5) * 6.28;
+      this.pigeons.push({ mesh: node, hx, hz, x: hx, z: hz, y: 0, vx: 0, vy: 0, vz: 0, flee: 0, peck: hash(i, 7) * 3 });
+    }
+  }
+
+  /** C3: pigeons scatter when someone comes close (walking: 2.5 m, running: 6 m), then drift back. */
+  updatePark(dt: number, threats: { x: number; z: number; speed: number }[]) {
+    const t = performance.now() / 1000;
+    if (this.fin) {
+      const c = (this.arena.pondShape ?? [])[0];
+      const a = t * 0.6;
+      this.fin.position.set(c.x + Math.cos(a) * c.r * 0.55, 0.45 + Math.sin(t * 3) * 0.04, c.z + Math.sin(a) * c.r * 0.55);
+      this.fin.rotation.y = -a;
+    }
+    for (const p of this.pigeons) {
+      if (p.flee <= 0) {
+        for (const th of threats) {
+          const d = Math.hypot(th.x - p.x, th.z - p.z);
+          if (d < (th.speed > 6 ? 6 : 2.5)) {
+            const ax = (p.x - th.x) / (d || 1), az = (p.z - th.z) / (d || 1);
+            p.vx = ax * 5 + (Math.random() - 0.5) * 2; p.vz = az * 5 + (Math.random() - 0.5) * 2; p.vy = 3 + Math.random() * 1.5;
+            p.flee = 6 + Math.random() * 4;
+            this.scatters++;
+            break;
+          }
+        }
+      }
+      if (p.flee > 0) {
+        p.flee -= dt;
+        p.x += p.vx * dt; p.z += p.vz * dt; p.y = Math.min(9, p.y + p.vy * dt);
+        if (p.flee <= 0) { p.x = p.hx + (Math.random() - 0.5); p.z = p.hz + (Math.random() - 0.5); p.y = 0; } // (they come back when nobody's looking)
+        p.mesh.rotation.y = Math.atan2(p.vx, p.vz);
+        p.mesh.rotation.z = Math.sin(t * 30) * 0.3; // (flapping)
+      } else {
+        p.mesh.rotation.z = 0;
+        p.peck -= dt;
+        if (p.peck < 0) { p.peck = 1 + Math.random() * 3; p.mesh.rotation.y += (Math.random() - 0.5) * 1.5; }
+      }
+      p.mesh.position.set(p.x, p.y, p.z);
+      const head = p.mesh.getChildMeshes(true)[1];
+      if (head) head.position.y = p.flee <= 0 && p.peck < 0.3 ? 0.16 : 0.26;
+    }
+  }
+  /** C3: how many times a pigeon took off (tests) */
+  scatters = 0;
+  get pigeonCount() { return this.pigeons.length; }
+  get pigeonsFlying() { return this.pigeons.filter((p) => p.flee > 0).length; }
 
   /** Slice 2A: per-building extras: awning, neon OPEN sign, posters and ceiling lights inside. */
   private buildShops() {
@@ -825,6 +1439,14 @@ export class CityRenderer {
           const sl = MB.CreateBox("sleeper", { width: 2.2, height: 0.08, depth: 0.28 }, sc);
           sl.position.set(d.x, 0.17, d.z + t); this.add(sl, "#6b4a2b", 0, false);
         }
+      } else if (d.kind === "lamp") {
+        // C3: an old-fashioned park lamp
+        const pole = MB.CreateCylinder("parklamp", { diameterTop: 0.1, diameterBottom: 0.18, height: 3.4, tessellation: 8 }, sc);
+        pole.position.set(d.x, 1.7, d.z); this.add(pole, "#2b3a2b", 0.015, false);
+        const globe = MB.CreateSphere("parkglobe", { diameter: 0.5, segments: 8 }, sc);
+        globe.position.set(d.x, 3.6, d.z); this.add(globe, "#fff2b0", 0.015, false);
+        const cap = MB.CreateCylinder("parklampcap", { diameterTop: 0.05, diameterBottom: 0.5, height: 0.25, tessellation: 8 }, sc);
+        cap.position.set(d.x, 3.95, d.z); this.add(cap, "#2b3a2b", 0.01, false);
       } else if (d.kind === "light") {
         const yaw = d.yaw ?? 0, fx = Math.sin(yaw), fz = Math.cos(yaw);
         const pole = MB.CreateCylinder("tlpole", { diameter: 0.16, height: 4.2, tessellation: 8 }, sc);
@@ -841,6 +1463,17 @@ export class CityRenderer {
         };
         const lamp = { node: d.node ?? 0, approach: d.approach ?? 0, red: mk("r", 4.4), amber: mk("a", 4.0), green: mk("g", 3.6), state: "" };
         this.lamps.push(lamp);
+      } else if (d.kind === "ladder") {
+        // two rails and rungs down the quay wall (the way out of the canal)
+        const yaw = d.yaw ?? 0, rx = Math.cos(yaw), rz = -Math.sin(yaw);
+        for (const s of [-0.35, 0.35]) {
+          const rail = MB.CreateBox("ladrail", { width: 0.06, height: 1.5, depth: 0.06 }, sc);
+          rail.position.set(d.x + rx * s, 0.6, d.z + rz * s); this.add(rail, "#d9a632", 0.01);
+        }
+        for (let y = 0.2; y < 1.3; y += 0.3) {
+          const rung = MB.CreateBox("ladrung", { width: Math.abs(rx) > 0.5 ? 0.7 : 0.05, height: 0.05, depth: Math.abs(rx) > 0.5 ? 0.05 : 0.7 }, sc);
+          rung.position.set(d.x, y, d.z); this.add(rung, "#d9a632", 0.01);
+        }
       } else if (d.kind === "clock") {
         const face = MB.CreatePlane("clock", { width: 4, height: 4 }, sc);
         face.position.set(d.x + Math.sin(d.yaw ?? 0) * 0.05, d.h ?? 20, d.z + Math.cos(d.yaw ?? 0) * 0.05);

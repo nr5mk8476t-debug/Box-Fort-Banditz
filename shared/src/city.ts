@@ -24,7 +24,7 @@
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
 import {
-  box, tierAt, type Box, type ArenaLayout, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
+  box, tierAt, inRect, type Box, type ArenaLayout, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
   type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef,
 } from "./arena.js";
 
@@ -40,8 +40,9 @@ export const UNIT = {
 };
 /** The roundabout round the park: lane centre radius, road surface r0..r1, and no buildings inside RING_CLEAR. */
 export const RING = { r: 25.7, r0: 21.7, r1: 29.7, clear: 32.7 };
-/** Tent Town fort compounds (x centres; slot 0/1 = the corners, 2/3 = the middle two) */
-export const COMPOUND = { xs: [-99, 99, -33, 33], z0: -111, z1: -96, half: 8, wallH: 2.5 };
+/** Tent Town fort yards (x centres, evenly spaced between the railway and the canal; slot 0/1 = the
+ *  corners, 2/3 = the middle two). No walls: walls come as upgrades. */
+export const COMPOUND = { xs: [-71.25, 71.25, -23.75, 23.75], z0: -111, z1: -96, half: 8 };
 /** The overhead highway over Tent Town */
 export const HIGHWAY = { z0: -110, z1: -96, y: 9.5, h: 1 };
 
@@ -54,9 +55,24 @@ function hash(a: number, b: number) {
 const rectI = (a: Rect, b: Rect) => a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
 const R = (minX: number, maxX: number, minZ: number, maxZ: number): Rect => ({ minX, maxX, minZ, maxZ });
 
-const SIGNS_LOW = ["DISCOUNT SOUP", "PIGEON SUPPLY", "MOP EMPORIUM", "CHEAP WIGS", "HAT HUT", "SOCK OUTLET", "NAPKIN DEPOT", "USED MATTRESS WORLD", "CASH 4 SPOONS", "BUDGET DENTIST", "PAWN-ISH", "LIQUOR-ISH"];
-const SIGNS_MID = ["BRICK & MORTAR", "VINTAGE RECORDS", "NOODLE PALACE", "LAUNDRO-MATT", "FANCY-ISH FLOWERS", "OLD TIMEY BARBER", "BOOKS (SOME)", "TAILOR SWIFTLY", "DELI-CIOUS", "CHEESE LOUISE", "BAGELS & BAGELS", "RENT-A-CANOE"];
-const SIGNS_HIGH = ["INSURANCE-ISH", "BOXLY INC", "YELLING NEWS 24", "GOOCHY", "VERSAYCHEE", "PRADUH", "HOTEL ADEQUATE", "CRUNCHO+ TOWER", "GOLDMAN SNACKS", "LAWYERS 4 MORE", "THE PENTHOUSE", "ART-ISH GALLERY"];
+const SIGNS_LOW = ["DISCOUNT SOUP", "PIGEON SUPPLY", "MOP EMPORIUM", "CHEAP WIGS", "HAT HUT", "SOCK OUTLET", "NAPKIN DEPOT", "USED MATTRESS WORLD", "CASH 4 SPOONS", "BUDGET DENTIST", "PAWN-ISH", "LIQUOR-ISH",
+  "99c-ISH STORE", "TAXES (DONE BADLY)", "LOOSE BATTERIES", "GUM UNDER GLASS", "DAVE'S CHICKEN-ADJACENT", "TYRES (MOSTLY ROUND)", "NAILS & TAILS", "KEYS CUT WHILE U WAIT (LONG)", "PAYDAY LOANS-ISH", "FISH? FISH.", "ONE SHOE SHOP", "CHEQUES CASHED (MAYBE)"];
+const SIGNS_MID = ["BRICK & MORTAR", "VINTAGE RECORDS", "NOODLE PALACE", "LAUNDRO-MATT", "FANCY-ISH FLOWERS", "OLD TIMEY BARBER", "BOOKS (SOME)", "TAILOR SWIFTLY", "DELI-CIOUS", "CHEESE LOUISE", "BAGELS & BAGELS", "RENT-A-CANOE",
+  "SOUP-ER MARKET", "WOK THIS WAY", "PHO-KING GOOD", "LETTUCE PRAY SALADS", "SEW WHAT", "PLANT DADDY", "SPECS APPEAL", "BEAN THERE CAFE", "HAIR FORCE ONE", "THAI TANIC", "CURL UP & DYE", "BREAD PITT BAKERY"];
+const SIGNS_HIGH = ["INSURANCE-ISH", "BOXLY INC", "YELLING NEWS 24", "GOOCHY", "VERSAYCHEE", "PRADUH", "HOTEL ADEQUATE", "CRUNCHO+ TOWER", "GOLDMAN SNACKS", "LAWYERS 4 MORE", "THE PENTHOUSE", "ART-ISH GALLERY",
+  "BALENCI-AGAIN", "LOUIS VUITTONISH", "ROLEXISH", "TIFFANY-ADJACENT", "CARTIER-ISH", "HERMEZ", "MONOCLE WAREHOUSE", "CAVIAR EXPRESS", "YACHT PARTS (NEW)", "OVERPRICED WATER BAR", "SMALL DOG BOUTIQUE", "HEDGE FUND & SONS"];
+
+// ---- C2: each tier has its own materials (the renderer draws brick / render / stone + glass) ----
+export const TIER_WALLS: string[][] = [
+  ["#9e4a36", "#8a3f30", "#b3553f", "#7a4a3a", "#a86a4a", "#6f5a50", "#9a6a3c", "#84563f"],
+  ["#d9b98a", "#a9c4a0", "#e8a98a", "#9fc4d9", "#c9b0d9", "#e8d58a", "#c98a7a", "#b9c9a0"],
+  ["#e8e2d4", "#d8d0c4", "#cfc8b8", "#bfb7a6", "#e4dccb", "#a9a4ad", "#d9cfb9", "#c4bca9"],
+];
+export const TIER_TOWERS: string[][] = [
+  ["#7a4a3a", "#6f5a50", "#8a3f30", "#5c5058", "#84563f", "#6b6f86"],
+  ["#c9a86a", "#8a9a7b", "#a88a7a", "#7b8da8", "#9a8aa8", "#b39a6a"],
+  ["#5c7a9e", "#3d8f8a", "#4f6b7a", "#8a9ab0", "#6a8aa8", "#9a8a6a", "#4a5a7a", "#7aa8b0"],
+];
 
 /** What each kind of shop has on its shelves (Slice 2C adds themed items for the new shops). */
 export const SHOP_POOLS: Record<ShopType, string[]> = {
@@ -144,6 +160,8 @@ export function buildTrashington(): ArenaLayout {
   const shops: ShopDef[] = [];
   const units: UnitDef[] = [];
   const navChains: { x: number; z: number }[][] = [];
+  const posts: NonNullable<ArenaLayout["posts"]> = [];
+  const deepWater: Rect[] = [];
   const water: Rect[] = [];
   const streetLoot: [number, number][] = [];
   const spawnAt = (x: number, z: number, zone: LootZone, y = 0, extra: Partial<SpawnPoint> = {}) => loot.push({ x, y, z, zone, tier: tierAt(z), ...extra });
@@ -153,7 +171,7 @@ export function buildTrashington(): ArenaLayout {
     const n = (count[kind] = (count[kind] ?? 0) + 1);
     const id = kind + n;
     const turned = Math.abs(Math.sin(yaw)) > 0.5;
-    if (h > 0) boxes.push({ ...box(x, z, turned ? d : w, turned ? w : d, h, kind === "till" ? "counter" : kind) });
+    if (h > 0) boxes.push({ ...box(x, z, turned ? d : w, turned ? w : d, h, kind === "till" ? "counter" : (kind as Box["kind"])) });
     props.push({ id, kind, x, y: 0, z, yaw, ...extra });
     return id;
   };
@@ -381,14 +399,14 @@ export function buildTrashington(): ArenaLayout {
   // Mayor's Mile
   path([[0, -89], [0, -50], [0, -RR]], 5, "Mayor's Mile");
   path([[0, RR], [0, 50], [0, 70]], 5, "Mayor's Mile");
-  rd(0, 96, 0, 108, 4, "Mayor's Mile");
   // crosstown streets (with a jog at the Mile)
   path([[-91, -48], [-56, -48]], 4, "Yards Rd"); rd(-56, -48, 0, -50, 4, "Yards Rd", { pb: [0, -48] });
   rd(0, -50, 58, -52, 4, "Yards Rd", { pa: [0, -52] }); path([[58, -52], [91, -52]], 4, "Yards Rd");
   path([[-91, 48], [-56, 48]], 4, "Uptown Ave"); rd(-56, 48, 0, 50, 4, "Uptown Ave", { pb: [0, 48] });
   rd(0, 50, 56, 52, 4, "Uptown Ave", { pa: [0, 52] }); path([[56, 52], [91, 52]], 4, "Uptown Ave");
-  path([[-91, 83], [-56, 83], [-21, 83]], 3, "Gold St");
-  path([[21, 83], [56, 83], [91, 83]], 3, "Gold St");
+  // (C1.1: one-way eastbound, round the front of City Hall: Blake cut the loop's back off)
+  path([[-91, 83], [-56, 83], [-21, 83]], 3, "Gold St", { oneway: true });
+  path([[21, 83], [56, 83], [91, 83]], 3, "Gold St", { oneway: true });
   path([[-56, -89], [-56, -48], [-56, 0], [-56, 48], [-56, 83], [-56, 108]], 3, "Crooked St");
   path([[56, 52], [56, 83], [56, 108]], 3, "Diamond St");
   path([[-91, 0], [-56, 0], [-RR, 0]], 4, "Crooked Spur");
@@ -397,8 +415,8 @@ export function buildTrashington(): ArenaLayout {
   path([[38, 0], [38, -18], [58, -18], [72, -18], [72, 0], [72, 18], [38, 18], [38, 0]], 3, "Market Row", { oneway: true });
   rd(72, 0, 91, 0, 3, "Market Link");
   path([[58, -18], [58, -52], [58, -89]], 3, "Market St");
-  // the City Hall one-way loop (counter-clockwise)
-  path([[0, 70], [21, 70], [21, 83], [21, 96], [0, 96], [-21, 96], [-21, 83], [-21, 70], [0, 70]], 3, "City Hall Loop", { oneway: true });
+  // the one-way U in front of City Hall: in from Gold St (west), round the front, out to Gold St (east)
+  path([[-21, 83], [-21, 70], [0, 70], [21, 70], [21, 83]], 3, "City Hall Drive", { oneway: true });
   // the roundabout (counter-clockwise quarter arcs)
   const arc = { cx: 0, cz: 0, r: RR };
   rd(RR, 0, 0, RR, 4, "Roundabout", { oneway: true, arc }); rd(0, RR, -RR, 0, 4, "Roundabout", { oneway: true, arc });
@@ -449,7 +467,7 @@ export function buildTrashington(): ArenaLayout {
       const len = Math.hypot(qx - px, qz - pz);
       const dx = (qx - px) / len, dz = (qz - pz) / len;
       let reach = 0;
-      if (n.ctl === "round") reach = RING.r1 - RR;
+      if (n.ctl === "round") reach = RING.r1 - RR + 5; // (C3: 5 m back from the ring, so a car waiting to join the ring isn't parked on the zebra)
       for (const o of inc) {
         if (o === e) continue;
         const r = rectOfEdge.get(o)!;
@@ -524,18 +542,28 @@ export function buildTrashington(): ArenaLayout {
   const roadGraph = { nodes: gNodes, edges: gEdges };
 
   // =================================================================================================
-  // THE PARK inside the roundabout (grey-box: slice C3 dresses it)
+  // THE PARK inside the roundabout (C3): grass, a paved promenade ring, the fountain you can wade in with
+  // the Golden Mayor on a golden toilet in the middle, a pear-shaped pond (a shark fin, a fisherman),
+  // bushes to hide in, lamps, benches, picnic tables, flower beds
   // =================================================================================================
-  scenery.push({ kind: "grassdisc", x: 0, z: 0, r: RING.r0, h: 15 });
-  // the pigeon fountain with the Golden Mayor on his column in the middle
-  boxes.push(box(0, 0, 7, 7, 0.8, "fountain"));
-  boxes.push({ ...box(0, 0, 1.6, 1.6, 3.0, "plinth", 0.8), sign: "OUR MAYOR (FOR NOW)", face: [0, -1] });
-  boxes.push({ ...box(0, 0, 1.2, 1.2, 2.8, "statue", 3.8) });
-  // the pond on the east side (Slice C3 makes it pear-shaped with a shark fin)
-  const pond: Rect = { minX: 8, maxX: 14, minZ: -4, maxZ: 4 };
-  water.push(pond);
-  for (const [x, z, w, d] of [[11, -4.15, 6.6, 0.3], [11, 4.15, 6.6, 0.3], [7.85, 0, 0.3, 8.6], [14.15, 0, 0.3, 8.6]]) boxes.push(box(x, z, w, d, 0.3, "rim"));
-  boxes.push(box(8.5, 2.5, 1.4, 1.6, 0.2, "dock", 0.3)); // the fisherman's spot (Slice C3)
+  scenery.push({ kind: "grassdisc", x: 0, z: 0, r: RING.r0, h: 16.5 }); // (lawn to 16.5 m, the paved promenade ring outside it)
+  // the fountain: a low rim you can step over (0.35 m), shallow water inside, the Mayor's column in the middle
+  for (const [x, z, w, d] of [[0, -3.3, 7, 0.4], [0, 3.3, 7, 0.4], [-3.3, 0, 0.4, 6.2], [3.3, 0, 0.4, 6.2]]) boxes.push({ ...box(x, z, w, d, 0.35, "rim"), color: "#c8c0b0" });
+  water.push(R(-3.1, 3.1, -3.1, 3.1));
+  boxes.push({ ...box(0, 0, 1.6, 1.6, 3.8, "plinth"), sign: "OUR MAYOR (FOR NOW)", face: [0, -1] });
+  boxes.push({ ...box(0, 0, 1.2, 1.2, 2.2, "statue", 3.8) });
+  // the pond: pear-shaped (a big round end and a small one), wadeable; its outline is drawn from pondShape
+  const pondShape = [{ x: 10, z: -2, r: 4.5 }, { x: 10, z: 3.5, r: 2.8 }];
+  for (let z0 = -6.5; z0 < 6.3; z0 += 0.5) {
+    // (the wading area: 0.5 m strips across the pear, each as wide as the shape at its middle)
+    const zm = z0 + 0.25;
+    let x0 = Infinity, x1 = -Infinity;
+    for (const c of pondShape) { const dz = Math.abs(zm - c.z); if (dz < c.r) { const hw = Math.sqrt(c.r * c.r - dz * dz); x0 = Math.min(x0, c.x - hw); x1 = Math.max(x1, c.x + hw); } }
+    if (x1 > x0) water.push(R(x0, x1, z0, z0 + 0.5));
+  }
+  const pond: Rect = { minX: 5.5, maxX: 14.5, minZ: -6.5, maxZ: 6.3 };
+  boxes.push({ ...box(7.4, 3.5, 1.8, 1.4, 0.2, "dock", 0.3) }); // the fisherman's jetty
+  posts.push({ kind: "fisherman", x: 6.0, z: 3.5, yaw: Math.PI / 2 }); // (at the foot of his jetty, rod out over the water)
   for (let k = 0; k < 8; k++) {
     const t = (k + 0.5) * Math.PI / 4;
     boxes.push(box(Math.cos(t) * 15.5, Math.sin(t) * 15.5, 0.6, 0.6, 3, "tree"));
@@ -544,6 +572,22 @@ export function buildTrashington(): ArenaLayout {
     const x = Math.cos(t) * 20.3, z = Math.sin(t) * 20.3, along = Math.abs(Math.cos(t)) > 0.7;
     boxes.push(box(x, z, along ? 0.8 : 3, along ? 3 : 0.8, 0.5, "bench"));
   }
+  // lamps round the promenade (looks only)
+  for (let k = 0; k < 8; k++) { const t = k * Math.PI / 4 + 0.2; scenery.push({ kind: "lamp", x: Math.cos(t) * 20.4, z: Math.sin(t) * 20.4 }); }
+  // picnic tables and flower beds
+  for (const [x, z] of [[-3.1, -8.5], [-8.5, 3.1]]) {
+    boxes.push(box(x, z, 1.8, 0.9, 0.75, "table"));
+    for (const s of [-1, 1]) boxes.push(box(x, z + s * 0.85, 1.8, 0.35, 0.45, "bench"));
+  }
+  for (const [x, z] of [[-5.5, -5.5], [-5.5, 5.5], [5.5, 5.5]]) boxes.push({ ...box(x, z, 1.6, 1.6, 0.5, "planter"), color: "#b5653b" });
+  // bushes to hide in (walk in, crouch, and the cops lose sight of you)
+  const bushes: Rect[] = [];
+  for (const deg of [110, 150, 200, 245, 290]) {
+    const t = (deg * Math.PI) / 180, x = Math.cos(t) * 12, z = Math.sin(t) * 12;
+    bushes.push(R(x - 1.3, x + 1.3, z - 1.3, z + 1.3));
+  }
+  spawnAt(Math.cos((150 * Math.PI) / 180) * 12, Math.sin((150 * Math.PI) / 180) * 12, "plaza", 0);
+  spawnAt(Math.cos((290 * Math.PI) / 180) * 12, Math.sin((290 * Math.PI) / 180) * 12, "plaza", 0);
   prop("bin", 0, 19.8, 0, 0.7, 0.7, 1.0);
   prop("bin", -19.8, 0, 0, 0.7, 0.7, 1.0);
   for (const [x, z] of [[-6, 9], [6, -9], [-10, -3], [3, 11], [-4, -12]]) spawnAt(x, z, "plaza", 0);
@@ -634,6 +678,8 @@ export function buildTrashington(): ArenaLayout {
     const squeezeSide = courtyard && !b.noAlley ? sorted[1] : undefined;
     const placed: Rect[] = [];
     let k = 0;
+    const signStart = Math.floor(H(99) * 24);
+    let signCount = 0;
     for (const s of b.sides) {
       if ((s.dir === "S" && oneRowZ) || (s.dir === "W" && oneRowX)) continue; // (one row serves both streets)
       const ns = s.dir === "N" || s.dir === "S";
@@ -659,6 +705,7 @@ export function buildTrashington(): ArenaLayout {
       const spans: [number, number][] = [...keep, ...placed].filter((q) => rectI(q, band)).map((q) => (ns ? [q.minX, q.maxX] : [q.minZ, q.maxZ]) as [number, number]);
       if (!Number.isNaN(gapAt)) spans.push([gapAt - gapW / 2, gapAt + gapW / 2]);
       let t = lo;
+      let prevColor = "";
       while (t < hi - 0.3) {
         const inside = spans.find(([a, c]) => t >= a - 0.01 && t < c);
         if (inside) { t = inside[1]; continue; }
@@ -671,13 +718,21 @@ export function buildTrashington(): ArenaLayout {
           const rc = mk(t, t + w, d);
           if (keep.some((q) => rectI(q, rc)) || placed.some((q) => rectI(q, rc)) || (b.ring && ringHit(rc))) continue;
           placed.push(rc);
-          const hRaw = tier === 0 ? 3.2 + H(k + 50) * 6.5 : tier === 1 ? 5 + H(k + 50) * 11 : 12 + H(k + 50) * H(k + 90) * 42;
+          const hRaw = tier === 0 ? 4.8 + H(k + 50) * 4.9 : /* C2: one-storey shops are 4.8 m+ so the shopfront and fascia sign fit */ tier === 1 ? 5 + H(k + 50) * 11 : 12 + H(k + 50) * H(k + 90) * 42;
           const h = Math.round(hRaw * 2) / 2;
+          // C2: every street building has a front (a shop, or a tower lobby) facing its street, with a parody sign
+          // (the names go round the tier's list from a per-block start, so a block never repeats one)
           const signs = tier === 0 ? SIGNS_LOW : tier === 1 ? SIGNS_MID : SIGNS_HIGH;
-          const signed = H(k + 70) < (tier === 2 ? 0.25 : 0.45) && w >= 6;
+          const signed = (ns ? rc.maxX - rc.minX : rc.maxZ - rc.minZ) >= 3; // (the width along the street)
+          const name = signs[(signStart + signCount++) % signs.length];
+          // (C2: no two neighbours alike: a colour different from the building before it in the row)
+          const pal = h > 20 ? TIER_TOWERS[tier] : TIER_WALLS[tier];
+          let ci = Math.floor(H(k + 85) * pal.length);
+          if (pal[ci] === prevColor) ci = (ci + 1 + Math.floor(H(k + 86) * (pal.length - 1))) % pal.length;
+          prevColor = pal[ci];
           boxes.push({
             ...box((rc.minX + rc.maxX) / 2, (rc.minZ + rc.maxZ) / 2, rc.maxX - rc.minX, rc.maxZ - rc.minZ, h, h > 20 ? "tower" : "building"),
-            windows: true, ...(signed ? { sign: signs[Math.floor(H(k + 80) * signs.length)], face: OUT[s.dir] } : {}),
+            color: pal[ci], windows: true, face: OUT[s.dir], front: h > 20 ? "lobby" : "shop", ...(signed ? { sign: name } : {}),
           });
           if (h <= 7 && H(k + 60) < 0.35) spawnAt((rc.minX + rc.maxX) / 2, (rc.minZ + rc.maxZ) / 2, "rooftop", h);
           done = true;
@@ -728,9 +783,9 @@ export function buildTrashington(): ArenaLayout {
   const LM = {
     skyscraper: R(43, 51, -81, -64), cinema: R(-33, -17, -40, -29), church: R(-77, -63, 25, 40),
     precinct: R(9, 29, 30.5, 44), copLot: R(29, 33, 32, 44), hall: R(45, 65, -9, 9),
-    hotel: R(-49, -41, 56, 76), hq: R(41, 49, 60, 76), casino: R(63, 76, 60, 76),
-    carpark: R(-83, -63, 90, 100), museum: R(-49, -35, 90, 100), mall: R(28, 46, 90, 100), club: R(63, 83, 90, 100),
-    cityHall: R(-18, 18, 73, 93),
+    hotel: R(-33, -25, 56, 76), hq: R(25, 33, 60, 76), casino: R(63, 76, 60, 76),
+    tower: R(-83, -71, 90, 100), valet: R(-70, -63, 90, 100), museum: R(-49, -35, 90, 100), mall: R(28, 46, 90, 100), club: R(63, 83, 90, 100),
+    cityHall: R(-18, 18, 73, 86), garden: R(-24, 24, 86, 104),
   };
   const specs: BlockSpec[] = [
     // ---- LOW: The Yards ----
@@ -754,22 +809,35 @@ export function buildTrashington(): ArenaLayout {
     B("Market Row: North", 35, 87, 21, 48, ["N", "E", { dir: "S", from: 35, to: 75 }], { units: [{ spec: U.pharm, dir: "S", at: 44 }, { spec: U.gizmo, dir: "S", at: 60 }, { spec: U.kicks, dir: "S", at: 75.5 }] }),
     // ---- HIGH: Uptown ----
     B("Uptown: West", -87, -59, 52, 80, ALL),
-    B("Uptown: Hotel block", -53, -24, 52, 80, ["S", "N", "W", { dir: "E", from: 67, to: 80 }], { units: [{ spec: U.bling, dir: "S", at: -33 }], keep: [LM.hotel] }),
+    B("Uptown: Hotel block", -53, -24, 52, 80, ["S", "N", "W", { dir: "E", from: 67, to: 80 }], { units: [{ spec: U.bling, dir: "S", at: -41.5 }], keep: [LM.hotel] }),
     B("Uptown: Mile West", -24, -5, 52, 67, ["S", "E", "N"], { noAlley: true }),
-    B("Uptown: HQ block", 24, 53, 56, 80, ["S", "N", "E", { dir: "W", from: 67, to: 80 }], { units: [{ spec: U.cracked, dir: "S", at: 32.5 }], keep: [LM.hq] }),
+    B("Uptown: HQ block", 24, 53, 56, 80, ["S", "N", "E", { dir: "W", from: 67, to: 80 }], { units: [{ spec: U.cracked, dir: "S", at: 41.5 }], keep: [LM.hq] }),
     B("Uptown: Mile East", 5, 24, 56, 67, ["S", "W", "N"], { noAlley: true }),
     B("Uptown: Casino block", 59, 87, 56, 80, ALL, { keep: [LM.casino] }),
-    B("Uptown: Car park block", -87, -59, 86, 104, ALL, { keep: [LM.carpark] }),
-    B("Uptown: Museum block", -53, -24, 86, 104, ["N", "S", "W", { dir: "E", from: 86, to: 99 }], { keep: [LM.museum] }),
-    B("Uptown: Mall block", 24, 53, 86, 104, ["N", "S", "E", { dir: "W", from: 86, to: 99 }], { keep: [LM.mall] }),
+    B("Uptown: Apartment tower block", -87, -59, 86, 104, ALL, { keep: [LM.tower, LM.valet] }),
+    B("Uptown: Museum block", -53, -24, 86, 104, ["N", "S", "W"], { keep: [LM.museum] }),
+    B("Uptown: Mall block", 24, 53, 86, 104, ["N", "S", "E"], { keep: [LM.mall] }),
     B("Uptown: Country club block", 59, 87, 86, 104, ALL, { keep: [LM.club], open: ["N", "S", "E"] }),
   ];
   for (const s of specs) fillBlock(s);
-  // City Hall plaza (inside its loop) and the pavements north of the loop
+  // City Hall plaza (inside its U) and the Mayor's formal garden behind it, up to North Parade
   ground(LM.cityHall, "plaza", "#d8d0c4");
   blocks.push({ name: "City Hall plaza", rect: LM.cityHall, tier: 2, open: ["N", "S", "E", "W"] });
-  for (const r of [R(-24, -4, 99, 104), R(4, 24, 99, 104)]) { ground(r); blocks.push({ name: "North pavement", rect: r, tier: 2, open: ["N", "S", "E", "W"] }); }
-  for (const [x, z] of [[-12, 76], [12, 76], [-14, 86], [14, 86], [0, 76]]) spawnAt(x, z, "plaza", 0.15);
+  ground(LM.garden, "plaza", "#cfc6b0");
+  blocks.push({ name: "The Mayor's garden", rect: LM.garden, tier: 2, open: ["N", "S", "E", "W"] });
+  for (const [x, z] of [[-12, 76], [12, 76], [0, 76]]) spawnAt(x, z, "plaza", 0.15);
+  {
+    decor.push({ kind: "grass", x: -12, z: 96, w: 16, d: 12, h: 0.17 }, { kind: "grass", x: 12, z: 96, w: 16, d: 12, h: 0.17 });
+    // clipped hedges (low: hide behind them), two fountains, a plinth waiting for a statue, trees, benches
+    for (const sx of [-1, 1]) {
+      for (const x of [5, 7, 9, 15, 17, 19]) for (const z of [91, 101]) boxes.push({ ...box(sx * x, z, 2, 1.2, 1.1, "planter"), color: "#4f7a3a" });
+      boxes.push(box(sx * 12, 96, 4.5, 4.5, 0.7, "fountain"));
+      boxes.push(box(sx * 21.5, 90, 0.6, 0.6, 3, "tree"), box(sx * 21.5, 101.5, 0.6, 0.6, 3, "tree"));
+      boxes.push(box(sx * 6, 96, 0.8, 3, 0.5, "bench"));
+    }
+    boxes.push({ ...box(0, 99, 2.4, 2.4, 1.6, "plinth"), sign: "RESERVED FOR THE NEXT MAYOR", face: [0, -1] });
+    for (const [x, z] of [[-12, 93], [12, 99], [-18, 96], [18, 96], [0, 94]]) spawnAt(x, z, "plaza", 0.15);
+  }
 
   // =================================================================================================
   // LANDMARKS (grey-box shells; slice C2 gives them their facades)
@@ -791,21 +859,22 @@ export function buildTrashington(): ArenaLayout {
   shell(LM.hq, 62, "tower", "#3d5a9e", "TRASHCORP HQ", [0, -1]);
   shell(LM.casino, 14, "building", "#6b3fa0", "LUCKY DUMPSTER CASINO", [0, -1]);
   shell(R(64, 75, 58.6, 60), 0.4, "slab", "#ffcf3a", undefined, undefined, 4.5); // marquee
+  for (const x of [65.5, 73.5]) spawnAt(x, 58.3, "street", 0.15); // (dropped chips outside the casino)
   shell(LM.museum, 12, "building", "#e8e2d4", "MUSEUM OF OLD STUFF", [0, -1]);
   for (const x of [-47, -44, -41, -38]) boxes.push({ ...box(x, 89.4, 0.8, 0.8, 9, "wall"), color: "#f4f1ea" });
   shell(LM.mall, 16, "building", "#ff8fa3", "LUXURY MALL: GOOCHY / PRADUH / VERSAYCHEE", [0, -1]);
   shell(R(63, 73, 90, 100), 7, "building", "#8a9a5b", "TRASHINGTON COUNTRY CLUB (MEMBERS ONLY)", [0, -1]);
   decor.push({ kind: "grass", x: 78, z: 95, w: 10, d: 10, h: 0.17 });
-  // the multi-storey car park: a deck on pillars, a stepped ramp up, cars underneath
+  // the luxury apartment tower (a snooty doorman at the door, the valet's cars beside it)
   {
-    const cp = LM.carpark, deckTop = 3.5;
-    for (const x of [cp.minX + 0.4, (cp.minX + cp.maxX) / 2, cp.maxX - 6.4]) for (const z of [cp.minZ + 0.4, cp.maxZ - 0.4]) boxes.push({ ...box(x, z, 0.6, 0.6, deckTop - 0.3, "wall"), color: "#8e8a94" });
-    boxes.push({ ...box((cp.minX + cp.maxX - 6) / 2, (cp.minZ + cp.maxZ) / 2, cp.maxX - cp.minX - 6, cp.maxZ - cp.minZ, 0.3, "slab", deckTop - 0.3), color: "#8e8a94", sign: "PARK-O-RAMA (LEVEL 2)", face: [0, -1] });
-    boxes.push({ ...box((cp.minX + cp.maxX - 6) / 2, cp.maxZ - 0.2, cp.maxX - cp.minX - 6, 0.3, 1.0, "wall", deckTop), color: "#6f6a78" });
-    for (let i = 1; i <= 11; i++) boxes.push({ ...box(cp.maxX - (i - 0.5) * 0.5, cp.minZ + 1.5, 0.5, 2.4, (i * deckTop) / 11, "step"), color: "#8e8a94" });
-    ["#d6264a", "#3d6fb5", "#e8e2d4"].forEach((c, i) => prop("car", cp.minX + 3 + i * 4.5, cp.maxZ - 4, Math.PI, 1.9, 4.2, 1.5, { color: c }));
-    spawnAt(cp.minX + 6, (cp.minZ + cp.maxZ) / 2, "rooftop", deckTop);
-    spawnAt(cp.minX + 3, cp.minZ + 3, "alley", 0.15);
+    const t = LM.tower;
+    shell(t, 55, "tower", "#e8e2d4", "THE GILDED PIGEON RESIDENCES", [0, -1]);
+    boxes.push({ ...box((t.minX + t.maxX) / 2, t.minZ - 1.2, 5, 2.4, 0.15, "slab", 3.4), color: "#6b1f2e" }); // canopy
+    for (const x of [-79, -75]) boxes.push({ ...box(x, 88.6, 0.3, 0.3, 1.0, "wall"), color: "#d9a632" }); // velvet rope posts
+    posts.push({ kind: "doorman", x: -77, z: 88.8, yaw: Math.PI });
+    ["#6b4c9a", "#8a9a5b", "#ff7a1f"].forEach((c, i) => prop("car", i === 1 ? -64.5 : -68.5, i === 2 ? 97.5 : 92.5, 0, 1.9, 4.2, 1.5, { color: c }));
+    boxes.push({ ...box(-64.5, 98.2, 1.0, 0.8, 1.1, "kiosk"), sign: "VALET (TIPS MANDATORY)", face: [0, -1] });
+    spawnAt(-66.5, 100.5, "street", 0.15); spawnAt(-72, 101.2, "alley", 0.15);
   }
   // Medium
   shell(LM.hall, 8, "building", "#c26b4a", "MARKET ROW HALL", [0, -1]);
@@ -831,14 +900,14 @@ export function buildTrashington(): ArenaLayout {
   }
 
   // =================================================================================================
-  // THE SIDES: rail yard (west), canal (east), the north pavement
+  // THE SIDES: the rail yard (west) and the canal (east) run the full length of the city, fence to fence
   // =================================================================================================
-  ground(R(-115, -95, -93, 115), "plaza", "#8e8478");
-  ground(R(95, 99, -93, 115), "sidewalk"); ground(R(113, 115, -93, 115), "sidewalk");
-  ground(R(99, 113, -93, -40), "plaza", "#8e8a94"); ground(R(99, 113, 104, 115), "sidewalk");
+  ground(R(-115, -95, -115, 115), "plaza", "#8e8478");
+  ground(R(95, 99, -115, 115), "sidewalk"); ground(R(113, 115, -115, 115), "sidewalk");
+  ground(R(99, 113, 104, 115), "sidewalk");
   ground(R(-95, 95, 112, 115), "sidewalk");
-  blocks.push({ name: "Rail yard", rect: R(-115, -95, -93, 115), tier: 1, open: ["N", "S", "E", "W"] });
-  blocks.push({ name: "Canal side", rect: R(95, 115, -93, 115), tier: 1, open: ["N", "S", "E", "W"] });
+  blocks.push({ name: "Rail yard", rect: R(-115, -95, -115, 115), tier: 1, open: ["N", "S", "E", "W"] });
+  blocks.push({ name: "Canal side", rect: R(95, 115, -115, 115), tier: 1, open: ["N", "S", "E", "W"] });
   // --- build yard (south end): an open lot. The movement tests + tutorials use it, so it stays clear. ---
   const T = { x: -97.5, z: -62 };
   boxes.push(box(-110, -91.5, 1.3, 1.3, 2.4, "portaloo"));
@@ -859,7 +928,8 @@ export function buildTrashington(): ArenaLayout {
   for (const [x, z, w, d, h] of [[-113, -37, 3, 3, 1.6], [-99, -39, 2, 4, 1.1], [-113, -25, 3, 2, 2.2], [-98.5, -22, 2.4, 2, 1.3], [-100, -12, 2, 3, 1.8], [-112, -9, 4, 2, 1.3]]) boxes.push(box(x, z, w, d, h, "junk"));
   spawnAt(-106, -24, "yard", 0.15); spawnAt(-100, ledgeZ, "yard", 1.95); spawnAt(-112, -14, "yard", 0.15);
   // --- tracks, boxcars, the railway arches ---
-  scenery.push({ kind: "rail", x: -106, z: 28, d: 72 }, { kind: "rail", x: -101, z: 28, d: 72 });
+  // (C1.1: the tracks run the whole length of the rail yard, from the station down to the siding by the forts)
+  scenery.push({ kind: "rail", x: -106, z: -25.5, d: 179 }, { kind: "rail", x: -101, z: -25.5, d: 179 });
   boxes.push({ ...box(-106, 12, 3, 12, 3.2, "building"), color: "#a8743f", sign: "TRASHINGTON FREIGHT", face: [1, 0] });
   boxes.push({ ...box(-101, 36, 3, 12, 3.2, "building"), color: "#6b4c9a" });
   boxes.push(box(-98.6, 34, 1.4, 1.4, 1.5, "crate"));
@@ -877,78 +947,99 @@ export function buildTrashington(): ArenaLayout {
   spawnAt(-104, 111.5, "yard", 0.15);
   for (const [x, z] of [[-97, 102], [-97, 88], [-110, 102.5]]) spawnAt(x, z, "street", 0.15);
 
-  // --- canal: quay, bus depot (south end), marina with yachts (north end) ---
-  water.push(R(99, 113, -40, 104));
-  scenery.push({ kind: "canal", x: 106, z: 32, w: 14, d: 144 });
-  for (let z = -36; z <= 100; z += 12) boxes.push({ ...box(98.8, z, 0.25, 0.25, 1.0, "wall"), color: "#3a3444" }); // bollards
-  // bus depot
-  for (const x of [99.5, 112.5]) for (const z of [-80, -67.5, -55]) boxes.push({ ...box(x, z, 0.6, 0.6, 5, "wall"), color: "#8e8a94" });
-  boxes.push({ ...box(106, -67.5, 14, 26, 0.3, "roof", 5), color: "#5a5163", sign: "BUS DEPOT: BUSES (SOMETIMES)", face: [-1, 0] });
-  for (const x of [102.5, 109.5]) boxes.push({ ...box(x, -68, 2.6, 10, 3.2, "van"), color: "#ffcf3a" });
-  spawnAt(106, -60, "yard", 0.15); spawnAt(106, -82, "yard", 0.15);
-  ["#6b4c9a", "#8a9a5b", "#ff7a1f"].forEach((c, i) => prop("car", 101 + i * 5, -88.5, Math.PI / 2, 1.9, 4.2, 1.5, { color: c }));
+  // --- the siding at the south end: abandoned boxcars under the highway, next to the west fort ---
+  boxes.push({ ...box(-106, -104, 3, 12, 3.2, "building"), color: "#8a4a3a", sign: "TRASHINGTON FREIGHT (RETIRED)", face: [1, 0] });
+  boxes.push({ ...box(-101, -99, 3, 12, 3.2, "building"), color: "#3d6f5a" });
+  boxes.push(box(-98.4, -101, 1.4, 1.4, 1.5, "crate"), box(-103.4, -110.5, 1.2, 1.2, 1.2, "crate"));
+  spawnAt(-106, -104, "rooftop", 3.2); spawnAt(-101, -99, "rooftop", 3.2); spawnAt(-103.5, -106, "alley", 0.15);
 
-  spawnAt(102.5, -68, "rooftop", 3.2);
-  // marina
-  for (const z of [70, 82, 94]) boxes.push({ ...box(103, z, 8, 1.6, 0.4, "dock"), color: "#8b5a2b" });
+  // --- the canal: deep water, a kerb all along both banks, ladders to climb out, 2 footbridges,
+  //     the marina (north end), the sewer outfall with a crawl pipe (south end) ---
+  const CANAL = R(99, 113, -108, 104);
+  deepWater.push(CANAL);
+  scenery.push({ kind: "canal", x: (CANAL.minX + CANAL.maxX) / 2, z: (CANAL.minZ + CANAL.maxZ) / 2, w: CANAL.maxX - CANAL.minX, d: CANAL.maxZ - CANAL.minZ });
+  const bridgesZ = [-60, 30];
+  const laddersW = [-95, -72, -45, -20, 5, 55, 105 - 20], laddersE = [-85, -25, 60];
+  const docksZ = [70, 82, 94];
+  const gapsW = [...bridgesZ.map((z) => [z - 1.5, z + 1.5]), ...laddersW.map((z) => [z - 0.7, z + 0.7]), ...docksZ.map((z) => [z - 0.9, z + 0.9])];
+  const gapsE = [...bridgesZ.map((z) => [z - 1.5, z + 1.5]), ...laddersE.map((z) => [z - 0.7, z + 0.7])];
+  const kerb = (x: number, gaps: number[][]) => {
+    const g = [...gaps].sort((p, q) => p[0] - q[0]);
+    let z0 = CANAL.minZ;
+    for (const [a, b] of [...g, [CANAL.maxZ, CANAL.maxZ]]) {
+      if (a - z0 > 0.2) boxes.push({ ...box(x, (z0 + a) / 2, 0.4, a - z0, 1.0, "wall"), color: "#8e8a94" });
+      z0 = Math.max(z0, b);
+    }
+  };
+  kerb(CANAL.minX - 0.2, gapsW); kerb(CANAL.maxX + 0.2, gapsE);
+  boxes.push({ ...box(106, CANAL.maxZ + 0.2, 14.8, 0.4, 1.0, "wall"), color: "#8e8a94" });
+  for (const z of laddersW) scenery.push({ kind: "ladder", x: CANAL.minX + 0.15, z, yaw: Math.PI / 2 });
+  for (const z of laddersE) scenery.push({ kind: "ladder", x: CANAL.maxX - 0.15, z, yaw: -Math.PI / 2 });
+  for (const z of bridgesZ) {
+    boxes.push({ ...box(106, z, 14.8, 2.6, 0.2, "slab", 0.4), color: "#a8743f" });
+    for (const s of [-1, 1]) boxes.push({ ...box(106, z + s * 1.25, 14.8, 0.1, 0.9, "wall", 0.6), color: "#6b4a2b" });
+    for (const x of [CANAL.minX - 0.3, CANAL.maxX + 0.3]) boxes.push({ ...box(x, z, 0.6, 2.4, 0.35, "step"), color: "#8e8a94" });
+  }
+  // marina (north end): docks, yachts, the office
+  for (const z of docksZ) boxes.push({ ...box(103, z, 8, 1.6, 0.4, "dock"), color: "#8b5a2b" });
   for (const [z, name] of [[76, "SS TAX WRITE-OFF"], [88, "YACHT-A-LOT"], [99, ""]] as [number, string][]) {
     boxes.push({ ...box(109.5, z, 3, 8, 2.2, "van"), color: "#f4f1ea", ...(name ? { sign: name, face: [-1, 0] as [number, number] } : {}) });
   }
   spawnAt(106, 70.5, "yard", 0.55); spawnAt(106, 94.5, "yard", 0.55); spawnAt(106, 82.5, "yard", 0.55);
   for (const [x, z] of [[97, 102], [97, 88], [106, 112]]) spawnAt(x, z, "street", 0.15);
   shell(R(97, 101, 104.5, 110), 3.2, "building", "#43a7c7", "MARINA OFFICE", [-1, 0]);
+  // sewer outfall (south end): a concrete block with a pipe you crawl into from the quay. A stash inside,
+  // and a hole on the far side where you drop out into the canal
+  {
+    const g = "#8e8a94", y1 = 1.3, top = 4;
+    boxes.push({ ...box(106, -114.2, 14, 1.6, top, "wall"), color: g });
+    boxes.push({ ...box(103.5, -108.8, 9, 1.6, top, "wall"), color: g, sign: "SEWER OUTFALL (DO NOT DRINK)", face: [0, 1] });
+    boxes.push({ ...box(111.5, -108.8, 3, 1.6, top, "wall"), color: g });
+    boxes.push({ ...box(106, -111.5, 14, 3.8, top - y1, "slab", y1), color: g });
+    boxes.push({ ...box(112.8, -111.5, 0.4, 3.8, y1, "wall"), color: g }); // the pipe's dead end
+    boxes.push({ ...box(106, -111.5, 14, 3.8, 0.03, "shopfloor"), color: "#5a5163" }); // (slimy floor)
+    spawnAt(104, -111.5, "alley", 0);
+  }
+  for (const [x, z] of [[97, -100], [97, -40], [114, 10]]) spawnAt(x, z, "street", 0.15);
 
   // =================================================================================================
-  // TENT TOWN under the highway: the four fort compounds (walled, a main gate, a squeeze gap round
-  // the back), junk clusters between them, the broken ramp lookout
+  // TENT TOWN under the highway, between the railway and the canal: four open fort yards (no walls:
+  // walls are bought in the upgrades), evenly spaced, junk clusters between them, the broken ramp lookout
   // =================================================================================================
-  ground(R(-115, 115, -115, -93), "plaza", "#9a8a6e");
-  blocks.push({ name: "Tent Town", rect: R(-115, 115, -115, -93), tier: 0, open: ["N", "S", "E", "W"] });
-  // the highway deck on pillars (10 m up)
+  ground(R(-95, 95, -115, -93), "plaza", "#9a8a6e");
+  blocks.push({ name: "Tent Town", rect: R(-95, 95, -115, -93), tier: 0, open: ["N", "S", "E", "W"] });
+  // the highway deck on pillars (10 m up), right across, over the railway and the canal too
   boxes.push({ ...box(0, (HIGHWAY.z0 + HIGHWAY.z1) / 2, 232, HIGHWAY.z1 - HIGHWAY.z0, HIGHWAY.h, "slab", HIGHWAY.y), color: "#8e8a94", sign: "INTERSTATE 0", face: [0, 1] });
   scenery.push({ kind: "highway", x: 0, z: (HIGHWAY.z0 + HIGHWAY.z1) / 2, w: 232, d: HIGHWAY.z1 - HIGHWAY.z0, h: HIGHWAY.y + HIGHWAY.h });
-  for (const x of [-66, 0, 66]) for (const z of [-98.5, -107.5]) boxes.push({ ...box(x, z, 1.8, 1.8, HIGHWAY.y, "wall"), color: "#9aa3b5" });
+  for (const x of [-47.5, 0, 47.5]) for (const z of [-98.5, -107.5]) boxes.push({ ...box(x, z, 1.8, 1.8, HIGHWAY.y, "wall"), color: "#9aa3b5" });
+  for (const [x, z] of [[-113.5, -98.5], [-113.5, -107.5], [106, -99], [106, -104]]) boxes.push({ ...box(x, z, 1.6, 1.6, HIGHWAY.y, "wall"), color: "#9aa3b5" }); // bridge piers
   // the broken ramp: a stepped concrete ramp you can run up to a lookout that ends in mid-air
-  for (let i = 1; i <= 26; i++) boxes.push({ ...box(-18 + (i - 0.5) * 0.5, -112.5, 0.5, 1.8, i * 0.3, "ramp-step"), color: "#9aa3b5" });
-  boxes.push({ ...box(-3.5, -112.5, 3, 1.8, 7.8, "platform"), color: "#9aa3b5" });
-  spawnAt(-3.5, -112.5, "rooftop", 7.8);
+  for (let i = 1; i <= 26; i++) boxes.push({ ...box(-12 + (i - 0.5) * 0.5, -112.5, 0.5, 1.8, i * 0.3, "ramp-step"), color: "#9aa3b5" });
+  boxes.push({ ...box(2.5, -112.5, 3, 1.8, 7.8, "platform"), color: "#9aa3b5" });
+  spawnAt(2.5, -112.5, "rooftop", 7.8);
   const forts: FortLot[] = [];
   const C = COMPOUND;
   C.xs.forEach((cx, slot) => {
-    const wallC = "#8a7a63", H2 = C.wallH, zc = (C.z0 + C.z1) / 2, dep = C.z1 - C.z0;
-    const w = (x: number, z: number, ww: number, dd: number) => boxes.push({ ...box(x, z, ww, dd, H2, "wall"), color: wallC });
-    // north wall with the main gate (4 m) in the middle
-    const seg = C.half - 2;
-    w(cx - C.half + seg / 2, C.z1, seg, 0.4); w(cx + C.half - seg / 2, C.z1, seg, 0.4);
-    // south wall with a 1.6 m squeeze gap near one corner
-    const gx = cx + (cx < 0 ? 5 : -5);
-    const l = gx - 0.8 - (cx - C.half), rr = cx + C.half - (gx + 0.8);
-    w(cx - C.half + l / 2, C.z0, l, 0.4); w(cx + C.half - rr / 2, C.z0, rr, 0.4);
-    w(cx - C.half, zc, 0.4, dep + 0.4); w(cx + C.half, zc, 0.4, dep + 0.4);
-    // the fort itself at the back, the drop pad in front of it
     const fortBox = box(cx, C.z0 + 3.5, 2.4, 1.9, 1.5, "fort");
     boxes.push(fortBox);
-    const zone = R(cx - C.half + 0.4, cx + C.half - 0.4, C.z0 + 0.4, C.z1 - 0.4);
-    forts.push({ slot, x: cx, z: fortBox.z, padX: cx, padZ: C.z0 + 9.5, yaw: 0, zone, backX: cx, backZ: C.z0 - 2, gapX: gx, gapZ: C.z0 });
-    // gate sign
-    boxes.push({ ...box(cx, C.z1, 4.2, 0.3, 0.6, "slab", 2.9), color: "#6b4a2b" });
+    const zone = R(cx - C.half, cx + C.half, C.z0, C.z1);
+    forts.push({ slot, x: cx, z: fortBox.z, padX: cx, padZ: C.z0 + 9.5, yaw: 0, zone, backX: cx, backZ: C.z0 - 2 });
   });
-  // junk clusters between the compounds (cover + climbing, so raids aren't a straight run)
+  // junk clusters between the yards (cover + climbing, so raids aren't a straight run)
   const junk = (x: number, z: number, w: number, d: number, h: number, kind: Box["kind"] = "junk", color?: string) => boxes.push({ ...box(x, z, w, d, h, kind), ...(color ? { color } : {}) });
-  for (const cx of [-66, 66]) {
-    junk(cx - 6, -101, 3, 2.4, 1.4, "junk", "#3d6fb5"); // tents
-    junk(cx + 5, -104, 2.6, 2.6, 1.3, "junk", "#6aa84f");
-    junk(cx - 3, -110, 2, 2, 1.1, "crate");
-    junk(cx + 7.5, -97.5, 1.2, 1.2, 0.9, "crate");
-    junk(cx - 8, -95.5, 1.2, 1.2, 0.5, "pallet");
-    prop("bin", cx + 2.5, -99, 0, 0.7, 0.7, 1.0); // burning barrel
-    spawnAt(cx, -103, "yard", 0.15); spawnAt(cx - 5, -106, "yard", 0.15);
+  for (const cx of [-47.5, 47.5]) {
+    junk(cx - 5, -101, 3, 2.4, 1.4, "junk", "#3d6fb5"); // tents
+    junk(cx + 4.5, -104, 2.6, 2.6, 1.3, "junk", "#6aa84f");
+    junk(cx - 3, -110.5, 2, 2, 1.1, "crate");
+    junk(cx + 5, -97.5, 1.2, 1.2, 0.9, "crate");
+    junk(cx - 6, -95.5, 1.2, 1.2, 0.5, "pallet");
+    prop("bin", cx + 2.5, -99.5, 0, 0.7, 0.7, 1.0); // burning barrel
+    spawnAt(cx, -103, "yard", 0.15); spawnAt(cx - 4, -106.5, "yard", 0.15);
   }
-  for (const [x, z, w, d, h, c] of [[-14, -101, 3, 2.4, 1.4, "#e14b4b"], [11, -100, 2.6, 2.6, 1.3, "#ffcf3a"], [4, -107, 3, 2, 1.1, "#43c7a6"], [-9, -108, 2, 2, 1.5, ""], [16, -109, 1.2, 1.2, 0.9, ""]] as [number, number, number, number, number, string][]) junk(x, z, w, d, h, c ? "junk" : "crate", c || undefined);
-  for (const x of [-116, 116]) void x;
-  for (const [x, z] of [[-3, -103], [8, -97], [-20, -105]]) spawnAt(x, z, "yard", 0.15);
-  for (const [x, z] of [[-50, -97], [50, -97], [-82, -97], [82, -97]]) spawnAt(x, z, "street", 0.15);
-  for (const x of [-80, -50, -20, 20, 50, 80]) decor.push({ kind: "streetlight", x, z: -94.2 });
+  for (const [x, z, w, d, h, c] of [[-10, -100.5, 3, 2.4, 1.4, "#e14b4b"], [9, -100, 2.6, 2.6, 1.3, "#ffcf3a"], [5, -107, 3, 2, 1.1, "#43c7a6"], [-7, -107.5, 2, 2, 1.5, ""], [10, -109.5, 1.2, 1.2, 0.9, ""]] as [number, number, number, number, number, string][]) junk(x, z, w, d, h, c ? "junk" : "crate", c || undefined);
+  for (const [x, z] of [[-3, -103], [4, -97], [-8, -104]]) spawnAt(x, z, "yard", 0.15);
+  for (const [x, z] of [[-36, -97], [36, -97], [-86, -97], [86, -97]]) spawnAt(x, z, "street", 0.15);
+  for (const x of [-84, -47.5, -12, 12, 47.5, 84]) decor.push({ kind: "streetlight", x, z: -94.2 });
 
   // =================================================================================================
   // THE POLICE PRECINCT, north of the roundabout, front door facing the park
@@ -1032,8 +1123,11 @@ export function buildTrashington(): ArenaLayout {
     noShops: { x: -105, z: -80, yaw: 0 },
     /** Slice 2A: standing in the doorway of Corner Mart, looking in */
     martDoor: { x: units[0].doorX + units[0].out[0] * 1.5, z: units[0].doorZ + units[0].out[1] * 1.5, yaw: Math.atan2(-units[0].out[0], -units[0].out[1]) },
-    pondEdge: { x: 11, z: pond.minZ - 2.5, yaw: 0, waterZ: pond.minZ },
+    pondEdge: { x: 10, z: pond.minZ - 2.5, yaw: 0, waterZ: pond.minZ },
     parkCentre: { x: 0, z: -8, yaw: 0 },
+    // C3: a bush to hide in, the fountain
+    bush: { x: (bushes[0].minX + bushes[0].maxX) / 2, z: (bushes[0].minZ + bushes[0].maxZ) / 2, yaw: 0 },
+    fountain: { x: 0, z: -2.2, yaw: 0 },
     cityHall: { x: 0, z: 76, yaw: 0 },
   };
   // (lines closer than 1.3 m merge into one: crowded route points make walkers dither. A crosswalk's
@@ -1055,10 +1149,63 @@ export function buildTrashington(): ArenaLayout {
   const navLines = merge(xLines, cwX);
   const navLinesZ = merge(zLines, cwZ);
 
+  // C4a: street things you can smash, one prop per box (shop windows, bus-stop glass, hydrants, mailboxes,
+  // benches, planters, café and picnic tables, pallets). Broken = the box stops blocking until dawn.
+  {
+    const BREAK: Partial<Record<Box["kind"], PropKind>> = { glass: "shopglass", busstop: "busstop", hydrant: "hydrant", mailbox: "mailbox", bench: "bench", planter: "planter", table: "table", pallet: "pallet" };
+    const nb: Record<string, number> = {};
+    boxes.forEach((b, i) => {
+      const k = BREAK[b.kind];
+      if (!k || b.y - b.h / 2 > 0.5) return; // (ground level only)
+      if (b.unit !== undefined && k !== "shopglass") return; // (furniture inside shops waits for C6's interiors)
+      const shop = k === "shopglass" ? (units.find((u) => inRect(u.rect, b.x, b.z, 0.6))?.shop ?? undefined) : undefined;
+      nb[k] = (nb[k] ?? 0) + 1;
+      props.push({ id: k + nb[k], kind: k, x: b.x, y: 0, z: b.z, yaw: 0, box: i, hw: b.w / 2, hd: b.d / 2, ...(shop !== undefined ? { shop } : {}) });
+    });
+  }
+
+  // C4a: street junk spots. Each is checked to be clear ground (not in anything, not on a road, not in water).
+  const junkSpots: NonNullable<ArenaLayout["junkSpots"]> = [];
+  {
+    const clear = (x: number, z: number, r: number) => {
+      if (Math.abs(x) > HALF - 1 || Math.abs(z) > HALF - 1) return false;
+      if (roads.some((q) => inRect(q, x, z, r)) || water.some((q) => inRect(q, x, z, r)) || deepWater.some((q) => inRect(q, x, z, r))) return false;
+      if (Math.hypot(x, z) > RING.r0 - r && Math.hypot(x, z) < RING.r1 + r) return false;
+      for (const b of boxes) {
+        const top = b.y + b.h / 2, bot = b.y - b.h / 2;
+        if (top <= 0.3 || bot > 2) continue; // (pavements, overheads)
+        if (Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r) return false;
+      }
+      return !junkSpots.some((j) => Math.hypot(j.x - x, j.z - z) < r + 0.35);
+    };
+    /** try a spot, and a few nudges round it */
+    const put = (type: string, x: number, z: number, r: number, yaw = 0) => {
+      for (const [dx, dz] of [[0, 0], [0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8], [1.4, 1.4], [-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4]]) {
+        if (clear(x + dx, z + dz, r)) { junkSpots.push({ type, x: x + dx, z: z + dz, yaw }); return true; }
+      }
+      return false;
+    };
+    // chairs beside the outdoor café and picnic tables, lids beside the bins
+    for (const b of boxes) if (b.kind === "table" && b.unit === undefined && b.y - b.h / 2 < 0.5) put("cafe_chair", b.x + b.w / 2 + 0.6, b.z, 0.35, Math.PI / 2);
+    for (const pr of props) if (pr.kind === "bin") put("bin_lid", pr.x + 0.9, pr.z + 0.4, 0.32);
+    // bottles in the alleys, crates by the courtyard dumpsters
+    loot.filter((l) => l.zone === "alley").slice(0, 12).forEach((l, i) => put("glass_bottle", l.x + (i % 2 ? 0.7 : -0.7), l.z + 0.6, 0.12));
+    for (const pr of props) if (pr.kind === "dumpster") put("plastic_crate", pr.x + 2.2, pr.z, 0.6);
+    // the building site by the half-built skyscraper: bricks, a barrier; the build yard: barriers, barrels
+    for (let i = 0; i < 6; i++) put("brick", 41 + (i % 3) * 0.7, -62 - Math.floor(i / 3) * 0.7, 0.12, i * 0.7);
+    put("traffic_barrier", 42, -83, 0.45); put("traffic_barrier", T.x - 4, T.z + 12, 0.45, Math.PI / 2);
+    for (const [x, z] of [[-110, -44], [-99, -46], [-111, -5], [-98, -3]]) put("oil_barrel", x, z, 0.55);
+    // trolleys outside Corner Mart
+    const mart = units[0];
+    for (const s2 of [-1.6, 1.6]) put("shopping_trolley", mart.doorX + mart.out[0] * 2.4 - mart.out[1] * s2, mart.doorZ + mart.out[1] * 2.4 + mart.out[0] * s2, 0.6, Math.atan2(mart.out[0], mart.out[1]));
+    // fish at the Market Row stalls and the marina
+    for (const [x, z] of [[50, -11.5], [60, -11.5], [97, 75], [97, 88]]) put("smelly_fish", x, z, 0.15);
+  }
+
   return {
     halfSize: HALF, boxes, spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
-    roadNet, blocks, scenery,
+    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots,
   };
 }
 

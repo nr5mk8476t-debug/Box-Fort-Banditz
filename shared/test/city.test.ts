@@ -82,11 +82,13 @@ test("dumpsters and bins: search with E for random junk, then they're empty unti
   assert.equal(w.items.size, n);
 });
 
-test("smash-and-grab: phone booth -> handset, vending -> snacks, meter -> change, newsbox -> paper; heat goes up", () => {
+test("smash-and-grab: phone booth -> handset, vending -> snacks, meter -> change, newsbox -> paper; heat goes up (C4a: when someone sees it)", () => {
   for (const [kind, type] of [["phone", "phone_handset"], ["vending", ""], ["meter", "coin_pile"], ["newsbox", "newspaper"]] as const) {
     const { w, p } = world();
     const d = propsOf(w, kind)[0];
     faceProp(w, "a", d, 0.7);
+    const watcher = w.npc.spawn("tourist")!; // (C4a: breaking things only adds heat if somebody sees)
+    watcher.move = makeMoveState(p.move.x - Math.sin(p.move.yaw) * 2, p.move.z - Math.cos(p.move.yaw) * 2, 0);
     const before = new Set(w.items.keys());
     w.action("a", { a: "punch", yaw: p.move.yaw, pitch: 0 });
     const got = [...w.items.values()].filter((i) => !before.has(i.id));
@@ -378,7 +380,7 @@ test("2A: shoplifting only counts on the shop floor (not from the stockroom upst
 
 test("2A: the pond: you wade through it slowly, pedestrians walk round it", () => {
   const c = buildTrashington();
-  const pond = c.water![0];
+  const pond = c.water!.find((r) => inRect(r, 10, -1.75))!; // (C3: the widest strip of the pear-shaped pond)
   const cz = (pond.minZ + pond.maxZ) / 2;
   const land = walk(c, { x: -14, z: -14 }, { x: -14, z: 20 }, 1, 0.15);
   let s = makeMoveState(pond.minX + 1, cz, Math.PI / 2); s.y = 0.15;
@@ -388,7 +390,7 @@ test("2A: the pond: you wade through it slowly, pedestrians walk round it", () =
   assert.ok(wade > 1, "but you can get through");
   const w = new World({ seed: 4 });
   for (let i = 0; i < 60 * 60; i++) { w.tick(); w.takeEvents(); if (i % 30) continue;
-    for (const n of w.npc.npcs.values()) assert.ok(!inRect(pond, n.move.x, n.move.z) || n.state === "ko", `${n.kind} walked into the pond`); }
+    for (const n of w.npc.npcs.values()) assert.ok(!c.water!.some((r) => inRect(r, n.move.x, n.move.z)) || n.state === "ko" || n.post, `${n.kind} walked into the water at ${n.move.x.toFixed(1)},${n.move.z.toFixed(1)}`); }
 });
 
 test("2A: pedestrians wander into shops (and back out)", () => {

@@ -17,7 +17,7 @@
 // BUSTED: everything you carry is confiscated (gone), heat resets, 30 s in a cell at the station.
 // JAIL: pick the lock (lockpick.ts) to break out early into the back alley (still wanted, 1 star),
 // or serve the 30 s and walk out the front door clean.
-import { nearBoxes, type Box } from "./arena.js";
+import { nearBoxes, inBush, type Box } from "./arena.js";
 import { makeMoveState } from "./movement.js";
 import { PLAYER } from "./constants.js";
 import { NPC_DEFS, pickLine } from "./npc.js";
@@ -206,8 +206,25 @@ export class PoliceSystem {
     const d = Math.hypot(m.x - n.move.x, m.z - n.move.z);
     if (d > (this.night ? COP_SIGHT_NIGHT : COP_SIGHT) || Math.abs(m.y - n.move.y) > 8) return false;
     if (d < COP_HEAR) return true;
+    // C3: crouched in a bush, you're invisible (unless they're close enough to hear you)
+    if (m.crouching && m.y < 0.5 && inBush(this.w.arena, m.x, m.z)) return false;
     const eye = m.crouching || m.slideT > 0 ? 0.9 : 1.6; // your head; crouching behind a parked car (1.5 m) hides it
     return this.los(n.move.x, n.move.y + 1.6, n.move.z, m.x, m.y + eye, m.z);
+  }
+
+  /**
+   * C4a: a noise at (x, z) heard r metres away. Cops in earshot who aren't busy chasing someone come and
+   * look where it came from (if the bandit who made it is wanted, they're on to them).
+   */
+  hear(p: PlayerSim, x: number, z: number, r: number) {
+    if (p.jailT > 0) return;
+    for (const c of this.cops()) {
+      if (c.state === "ko" || c.state === "stunned" || c.state === "windup" || c.state === "chase") continue;
+      if (Math.hypot(c.move.x - x, c.move.z - z) > r) continue;
+      c.state = "chase"; c.target = p.id; c.sees = false; c.lostT = 0; c.path = [];
+      c.lastX = x; c.lastZ = z;
+      this.say(c, NPC_DEFS.cop.lines.spot);
+    }
   }
 
   /** A crime happened: any cop who can see it comes running (and it counts extra). */

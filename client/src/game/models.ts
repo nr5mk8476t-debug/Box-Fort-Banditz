@@ -469,6 +469,53 @@ export function buildLootModel(scene: Scene, type: string, outlineColor?: Color3
       star.position.y = 0.05;
       break;
     }
+    // ---- C4a: street junk (sized to each item's collision sphere) ----
+    case "cafe_chair": {
+      const seat = P(MB.CreateBox("s", { width: 0.42, height: 0.05, depth: 0.42 }, scene), "#c8c4cc", 0.015); seat.position.y = -0.02;
+      const back = P(MB.CreateBox("b", { width: 0.42, height: 0.36, depth: 0.04 }, scene), "#c8c4cc", 0.015); back.position.set(0, 0.17, -0.2);
+      for (const [x, z] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) { const l = P(MB.CreateCylinder("l", { diameter: 0.04, height: 0.32, tessellation: 5 }, scene), "#3a3444", 0.01); l.position.set(x, -0.2, z); }
+      break;
+    }
+    case "bin_lid": {
+      P(MB.CreateCylinder("lid", { diameter: 0.62, height: 0.06, tessellation: 16 }, scene), "#8e96a8", 0.02);
+      const h = P(MB.CreateBox("h", { width: 0.2, height: 0.05, depth: 0.05 }, scene), "#5a6070", 0.01); h.position.y = 0.06;
+      break;
+    }
+    case "glass_bottle": {
+      P(MB.CreateCylinder("b", { diameter: 0.09, height: 0.17, tessellation: 10 }, scene), "#3f8f4f", 0.01);
+      const n = P(MB.CreateCylinder("n", { diameterTop: 0.03, diameterBottom: 0.07, height: 0.08, tessellation: 8 }, scene), "#3f8f4f", 0.01); n.position.y = 0.12;
+      break;
+    }
+    case "brick": P(MB.CreateBox("br", { width: 0.22, height: 0.07, depth: 0.11 }, scene), "#b3553f", 0.012); break;
+    case "smelly_fish": {
+      const b = P(MB.CreateSphere("f", { diameterX: 0.28, diameterY: 0.1, diameterZ: 0.1, segments: 8 }, scene), "#8a9ab0", 0.012);
+      void b;
+      const t = P(MB.CreateCylinder("t", { diameterTop: 0, diameterBottom: 0.12, height: 0.1, tessellation: 3 }, scene), "#6a7a90", 0.01); t.rotation.z = Math.PI / 2; t.position.x = -0.17;
+      const e = P(MB.CreateSphere("e", { diameter: 0.025, segments: 4 }, scene), "#1b1420", 0); e.position.set(0.1, 0.02, 0.04);
+      break;
+    }
+    case "traffic_barrier": {
+      const bar = P(MB.CreateBox("bar", { width: 0.9, height: 0.16, depth: 0.05 }, scene), "#f4f1ea", 0.015); bar.position.y = 0.12;
+      for (const x of [-0.3, 0, 0.3]) { const st = P(MB.CreateBox("st", { width: 0.12, height: 0.165, depth: 0.055 }, scene), "#e14b4b", 0); st.position.set(x, 0.12, 0); }
+      for (const x of [-0.38, 0.38]) { const l = P(MB.CreateBox("l", { width: 0.05, height: 0.42, depth: 0.3 }, scene), "#3a3444", 0.01); l.position.set(x, -0.14, 0); }
+      break;
+    }
+    case "plastic_crate": {
+      for (let i = 0; i < 3; i++) { const c = P(MB.CreateBox("c", { width: 0.75, height: 0.36, depth: 0.55 }, scene), i % 2 ? "#3d6fb5" : "#e14b4b", 0.02); c.position.set((i - 1) * 0.04, -0.4 + i * 0.37, 0); c.rotation.y = (i - 1) * 0.12; }
+      break;
+    }
+    case "oil_barrel": {
+      P(MB.CreateCylinder("b", { diameter: 0.8, height: 1.0, tessellation: 16 }, scene), "#3d6f5a", 0.03);
+      for (const y of [-0.25, 0.25]) { const r = P(MB.CreateTorus("r", { diameter: 0.81, thickness: 0.05, tessellation: 16 }, scene), "#2b4f40", 0); r.position.y = y; }
+      break;
+    }
+    case "shopping_trolley": {
+      const basket = P(MB.CreateBox("bk", { width: 0.6, height: 0.45, depth: 0.85 }, scene), "#b8b4c8", 0.02); basket.position.y = 0.15;
+      const base = P(MB.CreateBox("bs", { width: 0.5, height: 0.05, depth: 0.8 }, scene), "#8e8a94", 0.01); base.position.y = -0.3;
+      const handle = P(MB.CreateBox("h", { width: 0.62, height: 0.05, depth: 0.05 }, scene), "#d6264a", 0.01); handle.position.set(0, 0.45, -0.48);
+      for (const [x, z] of [[-0.22, -0.32], [0.22, -0.32], [-0.22, 0.32], [0.22, 0.32]]) { const w = P(MB.CreateCylinder("w", { diameter: 0.14, height: 0.05, tessellation: 8 }, scene), "#1b1420", 0.01); w.rotation.z = Math.PI / 2; w.position.set(x, -0.52, z); }
+      break;
+    }
     default: {
       P(MB.CreateBox("unknown", { size: 0.4 }, scene), "#ff00ff");
     }

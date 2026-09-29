@@ -22,8 +22,8 @@ import { CopCarRenderer } from "./copCarRenderer.ts";
 import { LockpickUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
 import {
-  makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, type PropDef,
+  inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
+  throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, setBoxOff, propSurfaceDist, propNearest, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -47,6 +47,8 @@ export interface UseTarget { id: string; kind: string; name: string; empty: bool
 const PROP_NAMES: Record<string, string> = {
   dumpster: "Dumpster", bin: "Trash Can", phone: "Phone Booth", vending: "Vending Machine", meter: "Parking Meter",
   newsbox: "Newspaper Box", car: "Parked Car", till: "the Till",
+  // C4a: things you can smash
+  shopglass: "Shop Window", busstop: "Bus Stop", hydrant: "Fire Hydrant", mailbox: "Mailbox", bench: "Bench", planter: "Planter", table: "Table", pallet: "Pallet",
 };
 
 /** Round loop + event state for the HUD (read from the server / solo world). */
@@ -72,7 +74,7 @@ const PUNCH_CD_MS = 550; // matches the server's punch cooldown (the server has 
 const PUNCH_REACH = 2.2;
 /** Gibberish voice pitch per pedestrian type. */
 const NPC_VOICE: Record<string, number> = {
-  tourist: 1.15, businessman: 0.8, influencer: 1.45, jogger: 1.1, gym_bro: 0.62, mall_cop: 0.75, mime: 1.0, pigeon_lady: 1.3,
+  tourist: 1.15, businessman: 0.8, influencer: 1.45, jogger: 1.1, gym_bro: 0.62, mall_cop: 0.75, mime: 1.0, pigeon_lady: 1.3, doorman: 0.7, fisherman: 0.75,
 };
 
 /**
@@ -141,6 +143,12 @@ export class ArenaScene {
   private itemViews = new Map<string, { value: number; mode: string; holder: string; holder2: string; lock: number; fort: number; mult: number; tug: number }>();
   // Phase 5A: night, tug of war, pawn shop, fort view
   private night: NightRenderer;
+  /** C4a: the layout this screen collides with (tests) */
+  get arenaLayout() { return this.arena; }
+  /** C4a: breakable prop id -> its arena box */
+  private brkBox = new Map<string, number>();
+  /** C3: how long building the city's meshes took (perf tests) */
+  cityBuildMs = 0;
   /** the static city (Slice 2A: interiors drawn only near the camera) */
   readonly city: CityRenderer;
   private wires: { m: Mesh; t: number }[] = [];
@@ -253,7 +261,9 @@ export class ArenaScene {
       scene.fogEnd = 150;
     }
 
-    this.city = new CityRenderer(scene, this.arena, shadows);
+    const tCity = performance.now();
+    this.city = new CityRenderer(scene, this.arena, shadows, { detail: !settings.lowGraphics }); // (C2: Performance mode skips small façade detail)
+    this.cityBuildMs = performance.now() - tCity;
     this.night = new NightRenderer(scene, this.arena, hemi, sun, cam);
     // Only the static city casts shadows, so draw the shadow map once instead of every frame
     const sm = shadows?.getShadowMap();
@@ -262,6 +272,7 @@ export class ArenaScene {
     this.npcs = new NpcRenderer(scene);
     this.events = new EventRenderer(scene);
     this.propsR = new PropRenderer(scene, this.arena.props ?? []);
+    for (const pd of this.arena.props ?? []) if (pd.box !== undefined) this.brkBox.set(pd.id, pd.box);
     this.cars = new CarRenderer(scene);
     this.copCars = new CopCarRenderer(scene);
     this.lock = new LockpickUI(document.getElementById("hud") ?? document.body);
@@ -409,7 +420,12 @@ export class ArenaScene {
     this.remotes.retain(ids);
 
     // props (dumpsters emptied, booths smashed, alarms) + traffic
-    view.props?.forEach((pv, id) => { this.propsR.sync(id, pv); this.propState.set(id, pv.ready); });
+    view.props?.forEach((pv, id) => {
+      this.propsR.sync(id, pv); this.propState.set(id, pv.ready);
+      // C4a: smashed things vanish and stop blocking (repaired at dawn)
+      const bd = this.brkBox.get(id);
+      if (bd !== undefined) { this.propsR.syncBreakable(id, pv.ready); this.city.setBroken(id, !pv.ready); setBoxOff(this.arena, bd, !pv.ready); }
+    });
     view.cars?.forEach((cv, id) => this.cars.sync(id, cv));
     this.copCars.syncAll(view.copCars);
 
@@ -580,7 +596,12 @@ export class ArenaScene {
         }
         case "smash": {
           const d = this.propsR.def(e.prop) ?? (this.arena.props ?? []).find((x) => x.id === e.prop);
-          if (d) { const g = gainAt(d.x, 1, d.z); if (g > 0.1) { sfx.smash(e.kind, g); this.pop(e.kind === "car" ? "SMASH!" : "CLANG!", d.x, 2.2, d.z, "#ffe14a"); } }
+          const x = e.x ?? d?.x ?? 0, z = e.z ?? d?.z ?? 0;
+          if (d) {
+            const g = gainAt(x, 1, z);
+            if (g > 0.1) { sfx.smash(e.kind, g); this.pop(e.kind === "car" ? "SMASH!" : e.broke ? (e.kind === "shopglass" || e.kind === "busstop" ? "SHATTER!" : "CRUNCH!") : "CLANG!", x, 2.2, z, "#ffe14a"); }
+            if (d.box !== undefined) this.propsR.burst(e.kind, x, z, !!e.broke);
+          }
           break;
         }
         case "empty": if (e.p === me) this.onFeedback?.("Nothing left in there. It refills later.", "info"); break;
@@ -665,6 +686,10 @@ export class ArenaScene {
             this.pop("+$" + e.value, p.x, p.y + 0.6, p.z, "#7fe07a");
             this.onFeedback?.(`+$${e.value} cash (${lootDef(e.type).name})`, "good");
           }
+          break;
+        case "splash":
+          sfx.splash(gainAt(e.x, 0.3, e.z));
+          if (e.p === me) { const t = this.itemTypes.get(e.item); this.onFeedback?.(`SPLASH! Your ${t ? lootDef(t).name : "loot"} floats off. Climb out at a ladder.`, "bad"); }
           break;
         case "raidEnter": {
           // C1: the loud, direct raid alert (the owner), and a siren everyone in Tent Town hears
@@ -1096,8 +1121,10 @@ export class ArenaScene {
     let best: PropDef | null = null, bestScore = Infinity;
     for (const d of this.arena.props ?? []) {
       if (!filter(d)) continue;
-      const dx = d.x - me.x, dz = d.z - me.z, dist = Math.hypot(dx, dz);
-      if (dist - PROP_RADIUS[d.kind] > reach || Math.abs(d.y - me.y) > 2.2) continue;
+      if (d.box !== undefined && this.propState.get(d.id) === false) continue; // (C4a: already smashed)
+      const n = propNearest(d, me.x, me.z); // (C4a: long things: aim at the nearest bit)
+      const dx = n.x - me.x, dz = n.z - me.z, dist = Math.hypot(dx, dz);
+      if (propSurfaceDist(d, me.x, me.z) > reach || Math.abs(d.y - me.y) > 2.2) continue;
       let ang = Math.atan2(dx, dz) - yaw;
       while (ang > Math.PI) ang -= Math.PI * 2;
       while (ang < -Math.PI) ang += Math.PI * 2;
@@ -1200,7 +1227,9 @@ export class ArenaScene {
     const ease = (rate: number) => 1 - Math.exp(-dt * rate);
 
     // Eye height follows stance (crouch / slide lower the camera smoothly)
-    const eyeTarget = pose === "knocked" ? 0.35 : pose === "slide" ? PLAYER.slideEyeHeight : cur.crouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight;
+    // (C1.1: floating in the canal: eyes just above the water)
+    const swimming = inDeepWater(this.arena, cur.x, cur.z, cur.y);
+    const eyeTarget = pose === "knocked" ? 0.35 : swimming ? 0.6 : pose === "slide" ? PLAYER.slideEyeHeight : cur.crouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight;
     this.eye += (eyeTarget - this.eye) * ease(12);
 
     // Head bob (off with reduced motion)
@@ -1269,6 +1298,13 @@ export class ArenaScene {
     this.npcs.update(now, dt, this.camera);
     this.night.update(dt);
     this.city.update(this.camera.position.x, this.camera.position.z);
+    // C3: the park's pigeons scatter from anyone who comes close (only worth checking near the park)
+    if (Math.hypot(this.camera.position.x, this.camera.position.z) < 60) {
+      const threats: { x: number; z: number; speed: number }[] = [{ x: this.cur.x, z: this.cur.z, speed: Math.hypot(this.cur.vx, this.cur.vz) }];
+      this.remotes.forEachPos((x, z) => { if (Math.abs(x) < 25 && Math.abs(z) < 25) threats.push({ x, z, speed: 0 }); });
+      this.npcs.forEachVisible((_id, x, _y, z, _state, kind) => { if (kind !== "pigeon_lady" && Math.abs(x) < 25 && Math.abs(z) < 25) threats.push({ x, z, speed: 0 }); });
+      this.city.updatePark(dt, threats);
+    }
     this.city.updateLights(this.match.lightT ?? 0);
     this.raidAlert.update(dt, this.camera.position.x, this.camera.position.z, this.camera.rotation.y);
     this.updateWires(dt);

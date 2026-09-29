@@ -268,3 +268,50 @@ The live game felt laggy: the free Render server (0.1 CPU, in Singapore) could o
 - Raid alert: a rival stepping into your compound at night sets it off straight away (at most every 15 s): siren, red screen edge, a banner naming the raider, an arrow home with the distance. Taking something sends a second banner naming the item. Everyone in Tent Town (or within 80 m) hears the siren.
 - The movement playground and the browser tests' open ground moved to the build yard at the south end of the rail yard.
 - Fairness (open question for Blake): from every fort, the walk to the nearest quarter of the richest 20% of loot is within 3.4%, but the average walk to all of it differs by 15% (corners are further from the middle of Uptown). See the C1 report for options.
+
+## City Redesign slice C1.1 (Blake's layout fixes), built 2026-09-28
+- Kept as they were: the Uptown and Yards road jogs.
+- City Hall: the back of the loop and the Mile's link to the Parade are gone. City Hall Drive is now a one-way U in front of City Hall, which makes Gold St one-way eastbound. A formal garden fills the space behind (hedges, 2 fountains, benches, trees, an empty plinth "RESERVED FOR THE NEXT MAYOR", some loot).
+- The high-tier car park became THE GILDED PIGEON RESIDENCES, a luxury apartment tower with a canopy, rope posts, 3 valet cars (parked cars kept) and a "VALET (TIPS MANDATORY)" kiosk. Its doorman is a snooty NPC who stays at his post, fights back and insults you.
+- Forts: the compound walls are gone. Every fort starts open and vulnerable. Each yard is 16 x 15 m, marked by bold border lines and corner flags. Walls and defences come as paid upgrades in levels (Slice 5B). Forts are evenly spaced 47.5 m apart. Raccoons may come in from behind.
+- Raid alert: kept on entering a rival's yard at night; still nothing by day.
+- Sides run the full length to the south fence. West: the rail yard, with a boxcar siding ("RETIRED") at the south end; trains come in C5. East: the canal is deep water (you float, drop your hand item with a splash, paddle at 38% speed, can only climb out at ladders), with 2 footbridges, the marina at the north end and a sewer outfall with a crawlable pipe at the south end. The highway crosses over both.
+- The bus depot is scrapped. The edge roads stay.
+- Fairness is accepted by Blake: the nearest quarter of the richest loot is within 9.1% from every fort (the test limit is 12%); the average to all of it differs 16.1%.
+- Next: C2 (buildings and facades).
+
+## City Redesign slice C2 (buildings and façades), built 2026-09-29
+Blake's answers (29 Sep): detailed façades everywhere; materials per tier; a parody sign on every shop; night lighting waits for C5; keep going overnight with my recommendations (each logged here); stay at 100 files; Performance mode hides small detail; fire escapes and balconies are looks only until C6.
+- Materials per tier: the Yards are brick (mortar courses, soot streaks) in reds and browns; the middle is painted render (damp stains, hairline cracks) in pastels with cream trim; Uptown is dressed stone and blue-green glass curtain-wall towers. The Mayor's tower stays stone.
+- Every street building has a front: shops get a glass shopfront with a door and window displays, a striped awning (6 colour pairs) and a fascia sign; towers get a lobby with glass doors and a canopy (gold-trimmed Uptown, on a polished stone base).
+- Detail (normal mode only): window sills on the street side (and the back of Yards buildings), lintels and corner pilasters in the middle tier, window AC units in the Yards, flower boxes in the middle tier, fire escapes on about half the Yards/middle fronts, railed balconies (gold rails Uptown), cornices, belt courses on towers, water tanks and AC units on roofs you can't reach, setback crowns and masts on the tallest Uptown towers.
+- Landmarks got their own features: City Hall's pediment, gold band and flags; the Grand Hotel's red canopy and flags; a giant green trash can on TrashCorp HQ; the casino's marquee bulbs and rooftop dice; the museum's pediment; the mall's brand banners and arcade; the country club's topiary; a golden pigeon on the Gilded Pigeon; the market hall's barrel roof; the Bijou's bulb marquee; St. Dumpster's steeple and rose window; the station's arches; the marina office's lifebuoy. Landmark entrances get glass doors.
+- Signs: 24 parody names per tier (72 in all). A block never repeats one; touching neighbours never share a colour (both tested).
+- Changed a gameplay-visible thing: one-storey shops in the Yards are now 4.8 m+ tall (were 3.2 m+) so the shopfront and fascia sign fit. Rooftop loot on those roofs moves up with them.
+- Logged for later (my calls, not yet built): stoops, stairwells and reachable upper entrances need climbing, so they move to C6 with the fire escapes; lit windows and neon are C5.
+- Performance: about +30% triangles in view; Performance mode takes most of it back. Shop signs moved to shared texture sheets (fewer draw calls, less memory).
+
+## City Redesign slice C3 (the park), built 2026-09-29 (overnight, my recommendations)
+- The fountain is now wadeable: a 0.35 m rim you step over, shallow water inside (slows you like the pond). In the middle, the Golden Mayor sits on a white porcelain toilet with gold fittings on top of his column, reading the paper. The plaque still says "OUR MAYOR (FOR NOW)".
+- The pond is pear-shaped (a big round end, a small one) and wadeable. A shark fin circles in the big end (it's just for looks: probably cardboard).
+- The fisherman: a new posted NPC at the foot of his jetty with a rod out over the water. He grumbles at bandits ("Shh. You'll scare the fish."), fights back with his rod (2 hp), and goes back to fishing. He counts like the doorman (not part of the crowd).
+- Bushes: 5 clumps on the lawn. Crouch inside one and cops can't see you (unless they're close enough to hear you, like everywhere else). Standing up in a bush, or crouching on open grass, doesn't hide you. Two bushes have loot in them.
+- Pigeons: a flock of about 14 round the fountain. They scatter when someone walks within 2.5 m or sprints within 6 m, then come back. They're drawn by each player's own screen (not synced): cosmetic only, zero network cost.
+- Furniture: lawn out to 16.5 m with the paved promenade ring outside it, 8 park lamps, 2 picnic tables, 3 flower beds, benches, bins.
+- Fixed along the way: the zebra crossings where roads meet the roundabout moved 5 m out, so a car waiting to join the ring no longer sits on the crossing (it made walkers wait up to 20 s; found by the soak test after the park changed the random walks).
+- Not done (logged): pigeon lady feeding the flock, fishing for loot, the shark as a real hazard. Candidates for C5 (life).
+
+## City Redesign slice C4a (mess: smash, throw, push, noise), built 2026-09-29
+Blake's answers (29 Sep): split C4 into C4a (props, noise, heat, reset) and C4b (laundromat + old lady, tagging); aura points are shown now and used by the Mayor race later; a smashed shop window opens a way in until dawn; the old lady yells, calls the cops, then chases with her cane (C4b).
+- Smashable street things (each is a real collision box, so smashing it removes it for everyone until dawn): shop windows (2 hits), bus-stop glass (1), hydrants (2), mailboxes (2), benches (2), planters (2), café and picnic tables (1), pallets (1). The old smash-and-grab props (phone booths, vending machines, meters, news boxes, parked cars) work as before.
+- A smashed shop window: the shop alarm goes off (heard 25 m away), the cashier yells (heat if awake), and it's a walk-through gap into the shop until dawn.
+- A burst hydrant sprays for 20 s; standing in the jet shoves you away and lifts you off your feet.
+- A mailbox drops a newspaper, coupon, coins or (rarely) a wallet.
+- Smashing is loud (12 m): cops who hear it come to look, walkers stop and stare ("Was that a bench?!").
+- Heat only if seen: breaking things adds heat only when a pedestrian, cashier or cop can see you (20 m, clear line of sight). x2 at night as usual. An empty alley is free.
+- Throwing counts: a thrown thing slamming into something smashable is a hit by the thrower.
+- Street junk (~48 pieces, $0-5 each): café chairs by the tables, bin lids by the bins, bottles in the alleys, crates by the dumpsters, bricks and a barrier at the building site, barrels in the rail yard, trolleys outside Corner Mart, fish at the market and the marina. Chairs, lids, bottles, bricks, fish and barriers are thrown like any item; crates, barrels and trolleys are giant (dragged, slow). Junk never comes from random loot spawns and doesn't count toward the loot caps. It all goes back to its spot at the start of each round.
+- Resets: everything smashed is repaired at the start of each day; damage done in the day lasts through the night. Searchables refill as before.
+- Sync cost: a smash sends one prop change; resting junk costs nothing (only changes are sent).
+- How it's drawn: the smashable things stay part of the merged city meshes (no extra draw calls); a smash collapses just their vertices, and dawn puts them back. Pieces fly out and vanish after ~10 s (only on your screen).
+- My calls (logged): hydrants/benches etc. inside shops wait for C6's interiors; street lights, fences, fish tanks and TVs in shop windows aren't smashable yet (C6); rideable trolleys wait for C6 traversal.

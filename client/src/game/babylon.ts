@@ -12,6 +12,7 @@ export { Vector3, Color3, Color4, Matrix } from "@babylonjs/core/Maths/math.js";
 export { Scalar } from "@babylonjs/core/Maths/math.scalar.js";
 export { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
 export { Mesh } from "@babylonjs/core/Meshes/mesh.js";
+export { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData.js";
 export { VertexBuffer } from "@babylonjs/core/Buffers/buffer.js";
 export { TransformNode } from "@babylonjs/core/Meshes/transformNode.js";
 export type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";

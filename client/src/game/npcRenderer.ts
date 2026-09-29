@@ -16,7 +16,7 @@ interface Snap { t: number; x: number; y: number; z: number; yaw: number; }
 
 interface Look {
   body: string; legs: string; skin: string; hat?: string; hatShape?: "cap" | "sunhat" | "beret" | "band" | "none" | "scarf";
-  prop?: "camera" | "briefcase" | "phone" | "none" | "crumbs" | "cane" | "moneybag" | "laptop"; bulk?: number; face?: string;
+  prop?: "camera" | "briefcase" | "phone" | "none" | "crumbs" | "cane" | "moneybag" | "laptop" | "rod"; bulk?: number; face?: string;
 }
 
 const LOOKS: Record<string, Look> = {
@@ -27,6 +27,8 @@ const LOOKS: Record<string, Look> = {
   gym_bro: { body: "#2fb6ff", legs: "#3e4350", skin: "#d99a6c", hat: "#2b2433", hatShape: "cap", prop: "none", bulk: 1.35 },
   mall_cop: { body: "#3d5a9e", legs: "#2b3350", skin: "#e8b48a", hat: "#2b3350", hatShape: "cap", prop: "none", bulk: 1.15 },
   mime: { body: "#f4f1ea", legs: "#1b1420", skin: "#ffffff", hat: "#1b1420", hatShape: "beret", prop: "none" },
+  fisherman: { body: "#4f6b3a", legs: "#3a4a2a", skin: "#e0a878", hat: "#8a9a5b", hatShape: "sunhat", prop: "rod", bulk: 1.15 },
+  doorman: { body: "#6b1f2e", legs: "#1b1420", skin: "#e8b48a", hat: "#6b1f2e", hatShape: "cap", prop: "none", bulk: 1.2 },
   cashier: { body: "#d6264a", legs: "#2b2433", skin: "#e8b48a", hat: "#ffcf3a", hatShape: "cap", prop: "none" },
   raccoon: { body: "#8a8a96", legs: "#4a4652", skin: "#a3a3ae", hatShape: "none", prop: "none", bulk: 1.25 },
   millionaire: { body: "#2b2433", legs: "#1b1420", skin: "#f0c8a0", hat: "#1b1420", hatShape: "none", prop: "cane", bulk: 1.3 },
@@ -125,6 +127,11 @@ export class NpcRenderer {
     if (L.hatShape === "beret") { const h = part(MeshBuilder.CreateCylinder("beret", { diameter: 0.4, height: 0.08, tessellation: 12 }, sc), hc, head, 0.015); h.position.set(0.04, 0.2, 0); h.rotation.z = -0.25; }
     if (L.hatShape === "band") { const h = part(MeshBuilder.CreateTorus("band", { diameter: 0.4, thickness: 0.06, tessellation: 12 }, sc), hc, head, 0.01); h.position.y = 0.08; }
     if (L.hatShape === "scarf") { const h = part(MeshBuilder.CreateTorus("scarf", { diameter: 0.34, thickness: 0.12, tessellation: 10 }, sc), hc, pivot, 0.015); h.position.y = 1.42; const bird = part(MeshBuilder.CreateSphere("pigeon", { diameter: 0.16, segments: 6 }, sc), "#8a94a8", pivot, 0.012); bird.position.set(0.28, 1.5, 0); }
+    if (v.kind === "doorman") {
+      // gold buttons, epaulettes, white gloves
+      for (const y of [0.95, 1.1, 1.25]) { const b = part(MeshBuilder.CreateBox("btn", { width: 0.05, height: 0.05, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); b.position.set(0, y, 0.26 * bulk); }
+      for (const s of [-1, 1]) { const e = part(MeshBuilder.CreateBox("epaulette", { width: 0.14, height: 0.04, depth: 0.14 }, sc), "#ffcf3a", pivot, 0); e.position.set(s * 0.25 * bulk, 1.42, 0); }
+    }
     if (v.kind === "mall_cop") { const badge = part(MeshBuilder.CreateBox("badge", { width: 0.08, height: 0.1, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); badge.position.set(-0.12, 1.22, 0.26 * bulk); }
     if (v.kind === "millionaire") {
       const brim = part(MeshBuilder.CreateCylinder("tophatbrim", { diameter: 0.46, height: 0.03, tessellation: 14 }, sc), "#1b1420", head, 0.012); brim.position.y = 0.17;
@@ -181,6 +188,14 @@ export class NpcRenderer {
       if (L.prop === "crumbs") part(MeshBuilder.CreateSphere("bag", { diameter: 0.18, segments: 6 }, sc), "#d9c9a0", prop, 0.01);
       if (L.prop === "cane") { const c = part(MeshBuilder.CreateCylinder("cane", { diameter: 0.04, height: 0.9, tessellation: 6 }, sc), "#1b1420", prop, 0.008); c.position.y = -0.35; const k = part(MeshBuilder.CreateSphere("knob", { diameter: 0.09, segments: 6 }, sc), "#ffcf3a", prop, 0.008); k.position.y = 0.1; }
       if (L.prop === "moneybag") { const b = part(MeshBuilder.CreateSphere("mbag", { diameter: 0.42, segments: 8 }, sc), "#b99a5c", prop, 0.015); b.position.y = -0.18; const d = part(MeshBuilder.CreateBox("mbagsign", { width: 0.14, height: 0.18, depth: 0.02 }, sc), "#2f7a3b", prop, 0); d.position.set(0, -0.18, 0.21); }
+      if (L.prop === "rod") {
+        // C3: a fishing rod held out over the water, the line dangling
+        const r = part(MeshBuilder.CreateCylinder("rod", { diameterTop: 0.02, diameterBottom: 0.05, height: 2.6, tessellation: 6 }, sc), "#6b4a2b", prop, 0.006);
+        r.rotation.x = 1.0; r.position.set(0, 0.55, 1.1);
+        const line = part(MeshBuilder.CreateCylinder("fishline", { diameter: 0.01, height: 1.6, tessellation: 3 }, sc), "#f4f1ea", prop, 0);
+        line.position.set(0, 0.35, 2.2);
+        const bob = part(MeshBuilder.CreateSphere("bobber", { diameter: 0.09, segments: 4 }, sc), "#ff3a3a", prop, 0.006); bob.position.set(0, -0.45, 2.2);
+      }
       if (L.prop === "laptop") { const l = part(MeshBuilder.CreateBox("lap", { width: 0.34, height: 0.03, depth: 0.24 }, sc), "#9aa3b5", prop, 0.01); l.position.y = -0.02; }
     }
     // dizzy stars

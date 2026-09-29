@@ -97,6 +97,8 @@ export const BIG_SHOT_STAY = 120;
 
 export const NPC_STEP = SIM_DT * 2; // pedestrians think + move at 30 Hz (cheap, smooth enough)
 export const PUNCH_RANGE = 1.9;
+/** C4a: what walkers say when something smashes nearby */
+const STARTLED = ["What was that?!", "Hooligans!", "Not again...", "Somebody call somebody!", "Was that a bench?!", "I saw nothing. NOTHING."];
 const ATTACK_RANGE = 1.5;
 const STRIKE_RANGE = 1.9;
 const WINDUP = 0.45;
@@ -121,6 +123,13 @@ export class NpcSystem {
       n.move = makeMoveState(sh.cashier.x, sh.cashier.z, sh.cashier.yaw);
       n.state = "work";
     }
+    // C1.1: posted people (the doorman; C3: the fisherman)
+    for (const po of host.arena.posts ?? []) {
+      const n = this.spawn(po.kind)!;
+      n.post = { x: po.x, z: po.z, yaw: po.yaw };
+      n.move = makeMoveState(po.x, po.z, po.yaw);
+      n.state = "work";
+    }
   }
 
   // ---------------------------------------------------------------- cashiers
@@ -141,9 +150,9 @@ export class NpcSystem {
   /** New round: every cashier back at their till with a fresh float. */
   resetCashiers() {
     for (const n of this.npcs.values()) {
-      if (n.kind !== "cashier" || !n.post) continue;
+      if (!n.post) continue; // (cashiers and posted people: the doorman, the fisherman)
       n.move = makeMoveState(n.post.x, n.post.z, n.post.yaw);
-      n.state = "work"; n.robbed = false; n.hp = 1; n.stateT = 0;
+      n.state = "work"; n.robbed = false; n.hp = n.kind === "cashier" ? 1 : NPC_DEFS[n.kind].hp; n.stateT = 0;
     }
   }
 
@@ -210,7 +219,9 @@ export class NpcSystem {
     }
     // sideways along the back alley (perpendicular to the direction the fort faces)
     const lx = Math.cos(f.yaw), lz = -Math.sin(f.yaw);
-    const side = this.rng() < 0.5 ? -1 : 1;
+    const r = this.rng();
+    // (C1.1: runs off toward the middle of Tent Town, never into the fence)
+    const side = f.x < -1 ? 1 : f.x > 1 ? -1 : r < 0.5 ? -1 : 1;
     n.move = makeMoveState(f.backX + lx * side * 3, f.backZ + lz * side * 3, f.yaw);
     n.state = "sneak"; n.fortSlot = slot; n.lifeT = 0; n.robbed = true; n.pace = 1; n.lane = 0;
     // escape: round the side of the fort box (not through it), into the alley, then off down the alley
@@ -443,6 +454,17 @@ export class NpcSystem {
   }
 
   /** Everyone nearby freaks out; influencers start filming (double notoriety). */
+  /** C4a: a loud noise nearby: walkers stop and look (and some say so). */
+  startle(x: number, z: number, r: number) {
+    for (const o of this.npcs.values()) {
+      if (SPECIAL_KINDS.has(o.kind) || o.state !== "walk") continue;
+      if (Math.hypot(o.move.x - x, o.move.z - z) > r) continue;
+      o.state = "idle"; o.stateT = 1.2 + this.rng();
+      o.move.yaw = Math.atan2(x - o.move.x, z - o.move.z);
+      if (this.rng() < 0.3) this.say(o, STARTLED);
+    }
+  }
+
   private panicBystanders(victim: NpcSimData, byPlayer: string) {
     for (const o of this.npcs.values()) {
       if (o === victim || SPECIAL_KINDS.has(o.kind) || o.state === "ko" || o.state === "chase" || o.state === "windup") continue;
@@ -621,8 +643,8 @@ export class NpcSystem {
           }
           break;
         }
-        case "gloat": if (n.stateT <= 0) { n.state = "walk"; n.target = ""; } break;
-        case "huff": if (n.stateT <= 0) n.state = "walk"; break;
+        case "gloat": if (n.stateT <= 0) { n.state = n.post ? "work" : "walk"; n.target = ""; } break;
+        case "huff": if (n.stateT <= 0) n.state = n.post ? "work" : "walk"; break;
         case "ko": if (n.stateT <= 0) this.startFlee(n, n.move.x + 1, n.move.z, n.target, 3); break;
       }
 

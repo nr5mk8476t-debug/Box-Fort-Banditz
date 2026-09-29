@@ -174,6 +174,9 @@ export class RemotePlayers {
     return { x: r.root.position.x, y: r.root.position.y, z: r.root.position.z, yaw: r.yaw };
   }
 
+  /** C3: where every remote player is drawn (the park's pigeons flee from them) */
+  forEachPos(cb: (x: number, z: number) => void) { for (const r of this.map.values()) cb(r.root.position.x, r.root.position.z); }
+
   /** Current pose of a remote player (for tests / debugging). */
   poseOf(id: string): MovePose | null { return this.map.get(id)?.pose ?? null; }
 

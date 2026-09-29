@@ -22,6 +22,9 @@ const browser = await chromium.launch({
 async function openPage(name, query = "?test=1") {
   // (Slice 2A: the city is heavier to draw on the CPU; friends' windows render at a smaller size so 4 windows fit on the test box)
   const ctx = await browser.newContext({ viewport: name === "A" ? { width: 1280, height: 720 } : { width: 800, height: 450 } });
+  // (C3: friends' windows run in Performance mode: with C2's detailed façades, 4 CPU-rendered cities starve
+  //  the test box's one software GPU. The host window A keeps full detail.)
+  if (name !== "A") await ctx.addInitScript(() => { try { const k = "bfb.settings.v1"; const s = JSON.parse(localStorage.getItem(k) || "{}"); s.lowGraphics = true; localStorage.setItem(k, JSON.stringify(s)); } catch {} });
   await ctx.addInitScript(() => {
     window.__audioCtxCount = 0;
     const Orig = window.AudioContext;
@@ -266,7 +269,7 @@ try {
   ok(npcs0.length === 20, `the streets have ${npcs0.length} pedestrians`);
   const nCash = await A.evaluate(() => window.__bfb.npcs().filter((n) => n.kind === "cashier").length);
   ok(nCash === 15, `a cashier in each of the 15 shops (${nCash})`);
-  ok(new Set(npcs0.map((n) => n.kind)).size >= 6, `mix of types: ${[...new Set(npcs0.map((n) => n.kind))].join(", ")}`);
+  ok(new Set(npcs0.map((n) => n.kind)).size >= 5, `mix of types: ${[...new Set(npcs0.map((n) => n.kind))].join(", ")}`); // (C1.1: 5+ of the 8 kinds: 20 random people can miss one or two by chance)
   // 2.5 s of GAME time (this headless machine sometimes runs the solo world far slower than real time)
   const walkSteps0 = (await info(A)).stats.steps;
   await A.waitForFunction((n) => window.__bfb.info().stats.steps >= n, walkSteps0 + 150, { timeout: 60000 }).catch(() => {});
@@ -412,6 +415,60 @@ try {
   await shot(A, "52-raid-alert.png");
   await A.waitForFunction(() => !window.__bfb.raidAlert(), null, { timeout: 60000 }).catch(() => {});
 
+  // ---- C1.1: the deep canal, the doorman ----
+  console.log("\n# C1.1 canal + doorman (solo)");
+  await A.evaluate(() => { window.__bfb.teleport(106, 15, 0); window.__bfb.setPitch(0); });
+  await sleep(1500);
+  ok(await A.waitForFunction(() => window.__bfb.scene().activeCamera.position.y < 1.0, null, { timeout: 15000 }).then(() => true, () => false), `in the canal your eyes are just above the water (camera ${(await A.evaluate(() => window.__bfb.scene().activeCamera.position.y)).toFixed(2)} m)`);
+  await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+  const swim = await A.waitForFunction(() => { const m = window.__bfb.move(); const v = Math.hypot(m.vx, m.vz); return v > 0.5 ? v : false; }, null, { timeout: 20000 }).then((h) => h.jsonValue(), () => 0);
+  await A.evaluate(() => window.__bfb.setAxes(null));
+  ok(swim > 0.5 && swim < 2.5, `paddling speed ${Number(swim).toFixed(1)} m/s (walking is 5)`);
+  await hide();
+  await shot(A, "53-in-the-canal.png");
+  ok(await A.evaluate(() => window.__bfb.npcs().some((n) => n.kind === "doorman")), "the doorman is at the apartment tower");
+
+  // ---- C2: building façades (looks only) ----
+  console.log("\n# C2 façades (solo)");
+  const fac = await A.evaluate(() => window.__bfb.facades());
+  ok(fac.detail === true && fac.pieces > 2000, `façade detail is on in normal mode (${fac.pieces} pieces: sills, awnings, fire escapes...)`);
+  await A.evaluate(() => { window.__bfb.clearCops(); window.__bfb.teleport(-28, -51.5, Math.PI / 2 + 0.25); window.__bfb.setPitch(-0.05); });
+  await sleep(2500); await hide();
+  await shot(A, "54-c2-shop-street.png");
+
+  // ---- C3: the park (pigeons scatter, the fisherman, the pond) ----
+  console.log("\n# C3 park (solo)");
+  const pg0 = await A.evaluate(() => window.__bfb.pigeons());
+  ok(pg0.count >= 8, `${pg0.count} pigeons round the fountain`);
+  ok(await A.evaluate(() => window.__bfb.npcs().some((n) => n.kind === "fisherman")), "the fisherman is at the pond");
+  await A.evaluate(() => { window.__bfb.clearCops(); window.__bfb.teleport(0, -13, 0); window.__bfb.setPitch(0.1); window.__bfb.clearNpcs(0, 0, 20); });
+  await sleep(1500);
+  await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1, sprint: true }));
+  const scattered = await A.waitForFunction((n) => window.__bfb.pigeons().scatters > n, pg0.scatters, { timeout: 30000 }).then(() => true, () => false);
+  await A.evaluate(() => window.__bfb.setAxes(null));
+  ok(scattered, `running at the pigeons scatters them (${(await A.evaluate(() => window.__bfb.pigeons())).flying} flying)`);
+  await A.evaluate(() => { window.__bfb.teleport(-2, -9, 0.7); window.__bfb.setPitch(-0.05); });
+  await sleep(2000); await hide();
+  await shot(A, "55-c3-park.png");
+
+  // ---- C4a: mess (junk to throw, things to smash) ----
+  console.log("\n# C4a mess (solo)");
+  const junk = await A.evaluate(() => window.__bfb.items().filter((i) => ["cafe_chair", "bin_lid", "glass_bottle", "brick", "plastic_crate", "oil_barrel", "shopping_trolley", "smelly_fish", "traffic_barrier"].includes(i.type)).length);
+  ok(junk >= 30, `${junk} bits of street junk lying about`);
+  const benchS = await A.evaluate(() => { const ds = window.__bfb.propDefs().filter((d) => d.kind === "bench"); return ds[ds.length - 1]; });
+  await A.evaluate((b) => { window.__bfb.clearCops(); const x = b.x + (b.hw > b.hd ? 0 : b.hw + 0.8), z = b.z + (b.hw > b.hd ? b.hd + 0.8 : 0); window.__bfb.teleport(x, z, Math.atan2(b.x - x, b.z - z)); }, benchS);
+  await sleep(800);
+  // (punch until it breaks: the game clock runs slowly on this CPU-only box, so the punch cooldown takes a while)
+  let soloPunches = 0, soloBroke = false;
+  for (; soloPunches < 10 && !soloBroke; soloPunches++) {
+    await A.evaluate((b) => { const m = window.__bfb.move(); window.__bfb.shopAct({ a: "punch", yaw: Math.atan2(b.x - m.x, b.z - m.z), pitch: 0 }); }, benchS);
+    soloBroke = await A.waitForFunction((id) => window.__bfb.props().some((p) => p.id === id && !p.ready), benchS.id, { timeout: 2500 }).then(() => true, () => false);
+  }
+  ok(soloBroke, `punching smashes a bench (${soloPunches} punches sent; it takes 2 landed hits)`);
+  ok(await A.evaluate((b) => window.__bfb.smashed() >= 1 && window.__bfb.blockedAt(b.x, b.z) === false, benchS), "the smashed bench vanishes and stops blocking");
+  await hide();
+  await shot(A, "56-c4a-smashed.png");
+
   // ---- Slice 2A: walk-in shops, interiors drawn only nearby, the pond ----
   console.log("\n# Slice 2A city (solo)");
   const units = await A.evaluate(() => window.__bfb.units());
@@ -538,7 +595,7 @@ try {
   ok(await A.waitForFunction(() => window.__bfb.match().phase !== "lobby", null, { timeout: 10000 }).then(() => true, () => false), "ENTER starts the match (intro countdown)");
   ok(/CYCLE 1 OF 3/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
   ok((await M()).home.inside, "a cycle starts at home");
-  ok(await waitPhase("scavenge", 30000), "intro -> scavenge");
+  ok(await waitPhase("scavenge", 90000), "intro -> scavenge"); // (C3: 5 s of game time; the heavier city draws slower on this CPU-only box)
   await A.evaluate(() => window.__bfb.noEvents());
   ok(/^[23]:\d\d$/.test(await A.textContent("#mh-time")) && /DAY 1/.test(await A.textContent("#mh-round")), `day timer shows ${await A.textContent("#mh-round")} ${await A.textContent("#mh-time")}`);
   ok(await A.isVisible("#scores"), "scoreboard shows during the round");
@@ -546,7 +603,7 @@ try {
   const yardPos = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z, yaw: m.yaw }; });
   const fwd = { x: Math.sin(yardPos.yaw), z: Math.cos(yardPos.yaw) };
   await A.evaluate(([x, z]) => window.__bfb.spawnItem("crt_tv", x, z), [yardPos.x + fwd.x * 2, yardPos.z + fwd.z * 2]);
-  const banked = await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "crt_tv" && i.lock === 100), null, { timeout: 60000 }).then(() => true, () => false);
+  const banked = await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "crt_tv" && i.lock === 100), null, { timeout: 150000 }) /* (C3: 10 s of game time; slow CPU-drawn frames at the fort) */.then(() => true, () => false);
   ok(banked, "loot resting in your yard locks in (banked) after 10 s");
   const bankNow = (await M()).scores[0].bank;
   ok(bankNow > 0 && /\+\d+/.test(await A.textContent("#scores")), `scoreboard shows the fort loot value (+${bankNow})`);
@@ -564,7 +621,7 @@ try {
     }
     // (5 s of GAME time: this headless machine sometimes runs the solo world ~10x slower than real time)
     if (kind === "airdrop") ok(await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "airdrop_crate"), null, { timeout: 90000 }).then(() => true, () => false), "an airdrop crate spawns");
-    if (kind === "raccoons") ok(await A.waitForFunction(() => window.__bfb.npcs().some((n) => n.kind === "raccoon"), null, { timeout: 45000 }).then(() => true, () => false), "a raccoon sneaks toward your fort");
+    if (kind === "raccoons") ok(await A.waitForFunction(() => window.__bfb.npcs().some((n) => n.kind === "raccoon"), null, { timeout: 90000 }).then(() => true, () => false), "a raccoon sneaks toward your fort");
   }
   // small money goes straight into your cash
   await A.evaluate(() => { window.__bfb.clearNpcs(window.__bfb.T.x + (-8), window.__bfb.T.z + (-8), 8); window.__bfb.teleport(window.__bfb.T.x + (-8), window.__bfb.T.z + (-8), 0); });
@@ -718,6 +775,21 @@ try {
   ok(sawCrouch, "B sees A crouching");
 
   // ---- Phase 2 loot online ----
+  console.log("\n# C4a mess (online)");
+  {
+    const bench = await A.evaluate(() => { const ds = window.__bfb.propDefs().filter((d) => d.kind === "bench"); return ds[0]; });
+    await A.evaluate((b) => { const x = b.x + (b.hw > b.hd ? 0 : b.hw + 0.8), z = b.z + (b.hw > b.hd ? b.hd + 0.8 : 0); window.__bfb.teleport(x, z, Math.atan2(b.x - x, b.z - z)); }, bench);
+    await sleep(1500);
+    let aBroke = false;
+    for (let k = 0; k < 10 && !aBroke; k++) {
+      await A.evaluate((b) => { const m = window.__bfb.move(); window.__bfb.shopAct({ a: "punch", yaw: Math.atan2(b.x - m.x, b.z - m.z), pitch: 0 }); }, bench);
+      aBroke = await A.waitForFunction((id) => window.__bfb.props().some((p) => p.id === id && !p.ready), bench.id, { timeout: 2500 }).then(() => true, () => false);
+    }
+    const bSees = await B.waitForFunction((id) => window.__bfb.props().some((p) => p.id === id && !p.ready), bench.id, { timeout: 30000 }).then(() => true, () => false);
+    ok(bSees, "A smashes a bench: B's screen gets it too");
+    ok(await B.evaluate((b) => window.__bfb.smashed() >= 1 && window.__bfb.blockedAt(b.x, b.z) === false, bench), "on B's screen it's gone and doesn't block either (same collision both sides)");
+  }
+
   console.log("\n# Phase 2 loot (online)");
   await A.evaluate(() => window.__bfb.setAxes(null));
   for (const P of [A, C]) await P.evaluate(() => window.__bfb.testInput(true));
@@ -776,7 +848,13 @@ try {
   }
   ok(aDrags, "A drags the duck (alone)");
   await C.evaluate((id) => window.__bfb.shopAct({ a: "grab", item: id }), duck);
-  ok(await C.waitForFunction(() => !!window.__bfb.tug() && !document.getElementById("tug").classList.contains("hidden"), null, { timeout: 15000 }).then(() => true, () => false), "C grabs the other end: TUG OF WAR (mash meter)");
+  let cTug = await C.waitForFunction(() => !!window.__bfb.tug() && !document.getElementById("tug").classList.contains("hidden"), null, { timeout: 15000 }).then(() => true, () => false);
+  if (!cTug) {
+    console.log(`   [diag] tug: C at ${JSON.stringify(await C.evaluate(() => window.__bfb.move()))} C hand=${(await C.evaluate(() => window.__bfb.serverInventory())).hand} duck ${JSON.stringify(await C.evaluate((id) => window.__bfb.items().find((i) => i.id === id), duck))}`);
+    await C.evaluate((id) => window.__bfb.shopAct({ a: "grab", item: id }), duck); // (one retry, like A's grab)
+    cTug = await C.waitForFunction(() => !!window.__bfb.tug() && !document.getElementById("tug").classList.contains("hidden"), null, { timeout: 15000 }).then(() => true, () => false);
+  }
+  ok(cTug, "C grabs the other end: TUG OF WAR (mash meter)");
   ok(await A.waitForFunction(() => !!window.__bfb.tug(), null, { timeout: 15000 }).then(() => true, () => false), "A sees the tug of war too");
   // C mashes E (about 12 presses a second, right in the page so test lag doesn't slow it); A doesn't
   const mashing = C.evaluate(async () => { for (let k = 0; k < 40; k++) { window.__bfb.tugPress(); await new Promise((r) => setTimeout(r, 80)); } });
@@ -891,7 +969,7 @@ try {
   console.log("\n# Room full + bad code");
   const D = await openPage("D", `?room=${code}&test=1`);
   await D.click("#btn-accept-invite", { timeout: 120000 }); // 4 windows on one CPU: this page is slow
-  await D.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 480000 });
+  await D.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 900000 }); // (C3: 15 min: the 4th CPU-rendered window loads slowest)
   const E = await openPage("E", `?room=${code}&test=1`);
   await E.click("#btn-accept-invite", { timeout: 120000 });
   await E.waitForFunction(() => window.__bfb.info().screen === "title" && document.getElementById("title-status").textContent.length > 0, null, { timeout: 15000 });

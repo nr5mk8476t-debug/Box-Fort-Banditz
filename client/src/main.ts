@@ -12,7 +12,7 @@ import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
 } from "./net.ts";
 import {
-  MSG, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington,
+  MSG, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington, nearBoxes,
   lootDef, RARITY_COLOR, starsOf, type MoveInput, pinPos as pinPosOf, type WorldView, type WorldEvent,
 } from "@bfb/shared";
 
@@ -163,7 +163,7 @@ async function startSolo() {
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
   $("lp-hint").textContent = "Press ENTER to start. Each cycle: 3 min scavenge, 1 min NIGHT scavenge (x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
-  $("mode-badge").textContent = "CITY C1 / SOLO";
+  $("mode-badge").textContent = "CITY C4a / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -437,7 +437,7 @@ async function enterOnline(r: GameRoom) {
   $("lp-title").textContent = "LOBBY";
   show("lp-code-row");
   $("lp-code").textContent = r.roomId;
-  $("mode-badge").textContent = r.isHost ? "CITY C1 / HOSTING" : "CITY C1 / ONLINE";
+  $("mode-badge").textContent = r.isHost ? "CITY C4a / HOSTING" : "CITY C4a / ONLINE";
 
   r.onMessage(MSG.ANNOUNCE, (m: { text: string }) => toast(m.text));
   r.onDrop(() => {
@@ -925,6 +925,16 @@ enterTitle();
     camAt: (x: number, y: number, z: number, yaw: number, pitch: number) => { if (arena) arena.camOverride = { x, y, z, yaw, pitch }; },
     camFree: () => { if (arena) arena.camOverride = null; },
     interiors: () => arena?.city.interiorsDrawn ?? 0,
+    // C2: façade detail on/off (Performance mode) and how many pieces were built
+    facades: () => ({ detail: arena?.city.detail ?? null, pieces: arena?.city.detailPieces ?? 0 }),
+    cityBuildMs: () => Math.round(arena?.cityBuildMs ?? 0),
+    // C4a: smashed things (how many this screen has hidden) and whether a spot is blocked for this screen
+    smashed: () => arena?.city.brokenCount ?? 0,
+    worldProp: (id: string) => { const ps = local?.world.props.props.get(id); return ps ? { ready: ps.ready, hp: ps.hp } : null; },
+    worldMe: () => { const p = local?.world.players.get(SOLO_ID); return p ? { x: p.move.x, z: p.move.z, knockT: p.move.knockT, punchCd: p.punchCd, hand: p.hand, sel: p.sel, respawnT: p.respawnT, connected: p.connected } : null; },
+    blockedAt: (x: number, z: number) => { const a = arena?.arenaLayout; if (!a) return null; return nearBoxes(a, x, z, 0.1).some((b) => Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2 && b.y - b.h / 2 < 1 && b.y + b.h / 2 > 0.3); },
+    // C3: the park's pigeons
+    pigeons: () => ({ count: arena?.city.pigeonCount ?? 0, flying: arena?.city.pigeonsFlying ?? 0, scatters: arena?.city.scatters ?? 0 }),
     units: () => (arena as any)?.arena?.units?.map((u: any) => ({ id: u.id, name: u.name, use: u.use, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, upper: u.upper, access: u.access })) ?? [],
     teleport: (x: number, z: number, yaw: number) => {
       if (local) local.teleport(x, z, yaw); else room?.send("dbg", { op: "teleport", x, z, yaw });

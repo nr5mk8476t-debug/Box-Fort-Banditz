@@ -405,3 +405,26 @@ test("taser: dodging while he fires makes it miss", () => {
   assert.ok(ev.some((e) => e.t === "taser" && e.stage === "miss"), "missed");
   assert.equal(p.move.stunT, 0);
 });
+
+test("C3 park bushes: crouch in a bush and the cops can't see you (standing up, or crouching in the open, they can)", () => {
+  const { w, p } = quiet();
+  const bush = w.arena.bushes![0];
+  const bx = (bush.minX + bush.maxX) / 2, bz = (bush.minZ + bush.maxZ) / 2;
+  w.movePlayer(p, bx, bz, 0);
+  p.notoriety = 40;
+  // the cop 10 m away across the open lawn, towards the fountain
+  const d = Math.hypot(bx, bz), ux = -bx / d, uz = -bz / d;
+  const c = w.police.spawnCop(p, { x: bx + ux * 10, z: bz + uz * 10 })!;
+  c.move.x = bx + ux * 10; c.move.z = bz + uz * 10;
+  p.move.crouching = true;
+  assert.equal(w.police.canSee(c, p), false, "crouched in the bush");
+  p.move.crouching = false;
+  assert.equal(w.police.canSee(c, p), true, "standing up in the bush");
+  w.movePlayer(p, bx + ux * 4, bz + uz * 4, 0);
+  p.move.crouching = true;
+  assert.equal(w.police.canSee(c, p), true, "crouching on the open lawn");
+  // right next to the bush the cop can hear you
+  w.movePlayer(p, bx, bz, 0); p.move.crouching = true;
+  c.move.x = bx + ux * 1.5; c.move.z = bz + uz * 1.5;
+  assert.equal(w.police.canSee(c, p), true, "a cop close enough to hear you finds you");
+});

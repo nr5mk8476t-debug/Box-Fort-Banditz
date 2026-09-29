@@ -58,7 +58,7 @@ assert(evs.some((e) => e.t === "whiff" && e.p === a.sessionId), "grabbing a far 
 
 // Phase 2.5: pedestrians are synced
 const npcCount = (b.state as any).npcs.size;
-assert(npcCount === 35, `pedestrians + cashiers synced to clients: ${npcCount} (20 + 15 cashiers since Slice 2A)`);
+assert(npcCount === 37, `pedestrians + cashiers + the doorman + the fisherman synced to clients: ${npcCount} (20 + 15 + 2)`);
 {
   const st2: any = a.state;
   assert(st2.cars.size === CAR_COUNT, `traffic synced: ${st2.cars.size} cars`);

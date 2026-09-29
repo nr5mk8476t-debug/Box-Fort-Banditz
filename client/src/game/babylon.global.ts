@@ -24,3 +24,4 @@ export const DynamicTexture = B.DynamicTexture;
 export const Texture = B.Texture;
 export const CellMaterial = B.CellMaterial;
 export const VertexBuffer = B.VertexBuffer;
+export const VertexData = B.VertexData;

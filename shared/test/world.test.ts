@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  World, buildTrashington, LOOT, lootDef, PLAYER, GIANT_DRAG_MUL, TUG_MAX_TIME, FISTS, ITEM_MAX,
-  type MoveInput, type ArenaLayout, type Box,
+  World, buildTrashington, inDeepWater, LOOT, lootDef, PLAYER, GIANT_DRAG_MUL, TUG_MAX_TIME, FISTS, ITEM_MAX,
+  type MoveInput, type ArenaLayout, type Box, type WorldEvent,
 } from "../src/index.js";
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
@@ -54,25 +54,23 @@ test("city: every loot spawn settles to rest without leaving the world", () => {
   }
 });
 
-test("C1 climbing: run up Tent Town's broken ramp to the lookout, and the car park ramp to level 2", () => {
+test("C1 climbing: run up Tent Town's broken ramp to the lookout; C1.1: cross the canal on a footbridge", () => {
   const w = new World({ seed: 1, spawnLoot: false, npcs: 0 });
   const p = w.addPlayer("a", "Climber");
   // the broken highway ramp: stepped, rising east, ends in a lookout 7.8 m up
-  w.debugTeleport("a", -19.5, -112.5, Math.PI / 2);
+  w.debugTeleport("a", -13.5, -112.5, Math.PI / 2);
   drive(w, "a", 20, { yaw: Math.PI / 2 });
   let top = 0;
   for (let i = 0; i < 60 * 6; i++) { drive(w, "a", 1, { yaw: Math.PI / 2, mz: 1 }); top = Math.max(top, p.move.y); }
   assert.ok(top > 7.7, `reached the lookout (${top.toFixed(2)} m up)`);
-  // the car park: steps up to the deck
-  const deck = w.arena.boxes.find((b) => b.sign?.includes("PARK-O-RAMA"))!;
-  const stepTop = w.arena.boxes.filter((b) => b.kind === "step" && Math.abs(b.z - (deck.z - deck.d / 2 + 1.5)) < 0.1 && b.x > deck.x);
-  assert.ok(stepTop.length >= 10, "a stepped ramp");
-  const start = Math.max(...stepTop.map((b) => b.x)) + 1.5;
-  w.debugTeleport("a", start, stepTop[0].z, -Math.PI / 2);
-  drive(w, "a", 20, { yaw: -Math.PI / 2 });
-  top = 0;
-  for (let i = 0; i < 60 * 4; i++) { drive(w, "a", 1, { yaw: -Math.PI / 2, mz: 1 }); top = Math.max(top, p.move.y); }
-  assert.ok(top > deck.y + deck.h / 2 - 0.05, `onto level 2 (${top.toFixed(2)} m)`);
+  // C1.1: the canal's footbridge: step up from the quay, walk across dry (not swimming)
+  const bz = -60;
+  w.debugTeleport("a", 96.5, bz, Math.PI / 2);
+  drive(w, "a", 20, { yaw: Math.PI / 2 });
+  let maxX = 0, minY = 9;
+  for (let i = 0; i < 60 * 5; i++) { drive(w, "a", 1, { yaw: Math.PI / 2, mz: 1 }); maxX = Math.max(maxX, p.move.x); if (p.move.x > 100 && p.move.x < 112) minY = Math.min(minY, p.move.y); }
+  assert.ok(maxX > 113, `crossed the canal on the footbridge (x ${maxX.toFixed(1)})`);
+  assert.ok(minY > 0.5, `stayed up on the deck (lowest ${minY.toFixed(2)} m)`);
 });
 
 test("grab: big items go to hands and slow you down; heavy blocks sprint", () => {
@@ -346,7 +344,7 @@ test("items never end up inside walls after lots of random throwing (fuzz)", () 
 
 test("the spawner never exceeds the item cap", () => {
   const w = new World({ seed: 5 });
-  const loose = () => [...w.items.values()].filter((i) => i.shop < 0).length; // (shop shelves have their own cap)
+  const loose = () => [...w.items.values()].filter((i) => i.shop < 0 && !lootDef(i.type).junk).length; // (shop shelves have their own cap; C4a: so does street junk)
   for (let i = 0; i < 300; i++) w.spawnOne();
   assert.ok(loose() <= ITEM_MAX, `${loose()} items`);
   settle(w, 30); // top-ups over time also respect the cap
@@ -357,13 +355,14 @@ test("spawning: fills the city, rare stuff shows up more in the plaza, respects 
   const w = new World({ seed: 42 });
   assert.ok(w.items.size >= 28, `${w.items.size} items spawned`);
   let giants = 0;
-  for (const it of w.items.values()) if (lootDef(it.type).size === "giant") giants++;
+  for (const it of w.items.values()) if (lootDef(it.type).size === "giant" && !lootDef(it.type).junk) giants++; // (C4a: junk crates / barrels / trolleys don't count)
   assert.ok(giants <= 2);
   // statistical check over many worlds: plaza gets a higher share of rare+ than streets
   let plazaRare = 0, plazaN = 0, streetRare = 0, streetN = 0;
   for (let s = 0; s < 60; s++) {
     const ww = new World({ seed: 1000 + s });
     for (const it of ww.items.values()) {
+      if (lootDef(it.type).junk) continue;
       const near = ww.arena.lootSpawns!.reduce((best, sp) => (Math.hypot(sp.x - it.body.x, sp.z - it.body.z) < Math.hypot(best.x - it.body.x, best.z - it.body.z) ? sp : best));
       const rare = !["common", "uncommon"].includes(lootDef(it.type).rarity);
       if (near.zone === "plaza") { plazaN++; if (rare) plazaRare++; }
@@ -408,4 +407,203 @@ test("pressing drop right after a grab isn't lost: it runs when the short cooldo
   w.action("a", { a: "grab", item: id2 });
   const ev = w.takeEvents();
   assert.ok(ev.some((e) => e.t === "whiff" && e.reason === "cooldown"));
+});
+
+test("C1.1 the canal: fall in = float slowly, no jumping or climbing the kerb, lose what's in your hands; out at a ladder", () => {
+  const w = new World({ seed: 1, spawnLoot: false, npcs: 0 });
+  const p = w.addPlayer("a", "Swimmer");
+  const water = w.arena.deepWater![0];
+  // hop over the kerb from the quay, holding a TV
+  w.debugTeleport("a", 96.5, 15, Math.PI / 2);
+  const tv = w.placeItem("crt_tv", 96.5 + Math.sin(Math.PI / 2) * 0.9, 1.2, 15);
+  drive(w, "a", 10, { yaw: Math.PI / 2 });
+  w.action("a", { a: "grab", item: tv });
+  assert.equal(p.hand, tv);
+  let inWaterAt = -1;
+  const ev: WorldEvent[] = [];
+  for (let i = 0; i < 60 * 4 && inWaterAt < 0; i++) {
+    w.pushInputs("a", [inp(p.lastSeq + 1, { yaw: Math.PI / 2, mz: 1, jump: i % 20 < 10 })]); w.tick(); ev.push(...w.takeEvents());
+    if (inDeepWater(w.arena, p.move.x, p.move.z, p.move.y)) inWaterAt = i;
+  }
+  assert.ok(inWaterAt >= 0, "jumped the kerb into the canal");
+  drive(w, "a", 10, { yaw: Math.PI / 2 });
+  ev.push(...w.takeEvents());
+  assert.equal(p.hand, "", "the TV floated off");
+  assert.ok(ev.some((e) => e.t === "splash"), "splash");
+  // paddling is slow, sprint does nothing
+  const x0 = p.move.x;
+  drive(w, "a", 60, { yaw: Math.PI / 2, mz: 1, sprint: true });
+  const v = p.move.x - x0;
+  assert.ok(v > 1 && v < 2.2, `paddled ${v.toFixed(2)} m in 1 s (walking is 5)`);
+  // can't jump or climb out over the kerb on the far side
+  w.debugTeleport("a", water.maxX - 1, 15, Math.PI / 2);
+  for (let i = 0; i < 60 * 3; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { yaw: Math.PI / 2, mz: 1, jump: i % 20 < 10 })]); w.tick(); }
+  assert.ok(p.move.x < water.maxX && p.move.y < 0.3, `still in the water (${p.move.x.toFixed(2)}, y ${p.move.y.toFixed(2)})`);
+  // ...but a ladder gets you out
+  const ladder = w.arena.scenery!.find((s) => s.kind === "ladder" && s.x > 110)!;
+  w.debugTeleport("a", water.maxX - 1, ladder.z, Math.PI / 2);
+  drive(w, "a", 60 * 3, { yaw: Math.PI / 2, mz: 1 });
+  assert.ok(p.move.x > water.maxX + 0.3 && !inDeepWater(w.arena, p.move.x, p.move.z, p.move.y), `climbed out at the ladder (x ${p.move.x.toFixed(2)})`);
+});
+
+// ---------------------------------------------------------------- C4a: smash, noise, heat if seen, dawn repairs
+import { propSurfaceDist, BREAK_HP, HYDRANT_SPRAY, makeMoveState, stepMovement, propView } from "../src/index.js";
+
+function c4World(seed = 7) {
+  const w = new World({ seed, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  return { w, p };
+}
+/** stand next to a prop, facing it, and punch it n times */
+function punchProp(w: World, id: string, n: number) {
+  const p = w.players.get("a")!;
+  const ps = w.props.props.get(id)!;
+  const d = ps.def;
+  for (let i = 0; i < n; i++) {
+    const yaw = Math.atan2(d.x - p.move.x, d.z - p.move.z);
+    w.action("a", { a: "punch", yaw, pitch: 0 });
+    settle(w, 0.7);
+  }
+}
+/** a spot on open pavement just off one side of a prop */
+function besideProp(w: World, id: string): { x: number; z: number } {
+  const d = w.props.props.get(id)!.def;
+  for (const [dx, dz] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+    const x = d.x + dx * ((d.hw ?? 0.3) + 0.7), z = d.z + dz * ((d.hd ?? 0.3) + 0.7);
+    const s = makeMoveState(x, z, 0);
+    if (stepMovement(s, inp(1), w.arena).x === x) return { x, z };
+  }
+  return { x: d.x, z: d.z - (d.hd ?? 0.3) - 0.7 };
+}
+
+test("C4a breakables: every shop window, bus stop, hydrant, mailbox, bench, planter, table and pallet in the street is a prop tied to its box", () => {
+  const c = buildTrashington();
+  const brk = c.props!.filter((p) => p.box !== undefined);
+  const kinds = new Set(brk.map((p) => p.kind));
+  for (const k of ["shopglass", "hydrant", "bench", "planter", "table", "mailbox", "pallet"]) assert.ok(kinds.has(k as never), `has ${k}`);
+  assert.ok(brk.length > 100, `${brk.length} breakables`);
+  for (const p of brk) { const b = c.boxes[p.box!]; assert.ok(Math.abs(b.x - p.x) < 0.01 && Math.abs(b.z - p.z) < 0.01 && BREAK_HP[p.kind]! >= 1, p.id); }
+  assert.ok(brk.filter((p) => p.kind === "shopglass" && p.shop !== undefined).length >= 20, "shop windows know their shop");
+});
+
+test("C4a smash a bench: 2 hits break it, it stops blocking, day damage lasts the night, dawn repairs it", () => {
+  const { w, p } = c4World();
+  const bench = [...w.props.props.values()].find((x) => x.def.kind === "bench" && x.def.hw! + x.def.hd! > 1)!;
+  const spot = besideProp(w, bench.def.id);
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  punchProp(w, bench.def.id, 1);
+  assert.equal(bench.ready, true, "one hit: still there");
+  punchProp(w, bench.def.id, 1);
+  assert.equal(bench.ready, false, "two hits: broken");
+  assert.ok(w.arena.boxes[bench.def.box!].off, "its box stops blocking");
+  assert.equal(propView(w, bench.def.id).ready, false, "clients are told");
+  // walk through where it was
+  const d = bench.def, s = makeMoveState(d.x, d.z, 0);
+  assert.ok(stepMovement(s, inp(1), w.arena).y < 0.5, "standing where the bench was");
+  w.resetCity(true); // nightfall: stays broken
+  assert.equal(bench.ready, false, "night: still broken");
+  w.resetCity(false); // dawn
+  assert.equal(bench.ready, true, "dawn: repaired");
+  assert.ok(!w.arena.boxes[bench.def.box!].off && !w.arena.offCount, "and blocking again");
+  void p;
+});
+
+test("C4a a smashed shop window is a way in until dawn: alarm, the cashier yells", () => {
+  const { w, p } = c4World();
+  const glass = [...w.props.props.values()].find((x) => x.def.kind === "shopglass" && x.def.shop !== undefined)!;
+  const d = glass.def;
+  const spot = besideProp(w, d.id);
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  const ev: WorldEvent[] = [];
+  for (let i = 0; i < BREAK_HP.shopglass!; i++) { punchProp(w, d.id, 1); ev.push(...w.takeEvents()); }
+  assert.equal(glass.ready, false, "shattered");
+  assert.ok(ev.some((e) => e.t === "alarm" && e.kind === "shop"), "the shop alarm goes off");
+  assert.ok(p.notoriety > 0, "the cashier saw it: heat");
+  // walk straight through the gap into the shop
+  const into = { x: d.x - spot.x, z: d.z - spot.z }, l = Math.hypot(into.x, into.z);
+  let s = makeMoveState(spot.x, spot.z, Math.atan2(into.x, into.z));
+  for (let i = 0; i < 60; i++) s = stepMovement(s, inp(i + 1, { mz: 1, yaw: Math.atan2(into.x, into.z) }), w.arena);
+  assert.ok(Math.hypot(s.x - spot.x, s.z - spot.z) > l + 1, `walked in through the window (${Math.hypot(s.x - spot.x, s.z - spot.z).toFixed(1)} m)`);
+});
+
+test("C4a heat only if seen: smashing a planter where nobody's looking is free; with a pedestrian watching it isn't", () => {
+  const { w, p } = c4World();
+  const planters = [...w.props.props.values()].filter((x) => x.def.kind === "planter");
+  // somewhere nobody can see (no crowd in this world; the cashiers are inside their shops)
+  const lonely = planters.find((x) => !w.witnessed({ ...p, move: { ...p.move, x: x.def.x, z: x.def.z - 1.2 } } as never))!;
+  const s1 = besideProp(w, lonely.def.id);
+  w.debugTeleport("a", s1.x, s1.z, 0);
+  assert.equal(w.witnessed(p), false, "nobody watching");
+  punchProp(w, lonely.def.id, BREAK_HP.planter!);
+  assert.equal(lonely.ready, false, "smashed");
+  assert.equal(p.notoriety, 0, "no heat: nobody saw");
+  // now a tourist is standing right there watching
+  const other = planters.find((x) => x !== lonely && x.ready)!;
+  const s2 = besideProp(w, other.def.id);
+  w.debugTeleport("a", s2.x, s2.z, 0);
+  const n = w.npc.spawn("tourist")!;
+  n.move = makeMoveState(s2.x + 1.5, s2.z + 1.5, 0);
+  assert.equal(w.witnessed(p), true, "seen");
+  punchProp(w, other.def.id, BREAK_HP.planter!);
+  assert.ok(p.notoriety > 0, `heat when seen (${p.notoriety})`);
+});
+
+test("C4a noise: a cop within earshot comes to look where something smashed", () => {
+  const { w, p } = c4World();
+  const b = [...w.props.props.values()].find((x) => x.def.kind === "bench")!;
+  const spot = besideProp(w, b.def.id);
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  p.notoriety = 35; // wanted enough for a cop to bother
+  const cop = w.police.spawnCop(p, { x: spot.x + 9, z: spot.z })!;
+  cop.state = "search"; cop.target = "";
+  w.noise(p, b.def.x, b.def.z, 12);
+  assert.equal(cop.state, "chase");
+  assert.ok(Math.hypot(cop.lastX - b.def.x, cop.lastZ - b.def.z) < 0.01, "heading for the noise");
+});
+
+test("C4a a burst hydrant sprays: standing in it knocks you back", () => {
+  const { w, p } = c4World();
+  const h = [...w.props.props.values()].find((x) => x.def.kind === "hydrant")!;
+  const spot = besideProp(w, h.def.id);
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  punchProp(w, h.def.id, BREAK_HP.hydrant!);
+  assert.equal(h.ready, false, "burst");
+  w.debugTeleport("a", h.def.x + 0.5, h.def.z, 0);
+  drive(w, "a", 8, {}); // (players move when their inputs arrive)
+  assert.ok(Math.hypot(p.move.x - h.def.x, p.move.z - h.def.z) > 0.7 || p.move.y > 0.3, "shoved away / lifted by the jet");
+  assert.ok(HYDRANT_SPRAY.time >= 10);
+});
+
+test("C4a street junk: chairs, lids, bottles, bricks, crates, barrels, trolleys, fish at their spots, worth $0-5, back every day", () => {
+  const w = new World({ seed: 3, npcs: 0 });
+  const junkOf = () => [...w.items.values()].filter((it) => lootDef(it.type).junk);
+  const j0 = junkOf();
+  assert.ok(j0.length >= 30, `${j0.length} bits of junk`);
+  assert.ok(new Set(j0.map((j) => j.type)).size >= 7, "several kinds");
+  for (const it of j0) assert.ok(it.value <= 5, `${it.type} $${it.value}`);
+  assert.ok(![...w.items.values()].some((it) => lootDef(it.type).junk && !w.arena.junkSpots!.some((s) => Math.hypot(s.x - it.body.x, s.z - it.body.z) < 1.5)), "only at junk spots");
+  // take some away; a new day puts it back
+  for (const it of j0.slice(0, 10)) w.items.delete(it.id);
+  w.resetCity(false);
+  assert.ok(junkOf().length >= j0.length, "back the next day");
+  // random loot never rolls junk
+  for (let i = 0; i < 40; i++) w.spawnOne();
+  assert.ok(junkOf().length <= w.arena.junkSpots!.length, "no junk from random loot spawns");
+});
+
+test("C4a a thrown brick breaks a planter (counts as the thrower's hit)", () => {
+  const { w, p } = c4World();
+  const pl = [...w.props.props.values()].find((x) => x.def.kind === "planter" && BREAK_HP.planter === 2)!;
+  const spot = besideProp(w, pl.def.id);
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  for (let k = 0; k < 2; k++) {
+    const id = w.placeItem("brick", p.move.x, 0.25, p.move.z); // (thrown low and flat: a planter is knee-high)
+    const it = w.items.get(id)!;
+    const dx = pl.def.x - p.move.x, dz = pl.def.z - p.move.z, l = Math.hypot(dx, dz);
+    it.lastThrower = "a"; it.thrownT = 0;
+    it.body.vx = (dx / l) * 12; it.body.vz = (dz / l) * 12; it.body.vy = 0.5; it.body.resting = false;
+    settle(w, 0.8);
+  }
+  assert.equal(pl.ready, false, `two bricks broke it (hp ${pl.hp})`);
+  assert.ok(propSurfaceDist(pl.def, pl.def.x, pl.def.z) === 0);
 });

@@ -159,10 +159,10 @@ test("night: loot is scarce and worth x2, heat builds twice as fast", () => {
   const p = w.addPlayer("p0", "A");
   w.startMatch(); run(w, INTRO_TIME + 0.05);
   w.match.cancelPlannedEvents();
-  const dayFree = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0).length;
+  const dayFree = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk).length; // (C4a: street junk isn't loot)
   w.match.timeLeft = 0.01; run(w, 0.05);
   assert.equal(w.match.phase, "dusk");
-  const night = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0);
+  const night = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk);
   assert.ok(night.length <= ITEM_TARGET_NIGHT && night.length < dayFree, `scarce: ${night.length} vs ${dayFree} by day`);
   assert.ok([...w.items.values()].every((it) => it.mult === 2), "night loot is worth double");
   run(w, DUSK_TIME + 0.05);

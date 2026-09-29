@@ -30,6 +30,8 @@ export interface LootDef {
   npcOnly?: boolean;
   /** Phase 5A: small money (coins, cash, wallets) goes straight into your cash when you grab it */
   money?: boolean;
+  /** C4a: street junk: sits at its own spots round the city (never a random loot spawn), worth $0-5, back each day */
+  junk?: boolean;
 }
 
 export const LOOT: LootDef[] = [
@@ -95,6 +97,16 @@ export const LOOT: LootDef[] = [
   { type: "birthday_cake", name: "Birthday Cake", size: "big", rarity: "rare", valueMin: 40, valueMax: 90, weight: 0.1, material: "cloth", radius: 0.3, bounce: 0.05, spawnWeight: 0, npcOnly: true, blurb: "Happy birthday, Gary." },
   // Phase 3 event loot (never spawns normally): the airdrop crate parachutes into the plaza
   { type: "airdrop_crate", name: "Airdrop Crate", size: "giant", rarity: "legendary", valueMin: 350, valueMax: 600, weight: 0.4, heavy: true, material: "cardboard", radius: 0.75, bounce: 0.05, spawnWeight: 0, npcOnly: true, blurb: "Care package from nobody. Drag it home." },
+  // ---- C4a: street junk (throw it, push it, break things with it). Worth almost nothing. ----
+  { type: "cafe_chair", name: "Cafe Chair", size: "big", rarity: "common", valueMin: 1, valueMax: 4, weight: 0.1, material: "metal", radius: 0.35, bounce: 0.3, spawnWeight: 0, junk: true, blurb: "Reserved for customers. You are not a customer." },
+  { type: "bin_lid", name: "Bin Lid", size: "big", rarity: "common", valueMin: 0, valueMax: 2, weight: 0.05, material: "metal", radius: 0.32, bounce: 0.45, spawnWeight: 0, junk: true, blurb: "A shield. A frisbee. A lid." },
+  { type: "glass_bottle", name: "Empty Bottle", size: "small", rarity: "common", valueMin: 0, valueMax: 1, weight: 0, material: "glass", radius: 0.1, bounce: 0.2, spawnWeight: 0, junk: true, blurb: "Smells like last Tuesday." },
+  { type: "brick", name: "Brick", size: "small", rarity: "common", valueMin: 0, valueMax: 1, weight: 0.08, material: "trash", radius: 0.12, bounce: 0.05, spawnWeight: 0, junk: true, blurb: "The city's favourite window opener." },
+  { type: "smelly_fish", name: "Smelly Fish", size: "small", rarity: "common", valueMin: 1, valueMax: 5, weight: 0, material: "rubber", radius: 0.15, bounce: 0.4, spawnWeight: 0, junk: true, blurb: "Slap someone with it. You know you want to." },
+  { type: "traffic_barrier", name: "Traffic Barrier", size: "big", rarity: "common", valueMin: 2, valueMax: 5, weight: 0.2, material: "plastic", radius: 0.45, bounce: 0.2, spawnWeight: 0, junk: true, blurb: "ROAD CLOSED (by you)." },
+  { type: "plastic_crate", name: "Stack of Crates", size: "giant", rarity: "common", valueMin: 2, valueMax: 5, weight: 0.3, heavy: true, material: "plastic", radius: 0.6, bounce: 0.1, spawnWeight: 0, junk: true, blurb: "Push them somewhere more annoying." },
+  { type: "oil_barrel", name: "Oil Barrel", size: "giant", rarity: "common", valueMin: 3, valueMax: 5, weight: 0.35, heavy: true, material: "metal", radius: 0.55, bounce: 0.15, spawnWeight: 0, junk: true, blurb: "Empty. Probably. Don't shake it." },
+  { type: "shopping_trolley", name: "Shopping Trolley", size: "giant", rarity: "common", valueMin: 3, valueMax: 5, weight: 0.2, heavy: true, material: "metal", radius: 0.6, bounce: 0.2, spawnWeight: 0, junk: true, blurb: "One wheel has its own ideas." },
   { type: "rolecks_watch", name: "Rolecks Watch", size: "small", rarity: "epic", valueMin: 150, valueMax: 300, weight: 0, material: "metal", radius: 0.09, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Genuine imitation luxury." },
 ];
 

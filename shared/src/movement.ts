@@ -8,10 +8,12 @@
 //   mantle (locks everything) > stumble (limits) > slide > dodge > normal movement.
 
 import { PLAYER, SIM_DT } from "./constants.js";
-import { localArena, inWater, type ArenaLayout, type Box } from "./arena.js";
+import { localArena, inWater, inDeepWater, type ArenaLayout, type Box } from "./arena.js";
 
 /** Slice 2A: speed while wading through the pond */
 export const WADE_SPEED = 0.45;
+/** C1.1: floating in the canal: slow, no sprint / jump / climb / slide / dodge (you get out at a ladder) */
+export const SWIM_SPEED = 0.38;
 
 export interface MoveInput {
   /** increasing sequence number, used for reconciliation */
@@ -283,6 +285,10 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
     s.slideT = 0;
   }
 
+  // C1.1: in the canal you just paddle
+  const swimming = inDeepWater(fullArena, s.x, s.z, s.y);
+  if (swimming) { input = { ...input, sprint: false, jump: false, crouch: false, dodge: false }; s.slideT = 0; s.crouching = false; }
+
   // Button edges (pressed this step, not held from before)
   const jumpPressed = input.jump && !s.jumpLatch;
   const crouchPressed = input.crouch && !s.crouchLatch;
@@ -395,6 +401,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   speed *= s.carryMul;
   if (s.swarmT > 0) speed *= 0.6; // pigeons everywhere
   if (s.y < 0.3 && inWater(fullArena, s.x, s.z)) speed *= WADE_SPEED; // Slice 2A: wading through the pond
+  if (swimming) speed = PLAYER.walkSpeed * SWIM_SPEED * Math.min(1, s.carryMul + 0.3);
   const wishX = dirX * speed;
   const wishZ = dirZ * speed;
 

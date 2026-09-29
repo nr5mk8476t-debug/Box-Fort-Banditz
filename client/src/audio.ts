@@ -191,6 +191,10 @@ export const sfx = {
   // ---- Phase 3.5: loot sources, hold-ups, traffic ----
   search(gain = 1) { noise(0.35, 0.14 * gain, 900, 0, 0.6); blip(140, 0.12, "square", 0.06 * gain, 90, 0.05); noise(0.1, 0.1 * gain, 3000, 0.3); },
   smash(kind: string, gain = 1) {
+    // C4a: glass shatters, wood cracks, a hydrant clanks
+    if (kind === "shopglass" || kind === "busstop") { noise(0.5, 0.28 * gain, 6000, 0, 3); [2637, 3136, 2349, 3520].forEach((f, i) => blip(f, 0.12, "triangle", 0.05 * gain, undefined, 0.05 + i * 0.07)); return; }
+    if (kind === "bench" || kind === "pallet" || kind === "table") { noise(0.18, 0.22 * gain, 1400, 0, 1); blip(180, 0.15, "square", 0.08 * gain, 90); return; }
+    if (kind === "hydrant") { blip(520, 0.3, "square", 0.08 * gain, 260); noise(1.2, 0.12 * gain, 2500, 0.1, 0.5); return; }
     if (kind === "car" || kind === "vending" || kind === "phone") { noise(0.3, 0.2 * gain, 5200, 0, 2); blip(2400, 0.2, "triangle", 0.06 * gain, 1200, 0.02); }
     blip(kind === "meter" ? 900 : 300, 0.2, "square", 0.08 * gain, kind === "meter" ? 600 : 160);
     noise(0.08, 0.14 * gain, 900, 0, 0.8);
@@ -220,6 +224,8 @@ export const sfx = {
   unlock() { blip(900, 0.05, "square", 0.1); blip(600, 0.3, "triangle", 0.1, 1200, 0.06); [784, 988, 1318].forEach((f, i) => blip(f, 0.1, "triangle", 0.09, undefined, 0.3 + i * 0.08)); },
   // ---- Phase 5A
   raidAlarm() { for (let i = 0; i < 4; i++) { blip(1100, 0.16, "square", 0.09, 700, i * 0.34); blip(700, 0.16, "square", 0.09, 1100, i * 0.34 + 0.17); } },
+  /** C1.1: falling in the canal */
+  splash(g = 1) { sweepNoise(0.45, 0.14 * g, 3000, 300); blip(180, 0.2, "sine", 0.06 * g, 90, 0.05); },
   /** C1: the raid siren wailing across Tent Town (g = loudness by distance) */
   raidSiren(g = 1) { for (let i = 0; i < 3; i++) blip(620, 0.55, "sawtooth", 0.07 * g, 1250, i * 0.6); },
   tugStart() { blip(180, 0.25, "sawtooth", 0.1, 260); voice([0.8, 1.1], 0.9, 0.06); },

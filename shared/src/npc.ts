@@ -3,7 +3,11 @@
 
 export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym_bro" | "mall_cop" | "mime" | "pigeon_lady" | "raccoon" | "cashier" | "cop"
   // Phase 4.5 big shots (+ their entourage)
-  | "millionaire" | "bodyguard" | "courier" | "celebrity" | "fan" | "crypto_bro";
+  | "millionaire" | "bodyguard" | "courier" | "celebrity" | "fan" | "crypto_bro"
+  // C1.1: the apartment tower's doorman (stands at his door, very snooty, fights back)
+  | "doorman"
+  // C3: the park's fisherman (sits on his jetty, hates noise, whacks you with his rod)
+  | "fisherman";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -77,6 +81,28 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
     lines: { idle: ["*chitter*", "*sniff sniff*"], hit: ["*SKREEE!*", "*angry chitter*"], win: ["*triumphant chitter*"] },
   },
   // Phase 3.5: one behind every shop counter. Never fights, never leaves the shop.
+  doorman: {
+    kind: "doorman", name: "Doorman", walk: 1.4, flee: 4.8, fighter: true, hp: 3, dodge: 0, notoriety: 12, spawnWeight: 0,
+    loot: [["coin_pile", 4], ["sunglasses", 1], ["gold_chain", 0.4]],
+    lines: {
+      idle: ["Residents only.", "Sir, this is a luxury establishment.", "I can smell the cardboard from here.", "Do you have an appointment? No? Didn't think so.", "Wipe your feet. Actually, just leave.", "The penthouse does not accept boxes."],
+      hit: ["My HAT! You've dented my hat!", "Do you know how much this coat cost?!", "I'm calling the residents' association!"],
+      fight: ["Nobody touches the velvet rope!", "I trained for this. By correspondence course.", "You are NOT on the list!"],
+      win: ["And stay out!", "Have a *lovely* day.", "Riff-raff removed."],
+      lose: ["Tell the residents... I held the door..."],
+    },
+  },
+  fisherman: {
+    kind: "fisherman", name: "Fisherman", walk: 1.2, flee: 3.6, fighter: true, hp: 2, dodge: 0, notoriety: 8, spawnWeight: 0,
+    loot: [["canned_beans", 1], ["coin_pile", 1]],
+    lines: {
+      idle: ["Shh. You'll scare the fish.", "Been here since 1987. Caught one boot.", "There's a shark in there. Don't laugh.", "The fish know. They always know.", "It's a pond. I KNOW it's a pond.", "Stop wading in my spot!"],
+      hit: ["My ROD!", "You made me lose the big one!", "OW! Right in the tackle box!"],
+      fight: ["Take THIS, you land-lubber!", "I've wrestled catfish bigger than you!"],
+      win: ["Catch and release, pal.", "Back to fishing."],
+      lose: ["The fish... will avenge me..."],
+    },
+  },
   cashier: {
     kind: "cashier", name: "Cashier", walk: 1.4, flee: 1.4, fighter: false, hp: 1, dodge: 0, notoriety: 10, spawnWeight: 0,
     loot: [["cash_bundle", 1]],
@@ -141,7 +167,7 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
 /** Pedestrian types that wander the streets (raccoons and cashiers have their own jobs). */
 export const NPC_KINDS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => NPC_DEFS[k].spawnWeight > 0);
 /** Kinds that are never part of the everyday crowd (own jobs, own counts). */
-export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
+export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
 /** The four big shots. */
 export const BIG_SHOTS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => !!NPC_DEFS[k].bigShot);
 

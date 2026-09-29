@@ -48,9 +48,9 @@ test("route map: every point and every link is clear of walls, all connected, pl
 
 test("the crowd wanders for 2 minutes: never inside walls, never stuck, never NaN, stay in town", () => {
   const w = new World({ seed: 5, spawnLoot: false });
-  const walkers = () => [...w.npc.npcs.values()].filter((n) => n.kind !== "cashier");
+  const walkers = () => [...w.npc.npcs.values()].filter((n) => !n.post);
   assert.equal(walkers().length, NPC_COUNT);
-  assert.equal(w.npc.npcs.size - NPC_COUNT, w.arena.shops!.length, "one cashier per shop");
+  assert.equal(w.npc.npcs.size - NPC_COUNT, w.arena.shops!.length + 2, "one cashier per shop, the doorman and the fisherman");
   const start = new Map([...w.npc.npcs.values()].map((n) => [n.id, { x: n.move.x, z: n.move.z }]));
   const travelled = new Map<string, number>();
   const last = new Map([...start]);
@@ -72,7 +72,7 @@ test("the crowd wanders for 2 minutes: never inside walls, never stuck, never Na
       }
     }
   }
-  for (const [id, d] of travelled) if (w.npc.npcs.get(id)?.kind !== "cashier") assert.ok(d > 30, `pedestrian ${id} only walked ${d.toFixed(1)} m in 2 minutes (stuck?)`);
+  for (const [id, d] of travelled) if (!w.npc.npcs.get(id)?.post) assert.ok(d > 30, `pedestrian ${id} only walked ${d.toFixed(1)} m in 2 minutes (stuck?)`);
 });
 
 test("punch a businessman: BONK, his loot pops out, he flees; second punch gets nothing", () => {
@@ -287,7 +287,7 @@ test("the crowd stays full: robbed pedestrians far from everyone get replaced", 
   w.addPlayer("a", "A");
   for (const n of [...w.npc.npcs.values()].slice(0, 6)) n.robbed = true;
   settle(w, 6);
-  assert.equal([...w.npc.npcs.values()].filter((n) => n.kind !== "cashier").length, NPC_COUNT);
+  assert.equal([...w.npc.npcs.values()].filter((n) => !n.post).length, NPC_COUNT);
 });
 
 test("pedestrian world is deterministic (same seed + inputs = same crowd)", () => {
@@ -404,4 +404,51 @@ test("pedestrians walk around parked cars: a chaser reaches you behind one, nobo
     if (best < 1.6) reached++;
   }
   assert.ok(reached >= 7, `chaser got round the car ${reached}/8 times`);
+});
+
+test("C1.1 the doorman: stands at the apartment tower's door, sneers at bandits, fights back when punched, then goes back to his door", () => {
+  const w = new World({ seed: 3, npcs: 0, spawnLoot: false });
+  const p = w.addPlayer("a", "A");
+  const post = w.arena.posts!.find((x) => x.kind === "doorman")!;
+  const dm = [...w.npc.npcs.values()].find((n) => n.kind === "doorman")!;
+  assert.ok(dm && Math.hypot(dm.move.x - post.x, dm.move.z - post.z) < 0.5 && dm.state === "work", "at his door");
+  // stand in front of him for a while: he says something snooty
+  w.debugTeleport("a", post.x, post.z - 1.6, 0);
+  const ev: WorldEvent[] = [];
+  settle(w, 40, ev); // (a greeting is a random chance each tick)
+  assert.ok(ev.some((e) => e.t === "npcSay" && e.npc === dm.id && NPC_DEFS.doorman.lines.idle.includes(e.line)), "greets you, snootily");
+  // punch him: heat, and he comes after you
+  w.debugTeleport("a", dm.move.x, dm.move.z - 1.1, 0);
+  settle(w, 0.1);
+  const h0 = p.notoriety;
+  w.action("a", { a: "punch", yaw: Math.atan2(dm.move.x - p.move.x, dm.move.z - p.move.z), pitch: 0 });
+  const states = new Set<string>();
+  for (let i = 0; i < 60 * 3; i++) { settle(w, 1 / 60, ev); states.add(dm.state); }
+  assert.ok(p.notoriety > h0, "heat");
+  assert.ok(states.has("chase") || states.has("windup"), `fights back (${[...states].join(", ")})`);
+  // run far away: he gives up and walks back to his door
+  w.debugTeleport("a", -97.5, -62, 0);
+  settle(w, 40, ev);
+  assert.ok(dm.state === "work" && Math.hypot(dm.move.x - post.x, dm.move.z - post.z) < 1, `back at his door (${dm.state} at ${dm.move.x.toFixed(1)},${dm.move.z.toFixed(1)})`);
+});
+
+test("C3 the fisherman: sits on his jetty by the pond, grumbles at bandits, whacks you with his rod, goes back to fishing", () => {
+  const w = new World({ seed: 5, npcs: 0, spawnLoot: false });
+  const p = w.addPlayer("a", "A");
+  const post = w.arena.posts!.find((x) => x.kind === "fisherman")!;
+  const fm = [...w.npc.npcs.values()].find((n) => n.kind === "fisherman")!;
+  assert.ok(fm && Math.hypot(fm.move.x - post.x, fm.move.z - post.z) < 0.5 && fm.state === "work", "on his jetty");
+  w.debugTeleport("a", post.x - 1.6, post.z, Math.PI / 2);
+  const ev: WorldEvent[] = [];
+  settle(w, 40, ev); // (a grumble is a random chance each tick)
+  assert.ok(ev.some((e) => e.t === "npcSay" && e.npc === fm.id && NPC_DEFS.fisherman.lines.idle.includes(e.line)), "grumbles about the fish");
+  w.debugTeleport("a", fm.move.x - 1.1, fm.move.z, Math.PI / 2);
+  settle(w, 0.1);
+  w.action("a", { a: "punch", yaw: Math.atan2(fm.move.x - p.move.x, fm.move.z - p.move.z), pitch: 0 });
+  const states = new Set<string>();
+  for (let i = 0; i < 60 * 3; i++) { settle(w, 1 / 60, ev); states.add(fm.state); }
+  assert.ok(states.has("chase") || states.has("windup"), `fights back (${[...states].join(", ")})`);
+  w.debugTeleport("a", -97.5, -62, 0);
+  settle(w, 40, ev);
+  assert.ok(fm.state === "work" && Math.hypot(fm.move.x - post.x, fm.move.z - post.z) < 1, `back on his jetty (${fm.state} at ${fm.move.x.toFixed(1)},${fm.move.z.toFixed(1)})`);
 });

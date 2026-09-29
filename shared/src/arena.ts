@@ -21,6 +21,10 @@ export interface Box {
   face?: [number, number];
   /** Slice 2A: drawn only when the camera is near this building (interiors); see ArenaLayout.units */
   unit?: number;
+  /** C4a: smashed (a broken bench / shop window): collision ignores it until the city resets */
+  off?: boolean;
+  /** C2: a street building's ground floor: a shopfront (glass, door, awning) or a tower lobby */
+  front?: "shop" | "lobby";
 }
 
 export type BoxKind =
@@ -50,8 +54,16 @@ export interface Rect { minX: number; maxX: number; minZ: number; maxZ: number; 
 export const inRect = (r: Rect, x: number, z: number, pad = 0) => x >= r.minX - pad && x <= r.maxX + pad && z >= r.minZ - pad && z <= r.maxZ + pad;
 
 /** Things you can search, smash or rob (Phase 3.5). Static list; their state lives in the World. */
-export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "newsbox" | "car" | "till";
-export interface PropDef { id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string; }
+export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "newsbox" | "car" | "till"
+  // C4a: street things you can smash (each is one of the arena's boxes; broken = it stops blocking until dawn)
+  | "shopglass" | "busstop" | "hydrant" | "mailbox" | "bench" | "planter" | "table" | "pallet";
+export interface PropDef {
+  id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
+  /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
+  box?: number;
+  /** C4a: half-size of its footprint (for reach checks on long things like benches and shop windows) */
+  hw?: number; hd?: number;
+}
 
 export type ShopType = "mart" | "pawn" | "bakery" | "gadget"
   // Slice 2A
@@ -176,6 +188,8 @@ export function fortAt(arena: ArenaLayout, x: number, z: number): number {
 
 export interface ArenaLayout {
   halfSize: number; // playable area is [-halfSize, halfSize] on x and z
+  /** C4a: how many boxes are switched off (smashed) right now; 0 = nearBoxes skips the filter */
+  offCount?: number;
   boxes: Box[];
   spawns: { x: number; z: number; yaw: number }[];
   /** loot spawn points (Phase 2+) */
@@ -208,11 +222,21 @@ export interface ArenaLayout {
    *  the first point also links to the nearest street route points */
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
+  /** C1.1: people who stand at a spot (the apartment tower's doorman) */
+  posts?: { kind: "doorman" | "fisherman"; x: number; z: number; yaw: number }[];
+  /** C4a: where the street junk sits each day (chairs by café tables, lids by bins, bricks on building sites...) */
+  junkSpots?: { type: string; x: number; z: number; y?: number; yaw?: number }[];
+  /** C3: bushes you can crouch in to hide from the cops (walk-through) */
+  bushes?: Rect[];
+  /** C3: the pond's real shape for the renderer (a union of circles; the wading area is in \`water\`) */
+  pondShape?: { x: number; z: number; r: number }[];
+  /** C1.1: deep water (the canal): you float, can't climb out except at ladders */
+  deepWater?: Rect[];
   /** C1: the road network cars drive, and the city blocks */
   roadNet?: RoadNet;
   blocks?: BlockDef[];
   /** C1: purely visual scenery the renderer draws (highway deck, rails, canal...) */
-  scenery?: { kind: "highway" | "rail" | "canal" | "light" | "grassdisc" | "pillar" | "clock"; x: number; z: number; w?: number; d?: number; h?: number; r?: number; yaw?: number; node?: number; approach?: number }[];
+  scenery?: { kind: "highway" | "rail" | "canal" | "light" | "grassdisc" | "pillar" | "clock" | "ladder" | "lamp"; x: number; z: number; w?: number; d?: number; h?: number; r?: number; yaw?: number; node?: number; approach?: number }[];
   /** named places, used by tests and tutorials */
   landmarks?: Record<string, { x: number; z: number; yaw: number; [extra: string]: number }>;
 }
@@ -223,6 +247,20 @@ export function onRoadAt(arena: ArenaLayout, x: number, z: number, pad = 0): boo
   if (roads) for (let i = 0; i < roads.length; i++) { const r = roads[i]; if (x >= r.minX - pad && x <= r.maxX + pad && z >= r.minZ - pad && z <= r.maxZ + pad) return true; }
   const rings = arena.roadRings;
   if (rings) for (const g of rings) { const d = Math.hypot(x - g.x, z - g.z); if (d >= g.r0 - pad && d <= g.r1 + pad) return true; }
+  return false;
+}
+
+/** C1.1: in the deep water (the canal)? (feet at the water level: standing on a dock or a bridge doesn't count) */
+export function inDeepWater(arena: ArenaLayout, x: number, z: number, y = 0): boolean {
+  if (!arena.deepWater || y > 0.25) return false;
+  for (const r of arena.deepWater) if (inRect(r, x, z)) return true;
+  return false;
+}
+
+/** C3: inside a bush (crouch there and the cops can't see you)? */
+export function inBush(arena: ArenaLayout, x: number, z: number): boolean {
+  if (!arena.bushes) return false;
+  for (const r of arena.bushes) if (inRect(r, x, z)) return true;
   return false;
 }
 
@@ -322,6 +360,19 @@ const NONE: Box[] = [];
 
 /** Boxes whose footprint could touch the square (x +- r, z +- r), in original order. */
 export function nearBoxes(arena: ArenaLayout, x: number, z: number, r: number): Box[] {
+  const all = nearBoxesAll(arena, x, z, r);
+  return arena.offCount ? all.filter((b) => !b.off) : all; // (C4a: smashed things don't block)
+}
+
+/** C4a: switch a box off (smashed) or back on, keeping the arena's count right. */
+export function setBoxOff(arena: ArenaLayout, i: number, off: boolean) {
+  const b = arena.boxes[i];
+  if (!b || !!b.off === off) return;
+  b.off = off;
+  arena.offCount = Math.max(0, (arena.offCount ?? 0) + (off ? 1 : -1));
+}
+
+function nearBoxesAll(arena: ArenaLayout, x: number, z: number, r: number): Box[] {
   if (arena.boxes.length < 64) return arena.boxes; // small arenas: not worth it
   const g = gridOf(arena);
   const x0 = Math.floor((x - r) / CELL), x1 = Math.floor((x + r) / CELL);
@@ -344,6 +395,6 @@ export function nearBoxes(arena: ArenaLayout, x: number, z: number, r: number): 
 
 /** A view of the arena holding only the boxes near a point (for one collision step). */
 export function localArena(arena: ArenaLayout, x: number, z: number, r: number): ArenaLayout {
-  if (arena.boxes.length < 64) return arena;
+  if (arena.boxes.length < 64 && !arena.offCount) return arena;
   return { ...arena, boxes: nearBoxes(arena, x, z, r) };
 }

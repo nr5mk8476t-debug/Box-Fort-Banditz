@@ -10,6 +10,7 @@ const CLEARANCE = 0.55; // pedestrian radius + a little room
 
 function blockedAt(arena: ArenaLayout, x: number, z: number): boolean {
   if (arena.water?.some((r) => inRect(r, x, z, CLEARANCE))) return true; // (the pond: walk round it)
+  if (arena.deepWater?.some((r) => inRect(r, x, z, CLEARANCE))) return true; // (nobody walks into the canal)
   for (const b of nearBoxes(arena, x, z, CLEARANCE + 0.1)) {
     const top = b.y + b.h / 2;
     const bottom = b.y - b.h / 2;
