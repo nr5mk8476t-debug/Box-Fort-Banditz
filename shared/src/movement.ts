@@ -8,7 +8,7 @@
 //   mantle (locks everything) > stumble (limits) > slide > dodge > normal movement.
 
 import { PLAYER, SIM_DT } from "./constants.js";
-import { localArena, inWater, inDeepWater, type ArenaLayout, type Box } from "./arena.js";
+import { localArena, inWater, inDeepWater, inLobby, type ArenaLayout, type Box } from "./arena.js";
 
 /** Slice 2A: speed while wading through the pond */
 export const WADE_SPEED = 0.45;
@@ -464,8 +464,10 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
 
   // Keep inside arena
   const lim = arena.halfSize - PLAYER.radius;
-  s.x = clamp(s.x, -lim, lim);
-  s.z = clamp(s.z, -lim, lim);
+  if (!inLobby(arena, s.x, s.z, 2)) { // (C5a: the lobby roof is past the edge; its fence keeps you on it)
+    s.x = clamp(s.x, -lim, lim);
+    s.z = clamp(s.z, -lim, lim);
+  }
 
   // ---- 10. vertical move + land -----------------------------------------------------
   if (s.grounded) {

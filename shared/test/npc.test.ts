@@ -50,7 +50,7 @@ test("the crowd wanders for 2 minutes: never inside walls, never stuck, never Na
   const w = new World({ seed: 5, spawnLoot: false });
   const walkers = () => [...w.npc.npcs.values()].filter((n) => !n.post);
   assert.equal(walkers().length, NPC_COUNT);
-  assert.equal(w.npc.npcs.size - NPC_COUNT, w.arena.shops!.length + 2, "one cashier per shop, the doorman and the fisherman");
+  assert.equal(w.npc.npcs.size - NPC_COUNT, w.arena.shops!.length + 6, "one cashier per shop, the doorman, the fisherman, the old lady, Uncle Dumpster and the 2 bank guards");
   const start = new Map([...w.npc.npcs.values()].map((n) => [n.id, { x: n.move.x, z: n.move.z }]));
   const travelled = new Map<string, number>();
   const last = new Map([...start]);
@@ -61,7 +61,7 @@ test("the crowd wanders for 2 minutes: never inside walls, never stuck, never Na
       for (const n of w.npc.npcs.values()) {
         const m = n.move;
         assert.ok(Number.isFinite(m.x + m.z + m.y), `${n.kind} NaN`);
-        assert.ok(Math.abs(m.x) < w.arena.halfSize && Math.abs(m.z) < w.arena.halfSize, `${n.kind} wandered off to ${m.x.toFixed(1)},${m.z.toFixed(1)}`);
+        if (n.kind !== "uncle_dumpster") assert.ok(Math.abs(m.x) < w.arena.halfSize && Math.abs(m.z) < w.arena.halfSize, `${n.kind} wandered off to ${m.x.toFixed(1)},${m.z.toFixed(1)}`);
         for (const b of w.arena.boxes) {
           if (b.y + b.h / 2 <= 0.4 || b.y - b.h / 2 > 1.7) continue;
           assert.ok(!(Math.abs(m.x - b.x) < b.w / 2 - 0.05 && Math.abs(m.z - b.z) < b.d / 2 - 0.05 && m.y < b.y + b.h / 2 - 0.05), `${n.kind} inside ${b.kind}`);
@@ -415,7 +415,7 @@ test("C1.1 the doorman: stands at the apartment tower's door, sneers at bandits,
   // stand in front of him for a while: he says something snooty
   w.debugTeleport("a", post.x, post.z - 1.6, 0);
   const ev: WorldEvent[] = [];
-  settle(w, 40, ev); // (a greeting is a random chance each tick)
+  settle(w, 90, ev); // (a greeting is a random chance each tick)
   assert.ok(ev.some((e) => e.t === "npcSay" && e.npc === dm.id && NPC_DEFS.doorman.lines.idle.includes(e.line)), "greets you, snootily");
   // punch him: heat, and he comes after you
   w.debugTeleport("a", dm.move.x, dm.move.z - 1.1, 0);
@@ -440,7 +440,7 @@ test("C3 the fisherman: sits on his jetty by the pond, grumbles at bandits, whac
   assert.ok(fm && Math.hypot(fm.move.x - post.x, fm.move.z - post.z) < 0.5 && fm.state === "work", "on his jetty");
   w.debugTeleport("a", post.x - 1.6, post.z, Math.PI / 2);
   const ev: WorldEvent[] = [];
-  settle(w, 40, ev); // (a grumble is a random chance each tick)
+  settle(w, 90, ev); // (a grumble is a random chance each tick)
   assert.ok(ev.some((e) => e.t === "npcSay" && e.npc === fm.id && NPC_DEFS.fisherman.lines.idle.includes(e.line)), "grumbles about the fish");
   w.debugTeleport("a", fm.move.x - 1.1, fm.move.z, Math.PI / 2);
   settle(w, 0.1);

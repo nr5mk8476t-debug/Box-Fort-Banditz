@@ -1,6 +1,6 @@
 // Turns a World into the plain data clients see. Used by the server (copied into the synced
 // schema) and by solo mode (read directly), so the client reads ONE shape either way.
-import type { World } from "./world.js";
+import { ARREST, type World } from "./world.js";
 import { MOVE_NUM_KEYS, MOVE_BOOL_KEYS } from "./movement.js";
 import { lootDef } from "./loot.js";
 import { LOCK_TIME, ROUNDS, type EventView } from "./match.js";
@@ -17,6 +17,8 @@ export interface PlayerView extends Record<string, any> {
   /** Phase 3.5: seconds until respawn after a car wipeout (0 = fine); hold-up progress (-1 = none) */
   respawnT: number;
   robT: number;
+  /** C5c.1 citizen's arrest: who you're holding down, who's holding you down ("" = nobody), how hard you've wriggled (0..1) */
+  pinOn: string; pinBy: string; pinS: number;
   /** Phase 4: seconds of jail left (0 = free), your lock (seed; the client builds the same lock) */
   jailT: number;
   lockSeed: number;
@@ -27,6 +29,10 @@ export interface PlayerView extends Record<string, any> {
   ready: boolean;
   /** 5A.1 health 0..100 */
   hp: number;
+  /** C4b: aura points (tags sprayed) */
+  aura: number;
+  /** C5a: lobby mini-game bests, and the one you're in: "" or "throw:<seconds>:<score>" / "race:<seconds>:<checkpoint>" */
+  tb: number; rb: number; lg: string;
 }
 export interface ItemView {
   type: string;
@@ -43,7 +49,11 @@ export interface ItemView {
   chute: boolean;
   /** Phase 5A tug of war balance (-1 holder wins .. +1 challenger wins; 0 when no tug) */
   tug: number;
+  /** C4b: uses left (spray cans; -1 = not a can) */
+  uses: number;
 }
+/** C4b: a spray-painted tag on a wall */
+export interface TagView { x: number; y: number; z: number; nx: number; nz: number; c: number; s: number; }
 
 /** Common "map-like" interface: both Map and Colyseus MapSchema provide forEach(value, key) and get(). */
 export interface MapLike<T> { forEach(cb: (v: T, k: string) => void): void; get(k: string): T | undefined; size: number; }
@@ -66,6 +76,8 @@ export interface MatchView {
   results: string;
   evKind: string; evStage: string; evX: number; evZ: number; evR: number; evT: number;
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
+  /** C5b: the dragon parade's progress along Chinatown (-1 = none) */
+  paradeD: number;
   /** C1: the traffic-light clock (seconds, wraps every 10 min) */
   lightT: number;
 }
@@ -83,6 +95,7 @@ export interface WorldView extends Partial<MatchView> {
   props?: MapLike<PropView>;
   cars?: MapLike<CarView>;
   copCars?: MapLike<CopCarView>;
+  tags?: MapLike<TagView>;
   phase: string;
   ownerId: string;
   code: string;
@@ -102,12 +115,21 @@ export function playerView(w: World, id: string, out: Record<string, any> = {}):
   out.bank = w.match.bankedValue(p);
   out.respawnT = Math.max(0, Math.ceil(p.respawnT * 10) / 10);
   out.robT = p.rob ? Math.round(p.rob.t * 20) / 20 : -1;
+  out.pinOn = p.pin ? p.pin.target : "";
+  const pq = w.pinnerOf(p);
+  out.pinBy = pq ? pq.id : "";
+  out.pinS = pq && pq.pin ? Math.min(1, Math.round(pq.pin.struggle / ARREST.breakFree * 20) / 20) : 0;
   out.jailT = p.jailT > 0 ? Math.max(0.1, Math.ceil(p.jailT * 10) / 10) : 0;
   out.lockSeed = p.jailT > 0 ? p.lockSeed : 0;
   out.lockT = p.jailT > 0 ? Math.floor((w.time - p.lockT0) * 20) / 20 : 0;
   out.shop = w.pawn.viewJson(id);
   out.ready = w.match.ready.has(id);
   out.hp = Math.ceil(p.hp);
+  out.aura = p.aura;
+  out.tb = p.throwBest;
+  out.rb = p.raceBest;
+  const g = p.lobbyGame;
+  out.lg = g ? `${g.kind}:${Math.floor(g.t)}:${g.kind === "throw" ? g.score : g.cp}` : "";
   return out as PlayerView;
 }
 
@@ -121,6 +143,7 @@ export function itemView(w: World, id: string, out: Record<string, any> = {}): I
   out.lock = it.locked ? 100 : it.fort >= 0 ? Math.min(99, Math.max(1, Math.floor((it.bankT / LOCK_TIME) * 100))) : 0;
   out.fort = it.fort; out.mult = it.mult; out.chute = it.chute;
   out.tug = it.holder2 ? Math.round(it.tug * 100) / 100 : 0;
+  out.uses = it.type === "spray_can" ? (it.uses ?? 5) : -1;
   return out as ItemView;
 }
 
@@ -133,7 +156,7 @@ export function npcView(w: World, id: string, out: Record<string, any> = {}): Np
   return out as NpcView;
 }
 
-const evScratch: EventView = { kind: "", stage: "", x: 0, z: 0, r: 0, timeLeft: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0 };
+const evScratch: EventView = { kind: "", stage: "", x: 0, z: 0, r: 0, timeLeft: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, paradeD: -1 };
 let lastResults: unknown = null, lastResultsJson = "[]";
 
 /** Round loop state (writes only the flat fields, so it can target the synced room state). */
@@ -147,6 +170,8 @@ export function matchView(w: World, out: Record<string, any>): MatchView {
   const e = m.view(evScratch);
   out.evKind = e.kind; out.evStage = e.stage; out.evX = e.x; out.evZ = e.z; out.evR = e.r; out.evT = Math.ceil(e.timeLeft);
   out.truckOn = e.truckOn; out.truckX = e.truckX; out.truckZ = e.truckZ; out.truckYaw = e.truckYaw;
+  out.paradeD = Math.round(e.paradeD * 100) / 100;
+  // C5c: whose face is on the giant WANTED screen ("" nobody, "MAYOR" when a lone bandit hacked it), and was it a hack?
   return out as MatchView;
 }
 
@@ -166,4 +191,11 @@ export function copCarView(w: World, id: string, out: Record<string, any> = {}):
   const c = w.police.cars.find((x) => x.id === id)!;
   out.x = c.x; out.z = c.z; out.yaw = c.yaw; out.siren = c.mode !== "leave";
   return out as CopCarView;
+}
+
+/** C4b: a tag's view (static once sprayed). */
+export function tagView(w: World, id: string, out: Record<string, any> = {}): TagView {
+  const t = w.tags.get(id)!;
+  out.x = t.x; out.y = t.y; out.z = t.z; out.nx = t.nx; out.nz = t.nz; out.c = t.colorIdx; out.s = t.style;
+  return out as TagView;
 }

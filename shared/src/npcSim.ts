@@ -8,6 +8,8 @@ import { buildNavGraph, type NavNode } from "./navgraph.js";
 import { nearBoxes, onRoadAt, type ArenaLayout } from "./arena.js";
 
 export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup" | "gloat" | "ko" | "film" | "huff"
+  // C4b: the old lady: asleep upstairs (not drawn), then yelling out of her window
+  | "sleep" | "yell"
   // raccoon heist (Phase 3): sneak to a fort, grab loot, escape along the back alley; scram = running off empty-handed
   | "sneak" | "escape" | "scram"
   // police (Phase 4): patrol = heading to where you were reported, search = lost sight of you, leave = giving up
@@ -61,7 +63,9 @@ export interface NpcSimData {
   fortSlot: number;
   lifeT: number;
   // cashiers only
-  post: { x: number; z: number; yaw: number } | null;
+  post: { x: number; z: number; yaw: number; y?: number } | null;
+  /** C5a: which tip Uncle Dumpster is on */
+  tip?: number;
   shop: number;
 }
 
@@ -72,7 +76,7 @@ export interface NpcHost {
   playersForNpcs(): { id: string; x: number; y: number; z: number; yaw: number; connected: boolean; knocked: boolean; immune: boolean }[];
   npcHitPlayer(npcId: string, playerId: string, knock: boolean): void;
   npcDropLoot(npcId: string, type: string, x: number, y: number, z: number, awayX: number, awayZ: number): void;
-  npcEvent(e: { t: "npcSay"; npc: string; line: string } | { t: "npcAttack"; npc: string; p: string; hit: boolean } | { t: "npcDodge"; npc: string; p: string } | { t: "npcKo"; npc: string; by: string } | { t: "panic"; npc: string } | BigShotEvent): void;
+  npcEvent(e: { t: "npcSay"; npc: string; line: string } | { t: "npcAttack"; npc: string; p: string; hit: boolean } | { t: "npcDodge"; npc: string; p: string } | { t: "npcKo"; npc: string; by: string } | { t: "panic"; npc: string } | BigShotEvent | OldLadyEvent): void;
   addNotoriety(playerId: string, amount: number): void;
   /** a cashier got punched: shop alarm */
   shopAlarm(shopId: number): void;
@@ -89,6 +93,8 @@ export interface NpcHost {
 }
 
 /** Big shots (Phase 4.5): arrive (announced), get hit (jackpot), or leave town. */
+/** C4b: the old lady woke up and is yelling out of her window at a bandit */
+export type OldLadyEvent = { t: "oldLady"; npc: string; p: string };
 export type BigShotEvent = { t: "bigShot"; npc: string; kind: NpcKind; stage: "arrive" | "hit" | "gone"; x: number; z: number; by: string };
 /** First big shot after this many seconds, then one every BIG_SHOT_GAP after the last one left. */
 export const BIG_SHOT_FIRST = 35;
@@ -97,6 +103,9 @@ export const BIG_SHOT_STAY = 120;
 
 export const NPC_STEP = SIM_DT * 2; // pedestrians think + move at 30 Hz (cheap, smooth enough)
 export const PUNCH_RANGE = 1.9;
+/** C4b: the old lady above the laundromat: how far beyond a noise's range she still hears it, how long she yells,
+ *  the heat she reports, and how close you must still be for her to come down after you */
+export const OLD_LADY = { hearing: 4, yellTime: 3, heat: 12, chaseFrom: 18 };
 /** C4a: what walkers say when something smashes nearby */
 const STARTLED = ["What was that?!", "Hooligans!", "Not again...", "Somebody call somebody!", "Was that a bench?!", "I saw nothing. NOTHING."];
 const ATTACK_RANGE = 1.5;
@@ -126,9 +135,11 @@ export class NpcSystem {
     // C1.1: posted people (the doorman; C3: the fisherman)
     for (const po of host.arena.posts ?? []) {
       const n = this.spawn(po.kind)!;
-      n.post = { x: po.x, z: po.z, yaw: po.yaw };
+      n.post = { x: po.x, z: po.z, yaw: po.yaw, y: po.y };
       n.move = makeMoveState(po.x, po.z, po.yaw);
-      n.state = "work";
+      if (po.y) n.move.y = po.y; // (C5a: Uncle Dumpster lives on the squat's roof)
+      if (po.kind === "uncle_dumpster") n.sayCd = 1; // (he starts talking as soon as you arrive)
+      n.state = po.kind === "old_lady" ? "sleep" : "work";
     }
   }
 
@@ -152,7 +163,8 @@ export class NpcSystem {
     for (const n of this.npcs.values()) {
       if (!n.post) continue; // (cashiers and posted people: the doorman, the fisherman)
       n.move = makeMoveState(n.post.x, n.post.z, n.post.yaw);
-      n.state = "work"; n.robbed = false; n.hp = n.kind === "cashier" ? 1 : NPC_DEFS[n.kind].hp; n.stateT = 0;
+      if (n.post.y) n.move.y = n.post.y;
+      n.state = n.kind === "old_lady" ? "sleep" : "work"; n.robbed = false; n.hp = n.kind === "cashier" ? 1 : NPC_DEFS[n.kind].hp; n.stateT = 0; n.target = "";
     }
   }
 
@@ -300,6 +312,13 @@ export class NpcSystem {
       n.state = "stunned"; n.stateT = 0.9;
       this.say(n, def.lines.hit, true);
       return "hit";
+    }
+    if (n.kind === "uncle_dumpster") {
+      // C5a: bathrobe kung fu: he sways out of the way of every punch, sips his tea, carries on
+      n.move.vx += (this.rng() < 0.5 ? -1 : 1) * 2.5;
+      this.say(n, def.lines.dodge, true);
+      this.host.npcEvent({ t: "npcDodge", npc: n.id, p: byPlayer });
+      return "dodged";
     }
     if (n.kind === "raccoon") {
       // heroic! no heat for bonking a thief. It drops what it stole and runs off empty-handed.
@@ -454,6 +473,32 @@ export class NpcSystem {
   }
 
   /** Everyone nearby freaks out; influencers start filming (double notoriety). */
+  /**
+   * C4b: a noise at (x, z) heard r metres away. If the old lady's home is in earshot and she's asleep, she
+   * wakes up, leans out of her window yelling (and calls the cops on whoever did it). Returns her id if she woke.
+   */
+  /** C5c: the bank's alarm: every bank guard comes after whoever set it off */
+  guardsAlert(byPlayer: string) {
+    for (const n of this.npcs.values()) {
+      if (n.kind !== "bank_guard" || n.state === "ko") continue;
+      n.state = "chase"; n.target = byPlayer; n.chaseT = 0;
+      this.say(n, NPC_DEFS.bank_guard.lines.fight, true);
+    }
+  }
+
+  wakeOldLady(byPlayer: string, x: number, z: number, r: number): string {
+    for (const n of this.npcs.values()) {
+      if (n.kind !== "old_lady" || n.state !== "sleep" || !n.post) continue;
+      if (Math.hypot(n.post.x - x, n.post.z - z) > r + OLD_LADY.hearing) continue;
+      n.state = "yell"; n.stateT = OLD_LADY.yellTime; n.target = byPlayer;
+      this.say(n, NPC_DEFS.old_lady.lines.yell, true);
+      this.host.addNotoriety(byPlayer, OLD_LADY.heat);
+      this.host.npcEvent({ t: "oldLady", npc: n.id, p: byPlayer });
+      return n.id;
+    }
+    return "";
+  }
+
   /** C4a: a loud noise nearby: walkers stop and look (and some say so). */
   startle(x: number, z: number, r: number) {
     for (const o of this.npcs.values()) {
@@ -587,7 +632,7 @@ export class NpcSystem {
             n.state = "huff"; n.stateT = 1.5; n.target = "";
             break;
           }
-          tx = p.x; tz = p.z; speed = 5.6;
+          tx = p.x; tz = p.z; speed = def.chase ?? 5.6;
           const d = Math.hypot(p.x - n.move.x, p.z - n.move.z);
           if (d < ATTACK_RANGE && n.attackCd <= 0 && !p.immune) { n.state = "windup"; n.stateT = WINDUP; }
           else if (d < 1.1) speed = 0;
@@ -631,13 +676,31 @@ export class NpcSystem {
           if (n.lifeT > 60) gone.push(n);
           break;
         }
+        case "sleep": break; // (C4b: the old lady, upstairs: nothing to do until a noise wakes her)
+        case "yell": {
+          // C4b: leaning out of her window shouting; then she comes down after whoever made the noise
+          if (n.stateT > 0) break;
+          const p = pById.get(n.target);
+          if (p && !p.knocked && Math.hypot(p.x - n.move.x, p.z - n.move.z) < OLD_LADY.chaseFrom) { n.state = "chase"; n.chaseT = 0; this.say(n, def.lines.fight, true); }
+          else { n.state = "sleep"; n.target = ""; }
+          break;
+        }
         case "work": case "cower": {
           const post = n.post;
           if (!post) { n.state = "walk"; break; }
           if (n.state === "cower" && n.stateT <= 0) n.state = "work";
           const d = Math.hypot(post.x - n.move.x, post.z - n.move.z);
+          if (d <= 0.3 && n.kind === "old_lady") { n.state = "sleep"; break; } // (back upstairs to bed)
           if (d > 0.3) { tx = post.x; tz = post.z; speed = def.walk; } else face = post.yaw;
-          if (n.state === "work" && n.sayCd <= 0 && this.rng() < 0.002) {
+          if (n.kind === "uncle_dumpster") {
+            // C5a: his tips, in order, whenever somebody's close enough to hear
+            if (n.sayCd <= 0 && players.some((p) => Math.hypot(p.x - n.move.x, p.z - n.move.z) < 7 && Math.abs(p.y - n.move.y) < 3)) {
+              const tips = def.lines.idle;
+              n.tip = ((n.tip ?? -1) + 1) % tips.length;
+              this.host.npcEvent({ t: "npcSay", npc: n.id, line: tips[n.tip] });
+              n.sayCd = 7;
+            }
+          } else if (n.state === "work" && n.sayCd <= 0 && this.rng() < 0.002) {
             // greet customers who come near
             if (players.some((p) => Math.hypot(p.x - n.move.x, p.z - n.move.z) < 5)) this.say(n, def.lines.idle);
           }
@@ -854,7 +917,7 @@ export class NpcSystem {
     for (const p of this.host.playersForNpcs()) {
       if (!p.connected) continue;
       for (const n of list) {
-        if (n.state === "ko") continue;
+        if (n.state === "ko" || n.state === "sleep" || n.state === "yell") continue; // (C4b: the old lady's upstairs)
         const dx = n.move.x - p.x, dz = n.move.z - p.z, d2 = dx * dx + dz * dz;
         if (d2 > 0.56 || d2 < 1e-8 || Math.abs(n.move.y - p.y) > 1.2) continue;
         const d = Math.sqrt(d2), push = (0.75 - d) * 0.6;

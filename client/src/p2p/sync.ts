@@ -1,7 +1,7 @@
 // State sync for browser-hosted games: the host sends only what changed since the last update
 // (like the server's synced state did), and a full copy to players who just joined.
 
-export const COLLECTIONS = ["players", "items", "npcs", "props", "cars", "copCars"] as const;
+export const COLLECTIONS = ["players", "items", "npcs", "props", "cars", "copCars", "tags"] as const;
 type Coll = (typeof COLLECTIONS)[number];
 
 export interface Delta {
@@ -16,11 +16,11 @@ export interface Delta {
 /** What a joining player's game reads: plain Maps, the same shape as solo mode. */
 export interface NetState extends Record<string, any> {
   players: Map<string, any>; items: Map<string, any>; npcs: Map<string, any>;
-  props: Map<string, any>; cars: Map<string, any>; copCars: Map<string, any>;
+  props: Map<string, any>; cars: Map<string, any>; copCars: Map<string, any>; tags: Map<string, any>;
 }
 
 export function emptyState(): NetState {
-  return { players: new Map(), items: new Map(), npcs: new Map(), props: new Map(), cars: new Map(), copCars: new Map(), phase: "lobby", ownerId: "", code: "" };
+  return { players: new Map(), items: new Map(), npcs: new Map(), props: new Map(), cars: new Map(), copCars: new Map(), tags: new Map(), phase: "lobby", ownerId: "", code: "" };
 }
 
 const isColl = (k: string) => (COLLECTIONS as readonly string[]).includes(k);

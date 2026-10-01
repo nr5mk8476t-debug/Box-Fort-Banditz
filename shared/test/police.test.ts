@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   World, buildTrashington, inRect, onRoadAt, starsOf, JAIL_TIME, BREAKOUT_HEAT, COP_RUN, PLAYER, makeLock, newLockRun, lockPress, lockUpdate,
-  pinPos, bindingPin, LOCK, type MoveInput, type WorldEvent, type LockRun,
+  pinPos, bindingPin, LOCK, ARREST, type MoveInput, type WorldEvent, type LockRun,
 } from "../src/index.js";
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
@@ -427,4 +427,78 @@ test("C3 park bushes: crouch in a bush and the cops can't see you (standing up, 
   w.movePlayer(p, bx, bz, 0); p.move.crouching = true;
   c.move.x = bx + ux * 1.5; c.move.z = bz + uz * 1.5;
   assert.equal(w.police.canSee(c, p), true, "a cop close enough to hear you finds you");
+});
+
+// ============================================================================ C5c.1 citizen's arrest
+function twoBandits(seed = 8) {
+  const w = new World({ seed, npcs: 0, spawnLoot: false });
+  const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
+  w.movePlayer(a, -106, -82, 0); w.movePlayer(b, -106, -80.8, Math.PI);
+  return { w, a, b };
+}
+function runBoth(w: World, seconds: number, ev?: WorldEvent[], pb: Partial<MoveInput> = {}) {
+  const a = w.players.get("a")!, b = w.players.get("b")!;
+  for (let i = 0; i < Math.round(seconds * 60); i++) {
+    w.pushInputs("a", [inp(a.lastSeq + 1)]); w.pushInputs("b", [inp(b.lastSeq + 1, pb)]); w.tick();
+    const e = w.takeEvents(); if (ev) ev.push(...e);
+  }
+}
+
+test("C5c.1 citizen's arrest: pin a knocked-down wanted bandit, a cop comes and cuffs them, you get heat x $5 (out of their loot, then their cash)", () => {
+  const { w, a, b } = twoBandits();
+  const watch = w.placeItem("rolecks_watch", b.move.x, 0.2, b.move.z + 0.4);
+  runBoth(w, 0.4);
+  w.action("b", { a: "grab", item: watch }); runBoth(w, 0.4);
+  assert.ok(b.pockets.includes(watch) || b.hand === watch, "B has a watch");
+  b.cash = 30;
+  w.addHeat(b, 44);
+  b.move.knockT = 2.5; // (flattened: punched out)
+  w.takeEvents();
+  w.action("a", { a: "arrest", p: "b" });
+  const ev: WorldEvent[] = [...w.takeEvents()];
+  assert.ok(ev.some((e) => e.t === "pin" && e.target === "b"), "pinned");
+  runBoth(w, 60, ev);
+  const bust = ev.find((e) => e.t === "busted" && e.p === "b") as Extract<WorldEvent, { t: "busted" }>;
+  assert.ok(bust, "a cop came and cuffed B while A held them down");
+  assert.ok(!ev.some((e) => e.t === "pinEnd"), "B never got up");
+  const bounty = ev.find((e) => e.t === "bounty") as Extract<WorldEvent, { t: "bounty" }>;
+  assert.ok(bounty && bounty.p === "a" && bounty.target === "b", "bounty paid");
+  assert.equal(bounty.want, Math.round(44 * ARREST.perHeat));
+  assert.equal(bounty.value, Math.min(bounty.want, bust.value + 30), `paid out of the seized watch ($${bust.value}) then B's $30`);
+  assert.equal(a.cash, bounty.value);
+  assert.equal(b.cash, 30 - Math.max(0, bounty.value - bust.value));
+  assert.equal(a.pin, null);
+  assert.equal(a.jailT, 0, "A (clean) isn't in any trouble"); // (B was cuffed: see the busted event)
+});
+
+test("C5c.1 citizen's arrest: only a knocked-down bandit with a star, close by; they can wriggle free (mash SPACE), moving or getting hit lets go", () => {
+  const { w, a, b } = twoBandits();
+  runBoth(w, 0.3); w.takeEvents();
+  const fail = () => (w.takeEvents().find((e) => e.t === "pinFail") as any)?.reason;
+  b.notoriety = 10; b.move.knockT = 3;
+  w.action("a", { a: "arrest", p: "b" }); assert.equal(fail(), "clean", "no star: not wanted");
+  b.notoriety = 40; b.move.knockT = 0;
+  w.action("a", { a: "arrest", p: "b" }); assert.equal(fail(), "standing", "knock them down first");
+  b.move.knockT = 3; w.movePlayer(a, -106, -86, 0);
+  w.action("a", { a: "arrest", p: "b" }); assert.equal(fail(), "far");
+  // wriggle free: 14 presses
+  w.movePlayer(a, -106, -82, 0); b.move.knockT = 3;
+  w.action("a", { a: "arrest", p: "b" });
+  assert.ok(a.pin);
+  const ev: WorldEvent[] = [];
+  for (let i = 0; i < ARREST.breakFree; i++) { w.action("b", { a: "struggle" }); runBoth(w, 0.1, ev); }
+  runBoth(w, 0.1, ev);
+  assert.ok(ev.some((e) => e.t === "pinEnd" && e.why === "free"), "B wriggled free");
+  assert.equal(a.pin, null);
+  // moving away lets go
+  runBoth(w, 2); b.move.knockT = 3; b.notoriety = 40; w.movePlayer(a, b.move.x, b.move.z - 1.2, 0); runBoth(w, 0.2); w.takeEvents();
+  w.action("a", { a: "arrest", p: "b" }); assert.ok(a.pin, "pinned again");
+  const ev2: WorldEvent[] = [];
+  for (let i = 0; i < 90 && a.pin; i++) { w.pushInputs("a", [inp(a.lastSeq + 1, { mz: 1, sprint: true, yaw: Math.PI })]); w.tick(); ev2.push(...w.takeEvents()); }
+  assert.ok(ev2.some((e) => e.t === "pinEnd" && e.why === "moved"), "walked off: let go");
+  // a friend knocks the pinner down: rescued
+  runBoth(w, 0.5); b.move.knockT = 3; b.notoriety = 40; w.movePlayer(a, b.move.x, b.move.z - 1.2, 0); runBoth(w, 0.2); w.takeEvents();
+  w.action("a", { a: "arrest", p: "b" }); assert.ok(a.pin);
+  a.move.knockT = 1.5; const ev3: WorldEvent[] = []; runBoth(w, 0.1, ev3);
+  assert.ok(ev3.some((e) => e.t === "pinEnd" && e.why === "rescued"));
 });

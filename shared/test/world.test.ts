@@ -478,7 +478,7 @@ function besideProp(w: World, id: string): { x: number; z: number } {
 
 test("C4a breakables: every shop window, bus stop, hydrant, mailbox, bench, planter, table and pallet in the street is a prop tied to its box", () => {
   const c = buildTrashington();
-  const brk = c.props!.filter((p) => p.box !== undefined);
+  const brk = c.props!.filter((p) => p.box !== undefined && p.kind !== "vaultdoor"); // (C5c: the vault door is tied to its box too, but it opens rather than breaks)
   const kinds = new Set(brk.map((p) => p.kind));
   for (const k of ["shopglass", "hydrant", "bench", "planter", "table", "mailbox", "pallet"]) assert.ok(kinds.has(k as never), `has ${k}`);
   assert.ok(brk.length > 100, `${brk.length} breakables`);
@@ -581,7 +581,7 @@ test("C4a street junk: chairs, lids, bottles, bricks, crates, barrels, trolleys,
   assert.ok(j0.length >= 30, `${j0.length} bits of junk`);
   assert.ok(new Set(j0.map((j) => j.type)).size >= 7, "several kinds");
   for (const it of j0) assert.ok(it.value <= 5, `${it.type} $${it.value}`);
-  assert.ok(![...w.items.values()].some((it) => lootDef(it.type).junk && !w.arena.junkSpots!.some((s) => Math.hypot(s.x - it.body.x, s.z - it.body.z) < 1.5)), "only at junk spots");
+  assert.ok(![...w.items.values()].some((it) => lootDef(it.type).junk && it.shop < 0 && !w.arena.junkSpots!.some((s) => Math.hypot(s.x - it.body.x, s.z - it.body.z) < 1.5)), "only at junk spots");
   // take some away; a new day puts it back
   for (const it of j0.slice(0, 10)) w.items.delete(it.id);
   w.resetCity(false);
@@ -606,4 +606,514 @@ test("C4a a thrown brick breaks a planter (counts as the thrower's hit)", () => 
   }
   assert.equal(pl.ready, false, `two bricks broke it (hp ${pl.hp})`);
   assert.ok(propSurfaceDist(pl.def, pl.def.x, pl.def.z) === 0);
+});
+
+// ============================================================================ C4b
+import { OPEN_TIME, NOISE, TAG, OLD_LADY, tierAt, tagView } from "../src/index.js";
+
+/** pick up a fresh spray can and have it out */
+function giveCan(w: World, id = "a") {
+  const p = w.players.get(id)!;
+  const it = w.popLoot("spray_can", p.move.x, p.move.y + 0.3, p.move.z, 0, 0);
+  settle(w, 0.3);
+  p.actionCd = 0;
+  w.action(id, { a: "grab", item: it });
+  settle(w, 0.3);
+  const slot = p.pockets.indexOf(it);
+  if (slot >= 0) p.sel = slot;
+  assert.ok(p.hand === it || slot >= 0, "holding the can");
+  return it;
+}
+/** THE PIT's back graffiti wall: a spot in front of it and the point on its face */
+function pitWall(w: World) {
+  const wall = w.arena.boxes.find((b) => b.kind === "wall" && b.sign?.startsWith("THE PIT"))!;
+  const fz = wall.z - wall.d / 2;
+  return { wall, stand: { x: wall.x, z: fz - 1.1 }, at: (dx: number) => ({ x: wall.x + dx, y: 1.4, z: fz }) };
+}
+function sprayAt(w: World, pt: { x: number; y: number; z: number }, hold = TAG.hold + 0.1, id = "a") {
+  w.action(id, { a: "tagStart" });
+  settle(w, hold);
+  w.action(id, { a: "tag", x: pt.x, y: pt.y, z: pt.z, nx: 0, nz: -1 } as never);
+  return w.takeEvents();
+}
+
+test("C4b laundromat: washers and dryers inside it; E opens one quietly in OPEN_TIME (moving off cancels), once a day", () => {
+  const { w, p } = c4World();
+  const washers = [...w.props.props.values()].filter((x) => x.def.kind === "washer"), dryers = [...w.props.props.values()].filter((x) => x.def.kind === "dryer");
+  assert.ok(washers.length >= 3 && dryers.length >= 2, `${washers.length} washers, ${dryers.length} dryers`);
+  const m = washers[0];
+  const spot = besideProp(w, m.def.id);
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  // start, then walk away: cancelled
+  w.action("a", { a: "use", prop: m.def.id });
+  assert.ok(p.rob, "opening...");
+  w.debugTeleport("a", spot.x + 3, spot.z, 0);
+  settle(w, 0.2);
+  assert.equal(p.rob, null, "walked off: cancelled");
+  assert.equal(m.ready, true, "still shut");
+  // now properly
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  w.takeEvents();
+  w.action("a", { a: "use", prop: m.def.id });
+  settle(w, OPEN_TIME - 0.5);
+  assert.equal(m.ready, true, "not open yet");
+  settle(w, 0.8);
+  const ev = w.takeEvents();
+  assert.equal(m.ready, false, "open");
+  assert.ok(ev.some((e) => e.t === "search" && e.prop === m.def.id && e.found >= 1), "stuff popped out");
+  assert.ok(!ev.some((e) => e.t === "noise" || e.t === "oldLady"), "quietly");
+  assert.equal(p.notoriety, 0, "no heat");
+  // again: empty
+  w.action("a", { a: "use", prop: m.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "empty"), "one search per machine");
+  w.resetCity(true); assert.equal(m.ready, false, "night: still empty");
+  w.resetCity(false); assert.equal(m.ready, true, "dawn: fresh loads");
+});
+
+test("C4b punching a washer forces it open: instant, loud (wakes the old lady), heat if seen", () => {
+  const { w, p } = c4World();
+  const m = [...w.props.props.values()].filter((x) => x.def.kind === "washer")[4];
+  const spot = besideProp(w, m.def.id);
+  w.debugTeleport("a", spot.x, spot.z, 0);
+  w.takeEvents();
+  const lady = [...w.npc.npcs.values()].find((n) => n.kind === "old_lady")!;
+  assert.equal(lady.state, "sleep");
+  let ev: WorldEvent[] = [];
+  for (let i = 0; i < 12 && m.ready; i++) { p.actionCd = 0; punchProp(w, m.def.id, 1); ev.push(...w.takeEvents()); }
+  assert.equal(m.ready, false, "forced open");
+  assert.ok(ev.some((e) => e.t === "search" && e.prop === m.def.id), "loot out");
+  assert.ok(ev.some((e) => e.t === "noise"), "a bang");
+  assert.ok(ev.some((e) => e.t === "oldLady"), "upstairs, she's awake");
+  assert.ok(p.notoriety >= OLD_LADY.heat, `she calls it in (${p.notoriety})`);
+  void NOISE;
+});
+
+test("C4b the old lady: sleeps upstairs; a noise nearby wakes her -> yells + heat -> comes after you; far off she goes back to bed", () => {
+  const { w, p } = c4World();
+  const lady = [...w.npc.npcs.values()].find((n) => n.kind === "old_lady")!;
+  assert.ok(lady && lady.post, "posted at the laundromat");
+  assert.equal(w.npc.npcs.size - [...w.npc.npcs.values()].filter((n) => !n.post).length, w.arena.shops!.length + 6); // (C5a: + Uncle Dumpster; C5c: + 2 bank guards)
+  const post = lady.post!;
+  // a noise across town: nothing
+  w.noise(p, post.x + 60, post.z, 12);
+  assert.equal(lady.state, "sleep", "didn't hear that");
+  // right outside
+  w.debugTeleport("a", post.x, post.z - 8, 0);
+  w.takeEvents();
+  w.noise(p, post.x, post.z - 6, 10);
+  assert.equal(lady.state, "yell");
+  assert.ok(w.takeEvents().some((e) => e.t === "oldLady" && e.p === "a"));
+  assert.ok(p.notoriety >= OLD_LADY.heat, "she called the cops");
+  settle(w, OLD_LADY.yellTime + 0.5);
+  assert.equal(lady.state, "chase", "here she comes with the cane");
+  // second time: the player's long gone -> back to bed
+  const w2 = c4World().w, p2 = w2.players.get("a")!;
+  const l2 = [...w2.npc.npcs.values()].find((n) => n.kind === "old_lady")!;
+  w2.debugTeleport("a", l2.post!.x + 50, l2.post!.z, 0);
+  w2.noise(p2, l2.post!.x, l2.post!.z - 6, 10);
+  assert.equal(l2.state, "yell");
+  settle(w2, OLD_LADY.yellTime + 0.5);
+  assert.equal(l2.state, "sleep", "whoever it was is gone: back to sleep");
+});
+
+test("C4b tagging: needs a can out, the full hold, a real wall; +1 aura each, spaced out, 5 per can, then it's gone", () => {
+  const { w, p } = c4World();
+  const W = pitWall(w);
+  w.debugTeleport("a", W.stand.x, W.stand.z, 0);
+  // no can: nothing
+  assert.ok(!sprayAt(w, W.at(0)).some((e) => e.t === "tag"), "no can, no tag");
+  const can = giveCan(w);
+  w.debugTeleport("a", W.stand.x, W.stand.z, 0);
+  settle(w, 0.2);
+  // too short a hold (by the host's clock): it waits; letting go (a new start) drops it
+  assert.ok(!sprayAt(w, W.at(0), 0.3).some((e) => e.t === "tag"), "held too briefly");
+  // not a wall (the air in front of it)
+  assert.ok(!sprayAt(w, { ...W.at(0), z: W.at(0).z - 0.8 }).some((e) => e.t === "tag"), "thin air");
+  // proper
+  assert.ok(sprayAt(w, W.at(0)).some((e) => e.t === "tag"), "tagged");
+  assert.equal(p.aura, 1);
+  assert.equal(w.tags.size, 1);
+  assert.equal(w.items.get(can)!.uses, TAG.uses - 1);
+  // right on top of it: no
+  assert.ok(!sprayAt(w, W.at(0.5)).some((e) => e.t === "tag"), "too close to the last one");
+  // four more along the wall, the last empties the can
+  for (const dx of [-3.4, -1.7, 1.7, 3.4]) {
+    w.debugTeleport("a", W.stand.x + dx, W.stand.z, 0); settle(w, 0.2);
+    assert.ok(sprayAt(w, W.at(dx)).some((e) => e.t === "tag"), `tag at ${dx}`);
+  }
+  assert.equal(p.aura, 5);
+  assert.equal(w.tags.size, 5);
+  assert.ok(!w.items.has(can), "empty can tossed");
+  assert.equal(p.notoriety, 0, "nobody saw (no crowd here)");
+  assert.equal(tagView(w, [...w.tags.keys()][0]).c, p.colorIdx, "clients get the tags in your colour");
+  // night keeps them, dawn scrubs them (aura stays: it's this match's score)
+  w.resetCity(true); assert.equal(w.tags.size, 5, "night: still there");
+  w.resetCity(false); assert.equal(w.tags.size, 0, "dawn: the council scrubs them");
+  assert.equal(p.aura, 5);
+});
+
+test("C4b tagging where somebody sees you is heat", () => {
+  const { w, p } = c4World();
+  const W = pitWall(w);
+  w.debugTeleport("a", W.stand.x, W.stand.z, 0);
+  giveCan(w);
+  w.debugTeleport("a", W.stand.x, W.stand.z, 0); settle(w, 0.2);
+  const n = w.npc.spawn("tourist")!;
+  n.move = makeMoveState(W.stand.x + 2, W.stand.z - 2, 0);
+  n.state = "cower"; n.stateT = 99; // (stays put and watches)
+  assert.ok(sprayAt(w, W.at(0)).some((e) => e.t === "tag"));
+  assert.ok(p.notoriety >= TAG.heat, `seen: heat (${p.notoriety})`);
+});
+
+test("C4b THE PIT: a skate park in the low end with ramps, walls to tag and spray cans lying about (also at the other can spots)", () => {
+  const c = buildTrashington();
+  const pit = c.blocks!.find((b) => b.name.startsWith("The Pit"))!;
+  assert.ok(pit, "the skate park");
+  const cz = (pit.rect.minZ + pit.rect.maxZ) / 2;
+  assert.equal(tierAt(cz), 0, "low end of town");
+  const inPit = (b: { x: number; z: number }) => b.x > pit.rect.minX && b.x < pit.rect.maxX && b.z > pit.rect.minZ && b.z < pit.rect.maxZ;
+  assert.ok(c.boxes.filter((b) => b.kind === "ramp-step" && inPit(b)).length >= 12, "stepped quarter pipes");
+  const pw = c.landmarks!.pitWall, wall = c.boxes.find((b) => b.kind === "wall" && b.sign?.startsWith("THE PIT"))!;
+  assert.ok(Math.abs(wall.x - pw.x) < 0.01 && Math.abs(wall.z - wall.d / 2 - pw.faceZ) < 0.01, "the test landmark faces the graffiti wall");
+  const w = new World({ seed: 3, npcs: 0 });
+  const cans = [...w.items.values()].filter((i) => i.type === "spray_can");
+  assert.ok(cans.length >= 6, `${cans.length} spray cans`);
+  assert.ok(cans.filter((i) => inPit(i.body)).length >= 2, "some in the pit");
+});
+
+// ============================================================================ C5a: the lobby squat
+import { inLobby, THROW_GAME, NPC_DEFS as NPCD } from "../src/index.js";
+
+function lobbyWorld(seed = 3) {
+  const w = new World({ seed, npcs: 0, lobby: true });
+  const p = w.addPlayer("a", "A");
+  return { w, p, L: w.arena.lobby! };
+}
+
+test("C5a the squat: a rooftop past the south edge, 26 m up; you arrive there before the match, at your fort once it starts", () => {
+  const { w, p, L } = lobbyWorld();
+  assert.ok(L && L.rect.maxZ < -w.arena.halfSize, "just past the south fence");
+  assert.equal(L.y, 26);
+  assert.ok(inLobby(w.arena, p.move.x, p.move.z) && Math.abs(p.move.y - L.y) < 0.01, `spawned on the roof (${p.move.x}, ${p.move.y}, ${p.move.z})`);
+  settle(w, 1);
+  assert.ok(Math.abs(p.move.y - L.y) < 0.05 && p.move.grounded, "standing on the roof (not falling through it)");
+  const b = w.addPlayer("b", "B");
+  assert.ok(inLobby(w.arena, b.move.x, b.move.z), "a friend arrives there too");
+  p.aura = 7;
+  w.startMatch();
+  for (const q of [p, b]) assert.ok(!inLobby(w.arena, q.move.x, q.move.z, 3) && q.move.y < 1, "match on: off to the forts");
+  assert.equal(p.aura, 0, "aura starts from 0");
+  const c = w.addPlayer("c", "C");
+  assert.ok(!inLobby(w.arena, c.move.x, c.move.z, 3), "joining mid-match: straight to your fort");
+});
+
+test("C5a the squat's fence: walk or sprint at it from anywhere and you stay on the roof", () => {
+  const { w, p, L } = lobbyWorld();
+  for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.8, -2.4]) {
+    w.debugTeleport("a", 0, -130, yaw);
+    drive(w, "a", 60 * 8, { mz: 1, yaw, sprint: true, jump: true });
+    assert.ok(inLobby(w.arena, p.move.x, p.move.z) && p.move.y > L.y - 0.2, `yaw ${yaw.toFixed(1)}: still on the roof (${p.move.x.toFixed(1)}, ${p.move.y.toFixed(1)}, ${p.move.z.toFixed(1)})`);
+  }
+});
+
+test("C5a nothing counts up there: no heat, no noise; the practice dummy just wobbles", () => {
+  const { w, p } = lobbyWorld();
+  w.addHeat(p, 50);
+  assert.equal(p.notoriety, 0, "no heat on the roof");
+  w.takeEvents();
+  w.noise(p, p.move.x, p.move.z, 30);
+  assert.ok(!w.takeEvents().some((e) => e.t === "noise"), "nobody hears the squat");
+  const dummy = [...w.props.props.values()].find((x) => x.def.kind === "dummy")!;
+  w.debugTeleport("a", dummy.def.x, dummy.def.z + 1.0, Math.PI);
+  let ev: WorldEvent[] = [];
+  for (let i = 0; i < 4; i++) { p.punchCd = 0; w.action("a", { a: "punch", yaw: Math.PI, pitch: 0 }); settle(w, 0.5); ev.push(...w.takeEvents()); }
+  assert.ok(ev.filter((e) => e.t === "smash" && e.kind === "dummy").length >= 3, "THWACK");
+  assert.equal(dummy.ready, true, "never breaks");
+  assert.equal(p.notoriety, 0);
+});
+
+test("C5a the roof restocks while you wait: the free-stuff pile, bin lids, two trolleys, a spray can", () => {
+  const { w, L } = lobbyWorld();
+  settle(w, 40);
+  const near = (x: number, z: number, r: number, t?: string) => [...w.items.values()].filter((it) => (!t || it.type === t) && Math.hypot(it.body.x - x, it.body.z - z) < r && it.body.y > L.y - 1).length;
+  assert.ok(near(L.pile.x, L.pile.z, 2.5) >= 4, `free stuff (${near(L.pile.x, L.pile.z, 2.5)})`);
+  assert.ok(near(L.lids.x, L.lids.z, 2, "bin_lid") >= 3, "bin lids");
+  assert.equal(near(0, -130, 20, "shopping_trolley"), 2, "two trolleys");
+  assert.ok(near(L.cans.x, L.cans.z, 1.5, "spray_can") >= 1, "a spray can by the tag wall");
+  // taken stuff comes back
+  for (const it of [...w.items.values()]) if (near(L.pile.x, L.pile.z, 0.01) >= 0 && Math.hypot(it.body.x - L.pile.x, it.body.z - L.pile.z) < 2.5 && it.body.y > L.y - 1) w.items.delete(it.id);
+  settle(w, 40);
+  assert.ok(near(L.pile.x, L.pile.z, 2.5) >= 4, "the pile refills");
+  // once the match is on, the roof stops restocking (and the match clears it)
+  w.startMatch(); settle(w, 20);
+  assert.equal(near(0, -130, 20), 0, "match on: nothing up there");
+});
+
+test("C5a THROW-O-MATIC: E starts 30 s; lids on the targets score 3/2/1 by the bullseye; best score kept", () => {
+  const { w, p, L } = lobbyWorld();
+  const tg = L.targets[0];
+  const game = [...w.props.props.values()].find((x) => x.def.kind === "throwgame")!;
+  w.debugTeleport("a", game.def.x - 1.2, game.def.z, Math.PI / 2);
+  w.takeEvents();
+  w.action("a", { a: "use", prop: game.def.id });
+  assert.equal(p.lobbyGame?.kind, "throw");
+  assert.ok(w.takeEvents().some((e) => e.t === "lobbyGame" && e.stage === "start"));
+  // two lids hit: dead centre, and the rim
+  for (const [dy, pts] of [[0, 3], [tg.r * 0.9, 1]] as const) {
+    const id = w.placeItem("bin_lid", tg.x - 1.5, tg.y + dy - 0.2, tg.z);
+    const it = w.items.get(id)!;
+    it.lastThrower = "a"; it.thrownT = 0; it.body.y = tg.y + dy; it.body.vx = 14; it.body.vy = 1.5; it.body.vz = 0;
+    let got: WorldEvent | undefined;
+    for (let i = 0; i < 30 && !got; i++) { w.tick(); got = w.takeEvents().find((e) => e.t === "target"); }
+    assert.ok(got && got.t === "target" && got.pts === pts, `a lid ${dy ? "on the rim" : "in the bullseye"}: ${JSON.stringify(got)}`);
+  }
+  assert.equal(p.lobbyGame?.score, 4);
+  settle(w, THROW_GAME.time);
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "lobbyGame" && e.stage === "done" && e.score === 4), "time's up: 4 points");
+  assert.equal(p.throwBest, 4);
+  assert.equal(p.lobbyGame, null);
+});
+
+test("C5a TROLLEY GRAND PRIX: E at the post, then drag a trolley round the 4 cones and back: your lap time", () => {
+  const { w, p, L } = lobbyWorld();
+  settle(w, 8); // (the trolleys arrive)
+  const post = [...w.props.props.values()].find((x) => x.def.kind === "racegame")!;
+  w.debugTeleport("a", post.def.x, post.def.z - 1.0, 0);
+  w.action("a", { a: "use", prop: post.def.id });
+  assert.equal(p.lobbyGame?.kind, "race");
+  // no trolley: the cones don't count
+  w.debugTeleport("a", L.race[1].x, L.race[1].z, 0); settle(w, 0.3);
+  assert.equal(p.lobbyGame?.cp, 1, "no trolley, no checkpoint");
+  // grab a trolley and go round
+  const tr = [...w.items.values()].find((it) => it.type === "shopping_trolley" && inLobby(w.arena, it.body.x, it.body.z))!;
+  w.debugTeleport("a", tr.body.x, tr.body.z - 1.0, 0); settle(w, 0.3);
+  p.actionCd = 0; w.action("a", { a: "grab", item: tr.id }); settle(w, 0.3);
+  assert.equal(p.hand, tr.id, "dragging a trolley");
+  w.takeEvents();
+  for (const cp of [...L.race.slice(1), L.race[0]]) { w.debugTeleport("a", cp.x, cp.z, 0); settle(w, 0.5); }
+  const ev = w.takeEvents();
+  assert.equal(ev.filter((e) => e.t === "lobbyGame" && e.stage === "cp").length, 3, "3 cones");
+  const done = ev.find((e) => e.t === "lobbyGame" && e.stage === "done");
+  assert.ok(done && done.t === "lobbyGame" && done.score > 0, `finished: ${JSON.stringify(done)}`);
+  assert.ok(p.raceBest > 0 && p.raceBest === (done as { score: number }).score, "best lap kept");
+});
+
+test("C5a Uncle Dumpster: lives on the roof, goes through his tips while you're near, and can't be hit", () => {
+  const { w, p } = lobbyWorld();
+  const u = [...w.npc.npcs.values()].find((n) => n.kind === "uncle_dumpster")!;
+  assert.ok(u && u.post && u.move.y > 25, "on the roof");
+  settle(w, 1);
+  assert.ok(u.move.y > 25, "stays up there");
+  const said: string[] = [];
+  for (let i = 0; i < 16 * 60; i++) { w.tick(); for (const e of w.takeEvents()) if (e.t === "npcSay" && e.npc === u.id) said.push(e.line); }
+  const tips = NPCD.uncle_dumpster.lines.idle;
+  assert.ok(said.length >= 2 && said[0] === tips[0] && said[1] === tips[1], `tips in order: ${JSON.stringify(said.slice(0, 3))}`);
+  // punch him: he dodges, every time
+  w.debugTeleport("a", u.move.x, u.move.z - 1.0, 0);
+  let dodged = 0;
+  for (let i = 0; i < 4; i++) { p.punchCd = 0; w.action("a", { a: "punch", yaw: 0, pitch: 0 }); settle(w, 0.5); dodged += w.takeEvents().filter((e) => e.t === "npcDodge").length; }
+  assert.ok(dodged >= 3, `dodged ${dodged}`);
+  assert.equal(p.notoriety, 0);
+});
+
+// ============================================================================ C5b: Chinatown
+import { STALL_LOOT } from "../src/index.js";
+
+test("C5b Chinatown: six shophouses by the canal, two gates, lanterns, and a stall in front of each", () => {
+  const c = buildTrashington();
+  const shops = c.boxes.filter((b) => b.china);
+  assert.equal(shops.length, 6);
+  for (const b of shops) assert.ok(b.x > 75 && b.x < 95 && Math.abs(b.z) < 22 && b.sign && b.china!.sign2.length >= 2, `${b.sign} by the canal`);
+  assert.equal(tierAt(0), 1, "middle tier");
+  assert.equal(c.chinatown!.gates.length, 2);
+  assert.ok(c.chinatown!.lanternRows.length >= 4);
+  const stalls = c.props!.filter((p) => p.kind === "steamer" || p.kind === "trinkets" || p.kind === "fishtank");
+  assert.equal(stalls.length, 6);
+  for (const s of stalls) assert.ok(c.boxes.some((b) => b.kind === s.kind && Math.abs(b.x - s.x) < 0.01 && Math.abs(b.z - s.z) < 0.01), `${s.id} has a box`);
+});
+
+test("C5b stalls: E on a dumpling steamer gets you food; the stall keeper yells if anybody sees; empty till it restocks", () => {
+  const { w, p } = c4World();
+  const st = [...w.props.props.values()].find((x) => x.def.kind === "steamer")!;
+  const spot = { x: st.def.x - 1.4, z: st.def.z };
+  w.debugTeleport("a", spot.x, spot.z, Math.PI / 2); // (facing the stall)
+  const before = new Set(w.items.keys());
+  w.action("a", { a: "use", prop: st.def.id });
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "search" && e.prop === st.def.id));
+  settle(w, 0.5);
+  const got = [...w.items.values()].filter((it) => !before.has(it.id));
+  assert.ok(got.length >= 1 && got.every((it) => STALL_LOOT.steamer!.some(([t]) => t === it.type)), got.map((it) => it.type).join(","));
+  assert.equal(p.notoriety, 0, "nobody watching (no crowd here)");
+  w.action("a", { a: "use", prop: st.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "empty"), "sold out");
+  // with a watcher: +heat and a yell
+  const tr = [...w.props.props.values()].find((x) => x.def.kind === "trinkets")!;
+  const s2 = { x: tr.def.x - 1.4, z: tr.def.z };
+  w.debugTeleport("a", s2.x, s2.z, Math.PI / 2);
+  const n = w.npc.spawn("tourist")!;
+  n.move = makeMoveState(s2.x - 2, s2.z, 0);
+  n.state = "cower"; n.stateT = 99;
+  w.action("a", { a: "use", prop: tr.def.id });
+  const ev2 = w.takeEvents();
+  assert.ok(ev2.some((e) => e.t === "stallYell"), "HEY! You pay for that!");
+  assert.ok(p.notoriety >= 3, `heat (${p.notoriety})`);
+});
+
+test("C5b the seafood tank: punch it: SPLASH, a crab or a fish flops out, the glass is gone until dawn", () => {
+  const { w, p } = c4World();
+  const tank = [...w.props.props.values()].find((x) => x.def.kind === "fishtank")!;
+  const spot = { x: tank.def.x - 1.3, z: tank.def.z }; // (on the street side of it)
+  w.debugTeleport("a", spot.x, spot.z, Math.PI / 2); // (facing the stall)
+  const before = new Set(w.items.keys());
+  const ev: WorldEvent[] = [];
+  for (let i = 0; i < 8 && tank.ready; i++) { p.punchCd = 0; punchProp(w, tank.def.id, 1); ev.push(...w.takeEvents()); }
+  assert.equal(tank.ready, false, "smashed");
+  assert.ok(ev.some((e) => e.t === "smash" && e.kind === "fishtank"));
+  settle(w, 0.5);
+  const got = [...w.items.values()].filter((it) => !before.has(it.id));
+  assert.ok(got.some((it) => it.type === "live_crab" || it.type === "smelly_fish"), got.map((it) => it.type).join(","));
+  w.resetCity(true); assert.equal(tank.ready, false, "night: still smashed");
+  w.resetCity(false); assert.equal(tank.ready, true, "dawn: a new tank");
+});
+
+// ============================================================================ C5c: Uptown landmarks
+import { HOLD_TIME, KEYCARD_TIME, BANK, MAYOR_TAG, inRect, setBoxOff } from "../src/index.js";
+
+function propOf(w: World, kind: string) { return [...w.props.props.values()].find((x) => x.def.kind === kind)!; }
+function holdOn(w: World, id: string, seconds: number) {
+  const p = w.players.get("a")!;
+  w.action("a", { a: "use", prop: id });
+  for (let i = 0; i < Math.round(seconds * 60); i++) { w.pushInputs("a", [inp(p.lastSeq + 1)]); w.tick(); }
+}
+
+test("C5c the Trashington Bank: a walk-in marble hall where the country club was: vault, deposit boxes, 2 guards, a golden stash; the keycard is somewhere in Uptown", () => {
+  const c = buildTrashington();
+  assert.ok(c.bank && c.boxes.some((b) => b.sign === "TRASHINGTON BANK"));
+  assert.ok(!c.boxes.some((b) => b.sign?.includes("COUNTRY CLUB")), "no more country club");
+  assert.equal(tierAt(c.bank!.rect.minZ), 2, "Uptown");
+  assert.equal(c.props!.filter((p) => p.kind === "depositbox").length, 4);
+  const door = c.props!.find((p) => p.kind === "vaultdoor")!;
+  assert.ok(door.box !== undefined && c.boxes[door.box].h >= 2.5, "a real (blocking) vault door");
+  assert.equal(c.posts!.filter((p) => p.kind === "bank_guard").length, 2);
+  assert.ok(c.props!.filter((p) => p.kind === "stash").length >= 3, "golden stashes at the bank, the statue and the Mile East plaza");
+  const w = new World({ seed: 4, npcs: 0 });
+  assert.equal([...w.items.values()].filter((it) => it.type === "bank_keycard").length, 1, "one keycard, somewhere");
+  const card = [...w.items.values()].find((it) => it.type === "bank_keycard")!;
+  assert.ok(c.bank!.keycardSpots.some((k) => Math.hypot(k.x - card.body.x, k.z - card.body.z) < 0.5), "at one of the keycard spots");
+  assert.ok([...w.items.values()].filter((it) => it.type === "gold_bar" && inRect(c.bank!.vault, it.body.x, it.body.z)).length >= 5, "gold in the vault");
+});
+
+test("C5c the loud way: drilling the vault door: 3 stars at once, alarm, the guards come; 20 s later it swings open (walk in); dawn shuts it and restocks", () => {
+  const w = new World({ seed: 4, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  const door = propOf(w, "vaultdoor");
+  w.debugTeleport("a", door.def.x, door.def.z - 1.6, 0);
+  settle(w, 0.3); w.takeEvents();
+  w.action("a", { a: "use", prop: door.def.id });
+  assert.ok(p.notoriety >= BANK.drillHeat - 0.01, `3 stars straight away (${p.notoriety})`);
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "alarm" && e.kind === "bank"), "the bank alarm");
+  assert.ok([...w.npc.npcs.values()].filter((n) => n.kind === "bank_guard").every((n) => n.state === "chase" && n.target === "a"), "both guards come for you");
+  // (keep the guards off us for the rule check)
+  for (const n of w.npc.npcs.values()) if (n.kind === "bank_guard") { n.state = "work"; n.target = ""; }
+  w.police.reset();
+  holdOn(w, door.def.id, 0.01);
+  for (let i = 0; i < Math.round((HOLD_TIME.vaultdoor! + 0.5) * 60); i++) { w.pushInputs("a", [inp(p.lastSeq + 1)]); w.tick(); p.move.knockT = 0; }
+  assert.equal(door.ready, false, "open");
+  assert.ok(w.arena.boxes[door.def.box!].off, "the door no longer blocks");
+  // walk in
+  drive(w, "a", 90, { mz: 1, yaw: 0 });
+  assert.ok(inRect(w.arena.bank!.vault, p.move.x, p.move.z), `inside the vault (${p.move.x.toFixed(1)}, ${p.move.z.toFixed(1)})`);
+  w.resetCity(true); assert.equal(door.ready, false, "night: still open");
+  const gold0 = [...w.items.values()].filter((it) => it.type === "gold_bar").length;
+  for (const it of [...w.items.values()]) if (it.type === "gold_bar") w.items.delete(it.id);
+  w.resetCity(false);
+  assert.equal(door.ready, true, "dawn: shut again");
+  assert.ok(!w.arena.boxes[door.def.box!].off);
+  assert.ok([...w.items.values()].filter((it) => it.type === "gold_bar").length >= Math.min(5, gold0), "and restocked");
+});
+
+test("C5c the sneaky way: with the manager's keycard, E on the vault opens it in 3 s, quietly (no heat if nobody sees); the card stays in the lock", () => {
+  const w = new World({ seed: 4, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  for (const n of [...w.npc.npcs.values()]) if (n.kind === "bank_guard") w.npc.npcs.delete(n.id); // (nobody on shift)
+  const door = propOf(w, "vaultdoor");
+  w.debugTeleport("a", door.def.x, door.def.z - 1.6, 0);
+  const card = w.placeItem("bank_keycard", p.move.x, 0.3, p.move.z + 0.6);
+  settle(w, 0.3);
+  p.actionCd = 0; w.action("a", { a: "grab", item: card }); settle(w, 0.3);
+  assert.ok(w.carriedItems(p).some((it) => it.id === card), "got the card");
+  w.takeEvents();
+  holdOn(w, door.def.id, KEYCARD_TIME + 0.3);
+  const ev = w.takeEvents();
+  assert.equal(door.ready, false, "open");
+  assert.ok(ev.some((e) => e.t === "vault" && e.quiet), "quietly");
+  assert.ok(!ev.some((e) => e.t === "alarm"), "no alarm");
+  assert.equal(p.notoriety, 0, "no heat");
+  assert.ok(!w.items.has(card), "the card stays in the lock");
+});
+
+test("C5c safety deposit boxes: search each once a day", () => {
+  const w = new World({ seed: 4, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  const door = propOf(w, "vaultdoor");
+  w.props.props.get(door.def.id)!.ready = false; setBoxOff(w.arena, door.def.box!, true);
+  const box1 = propOf(w, "depositbox");
+  w.debugTeleport("a", box1.def.x + (box1.def.x < 68.5 ? 1.0 : -1.0), box1.def.z, box1.def.x < 68.5 ? -Math.PI / 2 : Math.PI / 2);
+  settle(w, 0.3); w.takeEvents();
+  w.action("a", { a: "use", prop: box1.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "search" && e.prop === box1.def.id));
+  w.action("a", { a: "use", prop: box1.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "empty"));
+  void p;
+});
+
+test("C5c the Mayor's Golden Statue: prise off his gold nose (hold E 5 s: heat if seen, gone till dawn); tag his plinth: +5 aura, +15 heat", () => {
+  const w = new World({ seed: 4, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  const nose = propOf(w, "nose");
+  const S = w.arena.statue!;
+  // up on the plinth, facing the nose
+  w.debugTeleport("a", nose.def.x + 0.9, nose.def.z, -Math.PI / 2);
+  p.move.y = S.plinthH; settle(w, 0.3);
+  assert.ok(Math.abs(p.move.y - S.plinthH) < 0.1, `standing on the plinth (${p.move.y})`);
+  w.takeEvents();
+  holdOn(w, nose.def.id, HOLD_TIME.nose! + 0.3);
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "nose"), "prised off");
+  assert.equal(nose.ready, false);
+  settle(w, 1);
+  assert.ok([...w.items.values()].some((it) => it.type === "gold_nose"), "a golden nose");
+  w.resetCity(true); assert.equal(nose.ready, false, "night: still missing");
+  w.resetCity(false); assert.equal(nose.ready, true, "dawn: the council glued it back");
+  // tag the plinth's front face
+  const plinth = w.arena.boxes.find((b) => b.mayor)!;
+  const fx = plinth.x + plinth.w / 2;
+  w.debugTeleport("a", fx + 1.1, plinth.z - 1.5, -Math.PI / 2); settle(w, 0.3);
+  const it = w.placeItem("spray_can", p.move.x, 0.3, p.move.z); settle(w, 0.3);
+  p.actionCd = 0; w.action("a", { a: "grab", item: it }); settle(w, 0.3);
+  const slot = p.pockets.indexOf(it); if (slot >= 0) p.sel = slot;
+  const a0 = p.aura, h0 = p.notoriety;
+  w.action("a", { a: "tagStart" }); settle(w, 1.7);
+  w.action("a", { a: "tag", x: fx, y: 2.0, z: plinth.z - 1.5, nx: 1, nz: 0 } as never);
+  assert.equal(p.aura - a0, MAYOR_TAG.aura, "5 aura");
+  assert.ok(p.notoriety - h0 >= MAYOR_TAG.heat - 0.01, "big heat");
+});
+
+test("C5c golden stashes: each hides one golden item, found once a day", () => {
+  const w = new World({ seed: 4, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  const stashes = [...w.props.props.values()].filter((x) => x.def.kind === "stash");
+  const st = stashes.find((x) => x.def.loot?.includes("diamond_pigeon"))!;
+  w.debugTeleport("a", st.def.x + Math.sin(st.def.yaw) * 0.9, st.def.z + Math.cos(st.def.yaw) * 0.9, st.def.yaw + Math.PI); settle(w, 0.3); w.takeEvents(); // (in front of it, facing it)
+  w.action("a", { a: "use", prop: st.def.id });
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "stashFound"), "found it");
+  settle(w, 1);
+  assert.ok([...w.items.values()].some((it) => it.type === "diamond_pigeon"));
+  w.action("a", { a: "use", prop: st.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "empty"), "once a day");
+  void p;
 });

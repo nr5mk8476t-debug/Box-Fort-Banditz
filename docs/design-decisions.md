@@ -315,3 +315,140 @@ Blake's answers (29 Sep): split C4 into C4a (props, noise, heat, reset) and C4b 
 - Sync cost: a smash sends one prop change; resting junk costs nothing (only changes are sent).
 - How it's drawn: the smashable things stay part of the merged city meshes (no extra draw calls); a smash collapses just their vertices, and dawn puts them back. Pieces fly out and vanish after ~10 s (only on your screen).
 - My calls (logged): hydrants/benches etc. inside shops wait for C6's interiors; street lights, fences, fish tanks and TVs in shop windows aren't smashable yet (C6); rideable trolleys wait for C6 traversal.
+
+## City Redesign slice C4b (laundromat, old lady, tagging, THE PIT) + Blake's fixes, built 2026-09-29
+Blake's asks (29 Sep): a small skate park in the low end of town; fix the brick texture drawn over the glass on unenterable buildings (and the mayor building); move the police station out of the centre to the middle tier near the river; remove the tutorial area on the train tracks.
+- Laundromat (SPIN CYCLE, low end): 9 washers along one wall, 4 tall dryer stacks along the back. No cashier. E on a machine opens it quietly in 2.2 s (move off and it cancels). A punch forces it open instantly: loud (10 m noise) and heat if anyone sees. One search per machine per day (refilled at dawn, not at night). Inside: loose change and odd socks mostly (odd sock, single shoe, novelty undies), fresh laundry sometimes, rarely a designer piece (a GOOCHY hoodie or VERSAYCHEE scarf, cartoon parody brands). 1 in 20 a cat-or-raccoon leaps out.
+- The old lady lives upstairs (the laundromat's upper floor is now an apartment, fire-escape access). She sleeps until a noise within ~4 m of her hearing range (a forced washer, a smash, an alarm): she leans out of her window yelling, calls the cops (+12 heat to whoever made the noise), then after 3 s comes down after you with her cane (slower than you: 4.3 m/s; 2 hp). If you're gone (18 m+) she goes back to bed. While asleep she's not drawn, can't be punched or hit, and doesn't count as a witness.
+- Tagging: pick up a spray can (THE PIT, alleys, the build yard, under the arches; Gizmo Garage sells them). With it out, look at a blank wall (a building, wall or fence face, not glass) within 2.6 m and hold E for 1.5 s. A can holds 5 tags; each tag is +1 aura (shown in the round tally; the Mayor race in C5+ will use it). Tags must be 1.6 m apart. Heat 2 if someone sees you. Tags stay through the night and are scrubbed at dawn; aura stays for the match. Tags are drawn in your player colour with a random word ("BANDIT", "TRASH KING", etc.).
+- The client times the 1.5 s hold; the host only checks that at least half of it passed (slow or jittery host clocks would otherwise refuse fair tags).
+- THE PIT (skate park, Yards, low tier, replacing "Yards: West"): concrete pad, two stepped quarter pipes (0.3 m steps up to a 1.8 m deck) facing each other, a fun box with a rail, a grind rail, a kicker, a bench, graffiti walls covered in background art (both sides), 3 spray cans and loot. Skating itself (boards) is not in C4b; you run up the ramps.
+- Background graffiti: up to 36 art pieces on low/middle-tier side walls plus THE PIT's walls (looks only).
+- Fix: façade wall textures now draw behind glass (alphaIndex: wall texture 1, glass/windows 2) and start above the shopfront (3.3 m) or tower lobby (4.2 m), so brick no longer covers the glass (City Hall included).
+- Fix: the police station moved from the centre to Market Row's precinct block (middle tier, 65..83 x -43.8..-30.5, near the canal), door on a street, cruisers in its own lot. The old block north of the park became ordinary buildings.
+- Fix: the tutorial area on the train tracks (practice ledges, crawl tunnel, labels) is gone. The mantle and crawl tests now use a freight dock at the rail yard (a 1.4 m platform) and the sewer pipe mouth.
+- My calls (logged): the old lady has no shop or till; she is posted inside the laundromat's ground floor (hidden while asleep) and shown at her window when yelling; the laundromat's floor count checks (14 shops with cashiers) were updated.
+
+## Next slices agreed 2026-09-30 (Blake, before bed)
+- Lobby: new players wait in a **rooftop squat** cardboard camp (lobby only; when the match starts everyone spawns at their own box fort). Enticing: a big view of the city, mentor **Uncle Dumpster** (grubby wise hobo in a bathrobe, talks like a kung-fu master about trash), free starter loot. In the lobby: practice everything (dummy, throw targets, tag wall, crates to mantle; nothing counts), **2 mini-games** to start (trolley race, bin-lid target throw), a painted **city map** board, plus an **M-key map** in matches.
+- Every block gets **both** a landmark and an activity; Blake's favourite kinds: **weird NPCs** and **big landmarks**.
+- Side jobs come from a **payphone network** (ringing payphones), paying **in-game cash + aura**.
+- **Chinatown**: a street in the middle tier by the canal: red gates at each end, curved tiled roofs, lanterns over the road, dumpling house / noodle bar / tea house / herbal shop / bakery. Lantern glow at night, a dragon-dance parade event, food stalls and fish tanks to loot. (Respectful, not a caricature: architecture, signs and food, no stereotyped characters.)
+- Order: C5a lobby camp -> C5b Chinatown -> block landmarks + weird NPCs -> payphone jobs -> night & life (lighting, Mayor race).
+- Performance is not a concern (Blake, 30 Sep): make things detailed.
+
+## City Redesign slice C5a (the lobby squat), built 2026-09-30 (overnight, Blake's answers)
+- **Where:** THE SQUAT: a condemned 26 m tenement just past the south fence (x -15..15, z -140..-120). Its roof is the lobby. You arrive there before the match (solo and online); when the host starts, everyone goes to their fort (the old start). Joining mid-match goes straight to your fort. The roof is the one place allowed past the city's edge; a parapet plus a 2.9 m chain-link fence keeps you on it.
+- **The view:** the spawn row faces north across the whole city to Uptown's towers. While you're up there the fog is pushed back 2.4x so you can see it all. Far-off suburbs are drawn all round the city, so the horizon never ends in nothing.
+- **The camp:** a burning barrel (flickering flames, rising embers), a sagging purple couch and rug, crate seats, three tarp tents, two cardboard huts, fairy lights, a washing line, a water tank with the city map painted across it ("YOU ARE HERE"), a locked stairwell hut, TV aerials, a satellite dish, a pigeon coop, plants in buckets, puddles and patched tar paper, and a "WELCOME TO THE SQUAT * POP: US" banner.
+- **Uncle Dumpster:** a grubby old hobo in a maroon bathrobe and fluffy slippers, with a long beard, headband and a mug of tea. He talks like a kung-fu master about trash and goes through 12 tips in order whenever someone is within 7 m (one every 7 s). He dodges every punch ("You punch like wet cardboard").
+- **Practice (nothing counts on the roof):** no heat, no noise heard below. There's a practice dummy (punch: THWACK, it wobbles, never breaks), three crates stepped 1.0 / 1.6 / 2.2 m to climb, and a TAG PRACTICE wall with a spray can that restocks. Aura resets to 0 when the match starts.
+- **Free stuff:** a FREE STUFF pile restocks every 6 s while waiting (rubber ducks, coupons, sandwiches, coins, chickens...), along with a rack of bin lids and two trolleys. It stops when the match starts, and the match clears the roof.
+- **Mini-game 1, THROW-O-MATIC:** press E on the machine, then you have 30 s to throw bin lids at three painted targets on the east fence. Points are 3 / 2 / 1 by distance from the bullseye; the target flashes and pops "+3". Your best score is kept and shown on the squat panel.
+- **Mini-game 2, TROLLEY GRAND PRIX:** press E at the chequered-flag post, then drag a shopping trolley round the four cones (a painted dashed track round the camp) and back through the start. The cones only count while you're dragging a trolley. There's a 120 s limit, and your best lap is kept.
+- **The squat panel (top right, on the roof only):** what's up there, your current game (time left and points, or cone count), and everyone's best throw score and lap.
+- **M map:** press M any time in a match for a map of the city: districts, landmarks (City Hall, Casino, Police, The Pit, Laundromat, Market Hall, Skyscraper), roads, the canal and pond, the park, buildings by tier, the forts in their colours, you (an arrow) and your friends. The same drawing is painted on the water tank.
+- **Rule tests** create worlds without the lobby (option `lobby: true` turns it on; the game always does). This keeps the older rule tests starting at the forts as before.
+- **My calls (logged):** the roof sits off the edge of town rather than on a city block, so no block had to be demolished. Solo also starts in the squat (it has a lobby phase too). Uncle Dumpster's first tip comes a second after you arrive.
+
+## City Redesign slice C5b (Chinatown), built 2026-09-30 (overnight, Blake's answers)
+- **Where:** the Market Row street by the canal (x 69..75, z -21..21, middle tier). The two small "Stalls" blocks east of it (75..87 x -21..-3 and 3..21) became Chinatown. Six shophouses face the street; the market hall's side is opposite.
+- **The look (respectful: architecture, signs and food, no caricatured characters):**
+  - Shophouses in red, cream, jade and ochre, with glazed hip roofs in green, red or orange, upturned corners and a gold ridge with curled ends.
+  - A tiled eave between the floors with red lanterns under it, balconies with red railings on some, and a hanging vertical sign in Chinese (饺子馆, 面馆, 茶楼, 药材, 饼家, 杂货) beside the English fascia.
+  - Shops: DUMPLING DYNASTY, LUCKY NOODLE BAR, GOLDEN LEAF TEA HOUSE, JADE HERBAL SHOP, GOLDEN MOON BAKERY, TRIPLE HAPPY GROCER.
+  - Two red gates (CHINATOWN boards on both faces, green tiled roofs, lanterns, round stone guardians at their feet), and red and gold lanterns strung across the road.
+  - Shophouses skip the generic fire escapes and rooftop water tanks.
+- **Lantern night:** all the lanterns glow warm red and gold as it gets dark.
+- **Stalls to loot:**
+  - Three dumpling steamer carts (E: dumpling boxes, pork bao, fortune cookies, mooncakes).
+  - Two souvenir stalls (E: paper fans, fortune cookies, lucky waving cats; rarely a jade dragon statue, a two-handed $80-200 item).
+  - A LIVE SEAFOOD tank. Punching it gives a splash and a noise, and a live crab or a fish flops out. The glass stays broken until dawn.
+  - Stalls restock after 60-90 s. The stall keeper yells "HEY! You pay for that!" (+3 heat) only if somebody sees you.
+- **Dragon parade (a new city event, in the random rotation with the airdrop, truck, happy hour and raccoons):**
+  - A gong and a 5 s warning, then a red-and-gold dragon on poles, carried by 10 dancers, snakes up Chinatown from gate to gate behind its drumming (about 35 s).
+  - It bumps anyone in its way aside (no knockdown) and scatters a red envelope of lucky money (+$5-40, straight to your wallet) every 2.6 m, with firecrackers.
+  - Every screen shows it in the same place: the host sends only how far the head has walked.
+- **Items (all only from Chinatown):** dumpling_box, bao_bun, fortune_cookie, mooncake, live_crab, paper_fan, lucky_cat, jade_dragon, red_envelope.
+- **M map:** Chinatown is on it.
+- **My calls (logged):**
+  - The shophouses aren't walk-in (C6 does interiors).
+  - The gates stand just inside the street's ends, clear of the crossroads.
+  - The parade walks the street's centre line (the cars don't stop for it; it's a cartoon dragon).
+  - English plus simple, correct Chinese characters on signs.
+
+## Landmarks agreed 2026-09-30 (Blake)
+- Blake's picks: 2 the crashed blimp, 3 the scrapyard car crusher, 4 the burnt-out bus fort, 6 the pigeon cathedral, 7 the Giant Donut, 9 the rusty Ferris wheel, 10 the Mayor's Golden Statue, 12 the giant WANTED screen. Plus a new **Trashington Bank**.
+- The country club goes. The grand **Trashington Bank** takes its Uptown block. The small Old Brick bank shop becomes a cheque-cashing shop.
+- Bank heist, **sneaky OR loud**:
+  - Sneaky: find the manager's keycard hidden in Uptown and open the vault quietly.
+  - Loud: drill the vault door (alarms, 3 stars).
+- **Golden stash items only at landmarks:** each landmark hides 1-3 secret stashes that refill daily, and a few rare golden items only come from them.
+- Order: C5c Uptown (bank, Mayor's Golden Statue, WANTED screen), then C5d low end (blimp, car crusher, bus fort), then C5e middle (pigeon cathedral, Giant Donut, Ferris wheel).
+
+## City Redesign slice C5c (Uptown: the bank, the Mayor's statue, the WANTED screen), built 2026-09-30
+- **The Trashington Bank** (Uptown, where the country club was; the Old Brick bank shop is now CHEQUE-O-MATIC):
+  - A marble temple of money you can walk into. Five columns hold up a frieze ("IN GOLD WE TRUST") and a pediment with a gold coin. It has a gold dome with ribs, a lantern and a $ flag, tall arched windows, a red carpet up the steps, brass bollards and a NO LOITERING sign.
+  - Inside:
+    - a chequered marble floor, two gold chandeliers, a velvet-rope queue;
+    - a teller counter with glass and hanging TELLER signs, banker's lamps;
+    - a portrait of the Mayor, a "LOANS FOR EVERYONE* (*NOT YOU)" banner, a security camera, potted palms;
+    - a STAFF ONLY door to the manager's office.
+  - The vault sits behind the counter: a round steel door with a spoked gold wheel, bolts and a keycard reader. Inside are a steel bench of gold bars (5, loose), bags of cash (3), stacked decorative gold and 4 walls of safety deposit boxes.
+  - **Loud way:** E on the vault door with no keycard = the drill.
+    - Heat jumps to 92 (3 stars), the bank alarm rings, and both bank guards come for you (tough: 3 hits).
+    - The drill sparks and makes noise every 2 s.
+    - Hold still for 20 s (moving over 1.2 m away or getting knocked down stops it). Then the door swings open (inward) and stops blocking.
+  - **Sneaky way:** the manager's keycard turns up each morning at one of 6 spots round Uptown (a bin, a planter, the museum steps...). E on the vault while carrying it opens the door in 3 s, quietly: no heat unless somebody sees you (then +30 and the guards come). The card stays in the lock.
+  - Safety deposit boxes: search each once a day (pearls, a watch, bearer bonds, an awkward family photo, cash, sometimes gold).
+  - Dawn shuts the vault, restocks it and hides a new keycard.
+- **The Mayor's Golden Statue** (Mile West):
+  - Mayor Grubsworth in gold on a throne on a plinth (MAYOR GRUBSWORTH on its front). He wears a top hat and a magnificent moustache, waves, and holds a giant drumstick as a sceptre. Twinkling sparkles, lamp posts with gold globes, a ring of flowers, and a "PLEASE DO NOT TOUCH THE NOSE" plaque.
+  - Climb the plinth and hold E for 5 s to prise off his **gold nose** ($180-320). There's heat if somebody sees you; he's noseless till dawn.
+  - Tag his plinth: +5 aura, +15 heat.
+- ~~The WANTED screen~~ (Mile East): dropped by Blake on 2026-10-01 (see C5c.1). Mile East is a plain plaza for now.
+- **Golden stashes (landmark-only items):** a loose brick or tile with a gold glint, found once a day:
+  - the bank manager's office: the Golden Toilet Seat (two hands, $300-600);
+  - the back of the Mayor's plinth: the Mayor's Medal of Honour;
+  - a low stone wall in the Mile East plaza: the Diamond Pigeon (it stays there until Mile East gets its own landmark).
+- **M map:** the Bank and the Mayor's statue are on it.
+- **My calls (logged):**
+  - The vault door swings inward so it clears the teller counter.
+  - The gold on the bench is looks only; the loose bars and bags are the loot.
+  - The bank's front columns block you (thin posts), and the frieze is a ledge you can stand on.
+  - The duplicate gold_bar entry I'd added was removed: the bank uses the existing $160-260 gold bar.
+
+## C5c.1 (Blake, 2026-10-01): no WANTED screen; bounties and citizen's arrests instead
+- Blake didn't like the giant WANTED screen, but liked players knowing each other's heat and being able to help the police for a reward. His answers:
+  - **Seeing heat:** on the M map.
+  - **Claiming:** a citizen's arrest.
+  - **Who pays:** the busted bandit.
+  - **Mile East:** another landmark later.
+- **Removed:** the screen, its control box and the hack/frame rules.
+- **M map WANTED pins:**
+  - You always see yourself.
+  - Other bandits appear only once they're wanted:
+    - 1 star: a red area 26 m across that they're somewhere inside;
+    - 2 stars: a 16 m area;
+    - 3 stars: exactly where they are.
+  - The areas move every 8 s.
+  - Under the name: the stars and their bounty (heat × $5).
+- **Citizen's arrest:**
+  1. Knock a wanted bandit (1+ star) down.
+  2. Stand over them (1.9 m, in front of you) and press E. You hold them down, and a red-and-blue light flashes over them.
+  3. While you hold them:
+     - they stay flat;
+     - their heat can't cool;
+     - the cops always know exactly where they are.
+  4. When a cop cuffs them, you get the bounty: their heat when you pinned them × $5. It's taken first out of the loot the cops seize from them, then out of their cash. If they have less, you get what there is.
+- **How a pin ends early:**
+  - they mash SPACE 14 times to wriggle free (you're dazed for a moment);
+  - a friend knocks you off (you get knocked down or stunned);
+  - you move over 1.2 m;
+  - 60 s pass.
+- **Rules:** you can't pin someone who is clean, standing, too far away, already held by someone else, or on the lobby squat.
+- **My calls (logged; easy to change):**
+  - The map now hides clean bandits. Before, it showed everyone exactly; otherwise the rough areas would give nothing away.
+  - The bounty rate is $5 per point of heat, up to $500 at 100 heat.
+  - A pin lasts at most 60 s, and it takes 14 SPACE presses to wriggle free.
+  - The pinner doesn't get heat for the knockdown punches beyond the usual rules.

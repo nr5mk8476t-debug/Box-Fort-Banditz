@@ -3,10 +3,10 @@
 // ink outlines, grimy-bright colours, shop signs, parody ads, windows.
 // Performance: static meshes are merged by material, so the whole city is a few dozen draw calls.
 import {
-  Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer, Vector3, VertexData,
+  Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer, Vector3, VertexData, Quaternion,
   type ShadowGenerator,
 } from "./babylon.ts";
-import { toon, ink, PALETTE, textTexture, unlitTextured } from "./look.ts";
+import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
 import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, type ArenaLayout, type Box } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
@@ -25,10 +25,38 @@ const KIND_COLOR: Partial<Record<Box["kind"], string>> = {
   hydrant: "#d6264a", mailbox: "#3d6fb5", bikerack: "#6f6a78", board: "#3a3444", pot: "#b5653b", bags: "#2b2433",
   pallet: "#a8743f", portaloo: "#3d8fd6", mixer: "#ff7a1f", trolley: "#b8b4c8",
 };
+/** C5c: a triangular prism (a pediment, a gable): base centred on the origin, apex up, ridge along z */
+function prism(sc: Scene, w: number, h: number, d: number): Mesh {
+  const x = w / 2, z = d / 2;
+  const faces: number[][][] = [
+    [[-x, 0, -z], [0, h, -z], [x, 0, -z]], [[x, 0, z], [0, h, z], [-x, 0, z]],
+    [[-x, 0, -z], [-x, 0, z], [0, h, z], [0, h, -z]], [[x, 0, -z], [0, h, -z], [0, h, z], [x, 0, z]],
+    [[-x, 0, -z], [x, 0, -z], [x, 0, z], [-x, 0, z]],
+  ];
+  const pos: number[] = [], ind: number[] = [];
+  for (const f of faces) { const b = pos.length / 3; for (const v of f) pos.push(...v); for (let i = 1; i < f.length - 1; i++) ind.push(b, b + i, b + i + 1); }
+  const norms: number[] = []; VertexData.ComputeNormals(pos, ind, norms);
+  const vd = new VertexData(); vd.positions = pos; vd.indices = ind; vd.normals = norms; vd.uvs = new Array((pos.length / 3) * 2).fill(0);
+  const m = new Mesh("prism", sc); vd.applyToMesh(m); return m;
+}
+/** C5c: a cartoon Mayor (round face, top hat, big moustache) for the portrait and the WANTED screen */
+function drawMayorFace(c: CanvasRenderingContext2D, x: number, y: number, r: number, skin: string) {
+  c.save();
+  c.fillStyle = skin; c.strokeStyle = "#1b1420"; c.lineWidth = r * 0.06;
+  c.beginPath(); c.ellipse(x, y + r * 0.1, r * 0.95, r * 0.85, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.beginPath(); c.ellipse(x, y + r * 0.72, r * 0.7, r * 0.3, 0, 0, Math.PI); c.fill(); c.stroke(); // (chins)
+  c.fillStyle = "#1b1420"; c.fillRect(x - r * 0.95, y - r * 0.72, r * 1.9, r * 0.14); c.fillRect(x - r * 0.55, y - r * 1.55, r * 1.1, r * 0.9);
+  c.fillStyle = "#c0282a"; c.fillRect(x - r * 0.55, y - r * 0.85, r * 1.1, r * 0.14);
+  for (const s of [-1, 1]) { c.fillStyle = "#fff"; c.beginPath(); c.arc(x + s * r * 0.35, y - r * 0.15, r * 0.16, 0, Math.PI * 2); c.fill(); c.fillStyle = "#1b1420"; c.beginPath(); c.arc(x + s * r * 0.33, y - r * 0.12, r * 0.07, 0, Math.PI * 2); c.fill(); }
+  c.fillStyle = "#ffd54a"; c.beginPath(); c.ellipse(x, y + r * 0.12, r * 0.16, r * 0.2, 0, 0, Math.PI * 2); c.fill(); c.stroke(); // (the gold nose, naturally)
+  c.fillStyle = "#6b3f22"; for (const s of [-1, 1]) { c.beginPath(); c.ellipse(x + s * r * 0.3, y + r * 0.38, r * 0.34, r * 0.12, s * 0.35, 0, Math.PI * 2); c.fill(); }
+  c.restore();
+}
+
 /** Slice 2A: interiors are drawn only when the camera is this close to the building. */
 export const INTERIOR_DRAW_DIST = 42;
 /** Props are drawn by buildProps (static body here, changing parts in PropRenderer). */
-const PROP_BOX_KINDS = new Set<Box["kind"]>(["bin", "phone", "vending", "meter", "newsbox", "car", "statue"]);
+const PROP_BOX_KINDS = new Set<Box["kind"]>(["bin", "phone", "vending", "meter", "newsbox", "car", "statue", "steamer", "fishtank", "trinkets", "vaultdoor", "depositbox"]);
 
 // ---- C2: each tier has its own materials ----
 // low (south): grimy brick; medium: painted render; high (Uptown): stone walls + glass towers
@@ -224,6 +252,8 @@ export class CityRenderer {
       this.brk = brkOfBox.get(bi) ?? "";
       if (b.kind === "fort") continue; // forts drawn separately (they will evolve in Phase 7)
       if (PROP_BOX_KINDS.has(b.kind)) continue;
+      if (b.hide) continue; // (C5a: collision only; drawn by buildLobby)
+      if (b.chain) { this.chainFences.push(b); continue; }
       this.group = b.unit ?? -1;
       if (b.kind === "glass") {
         // Slice 2A: big see-through shop windows (they still block you)
@@ -246,6 +276,7 @@ export class CityRenderer {
       const flat = b.kind === "sidewalk" || b.kind === "curb" || b.kind === "plaza" || b.kind === "shopfloor";
       this.add(m, color, flat ? (b.kind === "shopfloor" ? 0 : 0.02) : b.kind === "tower" ? 0.08 : 0.05, !flat);
       if ((b.kind === "building" || b.kind === "tower") && b.windows) this.facade(b, color, tier);
+      if (b.china) this.chinaDress(b);
       if (b.sign) this.sign(b);
       this.details(b);
     }
@@ -259,7 +290,7 @@ export class CityRenderer {
         const gm = new StandardMaterial("shopGlass", scene);
         gm.diffuseColor = Color3.FromHexString("#9fe3ff"); gm.emissiveColor = Color3.FromHexString("#2a5a70");
         gm.specularColor = Color3.FromHexString("#ffffff"); gm.alpha = 0.28; gm.backFaceCulling = false;
-        merged.material = gm; merged.parent = this.root; merged.isPickable = false;
+        merged.material = gm; merged.parent = this.root; merged.isPickable = false; merged.alphaIndex = 2;
       }
     }
     this.buildWater();
@@ -268,6 +299,11 @@ export class CityRenderer {
     this.buildDecor();
     this.buildScenery();
     this.buildPark();
+    this.buildPit();
+    this.buildLobby();
+    this.buildChinatown();
+    this.buildBank();
+    this.buildStatue();
     this.planes.windows.push(...windowPlanes);
     const planeMat = (name: string, tex: Texture, zo: number) => {
       const m = new StandardMaterial(name, scene);
@@ -284,7 +320,11 @@ export class CityRenderer {
       const list = this.planes[k];
       for (let i = 0; i < list.length; i += 1500) {
         const merged = Mesh.MergeMeshes(list.slice(i, i + 1500), true, true);
-        if (merged) { merged.material = mats[k]; merged.parent = this.root; merged.isPickable = false; merged.freezeWorldMatrix(); }
+        if (merged) {
+          merged.material = mats[k]; merged.parent = this.root; merged.isPickable = false; merged.freezeWorldMatrix();
+          // (see-through layers are drawn in this order, so the wall texture never paints over glass or windows)
+          merged.alphaIndex = k === "brick" || k === "render" || k === "stone" ? 1 : 2;
+        }
       }
     }
     this.buildSignAtlas();
@@ -503,9 +543,14 @@ export class CityRenderer {
       // ---- wall material ----
       if (!thin && !glass) {
         const tile = tier === 0 ? 2 : tier === 1 ? 4 : 3;
-        const p = at(MeshBuilder.CreatePlane("wallmat", { width: fw, height: b.h }, sc), 0, b.y, 0.12);
-        scaleUVs(p, fw / tile, b.h / tile);
-        (tier === 0 ? this.planes.brick : tier === 1 ? this.planes.render : this.planes.stone).push(p);
+        // (the wall texture stops above a shopfront / entrance / lobby: it never covers the glass)
+        const base = shop || entrance || lobby ? Math.min(bottom + (lobby ? 4.2 : 3.3), top) : bottom;
+        const wh = top - base;
+        if (wh > 0.2) {
+          const p = at(MeshBuilder.CreatePlane("wallmat", { width: fw, height: wh }, sc), 0, base + wh / 2, 0.12);
+          scaleUVs(p, fw / tile, wh / tile);
+          (tier === 0 ? this.planes.brick : tier === 1 ? this.planes.render : this.planes.stone).push(p);
+        }
       }
       // ---- windows ----
       const winBottom = shop || entrance ? bottom + 4.8 : tower && grounded ? bottom + 4.7 : bottom + 0.7;
@@ -577,7 +622,7 @@ export class CityRenderer {
       // ---- pilasters at the corners of middle-tier fronts ----
       if (street && tier === 1 && !tower && b.h > 4) for (const sx of [-1, 1]) piece(at(MeshBuilder.CreateBox("pilaster", { width: 0.45, height: b.h - 0.6, depth: 0.32 }, sc), sx * (fw / 2 - 0.22), bottom + (b.h - 0.6) / 2, 0.16), trim, 0.02);
       // ---- fire escape (low + middle tier street fronts, 3+ floors) ----
-      if (street && tier < 2 && !tower && rows >= 2 && cols >= 2 && H(9) < 0.5) {
+      if (street && tier < 2 && !tower && rows >= 2 && cols >= 2 && H(9) < 0.5 && !b.china) { // (C5b: Chinatown's shophouses have balconies instead)
         const c0 = Math.floor(H(10) * (cols - 1));
         const along = -pw / 2 + (c0 + 1) * cellW, span = Math.min(cellW * 2 + 0.4, 3.4);
         const iron = "#2b2433";
@@ -617,7 +662,7 @@ export class CityRenderer {
     // ---- cornice round the top (not on towers: they have a parapet) ----
     if (!tower && b.h > 3) piece((() => { const m = MeshBuilder.CreateBox("cornice", { width: b.w + 0.5, height: 0.45, depth: b.d + 0.5 }, sc); m.position.set(b.x, top - 0.28, b.z); return m; })(), trim, 0.03);
     // ---- roof clutter on roofs you can't reach (low roofs stay clear: rooftop loot lives there) ----
-    if (!tower && b.h >= 9) {
+    if (!tower && b.h >= 9 && !b.china) { // (C5b: not under a tiled roof)
       if (H(20) < 0.45) {
         const tx = b.x + (H(21) - 0.5) * b.w * 0.4, tz = b.z + (H(22) - 0.5) * b.d * 0.4;
         const tank = MeshBuilder.CreateCylinder("tank", { diameter: 2, height: 1.9, tessellation: 12 }, sc); tank.position.set(tx, top + 1.6, tz); piece(tank, "#8b5a2b", 0.04);
@@ -671,8 +716,8 @@ export class CityRenderer {
     if (b.face && b.kind === "wall" && b.h > 3) w = 5;
     else if (b.face && b.kind === "wall") w = Math.min(w, (b.h + 0.3) / 0.22);
     const p = MeshBuilder.CreatePlane("sign", { width: w, height: w * (b.kind === "board" ? 0.9 : 0.22) }, this.scene);
-    const y = b.front === "shop" ? Math.min(4.05, top - 0.5 - w * 0.11) : b.kind === "board" ? 0.6 : b.face && b.kind === "building" ? top - 0.9 : b.face && b.kind !== "truck" ? b.y : b.kind === "truck" ? 2.55 : b.kind === "roof" ? top - 0.9 : b.kind === "tower" ? 5.5 : b.kind === "plinth" ? 0.6 : Math.min(top - 0.6, 2.9);
-    const off = b.kind === "board" || b.kind === "plinth" ? 0.03 : b.kind === "truck" ? 0.12 : 0.34;
+    const y = b.front === "shop" ? Math.min(4.05, top - 0.5 - w * 0.11) : b.kind === "board" ? 0.6 : b.face && b.kind === "building" ? top - 0.9 : b.face && b.kind !== "truck" ? b.y : b.kind === "truck" ? 2.55 : b.kind === "roof" ? top - 0.9 : b.kind === "tower" ? 5.5 : b.kind === "plinth" ? (b.mayor ? b.y : 0.6) : Math.min(top - 0.6, 2.9);
+    const off = b.mayor ? 0.08 : b.kind === "board" || b.kind === "plinth" ? 0.03 : b.kind === "truck" ? 0.12 : 0.34;
     p.position.set(b.x + nx * (b.w / 2 + off), y, b.z + nz * (b.d / 2 + off)); // in front of the window planes
     p.rotation.y = Math.atan2(-nx, -nz);
     const bg = ["#f3e2b8", "#ffe14a", "#43c7a6", "#ff8fa3", "#9fe3ff"][Math.floor(hash(b.x, b.z) * 5)];
@@ -930,11 +975,13 @@ export class CityRenderer {
         break;
       }
       case "washer": {
-        for (const s of [-1, 1]) {
-          const door = MB.CreateCylinder("wdoor", { diameter: 0.5, height: 0.04, tessellation: 14 }, sc);
-          door.rotation.set(long ? Math.PI / 2 : 0, 0, long ? 0 : Math.PI / 2);
-          door.position.set(b.x + (long ? 0 : s * (b.w / 2 + 0.01)), bottom + Math.min(0.55, b.h - 0.4), b.z + (long ? s * (b.d / 2 + 0.01) : 0));
-          this.add(door, "#6fb6d9", 0.01);
+        // (a round door on every side: the ones against the wall or a neighbour are hidden anyway; C4b: the
+        // tall ones are a dryer stacked on a washer, so two doors)
+        for (const ax of [true, false]) for (const s of [-1, 1]) for (const y of b.h > 1.5 ? [0.55, 1.4] : [Math.min(0.55, b.h - 0.4)]) {
+          const door = MB.CreateCylinder("wdoor", { diameter: 0.5, height: 0.08, tessellation: 14 }, sc);
+          door.rotation.set(ax ? Math.PI / 2 : 0, 0, ax ? 0 : Math.PI / 2);
+          door.position.set(b.x + (ax ? 0 : s * (b.w / 2 + 0.03)), bottom + y, b.z + (ax ? s * (b.d / 2 + 0.03) : 0)); // (proud of the box's ink outline)
+          this.add(door, y > 1 ? "#e0a860" : "#6fb6d9", 0.01);
         }
         break;
       }
@@ -1193,6 +1240,762 @@ export class CityRenderer {
   /** C3: the park's pond (its real pear shape), bushes, the shark fin and the pigeons. */
   private fin: Mesh | null = null;
   private pigeons: { mesh: TransformNode; hx: number; hz: number; x: number; z: number; y: number; vx: number; vy: number; vz: number; flee: number; peck: number }[] = [];
+  /**
+   * C4b: THE PIT's dressing (looks only): steel coping on every ramp lip and the fun box, flood lights on
+   * the corners, a painted logo and skid marks on the concrete, stickers on the ramps, litter, a drinks
+   * cooler, a boombox on the bench.
+   */
+  /** C5b: Chinatown's lanterns (they glow at night) */
+  private lanternMat: StandardMaterial | null = null;
+  private lanternMeshes: Mesh[] = [];
+  private lanternT = 0;
+  private lanternMatFor(): StandardMaterial {
+    if (!this.lanternMat) {
+      const m = new StandardMaterial("lantern", this.scene);
+      m.diffuseColor = Color3.FromHexString("#d8261e"); m.specularColor = Color3.FromHexString("#ffb0a0");
+      m.emissiveColor = Color3.FromHexString("#5a1010");
+      this.lanternMat = m;
+    }
+    return this.lanternMat;
+  }
+  /** a red paper lantern: body, gold caps, a tassel (swings a little) */
+  private lantern(x: number, y: number, z: number, size = 1, gold = false): Mesh {
+    const sc = this.scene;
+    const body = MeshBuilder.CreateSphere("lantern", { diameter: 0.55 * size, segments: 10 }, sc);
+    body.scaling.y = 0.82; body.position.set(x, y, z); body.parent = this.root; body.isPickable = false;
+    body.material = gold ? (() => { const m = this.lanternMatFor().clone("lanternGold"); m.diffuseColor = Color3.FromHexString("#ffb000"); return m; })() : this.lanternMatFor();
+    ink(body, 0.02);
+    for (const dy of [0.24, -0.24]) {
+      const cap = MeshBuilder.CreateCylinder("lcap", { diameter: 0.26 * size, height: 0.07 * size, tessellation: 10 }, sc);
+      cap.position.set(x, y + dy * size, z); this.add(cap, "#e8b422", 0.01, false);
+    }
+    const tas = MeshBuilder.CreateCylinder("tassel", { diameter: 0.05 * size, height: 0.3 * size, tessellation: 5 }, sc);
+    tas.position.set(x, y - 0.42 * size, z); this.add(tas, "#e8b422", 0, false);
+    this.lanternMeshes.push(body);
+    return body;
+  }
+
+  /**
+   * C5b: a Chinatown shophouse's dressing (looks only): a glazed hip roof with upturned corners and a
+   * ridge, a tiled eave across the front between the floors, red lanterns under it, a balcony with a red
+   * railing on some, and a hanging vertical sign with the shop's name in Chinese.
+   */
+  private chinaDress(b: Box) {
+    if (!b.china) return;
+    const sc = this.scene, MB = MeshBuilder, top = b.y + b.h / 2;
+    const [nx, nz] = b.face ?? [-1, 0];
+    const ux = -nz, uz = nx; // along the front
+    const frontLen = nx ? b.d : b.w, depth = nx ? b.w : b.d;
+    const roofC = b.china.roof, H = hash(b.x, b.z);
+    this.group = -1;
+    // the hip roof: a squashed square frustum, then corner horns and a ridge with curled ends
+    const roof = MB.CreateCylinder("chinaRoof", { diameterTop: 0.25, diameterBottom: 1.414, height: 1.7, tessellation: 4 }, sc);
+    roof.rotation.y = Math.PI / 4; roof.bakeCurrentTransformIntoVertices();
+    roof.scaling.set(b.w + 1.6, 1, b.d + 1.6); roof.position.set(b.x, top + 0.85, b.z); roof.bakeCurrentTransformIntoVertices();
+    this.add(roof, roofC, 0.04, false);
+    for (const [cx, cz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const horn = MB.CreateCylinder("horn", { diameterTop: 0.02, diameterBottom: 0.28, height: 0.9, tessellation: 6 }, sc);
+      horn.position.set(b.x + cx * (b.w / 2 + 0.75), top + 0.25, b.z + cz * (b.d / 2 + 0.75));
+      horn.rotation.set(cz * 0.9, 0, -cx * 0.9); this.add(horn, roofC, 0.02, false);
+    }
+    const ridgeAlong = b.w > b.d;
+    const ridge = MB.CreateBox("ridge", { width: ridgeAlong ? Math.max(0.5, b.w - b.d + 0.4) : 0.22, height: 0.22, depth: ridgeAlong ? 0.22 : Math.max(0.5, b.d - b.w + 0.4) }, sc);
+    ridge.position.set(b.x, top + 1.72, b.z); this.add(ridge, "#e8b422", 0.02, false);
+    for (const s2 of [-1, 1]) {
+      const curl = MB.CreateSphere("curl", { diameter: 0.4, segments: 6 }, sc);
+      curl.position.set(b.x + (ridgeAlong ? s2 * (b.w - b.d + 0.4) / 2 : 0), top + 1.85, b.z + (ridgeAlong ? 0 : s2 * (b.d - b.w + 0.4) / 2)); this.add(curl, "#e8b422", 0.02, false);
+    }
+    // eave between the floors, with a row of tile ends and lanterns under it
+    const fx = b.x + nx * (depth / 2), fz = b.z + nz * (depth / 2), ey = 3.7;
+    const eave = MB.CreateBox("eave", { width: nx ? 1.2 : frontLen + 0.6, height: 0.12, depth: nx ? frontLen + 0.6 : 1.2 }, sc);
+    eave.position.set(fx + nx * 0.55, ey, fz + nz * 0.55); eave.rotation.set(nz * 0.35, 0, -nx * 0.35); this.add(eave, roofC, 0.02, false);
+    for (let t = -frontLen / 2; t <= frontLen / 2 + 0.01; t += 0.4) {
+      const tile = MB.CreateCylinder("tileEnd", { diameter: 0.14, height: 0.12, tessellation: 8 }, sc);
+      tile.rotation.set(nz ? Math.PI / 2 : 0, 0, nx ? Math.PI / 2 : 0);
+      tile.position.set(fx + nx * 1.12 + ux * t, ey - 0.2, fz + nz * 1.12 + uz * t); this.add(tile, "#e8b422", 0, false);
+    }
+    for (const t of [-frontLen / 3, 0, frontLen / 3]) this.lantern(fx + nx * 0.8 + ux * t, ey - 0.75, fz + nz * 0.8 + uz * t, 1.1);
+    // a balcony on some (2nd floor)
+    if (H < 0.6 && b.h > 7.5) {
+      const by = 4.9;
+      const slab = MB.CreateBox("balc", { width: nx ? 0.9 : frontLen * 0.7, height: 0.15, depth: nx ? frontLen * 0.7 : 0.9 }, sc);
+      slab.position.set(fx + nx * 0.45, by, fz + nz * 0.45); this.add(slab, "#5a4636", 0.02, false);
+      for (let t = -frontLen * 0.35; t <= frontLen * 0.35 + 0.01; t += 0.35) {
+        const post = MB.CreateBox("rail", { width: 0.06, height: 0.9, depth: 0.06 }, sc);
+        post.position.set(fx + nx * 0.85 + ux * t, by + 0.5, fz + nz * 0.85 + uz * t); this.add(post, "#c0282a", 0, false);
+      }
+      const rail = MB.CreateBox("railTop", { width: nx ? 0.08 : frontLen * 0.7, height: 0.08, depth: nx ? frontLen * 0.7 : 0.08 }, sc);
+      rail.position.set(fx + nx * 0.85, by + 0.95, fz + nz * 0.85); this.add(rail, "#c0282a", 0.01, false);
+    }
+    // the hanging vertical sign, sticking out from the front corner
+    {
+      const tex = new DynamicTexture("csign", { width: 128, height: 448 }, sc, true);
+      const c = tex.getContext() as unknown as CanvasRenderingContext2D;
+      c.fillStyle = H < 0.5 ? "#8e1f2e" : "#1b1420"; c.fillRect(0, 0, 128, 448);
+      c.strokeStyle = "#e8b422"; c.lineWidth = 8; c.strokeRect(6, 6, 116, 436);
+      const chars = [...b.china.sign2];
+      c.fillStyle = "#ffd54a"; c.textAlign = "center"; c.textBaseline = "middle";
+      c.font = `bold ${Math.min(96, Math.floor(400 / chars.length))}px "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Heiti SC", sans-serif`;
+      chars.forEach((ch, i) => c.fillText(ch, 64, 32 + (i + 0.5) * (384 / chars.length)));
+      tex.update();
+      const m = unlitTextured(sc, tex, "csign");
+      const sx = fx + nx * 0.75 + ux * (frontLen / 2 - 0.4), sz = fz + nz * 0.75 + uz * (frontLen / 2 - 0.4);
+      const pl = MB.CreatePlane("csign", { width: 0.7, height: 2.4 }, sc);
+      pl.position.set(sx, 6.1, sz); pl.rotation.y = Math.atan2(ux, uz); pl.material = m; pl.parent = this.root; pl.isPickable = false;
+      const bracket = MB.CreateBox("cbrk", { width: nx ? 1.3 : 0.06, height: 0.06, depth: nx ? 0.06 : 1.3 }, sc);
+      bracket.position.set(fx + nx * 0.6 + ux * (frontLen / 2 - 0.4), 7.35, fz + nz * 0.6 + uz * (frontLen / 2 - 0.4)); this.add(bracket, "#3a3444", 0, false);
+    }
+  }
+
+  /** C5b: Chinatown's two red gates and the lanterns strung across the street */
+  private buildChinatown() {
+    const C = this.arena.chinatown;
+    if (!C) return;
+    const sc = this.scene, MB = MeshBuilder;
+    this.group = -1; this.brk = "";
+    for (const g of C.gates) {
+      const half = g.w / 2 - 0.2;
+      for (const sx of [-1, 1]) {
+        const pil = MB.CreateBox("gatePillar", { width: 0.6, height: 7.2, depth: 0.6 }, sc); pil.position.set(g.x + sx * half, 3.6, g.z); this.add(pil, "#c0282a", 0.04);
+        const base = MB.CreateBox("gateBase", { width: 0.9, height: 0.5, depth: 0.9 }, sc); base.position.set(g.x + sx * half, 0.25, g.z); this.add(base, "#8e8a94", 0.03);
+        // stone lion-ish guardians at each foot (friendly, round)
+        const lion = MB.CreateSphere("guardian", { diameter: 0.7, segments: 8 }, sc); lion.position.set(g.x + sx * (half + 0.9), 0.45, g.z - Math.sign(g.z) * 0.6); this.add(lion, "#b9b3ac", 0.03);
+        const lhead = MB.CreateSphere("guardianHead", { diameter: 0.5, segments: 8 }, sc); lhead.position.set(g.x + sx * (half + 0.9), 0.95, g.z - Math.sign(g.z) * 0.75); this.add(lhead, "#b9b3ac", 0.03);
+      }
+      for (const [y, h, extra] of [[6.2, 0.35, 0.4], [7.1, 0.45, 1.4]] as const) {
+        const beam = MB.CreateBox("gateBeam", { width: g.w + extra, height: h, depth: 0.5 }, sc); beam.position.set(g.x, y, g.z); this.add(beam, "#c0282a", 0.04);
+      }
+      const roof = MB.CreateCylinder("gateRoof", { diameterTop: 0.2, diameterBottom: 1.414, height: 1.0, tessellation: 4 }, sc);
+      roof.rotation.y = Math.PI / 4; roof.bakeCurrentTransformIntoVertices();
+      roof.scaling.set(g.w + 2.4, 1, 1.8); roof.position.set(g.x, 7.85, g.z); roof.bakeCurrentTransformIntoVertices(); this.add(roof, "#3f7f4f", 0.04);
+      for (const sx of [-1, 1]) { const horn = MB.CreateCylinder("gHorn", { diameterTop: 0.02, diameterBottom: 0.25, height: 0.8, tessellation: 6 }, sc); horn.position.set(g.x + sx * (g.w / 2 + 1.2), 7.5, g.z); horn.rotation.z = -sx * 0.9; this.add(horn, "#3f7f4f", 0.02); }
+      // the name board, both faces
+      const bm = unlitTextured(sc, textTexture(sc, "CHINATOWN", { w: 512, h: 128, bg: "#1b1420", fg: "#ffd54a" }), "gateBoard");
+      for (const ry of [0, Math.PI]) {
+        const pl = MB.CreatePlane("gateBoard", { width: 3.2, height: 0.8 }, sc);
+        pl.position.set(g.x, 6.65, g.z + (ry ? 0.27 : -0.27)); pl.rotation.y = ry; pl.material = bm; pl.parent = this.root; pl.isPickable = false;
+      }
+      for (const sx of [-1, 1]) this.lantern(g.x + sx * 2.2, 5.6, g.z, 1.3);
+    }
+    // lanterns strung across the road (red and gold, a little sag), on thin wires between the buildings
+    const S = C.street;
+    for (const z of C.lanternRows) {
+      const x0 = S.minX - 1.5, x1 = S.maxX + 2.5, y = 6.4, n = 6;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, sag = Math.sin(t * Math.PI) * 0.6;
+        if (i > 0 && i < n) this.lantern(x0 + (x1 - x0) * t, y - sag - 0.45, z, 0.9, i % 2 === 0);
+      }
+      const len = x1 - x0, wire = MB.CreateCylinder("lwire", { diameter: 0.02, height: len, tessellation: 4 }, sc);
+      wire.rotation.z = Math.PI / 2; wire.position.set((x0 + x1) / 2, y - 0.3, z); this.add(wire, "#1b1420", 0, false);
+    }
+  }
+
+  // =================================================================================================
+  // C5c: UPTOWN LANDMARKS (looks only; the collision is in the layout)
+  // =================================================================================================
+  private uptownT = 0;
+  private sparkles: { m: Mesh; ph: number }[] = [];
+  private glowMat(col: string): StandardMaterial {
+    const m = new StandardMaterial("glow" + col, this.scene); m.disableLighting = true; m.emissiveColor = Color3.FromHexString(col); return m;
+  }
+  /** a gold sparkle (a little 4-point star that twinkles; see updateUptown) */
+  private sparkle(x: number, y: number, z: number, size = 0.35) {
+    const m = MeshBuilder.CreatePlane("sparkle", { size }, this.scene);
+    m.position.set(x, y, z); m.billboardMode = Mesh.BILLBOARDMODE_ALL; m.isPickable = false; m.parent = this.root;
+    m.material = this.sparkleMat ??= (() => {
+      const t = new DynamicTexture("sparkleTex", { width: 64, height: 64 }, this.scene, true);
+      const c = t.getContext() as unknown as CanvasRenderingContext2D;
+      c.clearRect(0, 0, 64, 64); c.fillStyle = "#fff6c0";
+      c.beginPath(); c.moveTo(32, 0); c.quadraticCurveTo(36, 28, 64, 32); c.quadraticCurveTo(36, 36, 32, 64); c.quadraticCurveTo(28, 36, 0, 32); c.quadraticCurveTo(28, 28, 32, 0); c.fill();
+      t.hasAlpha = true; t.update();
+      const mm = unlitTextured(this.scene, t, "sparkleMat"); mm.alphaMode = 1; return mm;
+    })();
+    this.sparkles.push({ m, ph: this.sparkles.length * 1.37 });
+  }
+  private sparkleMat: StandardMaterial | null = null;
+
+  /**
+   * THE TRASHINGTON BANK: a marble temple of money. A columned portico with a frieze and pediment, a gold
+   * dome, a red carpet up the steps; inside, a chequered marble floor, chandeliers, velvet queue ropes,
+   * teller signs, a portrait of the Mayor, a security camera; the vault door itself is a prop.
+   */
+  private buildBank() {
+    const B = this.arena.bank;
+    if (!B) return;
+    const sc = this.scene, MB = MeshBuilder, r = B.rect, cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2, H = 8;
+    const W = r.maxX - r.minX, D = r.maxZ - r.minZ;
+    const gold = "#e8b83a", goldHi = "#ffd54a", marble = "#e8e2d4", marble2 = "#cfc6b6", red = "#9e1b2c";
+    this.group = -1; this.brk = "";
+    const bx = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, o = 0.03, cast = true, ry = 0) => {
+      const m = MB.CreateBox("bk", { width: w, height: h, depth: d }, sc); m.position.set(x, y, z); m.rotation.y = ry; this.add(m, col, o, cast); return m;
+    };
+    const cyl = (d: number, h: number, x: number, y: number, z: number, col: string, o = 0.03, t = 16, top?: number) => {
+      const m = MB.CreateCylinder("bkc", { diameter: d, diameterTop: top ?? d, height: h, tessellation: t }, sc); m.position.set(x, y, z); this.add(m, col, o); return m;
+    };
+    const plane = (w: number, h: number, x: number, y: number, z: number, nx: number, nz: number, mat: StandardMaterial) => {
+      const p = MB.CreatePlane("bkp", { width: w, height: h }, sc); p.position.set(x, y, z); p.rotation.y = Math.atan2(-nx, -nz);
+      p.material = mat; p.parent = this.root; p.isPickable = false; return p;
+    };
+    const front = r.minZ;
+    // ---- the portico: fluted columns (a shaft of 8 facets, gold rings), a frieze with a motto, a pediment with a coin
+    for (const [x, z] of B.cols ?? []) {
+      bx(0.95, 0.3, 0.95, x, 0.15, z, marble2, 0.03);
+      cyl(0.7, 0.2, x, 0.4, z, marble);
+      cyl(0.62, 6.2, x, 3.6, z, marble, 0.03, 8, 0.56);
+      cyl(0.72, 0.12, x, 6.62, z, gold, 0.02);
+      bx(0.95, 0.3, 0.95, x, 6.85, z, marble2, 0.03);
+    }
+    const fz = 89.15 - 0.95; // (the frieze's front face)
+    bx(W + 0.8, 0.14, 0.12, cx, 7.12, fz - 0.1, gold, 0.02);
+    bx(W + 0.8, 0.14, 0.12, cx, 7.72, fz - 0.1, gold, 0.02);
+    plane(11, 0.5, cx, 7.42, fz - 0.17, 0, -1, unlitTextured(sc, textTexture(sc, "IN GOLD WE TRUST", { w: 1024, h: 48, bg: marble, fg: "#8a6a1a" }), "bankMotto"));
+    {
+      const ped = prism(sc, W + 0.4, 2.4, 1.9); ped.position.set(cx, 7.8, 89.15);
+      this.add(ped, marble, 0.04);
+      const coin = MB.CreateCylinder("coin", { diameter: 1.4, height: 0.16, tessellation: 24 }, sc); coin.rotation.x = Math.PI / 2; coin.position.set(cx, 8.55, 88.1); this.add(coin, gold, 0.02);
+      plane(1.1, 1.1, cx, 8.55, 87.96, 0, -1, unlitTextured(sc, textTexture(sc, "$", { w: 128, h: 128, bg: goldHi, fg: "#8a6a1a" }), "bankCoin"));
+    }
+    // red carpet up the steps and in through the door; gold door frame
+    bx(2.6, 0.03, 4.6, cx, 0.17, 90.2, red, 0, false);
+    for (const sx of [-1, 1]) bx(0.22, 3.7, 0.3, cx + sx * 1.6, 1.85, front - 0.02, gold, 0.02);
+    bx(3.6, 0.25, 0.3, cx, 3.6, front - 0.02, gold, 0.02);
+    // tall windows with gold frames on the east half of the front and down both sides
+    const glass = this.glowMat("#30507a"); glass.emissiveColor = Color3.FromHexString("#2c4a70");
+    const win = (x: number, z: number, nx: number, nz: number) => {
+      const p = plane(1.6, 4.2, x + nx * 0.1, 3.9, z + nz * 0.1, nx, nz, glass);
+      p.material = glass;
+      const along = nx ? [0, 1] : [1, 0];
+      for (const s of [-1, 1]) bx(nx ? 0.14 : 0.16, 4.5, nx ? 0.16 : 0.14, x + along[0] * s * 0.88 + nx * 0.07, 3.9, z + along[1] * s * 0.88 + nz * 0.07, gold, 0.01, false);
+      bx(nx ? 0.16 : 1.9, 0.18, nx ? 1.9 : 0.16, x + nx * 0.07, 6.1, z + nz * 0.07, gold, 0.01, false);
+      bx(nx ? 0.3 : 1.9, 0.12, nx ? 1.9 : 0.3, x + nx * 0.12, 1.7, z + nz * 0.12, marble2, 0.01, false);
+      const arch = MB.CreateCylinder("arch", { diameter: 1.6, height: 0.1, tessellation: 16, arc: 0.5 }, sc);
+      arch.rotation.set(Math.PI / 2, nx ? Math.PI / 2 : 0, 0); arch.position.set(x + nx * 0.12, 6.0, z + nz * 0.12); this.add(arch, gold, 0.01, false);
+    };
+    for (const x of [77.3, 81.3]) win(x, front, 0, -1);
+    for (const z of [92.5, 96, 99.5]) { win(r.maxX, z, 1, 0); win(r.minX, z, -1, 0); }
+    // the cornice (a gold band), the drum and the gold dome with a lantern and a flag on top
+    bx(W + 0.5, 0.35, D + 0.5, cx, 7.9, cz, gold, 0.03);
+    cyl(7.6, 0.9, cx, H + 0.4 + 0.45, cz, marble, 0.04, 24);
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; bx(0.35, 0.9, 0.35, cx + Math.cos(a) * 3.85, H + 0.85, cz + Math.sin(a) * 3.85, marble2, 0.02, true, -a); }
+    const dome = MB.CreateSphere("dome", { diameter: 7.2, segments: 20, slice: 0.5 }, sc); dome.position.set(cx, H + 1.3, cz); this.add(dome, gold, 0.05);
+    for (let i = 0; i < 12; i++) { // (gold ribs up the dome)
+      const a = i / 12 * Math.PI * 2, path: Vector3[] = [];
+      for (let k = 0; k <= 12; k++) { const e = k / 12 * Math.PI / 2 * 0.97; path.push(new Vector3(cx + Math.cos(a) * Math.cos(e) * 3.63, H + 1.3 + Math.sin(e) * 3.63, cz + Math.sin(a) * Math.cos(e) * 3.63)); }
+      const rib = MB.CreateTube("rib", { path, radius: 0.07, tessellation: 6 }, sc); this.add(rib, "#c99a22", 0, false);
+    }
+    cyl(1.2, 1.1, cx, H + 1.3 + 3.6 + 0.4, cz, marble, 0.03, 12);
+    const top = MB.CreateSphere("domeTop", { diameter: 1.0, segments: 10 }, sc); top.position.set(cx, H + 1.3 + 4.5, cz); this.add(top, gold, 0.03);
+    cyl(0.08, 2.4, cx, H + 1.3 + 5.9, cz, "#c9ccd4", 0.01, 6);
+    const flag = MB.CreatePlane("bankFlag", { width: 1.3, height: 0.8 }, sc); flag.position.set(cx + 0.66, H + 1.3 + 6.6, cz); flag.parent = this.root; flag.isPickable = false;
+    flag.material = unlitTextured(sc, textTexture(sc, "$", { w: 128, h: 80, bg: "#2f7a4f", fg: goldHi }), "bankFlagMat"); (flag.material as StandardMaterial).backFaceCulling = false;
+    this.sparkle(cx, H + 1.3 + 4.9, cz, 0.8);
+    // ---- the lobby: a chequered marble floor, chandeliers, velvet ropes, teller signs, the Mayor's portrait
+    if (this.detail) { // (Performance mode skips the small dressing)
+    for (let x = r.minX + 1.2; x < r.maxX - 0.6; x += 1.6) for (let z = front + 1.2; z < 94.2; z += 1.6) {
+      bx(0.8, 0.02, 0.8, x, 0.19, z, "#8a7f70", 0, false, Math.PI / 4);
+    }
+    const bulb = this.glowMat("#fff1b0"), bulbList: Mesh[] = [];
+    for (const x of [67, 79]) {
+      const y = 6.4, z = 92.4;
+      cyl(0.05, H - 0.4 - y - 0.3, x, (H - 0.4 + y + 0.3) / 2, z, gold, 0, 5);
+      for (const [d, dy] of [[1.9, 0], [1.2, 0.45], [0.6, 0.8]] as const) {
+        const ring = MB.CreateTorus("chand", { diameter: d, thickness: 0.07, tessellation: 20 }, sc); ring.position.set(x, y + dy, z); this.add(ring, gold, 0.01, false);
+        const n = Math.round(d * 4);
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2, b = MB.CreateSphere("cbulb", { diameter: 0.16, segments: 5 }, sc);
+          b.position.set(x + Math.cos(a) * d / 2, y + dy + 0.1, z + Math.sin(a) * d / 2); bulbList.push(b);
+          if (i % 2 === 0) { const drop = MB.CreateSphere("crystal", { diameter: 0.1, segments: 4 }, sc); drop.scaling.y = 1.8; drop.position.set(x + Math.cos(a) * d / 2, y + dy - 0.2, z + Math.sin(a) * d / 2); this.add(drop, "#e8f7ff", 0, false); }
+        }
+      }
+    }
+    { const mb = Mesh.MergeMeshes(bulbList, true, true); if (mb) { mb.material = bulb; mb.parent = this.root; mb.isPickable = false; mb.freezeWorldMatrix(); } }
+    // the queue: brass posts and red ropes
+    const qz = [91.6, 93.0];
+    for (const z of qz) for (let x = 76; x <= 81; x += 1.25) {
+      cyl(0.09, 0.95, x, 0.66, z, gold, 0.01, 8); cyl(0.3, 0.06, x, 0.21, z, gold, 0.01, 10);
+      const k = MB.CreateSphere("knob", { diameter: 0.14, segments: 6 }, sc); k.position.set(x, 1.16, z); this.add(k, gold, 0.01, false);
+      if (x + 1.25 <= 81.01) { const rope = MB.CreateCylinder("rope", { diameter: 0.07, height: 1.25, tessellation: 6 }, sc); rope.rotation.z = Math.PI / 2; rope.position.set(x + 0.625, 0.98, z); this.add(rope, red, 0, false); }
+    }
+    // teller signs hanging over the counter glass (facing the lobby)
+    ["TELLER 1", "TELLER 2", "CLOSED", "TELLER 4"].forEach((t, i) => {
+      const x = 65.5 + i * 3.6;
+      plane(1.3, 0.34, x, 2.75, 94.7 - 0.2, 0, -1, unlitTextured(sc, textTexture(sc, t, { w: 256, h: 68, bg: t === "CLOSED" ? red : "#1b1420", fg: goldHi }), "teller" + i));
+      for (const s of [-0.5, 0.5]) cyl(0.02, 0.8, x + s, 3.3, 94.5, gold, 0, 4);
+    });
+    // a little gold desk lamp and a pen-on-a-chain at each window
+    for (let i = 0; i < 4; i++) { const x = 65.5 + i * 3.6; cyl(0.08, 0.3, x + 0.4, 1.25, 94.6, gold, 0.01, 6); const sh = MB.CreateCylinder("lampShade", { diameterTop: 0.1, diameterBottom: 0.3, height: 0.18, tessellation: 10 }, sc); sh.position.set(x + 0.4, 1.45, 94.6); this.add(sh, "#2f7a4f", 0.01, false); }
+    }
+    // the Mayor's portrait (lobby west wall) and a banner (east wall)
+    const portrait = new DynamicTexture("mayorPortrait", { width: 256, height: 320 }, sc, true);
+    { const c = portrait.getContext() as unknown as CanvasRenderingContext2D; c.fillStyle = "#6b3f22"; c.fillRect(0, 0, 256, 320); c.fillStyle = "#e8b83a"; c.fillRect(10, 10, 236, 300); c.fillStyle = "#2f4a3a"; c.fillRect(26, 26, 204, 230); drawMayorFace(c, 128, 150, 70, "#f0c8a0"); c.fillStyle = "#6b3f22"; c.font = "bold 22px 'Arial Black', sans-serif"; c.textAlign = "center"; c.fillText("OUR MAYOR", 128, 290); portrait.update(); }
+    plane(1.8, 2.25, r.minX + 0.5 + 0.08, 4.2, 92.4, 1, 0, unlitTextured(sc, portrait, "portraitMat"));
+    plane(5.5, 1.1, r.maxX - 0.5 - 0.08, 5.2, 92.8, -1, 0, unlitTextured(sc, textTexture(sc, "LOANS FOR EVERYONE* (*NOT YOU)", { w: 1024, h: 200, bg: "#2f7a4f", fg: goldHi }), "bankBanner"));
+    plane(2.4, 0.5, 68.5, 3.4, 96.5 - 0.12, 0, -1, unlitTextured(sc, textTexture(sc, "VAULT", { w: 256, h: 54, bg: "#3a3444", fg: goldHi }), "vaultPlate"));
+    plane(2.2, 0.5, 81, 3.0, 96.75 - 0.35, 0, -1, unlitTextured(sc, textTexture(sc, "STAFF ONLY", { w: 256, h: 58, bg: red, fg: "#f4f1ea" }), "staffOnly"));
+    if (this.detail) { // (Performance mode skips the small dressing)
+    // a security camera in the corner watching the lobby, and potted palms by the door
+    bx(0.25, 0.25, 0.5, r.minX + 0.8, 6.8, front + 0.9, "#3a3444", 0.02, false, 0.7);
+    const lens = MB.CreateSphere("camLens", { diameter: 0.12, segments: 6 }, sc); lens.position.set(r.minX + 1.0, 6.8, front + 1.1); lens.material = this.glowMat("#ff3b30"); lens.parent = this.root; lens.isPickable = false;
+    for (const x of [cx - 2.4, cx + 2.4]) {
+      cyl(0.6, 0.7, x, 0.53, front + 1.0, "#b5653b", 0.02, 10, 0.75);
+      for (let i = 0; i < 5; i++) { const lf = MB.CreateBox("palm", { width: 0.2, height: 0.04, depth: 1.1 }, sc); lf.position.set(x, 1.4, front + 1.0); lf.rotation.set(0.6, i / 5 * Math.PI * 2, 0); lf.bakeCurrentTransformIntoVertices(); lf.position.set(Math.sin(i / 5 * Math.PI * 2) * 0.35, 0, Math.cos(i / 5 * Math.PI * 2) * 0.35); this.add(lf, "#4f8a3a", 0.01, false); }
+    }
+    }
+    // the vault inside: a steel floor, stacked (decorative) gold behind the shelf, a warning stripe at the door
+    bx(B.vault.maxX - B.vault.minX - 0.8, 0.02, B.vault.maxZ - B.vault.minZ - 0.8, (B.vault.minX + B.vault.maxX) / 2 - 0.1, 0.2, (B.vault.minZ + B.vault.maxZ) / 2 + 0.1, "#8a8a96", 0, false);
+    if (this.detail) { // (Performance mode skips the small dressing)
+    for (const x0 of [64.1, 66, 68, 70]) for (let lv = 0; lv < 2; lv++) for (let k = 0; k < 2 - lv; k++) for (const dz of [-0.13, 0.13]) { // (stacks of gold on the bench between the loose bars: looks only, bolted down)
+      const g = MB.CreateBox("goldPile", { width: 0.4, height: 0.15, depth: 0.22 }, sc); g.position.set(x0 + (k - (1 - lv) / 2) * 0.43, 1.085 + lv * 0.16, B.vault.maxZ - 0.9 + dz); this.add(g, (lv + k) % 2 ? gold : goldHi, 0.01, false);
+    }
+    for (let i = 0; i < 5; i++) bx(0.4, 0.021, 0.5, 67.7 + i * 0.4, 0.2, B.vault.minZ + 0.8, i % 2 ? "#1b1420" : goldHi, 0, false, 0.5);
+    for (let i = 0; i < 4; i++) this.sparkle(64 + i * 2.6, 1.9, B.vault.maxZ - 0.6, 0.3);
+    }
+    // outside: brass bollards along the kerb, a "NO LOITERING" sign that nobody reads
+    for (let x = r.minX + 1; x <= r.maxX - 1; x += 3.1) if (Math.abs(x - cx) > 2) { cyl(0.28, 0.9, x, 0.45, 87.1, gold, 0.02, 10); const k = MB.CreateSphere("bol", { diameter: 0.3, segments: 8 }, sc); k.position.set(x, 0.92, 87.1); this.add(k, gold, 0.02, false); }
+    cyl(0.08, 2.2, r.maxX + 1.4, 1.1, 88.2, "#6f6a78", 0.01, 6);
+    plane(1.2, 0.5, r.maxX + 1.4, 2.0, 88.14, 0, -1, unlitTextured(sc, textTexture(sc, "NO LOITERING", { w: 256, h: 104, bg: "#f4f1ea", fg: red }), "noLoiter"));
+  }
+
+  /**
+   * THE MAYOR'S GOLDEN STATUE: Mayor Grubsworth, three metres of solid(ish) gold, lounging on a throne on
+   * top of the plinth, waving, with a giant drumstick for a sceptre and a top hat. His nose is a prop.
+   */
+  private buildStatue() {
+    const S = this.arena.statue;
+    if (!S) return;
+    const sc = this.scene, MB = MeshBuilder, Y = S.plinthH;
+    const gold = "#e8b83a", goldHi = "#ffd54a", goldLo = "#c99a22";
+    this.group = -1; this.brk = "";
+    const d = { x: S.x, y: Y, z: S.z, yaw: S.yaw };
+    const put = (m: Mesh, col: string, lx: number, ly: number, lz: number, o = 0.03, rx = 0, rz = 0) => {
+      this.at(m, d, lx, ly, lz); m.rotation.x = rx; m.rotation.z = rz; this.add(m, col, o); return m;
+    };
+    const box = (w: number, h: number, dd: number) => MB.CreateBox("st", { width: w, height: h, depth: dd }, sc);
+    const sph = (dia: number, seg = 12) => MB.CreateSphere("st", { diameter: dia, segments: seg }, sc);
+    const cyl = (dia: number, h: number, top?: number, t = 14) => MB.CreateCylinder("st", { diameter: dia, diameterTop: top ?? dia, height: h, tessellation: t }, sc);
+    // the throne: seat, a tall back with a scalloped crest, arms with lion's-paw ends, ball feet
+    put(box(2.1, 0.5, 1.7), goldLo, 0, 0.3, -0.1);
+    put(box(2.3, 3.3, 0.35), goldLo, 0, 1.75, -0.95);
+    for (const [x, s] of [[-0.8, 0.5], [0, 0.75], [0.8, 0.5]] as const) put(sph(s), gold, x, 3.45, -0.95, 0.02);
+    for (const sx of [-1, 1]) { put(box(0.32, 0.55, 1.5), goldLo, sx * 1.0, 0.8, -0.05); put(sph(0.42), gold, sx * 1.0, 1.1, 0.72, 0.02); put(sph(0.3), gold, sx * 0.9, 0.08, 0.6, 0.02); put(sph(0.3), gold, sx * 0.9, 0.08, -0.85, 0.02); }
+    // the Mayor: a big round belly, short legs, shiny shoes
+    put(sph(1.65, 16), gold, 0, 1.3, 0.3).scaling.set(1.08, 1.0, 0.92);
+    for (const sx of [-1, 1]) {
+      put(cyl(0.42, 0.9), gold, sx * 0.34, 0.72, 0.6, 0.03, Math.PI / 2);
+      put(cyl(0.38, 0.6), gold, sx * 0.34, 0.35, 1.02);
+      put(sph(0.42), goldHi, sx * 0.34, 0.08, 1.18, 0.02).scaling.set(0.9, 0.55, 1.3);
+    }
+    // a sash and medals across the belly
+    put(box(0.2, 1.7, 0.1), goldHi, 0, 1.4, 1.0, 0.01, 0, 0.6);
+    for (const [x, y] of [[-0.3, 1.75], [0.05, 1.55]] as const) put(cyl(0.2, 0.05, undefined, 10), goldHi, x, y, 0.98, 0.01, Math.PI / 2);
+    // head: chins, cheeks, a magnificent moustache; top hat
+    put(sph(1.05, 16), gold, 0, 2.05, 0.55);
+    put(sph(0.8, 12), gold, 0, 1.75, 0.62).scaling.set(1.15, 0.6, 1);
+    for (const sx of [-1, 1]) {
+      put(sph(0.36), goldHi, sx * 0.3, 1.9, 0.95, 0.02);
+      put(sph(0.3), gold, sx * 0.2, 1.73, 1.02, 0.01).scaling.set(1.5, 0.55, 0.7);
+      put(sph(0.12, 8), goldLo, sx * 0.2, 2.2, 1.02, 0.01).scaling.set(1, 0.6, 0.6);
+      put(sph(0.22), gold, sx * 0.52, 2.08, 0.5, 0.01); // (ears)
+    }
+    put(cyl(1.25, 0.08, undefined, 20), goldLo, 0, 2.5, 0.5, 0.02, -0.12);
+    put(cyl(0.78, 0.95, 0.82, 16), gold, 0, 2.98, 0.45, 0.03, -0.12);
+    put(cyl(0.8, 0.14, undefined, 16), goldHi, 0, 2.65, 0.49, 0.01, -0.12);
+    // the right arm waving, the left holding a giant drumstick like a sceptre
+    put(cyl(0.3, 0.8), gold, 0.82, 2.0, 0.35, 0.02, 0, -0.5);
+    put(cyl(0.26, 0.7), gold, 1.05, 2.65, 0.4, 0.02, 0, 0.15);
+    put(sph(0.36), goldHi, 1.0, 3.05, 0.45, 0.02).scaling.set(0.8, 1.1, 0.5);
+    for (let i = 0; i < 4; i++) put(cyl(0.08, 0.26, undefined, 6), goldHi, 0.88 + i * 0.08, 3.28, 0.45, 0.01, 0, 0.15 - i * 0.1);
+    put(cyl(0.3, 0.8), gold, -0.85, 1.6, 0.35, 0.02, 0, 0.35);
+    put(sph(0.34), goldHi, -1.0, 1.25, 0.65, 0.02);
+    put(cyl(0.14, 1.8), goldHi, -1.0, 1.9, 0.72, 0.02);
+    put(sph(0.6, 12), gold, -1.0, 2.9, 0.72, 0.02).scaling.set(1, 1.3, 1); // (the drumstick's meaty end)
+    for (const sx of [-1, 1]) put(sph(0.18, 8), goldHi, -1.0 + sx * 0.08, 0.98, 0.72, 0.01);
+    // a cape down the back of the throne
+    put(box(2.0, 2.4, 0.08), goldLo, 0, 1.4, -1.18, 0.01, 0.12);
+    const px = S.x + 0.4, pz = S.z; // (the plinth's middle; the statue sits a bit back on it)
+    if (this.detail) { // (Performance mode skips the small dressing)
+    // sparkles round him (twinkling), lamp posts with gold globes at the corners, flowers round the base
+    for (const [lx, ly, lz] of [[0, 3.6, 0.5], [1.1, 3.4, 0.4], [-1.0, 3.3, 0.8], [0.5, 1.2, 1.3], [-0.6, 0.6, 1.1]] as const) {
+      const c = Math.cos(S.yaw), s = Math.sin(S.yaw); this.sparkle(S.x + lx * c + lz * s, Y + ly, S.z - lx * s + lz * c, 0.45);
+    }
+    const bulb = this.glowMat("#fff1b0"), globes: Mesh[] = [];
+    for (const [ox, oz] of [[-4.2, -4.2], [-4.2, 4.2], [4.2, -4.2], [4.2, 4.2]]) {
+      const post = cyl(0.14, 3.6, undefined, 8); post.position.set(px + ox, 1.8, pz + oz); this.add(post, "#2b2433", 0.02);
+      const g = sph(0.5, 10); g.position.set(px + ox, 3.8, pz + oz); globes.push(g);
+      const cap = cyl(0.3, 0.12); cap.position.set(px + ox, 4.1, pz + oz); this.add(cap, gold, 0.01, false);
+    }
+    { const mg = Mesh.MergeMeshes(globes, true, true); if (mg) { mg.material = bulb; mg.parent = this.root; mg.isPickable = false; ink(mg, 0.02); mg.freezeWorldMatrix(); } }
+    const cols = ["#e0502c", "#ffd54a", "#ff8fa3", "#f4f1ea"];
+    for (let i = 0; i < 40; i++) {
+      const a = i / 40 * Math.PI * 2, rr = 3.45 + (i % 2) * 0.12;
+      const x = px + Math.max(-1, Math.min(1, Math.cos(a) * 1.5)) * rr, z = pz + Math.max(-1, Math.min(1, Math.sin(a) * 1.5)) * rr;
+      const f = sph(0.26, 6); f.position.set(x, 0.18, z); this.add(f, i % 3 ? "#4f8a3a" : cols[i % 4], 0.01, false);
+    }
+    }
+    // the hint: a little plaque on a post
+    const hp = cyl(0.07, 1.1, undefined, 6); hp.position.set(px + 3.6, 0.55, pz - 2.2); this.add(hp, "#2b2433", 0.01);
+    const hint = MB.CreatePlane("noseHint", { width: 1.1, height: 0.42 }, sc); hint.position.set(px + 3.6, 1.2, pz - 2.2); hint.rotation.y = -Math.PI / 2; hint.parent = this.root; hint.isPickable = false;
+    const hm = unlitTextured(sc, textTexture(sc, "PLEASE DO NOT TOUCH THE NOSE", { w: 512, h: 196, bg: "#f4f1ea", fg: "#8e1f2e" }), "noseHint"); hm.backFaceCulling = false; hint.material = hm;
+  }
+
+  /** C5c: the gold sparkles twinkle */
+  updateUptown(dt: number) {
+    this.uptownT += dt;
+    const t = this.uptownT;
+    for (const s of this.sparkles) { const k = Math.max(0, Math.sin(t * 2.2 + s.ph * 3.1)); s.m.scaling.setAll(0.2 + k * k * 1.1); s.m.rotation.z = t * 0.8 + s.ph; }
+  }
+
+
+  /** C5b: how dark it is (0 day .. 1 night): the lanterns glow, and sway gently */
+  setNight(n: number, dt: number) {
+    if (!this.lanternMat) return;
+    this.lanternT += dt;
+    const glow = Color3.Lerp(Color3.FromHexString("#5a1010"), Color3.FromHexString("#ff5a30"), Math.min(1, n * 1.3));
+    this.lanternMat.emissiveColor = glow;
+    for (const m of this.lanternMeshes) if (m.material && m.material !== this.lanternMat) (m.material as StandardMaterial).emissiveColor = Color3.Lerp(Color3.FromHexString("#5a4010"), Color3.FromHexString("#ffc040"), Math.min(1, n * 1.3));
+  }
+
+  /** C5a: chain-link fences (the squat's roof) */
+  private chainFences: Box[] = [];
+  /** C5a: the squat's moving bits: the fire's flames and embers, the throw targets (flash on a hit) */
+  private flames: Mesh[] = [];
+  private embers: { m: Mesh; t: number; x: number; z: number }[] = [];
+  private targetMats = new Map<string, StandardMaterial>();
+  private targetFlash = new Map<string, number>();
+  private lobbyT = 0;
+
+  /**
+   * C5a: THE SQUAT: the lobby's rooftop camp (all looks; the collision boxes come from the layout). A tarp
+   * tent village round a burning barrel, a sagging couch, fairy lights, washing on a line, a water tank with
+   * the city map painted on it, the practice corner, the THROW-O-MATIC lane and targets, the TROLLEY GRAND
+   * PRIX track, a stairwell hut, aerials and a pigeon coop; and, all round the outside of the city, the
+   * far-off suburbs so the view from up there doesn't end in nothing.
+   */
+  private buildLobby() {
+    const L = this.arena.lobby;
+    if (!L) return;
+    const sc = this.scene, MB = MeshBuilder, Y = L.y;
+    this.group = -1; this.brk = "";
+    let seed = 1234;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const bx = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, o = 0.02, ry = 0) => {
+      const m = MB.CreateBox("lb", { width: w, height: h, depth: d }, sc); m.position.set(x, y, z); m.rotation.y = ry; this.add(m, col, o, false); return m; // (no shadow casting: it's all far from the city)
+    };
+    const cyl = (d: number, h: number, x: number, y: number, z: number, col: string, o = 0.02, t = 12, top?: number) => {
+      const m = MB.CreateCylinder("lc", { diameter: d, diameterTop: top ?? d, height: h, tessellation: t }, sc); m.position.set(x, y, z); this.add(m, col, o, false); return m;
+    };
+    const rope = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, col = "#2b2433", d = 0.03) => {
+      const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+      const m = MB.CreateCylinder("rope", { diameter: d, height: len, tessellation: 5 }, sc);
+      m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      const dir = new Vector3(x1 - x0, y1 - y0, z1 - z0).normalize();
+      const axis = Vector3.Cross(Vector3.Up(), dir); const ang = Math.acos(Math.max(-1, Math.min(1, Vector3.Dot(Vector3.Up(), dir))));
+      if (axis.length() > 1e-4) m.rotationQuaternion = Quaternion.RotationAxis(axis.normalize(), ang);
+      this.add(m, col, 0, false);
+      return m;
+    };
+    // the roof deck: tar paper with patches, puddles, a painted race track
+    bx(L.rect.maxX - L.rect.minX - 0.8, 0.1, L.rect.maxZ - L.rect.minZ - 0.8, (L.rect.minX + L.rect.maxX) / 2, Y + 0.05, (L.rect.minZ + L.rect.maxZ) / 2, "#4a4450", 0); // (tar paper, above the building's ink outline)
+    for (let i = 0; i < 14; i++) {
+      const pt = MB.CreateGround("tarPatch", { width: 1 + rnd() * 2.5, height: 0.8 + rnd() * 2 }, sc);
+      pt.position.set(L.rect.minX + 2 + rnd() * 26, Y + 0.11, L.rect.minZ + 2 + rnd() * 16); pt.rotation.y = rnd() * 3; this.add(pt, rnd() < 0.5 ? "#3d3844" : "#57505e", 0, false);
+    }
+    for (let i = 0; i < 4; i++) { const pd = MB.CreateDisc("puddle", { radius: 0.5 + rnd() * 0.7, tessellation: 14 }, sc); pd.rotation.x = Math.PI / 2; pd.position.set(L.rect.minX + 3 + rnd() * 24, Y + 0.115, L.rect.minZ + 3 + rnd() * 14); this.add(pd, "#6f8fae", 0, false); }
+    // the race track: a dashed loop through the four cones, a chequered start line, cones
+    const race = L.race;
+    for (let i = 0; i < race.length; i++) {
+      const a = race[i], b = race[(i + 1) % race.length], len = Math.hypot(b.x - a.x, b.z - a.z);
+      for (let t = 0.5; t < len - 0.5; t += 1.2) {
+        const d = MB.CreateGround("lane", { width: 0.12, height: 0.6 }, sc);
+        d.position.set(a.x + (b.x - a.x) * t / len, Y + 0.12, a.z + (b.z - a.z) * t / len); d.rotation.y = Math.atan2(b.x - a.x, b.z - a.z); this.add(d, "#f4f1ea", 0, false);
+      }
+      const cone = cyl(0.45, 0.75, a.x + 1.2, Y + 0.375, a.z, "#ff7a1a", 0.02, 10, 0.06);
+      bx(0.5, 0.04, 0.5, cone.position.x, Y + 0.02, a.z, "#ff7a1a", 0);
+      cyl(0.36, 0.1, cone.position.x, Y + 0.45, a.z, "#f4f1ea", 0, 10);
+    }
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) bx(0.35, 0.02, 0.35, race[0].x - 1.4 + i * 0.35, Y + 0.125, race[0].z - 0.35 + j * 0.35 + 0.175, (i + j) % 2 ? "#1b1420" : "#f4f1ea", 0);
+    // tarp tents: two sloping panels on a ridge pole, guy ropes, a sleeping bag poking out
+    for (const t of L.tents) {
+      const half = t.d / 2, h = 1.5, slant = Math.hypot(half, h), ang = Math.atan2(h, half);
+      for (const s2 of [-1, 1]) {
+        const pnl = MB.CreateBox("tarp", { width: t.w, height: 0.04, depth: slant }, sc);
+        pnl.position.set(t.x, Y + h / 2, t.z + s2 * half / 2); pnl.rotation.x = s2 * ang; // (edges down, ridge up)
+        // (its own matte material: the toon shader washed the sunny side out to white)
+        const tm = new StandardMaterial("tarp", sc); tm.diffuseColor = Color3.FromHexString(t.color); tm.specularColor = Color3.Black(); tm.emissiveColor = Color3.FromHexString(t.color).scale(0.25);
+        pnl.material = tm; pnl.parent = this.root; pnl.isPickable = false; ink(pnl, 0.02);
+      }
+      rope(t.x - t.w / 2 - 0.2, Y + h + 0.02, t.z, t.x + t.w / 2 + 0.2, Y + h + 0.02, t.z, "#8a6a4a", 0.06);
+      for (const s2 of [-1, 1]) { cyl(0.06, h, t.x + s2 * (t.w / 2 + 0.1), Y + h / 2, t.z, "#8a6a4a", 0, 6); rope(t.x + s2 * (t.w / 2 + 0.1), Y + h, t.z, t.x + s2 * (t.w / 2 + 1.0), Y, t.z, "#d8d0c4"); }
+      bx(0.9, 0.2, 0.6, t.x + t.w / 2 - 0.6, Y + 0.1, t.z + t.d / 2 - 0.1, "#3a6ea8", 0.01);
+    }
+    // box huts: cardboard lean-tos along the north-west
+    for (const [x, z, w] of [[-13.2, -121.8, 1.6], [-8.6, -121.6, 1.2]]) {
+      bx(w, 1.1, 1.1, x, Y + 0.55, z, "#c9a56b", 0.02);
+      bx(w * 0.6, 0.02, 0.7, x, Y + 0.6, z + 0.56, "#1b1420", 0);
+      bx(w + 0.2, 0.05, 1.3, x, Y + 1.13, z, "#b08a55", 0.01);
+    }
+    // the burning barrel: rusty drum with holes, flames and embers
+    const f = L.fire;
+    cyl(0.7, 1.0, f.x, Y + 0.5, f.z, "#7a3f22", 0.03, 14);
+    for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; bx(0.1, 0.1, 0.02, f.x + Math.sin(a) * 0.35, Y + 0.45, f.z + Math.cos(a) * 0.35, "#ffb000", 0, a); }
+    const flameMat = new StandardMaterial("flame", sc);
+    flameMat.emissiveColor = Color3.FromHexString("#ff9a1a"); flameMat.diffuseColor = Color3.Black(); flameMat.disableLighting = true; flameMat.alpha = 0.92;
+    const flameCore = flameMat.clone("flameCore"); flameCore.emissiveColor = Color3.FromHexString("#ffe14a");
+    for (let i = 0; i < 5; i++) {
+      const fl = MB.CreateCylinder("flame", { diameterTop: 0, diameterBottom: 0.28 + (i % 2) * 0.1, height: 0.7, tessellation: 6 }, sc);
+      fl.position.set(f.x + Math.sin(i * 1.3) * 0.14, Y + 1.25, f.z + Math.cos(i * 1.3) * 0.14); fl.material = i % 2 ? flameCore : flameMat; fl.parent = this.root; fl.isPickable = false;
+      this.flames.push(fl);
+    }
+    for (let i = 0; i < 10; i++) {
+      const e = MB.CreateBox("ember", { size: 0.04 }, sc); e.material = flameCore; e.parent = this.root; e.isPickable = false;
+      this.embers.push({ m: e, t: rnd() * 2, x: f.x + (rnd() - 0.5) * 0.4, z: f.z + (rnd() - 0.5) * 0.4 });
+    }
+    // couch cushions, a coffee-table crate with mugs, a rug
+    const rug = MB.CreateGround("rug", { width: 3.6, height: 2.2 }, sc); rug.position.set(0, Y + 0.12, -130.2); this.add(rug, "#8e1f2e", 0, false);
+    for (const s2 of [-0.6, 0.6]) bx(1.1, 0.15, 0.7, s2, Y + 0.58, -131.5, "#9a6fb0", 0.01);
+    for (const s2 of [-1.35, 1.35]) bx(0.25, 0.35, 0.9, s2, Y + 0.68, -131.6, "#6a3f7f", 0.01);
+    for (const [x, z] of [[-2.6, -128.8], [2.6, -129.1]]) cyl(0.1, 0.12, x, Y + 0.51, z, "#f4f1ea", 0.01, 8);
+    // fairy lights: bulbs strung from the tents to a pole by the couch and across the camp
+    const bulb = new StandardMaterial("bulb", sc); bulb.disableLighting = true; bulb.emissiveColor = Color3.FromHexString("#ffe9a0");
+    const bulbs = ["#ffe9a0", "#ff8fa3", "#9fe3ff", "#b6ff3c"].map((c2, i) => { const m = bulb.clone("bulb" + i); m.emissiveColor = Color3.FromHexString(c2); return m; });
+    cyl(0.1, 3.2, 4.2, Y + 1.6, -133.4, "#5a4636", 0.01, 6); cyl(0.1, 3.2, -4.2, Y + 1.6, -125.6, "#5a4636", 0.01, 6);
+    const strings: [number, number, number, number, number, number][] = [[-10, Y + 1.5, -124.3, -4.2, Y + 3.1, -125.6], [-4.2, Y + 3.1, -125.6, 4.2, Y + 3.1, -133.4], [4.2, Y + 3.1, -133.4, 10.2, Y + 1.5, -137.6], [-10, Y + 1.5, -129, 4.2, Y + 3.1, -133.4]];
+    let bi = 0;
+    for (const [x0, y0, z0, x1, y1, z1] of strings) {
+      const n = 12;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, sag = Math.sin(t * Math.PI) * 0.45;
+        const b = MB.CreateSphere("bulb", { diameter: 0.09, segments: 4 }, sc);
+        b.position.set(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t - sag, z0 + (z1 - z0) * t); b.material = bulbs[bi++ % bulbs.length]; b.parent = this.root; b.isPickable = false;
+        if (i < n) { const t2 = (i + 1) / n, sag2 = Math.sin(t2 * Math.PI) * 0.45; rope(b.position.x, b.position.y + 0.04, b.position.z, x0 + (x1 - x0) * t2, y0 + (y1 - y0) * t2 - sag2 + 0.04, z0 + (z1 - z0) * t2, "#1b1420", 0.015); }
+      }
+    }
+    // a washing line with shirts, socks and a pair of enormous pants
+    cyl(0.08, 2.2, -13.6, Y + 1.1, -131.8, "#5a4636", 0.01, 6); cyl(0.08, 2.2, -8.2, Y + 1.1, -131.8, "#5a4636", 0.01, 6);
+    rope(-13.6, Y + 2.1, -131.8, -8.2, Y + 2.1, -131.8, "#d8d0c4");
+    ["#ff5a3c", "#43c7a6", "#ffe14a", "#f4f1ea", "#4fb3ff", "#ff8fa3"].forEach((c2, i) => {
+      const cl = MB.CreatePlane("cloth", { width: i === 3 ? 1.1 : 0.6, height: i === 3 ? 0.8 : 0.55 }, sc);
+      cl.position.set(-13.1 + i * 0.85, Y + 1.75, -131.8); this.add(cl, c2, 0, false); (cl as Mesh).sideOrientation = Mesh.DOUBLESIDE;
+    });
+    // the water tank: wooden staves, iron hoops, a pointy lid, a ladder; the city map painted across its front
+    const tk = { x: L.map.x, z: L.map.z - 1.95 };
+    cyl(3.6, 3.2, tk.x, Y + 3.2 + 1.6, tk.z, "#8a5a3a", 0.04, 20);
+    for (const hy of [0.4, 1.6, 2.8]) { const hp = MB.CreateTorus("hoop", { diameter: 3.62, thickness: 0.06, tessellation: 24 }, sc); hp.position.set(tk.x, Y + 3.2 + hy, tk.z); this.add(hp, "#3a3444", 0, false); }
+    cyl(3.9, 1.1, tk.x, Y + 6.95, tk.z, "#5a4636", 0.03, 20, 0.2);
+    bx(4.2, 0.2, 4.2, tk.x, Y + 3.15, tk.z, "#5a4636", 0.02);
+    for (let r = 0; r < 12; r++) bx(0.5, 0.05, 0.05, tk.x + 2.0, Y + 0.3 + r * 0.3, tk.z - 1.2, "#3a3444", 0);
+    for (const s2 of [-0.25, 0.25]) bx(0.05, 3.6, 0.05, tk.x + 2.0 + s2, Y + 1.8, tk.z - 1.2, "#3a3444", 0);
+    {
+      const M = L.map;
+      const cv = new DynamicTexture("cityMapPaint", { width: 1024, height: 1024 }, sc, true);
+      const c2 = cv.getContext() as unknown as CanvasRenderingContext2D;
+      drawCityMap(c2, this.arena, 1024, { painted: true, extraSouth: 30 });
+      cv.update();
+      const mat = unlitTextured(sc, cv, "cityMapBoard");
+      const pl = MB.CreatePlane("cityMapBoard", { width: M.w, height: M.h }, sc);
+      pl.position.set(M.x, M.y, M.z + 0.02); pl.rotation.y = Math.PI; pl.material = mat; pl.parent = this.root; pl.isPickable = false;
+      bx(M.w + 0.3, M.h + 0.3, 0.12, M.x, M.y, M.z - 0.08, "#6a4a30", 0.03);
+      const title = MB.CreatePlane("mapTitle", { width: 3.6, height: 0.6 }, sc);
+      title.position.set(M.x, M.y + M.h / 2 + 0.5, M.z + 0.03); title.rotation.y = Math.PI; title.parent = this.root; title.isPickable = false;
+      title.material = unlitTextured(sc, textTexture(sc, "TRASHINGTON", { w: 512, h: 90, bg: "#ffe14a", fg: "#1b1420" }), "mapTitle");
+    }
+    // the stairwell hut (locked), aerials, a satellite dish, a pigeon coop
+    bx(2.4, 2.6, 2.4, -7.2, Y + 1.3, -138.2, "#8a6a58", 0.04);
+    bx(0.9, 1.9, 0.06, -7.2, Y + 0.95, -136.97, "#3f5a7a", 0.01);
+    const nope = MB.CreatePlane("nope", { width: 0.8, height: 0.3 }, sc); nope.position.set(-7.2, Y + 1.5, -136.93); nope.rotation.y = Math.PI; nope.parent = this.root; nope.isPickable = false;
+    nope.material = unlitTextured(sc, textTexture(sc, "NO ENTRY", { w: 256, h: 96, bg: "#d8342c", fg: "#fff" }), "nope");
+    for (const [x, z, h] of [[-6.5, -138.6, 3.4], [-7.9, -137.6, 2.8]]) {
+      cyl(0.05, h, x, Y + 2.6 + h / 2, z, "#c9ccd4", 0, 6);
+      for (let r = 0; r < 4; r++) bx(1.1 - r * 0.2, 0.03, 0.03, x, Y + 2.6 + h - 0.3 - r * 0.35, z, "#c9ccd4", 0);
+    }
+    const dish = MB.CreateSphere("dish", { diameter: 1.3, slice: 0.3, segments: 10 }, sc);
+    dish.position.set(-5.9, Y + 3.0, -137.6); dish.rotation.x = -2.2; this.add(dish, "#e8e2d4", 0.02, false);
+    bx(1.6, 1.0, 1.0, 13.3, Y + 0.5, -122.4, "#8e7a5a", 0.02);
+    bx(1.7, 0.08, 1.1, 13.3, Y + 1.05, -122.4, "#5a4636", 0.01);
+    for (let i = 0; i < 4; i++) { const pg = MB.CreateSphere("pigeon", { diameter: 0.22, segments: 5 }, sc); pg.position.set(12.8 + i * 0.35, Y + 1.2, -122.3); this.add(pg, "#8e8a94", 0.01, false); }
+    // buckets with scraggly plants, a shopping trolley bay sign, the free-stuff pile's sign
+    for (const [x, z] of [[-14, -126.5], [-14, -134], [7.2, -139], [14, -139]]) { cyl(0.45, 0.45, x, Y + 0.23, z, "#4f7fb0", 0.02, 10, 0.55); const pl2 = MB.CreateSphere("plant", { diameter: 0.6, segments: 5 }, sc); pl2.position.set(x, Y + 0.65, z); this.add(pl2, "#4f7a3a", 0.02, false); }
+    const sign = (text: string, x: number, y: number, z: number, ry: number, w: number, bg: string, fg = "#1b1420") => {
+      const pl3 = MB.CreatePlane("lsign", { width: w, height: w * 0.25 }, sc);
+      pl3.position.set(x, y, z); pl3.rotation.y = ry; pl3.parent = this.root; pl3.isPickable = false;
+      pl3.material = unlitTextured(sc, textTexture(sc, text, { w: 512, h: 128, bg, fg }), "lsign");
+      bx(w + 0.1, w * 0.25 + 0.1, 0.05, x - Math.sin(ry) * 0.03, y, z - Math.cos(ry) * 0.03, "#5a4636", 0.01, ry);
+    };
+    sign("FREE STUFF", L.pile.x, Y + 1.3, L.pile.z - 0.9, Math.PI, 1.6, "#43c7a6");
+    cyl(0.06, 1.2, L.pile.x, Y + 0.6, L.pile.z - 0.95, "#5a4636", 0, 6);
+    sign("TROLLEY BAY", L.trolleys[0].x - 1.0, Y + 1.25, L.trolleys[0].z + 0.45, Math.PI, 1.8, "#ffe14a");
+    // the welcome banner over the camp (read it when you turn round from the view)
+    cyl(0.1, 3.4, -5.2, Y + 1.7, -126.8, "#5a4636", 0.01, 6); cyl(0.1, 3.4, 5.2, Y + 1.7, -126.8, "#5a4636", 0.01, 6);
+    { // (painted on both sides)
+      const bm = unlitTextured(sc, textTexture(sc, "WELCOME TO THE SQUAT  *  POP: US", { w: 1024, h: 120, bg: "#f3e2b8", fg: "#8e1f2e" }), "welcome");
+      for (const [dz, ry] of [[0.02, Math.PI], [-0.02, 0]]) {
+        const ban = MB.CreatePlane("welcome", { width: 9.6, height: 1.1 }, sc);
+        ban.position.set(0, Y + 2.9, -126.8 + dz); ban.rotation.y = ry; ban.parent = this.root; ban.isPickable = false; ban.material = bm;
+      }
+    }
+    // the throw targets: painted rings on plywood, flash when hit
+    for (const tg of L.targets) {
+      const tex = new DynamicTexture("tgt-" + tg.id, { width: 256, height: 256 }, sc, true);
+      const c3 = tex.getContext() as unknown as CanvasRenderingContext2D;
+      ["#f4f1ea", "#d8342c", "#f4f1ea", "#d8342c", "#ffe14a"].forEach((col, i) => { c3.fillStyle = col; c3.beginPath(); c3.arc(128, 128, 126 - i * 25, 0, Math.PI * 2); c3.fill(); });
+      tex.hasAlpha = true; tex.update();
+      const mat = unlitTextured(sc, tex, "target"); mat.useAlphaFromDiffuseTexture = true;
+      const disc = MB.CreatePlane("target", { size: tg.r * 2 }, sc);
+      const nx = Math.sin(tg.yaw), nz = Math.cos(tg.yaw);
+      disc.position.set(tg.x + nx * 0.02, tg.y, tg.z + nz * 0.02); disc.rotation.y = tg.yaw + Math.PI; disc.material = mat; disc.parent = this.root; disc.isPickable = false;
+      this.targetMats.set(tg.id, mat);
+      bx(0.08, tg.r * 2.1, tg.r * 2.1, tg.x - nx * 0.06, tg.y, tg.z, "#a8743f", 0.02);
+      cyl(0.08, tg.y - Y, tg.x - nx * 0.1, Y + (tg.y - Y) / 2, tg.z, "#5a4636", 0, 6);
+    }
+    sign("THROW-O-MATIC LANE", 14.2, Y + 3.3, -127.4, -Math.PI / 2, 3.4, "#ff8fa3");
+    // chain-link fences: a diamond-mesh texture on see-through planes, with posts
+    // (each fence gets its own little texture: its tiling differs, and a cloned DynamicTexture never becomes "ready")
+    for (const b of this.chainFences) {
+      const along = b.w > b.d, len = along ? b.w : b.d;
+      const tex = new DynamicTexture("chain", { width: 64, height: 64 }, sc, true);
+      const c4 = tex.getContext() as unknown as CanvasRenderingContext2D;
+      c4.clearRect(0, 0, 64, 64); c4.strokeStyle = "#c9ccd4"; c4.lineWidth = 3;
+      c4.beginPath(); c4.moveTo(0, 32); c4.lineTo(32, 0); c4.lineTo(64, 32); c4.lineTo(32, 64); c4.closePath(); c4.stroke();
+      tex.hasAlpha = true; tex.wrapU = Texture.WRAP_ADDRESSMODE; tex.wrapV = Texture.WRAP_ADDRESSMODE;
+      tex.uScale = len / 0.25; tex.vScale = b.h / 0.25; tex.update();
+      const mat = new StandardMaterial("chainMat", sc);
+      mat.diffuseTexture = tex; mat.useAlphaFromDiffuseTexture = true; mat.backFaceCulling = false; mat.specularColor = Color3.Black();
+      mat.emissiveColor = Color3.FromHexString("#55525c");
+      const pl4 = MB.CreatePlane("chainfence", { width: len, height: b.h }, sc);
+      pl4.position.set(b.x, b.y, b.z); pl4.rotation.y = along ? 0 : Math.PI / 2;
+      pl4.material = mat; pl4.parent = this.root; pl4.isPickable = false; pl4.alphaIndex = 2;
+      for (let u = -len / 2; u <= len / 2 + 0.01; u += 2.5) cyl(0.07, b.h, b.x + (along ? u : 0), b.y, b.z + (along ? 0 : u), "#8e8a94", 0, 6);
+      bx(along ? len : 0.05, 0.05, along ? 0.05 : len, b.x, b.y + b.h / 2, b.z, "#8e8a94", 0);
+    }
+    // the far-off suburbs all round the city, so the view from the roof (and anywhere else) has a horizon
+    const H = this.arena.halfSize;
+    for (let i = 0; i < 260; i++) {
+      const a = rnd() * Math.PI * 2, r = H + 45 + rnd() * 140;
+      const x = Math.cos(a) * r * 1.1, z = Math.sin(a) * r * 1.1;
+      if (Math.abs(x) < H + 30 && Math.abs(z) < H + 30) continue;
+      if (Math.abs(x) < 40 && z < -H && z > -H - 60) continue; // (keep clear round the squat)
+      const h = 6 + rnd() * rnd() * 55, w = 8 + rnd() * 14;
+      bx(w, h, 8 + rnd() * 14, x, h / 2, z, ["#7a8298", "#8a8fa6", "#6e7488", "#9aa0b4"][Math.floor(rnd() * 4)], 0, rnd() * 0.3);
+    }
+    const out = MB.CreateGround("outskirts", { width: H * 2 + 700, height: H * 2 + 700 }, sc);
+    out.position.y = -0.05; this.add(out, "#6a6570", 0, false);
+  }
+
+  /** C5a: flicker the squat's fire, float its embers, fade target flashes */
+  updateLobby(dt: number) {
+    if (!this.flames.length) return;
+    this.lobbyT += dt;
+    const t = this.lobbyT, Y = this.arena.lobby!.y;
+    this.flames.forEach((f, i) => { const s = 0.75 + Math.sin(t * (9 + i * 1.7) + i) * 0.18 + Math.sin(t * 23 + i * 3) * 0.08; f.scaling.set(1, s, 1); f.position.y = Y + 1.0 + 0.35 * s; });
+    for (const e of this.embers) {
+      e.t += dt; if (e.t > 2) e.t -= 2;
+      e.m.position.set(e.x + Math.sin(e.t * 3 + e.x * 9) * 0.15, Y + 1.2 + e.t * 1.2, e.z + Math.cos(e.t * 2 + e.z * 7) * 0.15);
+      e.m.scaling.setAll(Math.max(0.1, 1 - e.t / 2));
+    }
+    for (const [id, until] of this.targetFlash) {
+      const m = this.targetMats.get(id); if (!m) continue;
+      const on = t < until && Math.floor(t * 12) % 2 === 0;
+      m.emissiveColor = on ? Color3.FromHexString("#b6ff3c") : Color3.White();
+      if (t >= until) this.targetFlash.delete(id);
+    }
+  }
+  /** C5a: a thrown lid hit a target */
+  flashTarget(id: string) { this.targetFlash.set(id, this.lobbyT + 0.8); }
+
+  private buildPit() {
+    const blk = this.arena.blocks?.find((b) => b.name.startsWith("The Pit"));
+    if (!blk) return;
+    const sc = this.scene, MB = MeshBuilder, r = blk.rect;
+    const inner = { minX: r.minX + 4, maxX: r.maxX - 4, minZ: r.minZ + 4, maxZ: r.maxZ - 4 };
+    const cx = (inner.minX + inner.maxX) / 2, cz = (inner.minZ + inner.maxZ) / 2;
+    const inPit = (b: Box) => b.x > inner.minX - 0.5 && b.x < inner.maxX + 0.5 && b.z > inner.minZ - 0.5 && b.z < inner.maxZ + 0.5;
+    this.group = -1; this.brk = "";
+    let seed = 71;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const pipe = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, d = 0.09, col = "#c9ccd4") => {
+      const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+      const c = MB.CreateCylinder("coping", { diameter: d, height: len, tessellation: 8 }, sc);
+      c.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      if (Math.abs(x1 - x0) > 0.01) c.rotation.z = Math.PI / 2; else if (Math.abs(z1 - z0) > 0.01) c.rotation.x = Math.PI / 2;
+      this.add(c, col, 0.01);
+    };
+    for (const b of this.arena.boxes) {
+      if (!inPit(b)) continue;
+      const top = b.y + b.h / 2;
+      if (b.kind === "platform" && b.h > 1.5) {
+        // the deck lip, on the side facing the middle, plus a railing at the back
+        const side = b.x < cx ? 1 : -1, ex = b.x + side * b.w / 2;
+        pipe(ex, top + 0.03, b.z - b.d / 2, ex, top + 0.03, b.z + b.d / 2, 0.1);
+        const bx2 = b.x - side * (b.w / 2 - 0.08);
+        pipe(bx2, top + 0.95, b.z - b.d / 2 + 0.1, bx2, top + 0.95, b.z + b.d / 2 - 0.1, 0.06, "#3a3444");
+        for (const t of [-1, 0, 1]) pipe(bx2, top, b.z + t * (b.d / 2 - 0.1), bx2, top + 0.95, b.z + t * (b.d / 2 - 0.1), 0.06, "#3a3444");
+      } else if (b.kind === "platform") {
+        // the fun box: steel angle on all four top edges
+        const hw = b.w / 2, hd = b.d / 2;
+        pipe(b.x - hw, top, b.z - hd, b.x + hw, top, b.z - hd, 0.07); pipe(b.x - hw, top, b.z + hd, b.x + hw, top, b.z + hd, 0.07);
+        pipe(b.x - hw, top, b.z - hd, b.x - hw, top, b.z + hd, 0.07); pipe(b.x + hw, top, b.z - hd, b.x + hw, top, b.z + hd, 0.07);
+      } else if (b.kind === "rim") {
+        // grind rails: a round bar on little posts
+        const long = b.w > b.d, len = long ? b.w : b.d;
+        pipe(b.x - (long ? len / 2 : 0), top + 0.04, b.z - (long ? 0 : len / 2), b.x + (long ? len / 2 : 0), top + 0.04, b.z + (long ? 0 : len / 2), 0.07, "#d9dde5");
+      } else if (b.kind === "ramp-step" && rnd() < 0.55) {
+        // stickers on the risers
+        const st = MB.CreatePlane("sticker", { width: 0.25 + rnd() * 0.25, height: 0.12 + rnd() * 0.1 }, sc);
+        const face = b.x < cx ? 1 : -1;
+        st.position.set(b.x + face * (b.w / 2 + 0.012), top - 0.15, b.z + (rnd() - 0.5) * (b.d - 0.8));
+        st.rotation.y = face > 0 ? -Math.PI / 2 : Math.PI / 2;
+        this.add(st, ["#ff5a3c", "#43c7a6", "#ffe14a", "#ff8fa3", "#4fb3ff", "#f4f1ea"][Math.floor(rnd() * 6)], 0);
+      }
+    }
+    // flood lights on the four corners (a tall pole, a crossbar, two lamp heads)
+    for (const [x, z] of [[r.minX + 1.2, r.minZ + 1.2], [r.maxX - 1.2, r.minZ + 1.2], [r.minX + 1.2, r.maxZ - 1.2], [r.maxX - 1.2, r.maxZ - 1.2]]) {
+      pipe(x, 0, z, x, 7.5, z, 0.2, "#3a3444");
+      const dx = Math.sign(cx - x) * 0.5, dz = Math.sign(cz - z) * 0.5;
+      pipe(x - dz, 7.5, z + dx, x + dz, 7.5, z - dx, 0.12, "#3a3444");
+      for (const s2 of [-1, 1]) {
+        const head = MB.CreateBox("flood", { width: 0.6, height: 0.35, depth: 0.25 }, sc);
+        head.position.set(x + s2 * dz * 0.9 + dx * 0.3, 7.7, z - s2 * dx * 0.9 + dz * 0.3);
+        head.rotation.y = Math.atan2(cx - x, cz - z); head.rotation.x = 0.5;
+        this.add(head, "#fff4c2", 0.02);
+      }
+    }
+    // painted logo and skid marks on the concrete
+    const logo = unlitTextured(sc, textTexture(sc, "THE PIT", { w: 512, h: 160, fg: "#ff5a3c", stroke: "#1b1420" }), "pitLogo");
+    const lp = MB.CreateGround("pitLogo", { width: 6, height: 1.9 }, sc);
+    lp.position.set(cx + 1, 0.23, cz + 2.8); lp.material = logo; lp.parent = this.root; lp.isPickable = false; lp.alphaIndex = 1;
+    (logo.diffuseTexture as Texture).hasAlpha = true; logo.useAlphaFromDiffuseTexture = true;
+    const skid = new StandardMaterial("skid", sc);
+    skid.diffuseColor = Color3.FromHexString("#2a2530"); skid.specularColor = Color3.Black(); skid.alpha = 0.35;
+    for (let i = 0; i < 16; i++) {
+      const m = MB.CreateGround("skid", { width: 0.06, height: 1.5 + rnd() * 3 }, sc);
+      m.position.set(inner.minX + 3 + rnd() * (inner.maxX - inner.minX - 6), 0.22, inner.minZ + 3 + rnd() * (inner.maxZ - inner.minZ - 6));
+      m.rotation.y = rnd() * Math.PI; m.material = skid; m.parent = this.root; m.isPickable = false;
+    }
+    // litter: crushed cans, a pizza box, a drinks cooler; a boombox on the bench
+    for (let i = 0; i < 14; i++) {
+      const can = MB.CreateCylinder("litter", { diameter: 0.07, height: 0.12, tessellation: 6 }, sc);
+      can.position.set(r.minX + 1 + rnd() * (r.maxX - r.minX - 2), 0.2, r.minZ + 1 + rnd() * (r.maxZ - r.minZ - 2));
+      can.rotation.set(Math.PI / 2, rnd() * 3, 0);
+      this.add(can, ["#d8342c", "#43c7a6", "#c9ccd4", "#ffe14a"][i % 4], 0);
+    }
+    const pz = MB.CreateBox("pizzabox", { width: 0.45, height: 0.05, depth: 0.45 }, sc);
+    pz.position.set(inner.maxX - 1.5, 0.21, inner.minZ + 1.4); pz.rotation.y = 0.4; this.add(pz, "#e8c79a", 0.01);
+    const cooler = MB.CreateBox("cooler", { width: 0.7, height: 0.45, depth: 0.45 }, sc);
+    cooler.position.set(inner.minX + 4.4, 0.41, inner.minZ + 1.1); this.add(cooler, "#2f7fd0", 0.02);
+    const lid = MB.CreateBox("coolerlid", { width: 0.74, height: 0.08, depth: 0.49 }, sc);
+    lid.position.set(inner.minX + 4.4, 0.67, inner.minZ + 1.1); this.add(lid, "#f4f1ea", 0.01);
+    const bench = this.arena.boxes.find((b) => b.kind === "bench" && inPit(b));
+    if (bench) {
+      const bb = MB.CreateBox("boombox", { width: 0.55, height: 0.3, depth: 0.18 }, sc);
+      bb.position.set(bench.x + 0.6, bench.y + bench.h / 2 + 0.15, bench.z); this.add(bb, "#1b1420", 0.02);
+      for (const s2 of [-1, 1]) {
+        const spk = MB.CreateCylinder("spk", { diameter: 0.18, height: 0.02, tessellation: 12 }, sc);
+        spk.rotation.x = Math.PI / 2; spk.position.set(bench.x + 0.6 + s2 * 0.15, bench.y + bench.h / 2 + 0.15, bench.z - 0.1);
+        this.add(spk, "#c9ccd4", 0);
+      }
+    }
+  }
+
   private buildPark() {
     const sc = this.scene, MB = MeshBuilder;
     const shape = this.arena.pondShape ?? [];

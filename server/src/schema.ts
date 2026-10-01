@@ -24,12 +24,19 @@ export const PlayerState = schema({
   bank: t.number(),
   respawnT: t.float32(),
   robT: t.float32(),
+  pinOn: t.string(),
+  pinBy: t.string(),
+  pinS: t.float32(),
   jailT: t.float32(),
   lockSeed: t.number(),
   lockT: t.float32(),
   shop: t.string(),
   ready: t.boolean(),
   hp: t.uint8(),
+  aura: t.uint16(),
+  tb: t.uint16(),
+  rb: t.float32(),
+  lg: t.string(),
   ...moveFields,
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState> & Record<string, any>;
@@ -50,6 +57,7 @@ export const ItemState = schema({
   mult: t.uint8(),
   chute: t.boolean(),
   tug: t.float32(),
+  uses: t.int8(),
 }, "ItemState");
 export type ItemState = SchemaType<typeof ItemState> & Record<string, any>;
 
@@ -106,6 +114,7 @@ export const FortRoomState = schema({
   truckX: t.float32(),
   truckZ: t.float32(),
   truckYaw: t.float32(),
+  paradeD: t.float32(),
   lightT: t.float32(),
   players: t.map(PlayerState),
   items: t.map(ItemState),

@@ -8,7 +8,7 @@ export { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight.js";
 export { DirectionalLight } from "@babylonjs/core/Lights/directionalLight.js";
 export { PointLight } from "@babylonjs/core/Lights/pointLight.js";
 export { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator.js";
-export { Vector3, Color3, Color4, Matrix } from "@babylonjs/core/Maths/math.js";
+export { Vector3, Color3, Color4, Matrix, Quaternion } from "@babylonjs/core/Maths/math.js";
 export { Scalar } from "@babylonjs/core/Maths/math.scalar.js";
 export { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
 export { Mesh } from "@babylonjs/core/Meshes/mesh.js";

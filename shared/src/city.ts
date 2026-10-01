@@ -25,7 +25,7 @@
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
 import {
   box, tierAt, inRect, type Box, type ArenaLayout, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
-  type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef,
+  type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef,
 } from "./arena.js";
 
 const HALF = 115;
@@ -79,7 +79,7 @@ export const SHOP_POOLS: Record<ShopType, string[]> = {
   mart: ["canned_beans", "energy_drink", "candy_bar", "soda_can", "lottery_ticket", "fancy_cheese"],
   pawn: ["gold_chain", "guitar", "sunglasses", "golden_spork", "snow_globe", "mixtape"],
   bakery: ["bagel", "baguette", "birthday_cake", "fancy_cheese", "donut"],
-  gadget: ["phone_handset", "fancy_earbuds", "laptop", "crt_tv", "mixtape"],
+  gadget: ["phone_handset", "fancy_earbuds", "laptop", "crt_tv", "mixtape", "spray_can"], // (C4b: the hardware corner sells spray paint)
   donut: ["donut", "soda_can", "energy_drink", "birthday_cake", "candy_bar"],
   pharmacy: ["energy_drink", "protein_shaker", "sunglasses", "candy_bar", "lottery_ticket", "soda_can"],
   pizza: ["half_sandwich", "soda_can", "fancy_cheese", "baguette", "energy_drink"],
@@ -109,6 +109,8 @@ interface UnitSpec {
   wall: string; floor: string;
   /** closed-front colour + sign */
   sub?: string;
+  /** C4b: a self-service shop (the laundromat): no cashier, no till */
+  noCashier?: boolean;
 }
 
 const U: Record<string, UnitSpec> = {
@@ -116,7 +118,7 @@ const U: Record<string, UnitSpec> = {
   donut: { name: "HOLE LOTTA DONUTS", use: "shop", type: "donut", layout: "food", upper: "apart", access: "fire", wall: "#e0779a", floor: "#fbe3ea" },
   pharm: { name: "DRUG-ISH MART", use: "shop", type: "pharmacy", layout: "shelves", back: "fridge", wall: "#4f8fc9", floor: "#e6f0f7" },
   pizza: { name: "LEANING TOWER OF PIZZA", use: "shop", type: "pizza", layout: "food", upper: "apart", access: "fire", wall: "#c9442f", floor: "#f2e1c8" },
-  bank: { name: "BIG BANK OF TRASHINGTON", use: "closed", sub: "OPENING SOON", wall: "#8a7d5c", floor: "#e8e2d4" },
+  bank: { name: "CHEQUE-O-MATIC", use: "closed", sub: "CASH FOR CHEQUES (BACK IN 5 MINS)", wall: "#8a7d5c", floor: "#e8e2d4" },
   bagel: { name: "BAGEL BARN", use: "shop", type: "bakery", layout: "food", wall: "#c26b4a", floor: "#f0dcc0" },
   arcade: { name: "PIXEL PALACE", use: "shop", type: "arcade", layout: "arcade", backroom: true, upper: "stock", access: "inside", wall: "#6b3fa0", floor: "#2b2240" },
   thrift: { name: "SECOND HAND STAN'S", use: "shop", type: "thrift", layout: "thrift", wall: "#8a6a3c", floor: "#e8dcc4" },
@@ -124,7 +126,8 @@ const U: Record<string, UnitSpec> = {
   gizmo: { name: "GIZMO GARAGE", use: "shop", type: "gadget", layout: "shelves", back: "table", wall: "#3d5a9e", floor: "#cfd8e8" },
   bling: { name: "BLING THING", use: "shop", type: "jeweller", layout: "jeweller", backroom: true, upper: "stock", access: "inside", wall: "#1f1f2e", floor: "#f4efe0" },
   cracked: { name: "CRACKED SCREENS", use: "shop", type: "phone", layout: "shelves", back: "table", upper: "stock", access: "inside", wall: "#2a8f8a", floor: "#d8efec" },
-  spin: { name: "SPIN CYCLE", use: "shop", type: "laundry", layout: "laundry", wall: "#43a7c7", floor: "#e8f4f8" },
+  // (C4b: a laundromat: no cashier; the grumpy old lady lives in the flat upstairs)
+  spin: { name: "SPIN CYCLE", use: "shop", type: "laundry", layout: "laundry", upper: "apart", access: "fire", noCashier: true, wall: "#43a7c7", floor: "#e8f4f8" },
   hair: { name: "HAIR TODAY", use: "shop", type: "barber", layout: "barber", wall: "#b03a48", floor: "#f4f1ea" },
   pet: { name: "PET PEEVES", use: "shop", type: "pet", layout: "shelves", back: "cage", wall: "#6aa84f", floor: "#eef5e6" },
   subpar: { name: "CLUB SUB-PAR", use: "closed", sub: "OPENS AFTER DARK (SOON)", wall: "#2b1f3a", floor: "#1f1a28" },
@@ -310,7 +313,11 @@ export function buildTrashington(): ArenaLayout {
     }
     let shopId = -1;
     const lootSpots: [number, number, number][] = [];
-    if (spec.use === "shop") {
+    if (spec.use === "shop" && spec.noCashier) {
+      // C4b: self-service: the grumpy old lady from upstairs is the only one who'll notice you (when it's loud)
+      const [ox, oz] = P(-2, 1.6), [wx, wz] = P(1.5, -0.35);
+      posts.push({ kind: "old_lady", x: ox, z: oz, yaw: yawOut, window: { x: wx, y: UP + 1.9, z: wz } });
+    } else if (spec.use === "shop") {
       shopId = shops.length;
       unit.shop = shopId;
       B(4.6, 4.0, 4, 1, 1.05, "counter", inside);
@@ -782,7 +789,7 @@ export function buildTrashington(): ArenaLayout {
   // landmark footprints
   const LM = {
     skyscraper: R(43, 51, -81, -64), cinema: R(-33, -17, -40, -29), church: R(-77, -63, 25, 40),
-    precinct: R(9, 29, 30.5, 44), copLot: R(29, 33, 32, 44), hall: R(45, 65, -9, 9),
+    precinct: R(65, 83, -43.8, -30.5), copLot: R(65, 83, -30.5, -25.2), hall: R(45, 65, -9, 9),
     hotel: R(-33, -25, 56, 76), hq: R(25, 33, 60, 76), casino: R(63, 76, 60, 76),
     tower: R(-83, -71, 90, 100), valet: R(-70, -63, 90, 100), museum: R(-49, -35, 90, 100), mall: R(28, 46, 90, 100), club: R(63, 83, 90, 100),
     cityHall: R(-18, 18, 73, 86), garden: R(-24, 24, 86, 104),
@@ -790,7 +797,7 @@ export function buildTrashington(): ArenaLayout {
   const specs: BlockSpec[] = [
     // ---- LOW: The Yards ----
     B("Yards: Corner Mart block", -53, -5, -85, -52, ALL, { units: [{ spec: U.mart, dir: "N", at: -40 }, { spec: U.thrift, dir: "N", at: -18 }] }),
-    B("Yards: West", -87, -59, -85, -52, ALL),
+    // (C4b: "Yards: West" is now THE PIT, the skate park; see below)
     B("Yards: Skyscraper block", 5, 55, -85, -56, ALL, { units: [{ spec: U.arcade, dir: "N", at: 17 }, { spec: U.pizza, dir: "N", at: 34 }], keep: [LM.skyscraper] }),
     B("Yards: East", 61, 87, -85, -56, ALL, { units: [{ spec: U.dive, dir: "N", at: 74 }] }),
     // ---- MEDIUM: Old Brick (west), Market Row (east), round the park ----
@@ -801,25 +808,177 @@ export function buildTrashington(): ArenaLayout {
     B("Market Row: Donut corner", 5, 35, -48, -21, ["S", "W"], { ring: true, open: ["W"], units: [{ spec: U.donut, dir: "S", at: 23 }] }),
     B("Market Row: Bagel corner", 35, 55, -48, -21, ["S", "E", "N"], { units: [{ spec: U.bagel, dir: "S", at: 43.5 }] }),
     B("Market Row: Promenade corner", 5, 35, -21, -3, ["W", "E"], { ring: true, open: ["W", "E", "N"], noAlley: true, keep: [R(29, 34.5, -15, -9)] }),
-    B("Market Row: South East", 61, 87, -48, -21, ["S", "E", "W", { dir: "N", from: 61, to: 75 }]),
-    B("Market Row: Stalls South", 75, 87, -21, -3, ["E", "W", "N"], { noAlley: true }),
-    B("Market Row: Stalls North", 75, 87, 3, 21, ["E", "W", "S"], { noAlley: true }),
+    B("Market Row: Precinct block", 61, 87, -48, -21, ["S", "E", "W", { dir: "N", from: 61, to: 75 }], { keep: [LM.precinct, LM.copLot], noAlley: true }),
     B("Market Row: Market hall", 41, 69, -15, 15, ALL, { keep: [LM.hall], noAlley: true }),
-    B("Market Row: Precinct block", 5, 35, 3, 48, ["W", "N"], { ring: true, open: ["W"], keep: [LM.precinct, LM.copLot] }),
+    B("Market Row: North of the park", 5, 35, 3, 48, ["W", "N"], { ring: true, open: ["W"] }),
     B("Market Row: North", 35, 87, 21, 48, ["N", "E", { dir: "S", from: 35, to: 75 }], { units: [{ spec: U.pharm, dir: "S", at: 44 }, { spec: U.gizmo, dir: "S", at: 60 }, { spec: U.kicks, dir: "S", at: 75.5 }] }),
     // ---- HIGH: Uptown ----
     B("Uptown: West", -87, -59, 52, 80, ALL),
     B("Uptown: Hotel block", -53, -24, 52, 80, ["S", "N", "W", { dir: "E", from: 67, to: 80 }], { units: [{ spec: U.bling, dir: "S", at: -41.5 }], keep: [LM.hotel] }),
-    B("Uptown: Mile West", -24, -5, 52, 67, ["S", "E", "N"], { noAlley: true }),
     B("Uptown: HQ block", 24, 53, 56, 80, ["S", "N", "E", { dir: "W", from: 67, to: 80 }], { units: [{ spec: U.cracked, dir: "S", at: 41.5 }], keep: [LM.hq] }),
-    B("Uptown: Mile East", 5, 24, 56, 67, ["S", "W", "N"], { noAlley: true }),
     B("Uptown: Casino block", 59, 87, 56, 80, ALL, { keep: [LM.casino] }),
     B("Uptown: Apartment tower block", -87, -59, 86, 104, ALL, { keep: [LM.tower, LM.valet] }),
     B("Uptown: Museum block", -53, -24, 86, 104, ["N", "S", "W"], { keep: [LM.museum] }),
     B("Uptown: Mall block", 24, 53, 86, 104, ["N", "S", "E"], { keep: [LM.mall] }),
-    B("Uptown: Country club block", 59, 87, 86, 104, ALL, { keep: [LM.club], open: ["N", "S", "E"] }),
   ];
   for (const s of specs) fillBlock(s);
+  // =================================================================================================
+  // C5c: UPTOWN LANDMARKS: the Trashington Bank (where the country club was), the Mayor's Golden Statue
+  // (Mile West), and a golden stash in each (Mile East plaza too).
+  // =================================================================================================
+  let bank: NonNullable<ArenaLayout["bank"]>, statue: NonNullable<ArenaLayout["statue"]>;
+  {
+    // ---- the Trashington Bank: a marble hall you can walk into: lobby, teller counter, the back corridor,
+    // the vault (a round door: drill it, or open it with the manager's keycard), the manager's office
+    const blk = R(59, 87, 86, 104), B0 = R(62, 84, 90, 102), H = 8, T = 0.5;
+    ground(blk, "sidewalk");
+    boxes.push({ ...box(73, 96, B0.maxX - B0.minX - 0.6, B0.maxZ - B0.minZ - 0.6, 0.03, "shopfloor", 0.15), color: "#e8e2d4" });
+    blocks.push({ name: "Uptown: Trashington Bank", rect: blk, tier: 2, open: ["N", "S", "E", "W"] });
+    const marble = "#e8e2d4", W = (x: number, z: number, w: number, d: number, h = H, y = 0, extra: Partial<Box> = {}) => boxes.push({ ...box(x, z, w, d, h, "wall", y), color: marble, ...extra });
+    // front (south) wall with a 3 m doorway, the other outer walls, the roof
+    W((62 + 71.5) / 2, B0.minZ + T / 2, 71.5 - 62, T, H, 0, { sign: "TRASHINGTON BANK", face: [0, -1] });
+    W((74.5 + 84) / 2, B0.minZ + T / 2, 84 - 74.5, T);
+    W(73, B0.minZ + T / 2, 3, T, H - 3.6, 3.6);
+    W(73, B0.maxZ - T / 2, B0.maxX - B0.minX, T);
+    W(B0.minX + T / 2, 96, T, B0.maxZ - B0.minZ);
+    W(B0.maxX - T / 2, 96, T, B0.maxZ - B0.minZ);
+    boxes.push({ ...box(73, 96, B0.maxX - B0.minX, B0.maxZ - B0.minZ, 0.4, "roof", H), color: "#b9b3a6" });
+    // steps up to the door, and the partition between the lobby and the back (a door gap at x 80..82)
+    boxes.push({ ...box(73, 89.3, 9, 1.2, 0.15, "step"), color: "#d8d0c4" });
+    // the portico: six marble columns (round ones are drawn; these are their collision) holding a frieze you can stand on
+    const cols: [number, number][] = [[62.8, 89.1], [70.6, 89.1], [75.4, 89.1], [79.3, 89.1], [83.2, 89.1]];
+    for (const [x, z] of cols) boxes.push({ ...box(x, z, 0.7, 0.7, 7.0, "wall"), hide: true });
+    boxes.push({ ...box(73, 89.15, 22.6, 1.9, 0.8, "wall", 7.0), color: marble });
+    // (the vault's front wall is the partition's west half; the tellers can reach its door from behind the counter)
+    W((74.5 + 80) / 2, 96.75, 80 - 74.5, 0.5, H);
+    W(83, 96.75, 2, 0.5, H);
+    // the teller counter (with glass above it) across the lobby
+    boxes.push({ ...box(71, 94.7, 15, 0.8, 1.1, "counter"), color: "#6b3f22" });
+    boxes.push({ ...box(71, 94.7, 15, 0.08, 1.2, "glass", 1.1) });
+    // the vault: steel walls, a round door on its south side (x 70..72)
+    const V = R(62.5, 74.5, 96.5, 101.75), steel = "#6f6a78", dx0 = 67.5, dx1 = 69.5; // (the vault backs onto the west wall; its door at x 67.5..69.5)
+    boxes.push({ ...box(V.maxX - 0.25, (V.minZ + V.maxZ) / 2, 0.5, V.maxZ - V.minZ, H, "wall"), color: steel });
+    boxes.push({ ...box((V.minX + dx0) / 2, V.minZ + 0.25, dx0 - V.minX, 0.5, H, "wall"), color: steel });
+    boxes.push({ ...box((dx1 + V.maxX) / 2, V.minZ + 0.25, V.maxX - dx1, 0.5, H, "wall"), color: steel });
+    boxes.push({ ...box((dx0 + dx1) / 2, V.minZ + 0.25, 2, 0.5, H - 2.8, "wall", 2.8), color: steel });
+    prop("vaultdoor", (dx0 + dx1) / 2, V.minZ + 0.25, 0, 2.0, 0.5, 2.8, { hw: 1.0, hd: 0.35 });
+    props[props.length - 1].box = boxes.length - 1; // (its box stops blocking once it's open)
+    // shelves of gold at the back, deposit boxes on the side walls, cash bags on the floor
+    boxes.push({ ...box(68.5, V.maxZ - 0.9, 9, 0.6, 1.0, "counter"), color: "#8a8a96" }); // (a steel bench, not a shop shelf)
+    const vaultSpots: { type: string; x: number; y: number; z: number }[] = [];
+    for (const x of [65, 67, 69, 71, 72.6]) vaultSpots.push({ type: "gold_bar", x, y: 1.05, z: V.maxZ - 0.9 });
+    for (const x of [65.5, 68.5, 71.5]) vaultSpots.push({ type: "cash_bag", x, y: 0.2, z: V.minZ + 2.0 });
+    for (const [x, z] of [[V.minX + 0.37, 98.6], [V.minX + 0.37, 100.2], [V.maxX - 0.62, 98.6], [V.maxX - 0.62, 100.2]]) prop("depositbox", x, z, x < 68.5 ? Math.PI / 2 : -Math.PI / 2, 0, 0, 0, { y: 1.1 });
+    // pens, brochures and the odd forgotten wallet in the lobby
+    for (const [x, z] of [[64.5, 93], [70, 92.5], [77, 93.2], [82, 94.5]]) spawnAt(x, z, "shop", 0.15);
+    // the manager's office (back right): a desk, a golden stash behind a loose marble tile
+    boxes.push({ ...box(81, 99.5, 2.2, 1.0, 0.8, "desk"), color: "#6b3f22" });
+    prop("stash", 83.35, 101.2, -Math.PI / 2, 0, 0, 0, { y: 0.35, loot: ["golden_toilet_seat"] });
+    posts.push({ kind: "bank_guard", x: 66.5, z: 92.2, yaw: 0 }, { kind: "bank_guard", x: 79.5, z: 98.8, yaw: -Math.PI / 2 });
+    // the manager's keycard turns up in one of these each morning (a bin, a planter, the museum steps...)
+    const keycardSpots = [{ x: -26.2, y: 0.15, z: 54.5 }, { x: 70, y: 0.15, z: 82 }, { x: -42, y: 0.15, z: 88.3 }, { x: 37, y: 0.15, z: 88.4 }, { x: 60.3, y: 0.15, z: 103 }, { x: -3.2, y: 0.15, z: 104.2 }];
+    bank = { rect: B0, vault: V, vaultSpots, keycardSpots, door: { x: 73, z: B0.minZ }, cols };
+
+    // ---- the Mayor's Golden Statue on Mile West: a stepped base, a plinth you can climb, the Mayor on a
+    // throne (a gold nose you can prise off), a golden stash in the back of the plinth
+    const mw = R(-24, -5, 52, 67);
+    ground(mw, "sidewalk"); ground(R(mw.minX + 3, mw.maxX - 3, mw.minZ + 3, mw.maxZ - 3), "plaza", "#e6dcc4");
+    blocks.push({ name: "Uptown: the Mayor's statue", rect: mw, tier: 2, open: ["N", "S", "E", "W"] });
+    const sx = -14.5, sz = 59.5;
+    boxes.push({ ...box(sx, sz, 6.4, 6.4, 1.0, "platform"), color: "#d8d0c4" });
+    boxes.push({ ...box(sx, sz, 5, 5, 2.0, "plinth", 1.0), color: "#e8e2d4", sign: "MAYOR GRUBSWORTH", face: [1, 0], mayor: true });
+    boxes.push({ ...box(sx - 0.4, sz, 1.8, 1.8, 3.2, "wall", 3.0), hide: true });
+    prop("nose", sx + 0.62, sz, Math.PI / 2, 0, 0, 0, { y: 4.9 });
+    prop("stash", sx - 2.53, sz + 1.2, -Math.PI / 2, 0, 0, 0, { y: 1.4, loot: ["mayors_medal"] });
+    for (const [x, z] of [[-21, 55], [-21, 64], [-8, 55], [-8, 64]]) boxes.push(box(x, z, 0.6, 0.6, 3, "tree"));
+    for (const z of [55.2, 63.8]) boxes.push({ ...box(-9.8, z, 2.6, 0.7, 0.5, "bench") });
+    spawnAt(-19.5, 59.5, "street", 0.15); spawnAt(-9, 59.5, "street", 0.15);
+    statue = { x: sx - 0.4, z: sz, plinthH: 3.0, yaw: Math.PI / 2 };
+
+    // ---- Mile East: a plain plaza for now (Blake dropped the WANTED screen; another landmark goes here later).
+    // A low stone wall by the benches hides the Diamond Pigeon stash.
+    const me = R(5, 24, 56, 67);
+    ground(me, "sidewalk"); // (just paving: a nested plaza patch here drew dark under its outline)
+    blocks.push({ name: "Uptown: Mile East plaza", rect: me, tier: 2, open: ["N", "S", "E", "W"] });
+    boxes.push({ ...box(10.5, 61.5, 0.8, 4.2, 0.6, "wall"), color: "#d8d0c4" });
+    prop("stash", 10.1 - 0.02, 62.6, -Math.PI / 2, 0, 0, 0, { y: 0.3, loot: ["diamond_pigeon"] });
+    for (const [x, z] of [[17, 59], [17, 64], [21.5, 61.5], [9, 58], [9, 65]]) boxes.push(box(x, z, 0.6, 0.6, 3, "tree"));
+    boxes.push({ ...box(14, 61.5, 0.7, 3, 0.5, "bench") });
+    spawnAt(19, 61.5, "street", 0.15);
+  }
+
+  // C5b: CHINATOWN: the Market Row street by the canal (x 69..75, z -21..21). Two rows of shophouses face
+  // it from the east (curved tiled roofs, lanterns, hanging signs), street stalls in front of them, the
+  // market hall's side on the west, a red gate at each end and lanterns strung across the road.
+  let chinatown: NonNullable<ArenaLayout["chinatown"]>;
+  {
+    const street = R(69, 75, -21, 21);
+    const SHOPS: [string, string, string, string][] = [
+      // name, second (Chinese) sign, wall colour, roof colour
+      ["DUMPLING DYNASTY", "饺子馆", "#b8322c", "#3f7f4f"],
+      ["LUCKY NOODLE BAR", "面馆", "#e8d8b0", "#b8322c"],
+      ["GOLDEN LEAF TEA HOUSE", "茶楼", "#3d8f6a", "#d8742c"],
+      ["JADE HERBAL SHOP", "药材", "#8e1f2e", "#3f7f4f"],
+      ["GOLDEN MOON BAKERY", "饼家", "#c98a2a", "#b8322c"],
+      ["TRIPLE HAPPY GROCER", "杂货", "#b8322c", "#d8742c"],
+    ];
+    const rows = [R(75, 87, -21, -3), R(75, 87, 3, 21)];
+    let k = 0;
+    rows.forEach((r, ri) => {
+      ground(r, "sidewalk");
+      blocks.push({ name: ri === 0 ? "Chinatown: South" : "Chinatown: North", rect: r, tier: 1, open: ["N", "S", "E", "W"] });
+      for (let j = 0; j < 3; j++) {
+        const [name, sign2, wall, roof] = SHOPS[k++];
+        const z0 = r.minZ + j * 6, zc = z0 + 3;
+        const h = [8.5, 10.6, 7.6, 9.4, 11.2, 8.2][k - 1];
+        boxes.push({ ...box(82.5, zc, 9, 5.8, h, "building"), color: wall, windows: true, face: [-1, 0], front: "shop", sign: name, china: { roof, sign2 } });
+        // the street stall in front (a dumpling steamer cart, a souvenir stall or a seafood tank)
+        const kind = (["steamer", "trinkets", "steamer", "trinkets", "steamer", "fishtank"] as const)[k - 1];
+        prop(kind, 77.3, zc + (j === 1 ? 0.8 : -0.8), -Math.PI / 2, kind === "fishtank" ? 1.4 : 1.6, kind === "fishtank" ? 0.8 : 0.9, kind === "fishtank" ? 1.3 : 1.05);
+      }
+      spawnAt(76.2, (r.minZ + r.maxZ) / 2 + 2, "street", 0.15);
+    });
+    // the gates (just inside each end of the street) and the lantern rows over the road
+    const gates = [{ x: 72, z: -13, w: 8.6 }, { x: 72, z: 13, w: 8.6 }];
+    for (const g of gates) for (const sx of [-1, 1]) boxes.push({ ...box(g.x + sx * (g.w / 2 - 0.2), g.z, 0.6, 0.6, 7.2, "wall"), hide: true });
+    chinatown = {
+      street, gates,
+      lanternRows: [-10.5, -7, 7, 10.5],
+      // the dragon parade walks up the middle of the street from the south gate to the north gate
+      route: [{ x: 72, z: -26 }, { x: 72, z: 26 }],
+    };
+  }
+
+  // C4b: THE PIT: a small skate park in the Yards (ramps you can run up, walls to tag, spray cans lying about)
+  const pit = R(-87, -59, -85, -52);
+  {
+    const inner = R(pit.minX + 4, pit.maxX - 4, pit.minZ + 4, pit.maxZ - 4);
+    // pavement round the edge (4 strips, so nothing overlaps the concrete: no flicker)
+    for (const r of [R(pit.minX, pit.maxX, pit.minZ, inner.minZ), R(pit.minX, pit.maxX, inner.maxZ, pit.maxZ), R(pit.minX, inner.minX, inner.minZ, inner.maxZ), R(inner.maxX, pit.maxX, inner.minZ, inner.maxZ)]) ground(r, "sidewalk");
+    ground(inner, "plaza", "#a8a4a0");
+    blocks.push({ name: "The Pit (skate park)", rect: pit, tier: 0, open: ["N", "S", "E", "W"] });
+    const cx = (inner.minX + inner.maxX) / 2, cz = (inner.minZ + inner.maxZ) / 2;
+    const concrete = "#b9b3ac", wood = "#a8743f";
+    // graffiti walls along the back (north) edge and the west edge, with gaps to walk through
+    boxes.push({ ...box(cx - 5, inner.maxZ - 0.3, 9, 0.5, 2.6, "wall"), color: "#8e8a94", sign: "THE PIT (SKATE AT YOUR OWN RISK)", face: [0, -1] });
+    boxes.push({ ...box(cx + 7, inner.maxZ - 0.3, 5, 0.5, 2.6, "wall"), color: "#8e8a94", art: true });
+    boxes.push({ ...box(inner.minX + 0.3, cz - 4, 0.5, 9, 2.4, "wall"), color: "#8e8a94", art: true });
+    boxes.push({ ...box(inner.minX + 0.3, cz + 7.5, 0.5, 5, 2.4, "wall"), color: "#8e8a94", art: true });
+    // two quarter pipes (steps you can run up: 0.3 m each, up to 1.8 m) facing each other across the middle
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? inner.minX + 1.0 : inner.maxX - 1.0; // (the deck's inner edge)
+      for (let i = 0; i < 6; i++) boxes.push({ ...box(x0 - side * (0.25 + (5 - i) * 0.5), cz + 1, 0.5, 6, 0.3 * (i + 1), "ramp-step"), color: concrete });
+      boxes.push({ ...box(side < 0 ? inner.minX + 0.5 : inner.maxX - 0.5, cz + 1, 1, 6, 1.8, "platform"), color: concrete }); // deck
+    }
+    // a fun box in the middle with a rail on it, a grind rail, a kicker
+    boxes.push({ ...box(cx, cz - 5.5, 4, 2.4, 0.4, "platform"), color: concrete });
+    boxes.push({ ...box(cx, cz - 5.5, 3.6, 0.12, 0.35, "rim", 0.4), color: "#3a3444" });
+    boxes.push({ ...box(cx - 2.6, cz - 5.5, 1.2, 2.4, 0.2, "ramp-step"), color: concrete }, { ...box(cx + 2.6, cz - 5.5, 1.2, 2.4, 0.2, "ramp-step"), color: concrete });
+    boxes.push({ ...box(cx + 4, cz + 7, 6, 0.12, 0.35, "rim"), color: "#3a3444" });
+    boxes.push({ ...box(cx - 4.5, cz + 7, 2, 2, 0.35, "ramp-step"), color: wood });
+    boxes.push(box(inner.minX + 2.2, inner.minZ + 1.2, 3, 0.8, 0.5, "bench"));
+    spawnAt(cx + 1, cz - 4.8, "yard", 0.4); spawnAt(cx + 5, cz - 1, "yard", 0.15); spawnAt(inner.minX + 2, cz + 2, "yard", 1.8);
+  }
   // City Hall plaza (inside its U) and the Mayor's formal garden behind it, up to North Parade
   ground(LM.cityHall, "plaza", "#d8d0c4");
   blocks.push({ name: "City Hall plaza", rect: LM.cityHall, tier: 2, open: ["N", "S", "E", "W"] });
@@ -863,8 +1022,6 @@ export function buildTrashington(): ArenaLayout {
   shell(LM.museum, 12, "building", "#e8e2d4", "MUSEUM OF OLD STUFF", [0, -1]);
   for (const x of [-47, -44, -41, -38]) boxes.push({ ...box(x, 89.4, 0.8, 0.8, 9, "wall"), color: "#f4f1ea" });
   shell(LM.mall, 16, "building", "#ff8fa3", "LUXURY MALL: GOOCHY / PRADUH / VERSAYCHEE", [0, -1]);
-  shell(R(63, 73, 90, 100), 7, "building", "#8a9a5b", "TRASHINGTON COUNTRY CLUB (MEMBERS ONLY)", [0, -1]);
-  decor.push({ kind: "grass", x: 78, z: 95, w: 10, d: 10, h: 0.17 });
   // the luxury apartment tower (a snooty doorman at the door, the valet's cars beside it)
   {
     const t = LM.tower;
@@ -915,18 +1072,13 @@ export function buildTrashington(): ArenaLayout {
   boxes.push(box(-99, -91.5, 1.2, 1.2, 0.5, "pallet"));
   boxes.push({ ...box(-114.6, -66, 0.6, 40, 2.6, "fence"), sign: "BUILD YARD: KEEP OUT (OR DON'T)", face: [1, 0] });
   for (const [x, z] of [[-110, -50], [-102, -78]]) spawnAt(x, z, "yard", 0.15);
-  // --- junkyard + movement playground ---
-  const ledgeZ = -30;
-  boxes.push(box(-110, ledgeZ, 3, 2, 0.9, "ledge"));
-  boxes.push(box(-105, ledgeZ, 3, 2, 1.4, "ledge"));
-  boxes.push(box(-100, ledgeZ, 3, 2, 1.95, "ledge"));
-  const tunX = -106, tunZ = -18;
-  // (the yard's gravel is 0.15 m up, so the tunnel is too)
-  boxes.push(box(tunX, tunZ, 6, 3.2, 0.3, "slab", 1.4));
-  boxes.push(box(tunX, tunZ - 1.8, 6, 0.4, 1.7, "wall"));
-  boxes.push(box(tunX, tunZ + 1.8, 6, 0.4, 1.7, "wall"));
+  // --- the junkyard (C4b: the old tutorial ledges and crawl tunnel are gone; the browser tests climb the
+  //     freight loading dock and crawl the sewer pipe instead) ---
+  const dock = R(-99, -96, 8, 16);
+  boxes.push({ ...box((dock.minX + dock.maxX) / 2, (dock.minZ + dock.maxZ) / 2, dock.maxX - dock.minX, dock.maxZ - dock.minZ, 1.4, "platform"), color: "#6b5a4a", sign: "FREIGHT DOCK", face: [1, 0] });
+  spawnAt(-97.5, 12, "yard", 1.4);
   for (const [x, z, w, d, h] of [[-113, -37, 3, 3, 1.6], [-99, -39, 2, 4, 1.1], [-113, -25, 3, 2, 2.2], [-98.5, -22, 2.4, 2, 1.3], [-100, -12, 2, 3, 1.8], [-112, -9, 4, 2, 1.3]]) boxes.push(box(x, z, w, d, h, "junk"));
-  spawnAt(-106, -24, "yard", 0.15); spawnAt(-100, ledgeZ, "yard", 1.95); spawnAt(-112, -14, "yard", 0.15);
+  spawnAt(-106, -24, "yard", 0.15); spawnAt(-112, -14, "yard", 0.15);
   // --- tracks, boxcars, the railway arches ---
   // (C1.1: the tracks run the whole length of the rail yard, from the station down to the siding by the forts)
   scenery.push({ kind: "rail", x: -106, z: -25.5, d: 179 }, { kind: "rail", x: -101, z: -25.5, d: 179 });
@@ -1042,7 +1194,7 @@ export function buildTrashington(): ArenaLayout {
   for (const x of [-84, -47.5, -12, 12, 47.5, 84]) decor.push({ kind: "streetlight", x, z: -94.2 });
 
   // =================================================================================================
-  // THE POLICE PRECINCT, north of the roundabout, front door facing the park
+  // THE POLICE PRECINCT, Market Row by the east road and the canal, front door on the south street
   // =================================================================================================
   const station = (() => {
     const P0 = LM.precinct, PD_H = 4.5, D = P0.maxZ - P0.minZ, zf = P0.minZ;
@@ -1052,13 +1204,13 @@ export function buildTrashington(): ArenaLayout {
     const wall = (x: number, z: number, w: number, d: number, h = PD_H, baseY = 0, kind: Box["kind"] = "wall", color = pdWall) =>
       boxes.push({ ...box(x, z, w, d, h, kind, baseY), color });
     wall(x0 + 1.5, V(0), 3, 0.4); // front wall, left of the door (door: x0+3 .. x0+6)
-    wall(x0 + 13, V(0), 14, 0.4); // right of the door
+    wall((x0 + 6 + x1) / 2, V(0), x1 - x0 - 6, 0.4); // right of the door
     wall(x0 + 4.5, V(0), 3, 0.4, PD_H - 2.7, 2.7); // over the door
     wall(pdX, V(D), x1 - x0 + 0.4, 0.4); // back wall
     wall(x0, pdZ, 0.4, D); wall(x1, pdZ, 0.4, D);
     boxes.push({ ...box(pdX, pdZ, x1 - x0 + 0.4, D + 0.4, 0.3, "roof", PD_H), sign: "TRASHINGTON PD", face: [0, -1], color: "#1f2944" });
     boxes.push({ ...box(pdX, pdZ, x1 - x0 - 0.4, D - 0.4, 0.03, "shopfloor"), color: "#c9ccd6" });
-    boxes.push({ ...box(x0 + 13, V(4.6), 9, 0.9, 1.1, "counter"), color: "#5a4632" }); // front desk
+    boxes.push({ ...box(x0 + 11.5, V(4.6), 8, 0.9, 1.1, "counter"), color: "#5a4632" }); // front desk
     const cellV0 = D - 6, cellV1 = D - 0.2, cellW = (x1 - x0 - 0.4) / 4;
     const cells: NonNullable<ArenaLayout["station"]>["cells"] = [];
     for (let i = 0; i < 4; i++) {
@@ -1068,7 +1220,9 @@ export function buildTrashington(): ArenaLayout {
       boxes.push({ ...box(cx, V(D - 0.9), 2.2, 0.8, 0.45, "bench"), color: "#6b4a2b" });
       cells.push({ x: cx, z: V(D - 3.3), yaw: Math.PI, rect: { minX: cx0 + 0.6, maxX: cx1 - 0.6, minZ: V(cellV0 + 0.5), maxZ: V(cellV1 - 0.6) } });
     }
-    for (const z of [35.5, 41]) { boxes.push(box(31, z, 1.9, 4.2, 1.5, "car")); decor.push({ kind: "copcar", x: 31, z, yaw: 0 }); }
+    // two cruisers parked in the lot behind (side on)
+    const lot = LM.copLot, lz = (lot.minZ + lot.maxZ) / 2;
+    for (const x of [lot.maxX - 3, lot.maxX - 8]) { boxes.push(box(x, lz, 4.2, 1.9, 1.5, "car")); decor.push({ kind: "copcar", x, z: lz, yaw: Math.PI / 2 }); }
     spawnAt(x1 + 1.5, V(D) + 1.6, "alley");
     return {
       rect: { minX: x0 - 0.2, maxX: x1 + 0.2, minZ: P0.minZ - 0.2, maxZ: P0.maxZ + 0.2 },
@@ -1106,10 +1260,11 @@ export function buildTrashington(): ArenaLayout {
   // fort slots: 0 + 1 are the corners, 2 + 3 the middle (2 players: corners, 3: + one middle)
   const spawns = forts.map((f) => ({ x: f.padX, z: f.padZ, yaw: f.yaw }));
   const landmarks = {
-    ledge09: { x: -110, z: ledgeZ - 2.2, yaw: 0, frontZ: ledgeZ - 1 },
-    ledge14: { x: -105, z: ledgeZ - 2.2, yaw: 0, frontZ: ledgeZ - 1 },
-    ledge195: { x: -100, z: ledgeZ - 2.2, yaw: 0, frontZ: ledgeZ - 1 },
-    tunnelEntrance: { x: tunX - 5.5, z: tunZ, yaw: Math.PI / 2, roofStartX: tunX - 3, roofEndX: tunX + 3 },
+    // (C4b: movement-test spots on real city things: the 1.4 m freight dock, the sewer outfall's crawl pipe)
+    ledge14: { x: -97.5, z: dock.minZ - 2.2, yaw: 0, frontZ: dock.minZ },
+    lobby: { x: 0, z: -124.6, yaw: 0, y: 26 }, // (C5a: where you wake up in the squat)
+    pitWall: { x: -78, z: -52 - 4 - 0.3 - 0.25 - 1.1, yaw: 0, faceZ: -52 - 4 - 0.3 - 0.25 }, // (C4b: in front of THE PIT's back graffiti wall)
+    tunnelEntrance: { x: 94, z: -111.5, yaw: Math.PI / 2, roofStartX: 99, roofEndX: 112.6 },
     /** the open build yard: tests use it as their origin (it replaces the old plaza) */
     testYard: { x: T.x, z: T.z, yaw: 0 },
     plaza: { x: T.x, z: T.z - 10, yaw: 0 },
@@ -1148,6 +1303,84 @@ export function buildTrashington(): ArenaLayout {
   };
   const navLines = merge(xLines, cwX);
   const navLinesZ = merge(zLines, cwZ);
+
+  // C4b: the laundromat's washers and dryers (the tall ones are dryers stacked on washers)
+  {
+    let nw = 0, nd = 0;
+    for (const b of boxes) {
+      if (b.kind !== "washer" || b.unit === undefined) continue;
+      const dryer = b.h > 1.5;
+      props.push({ id: dryer ? "dryer" + ++nd : "washer" + ++nw, kind: dryer ? "dryer" : "washer", x: b.x, y: 0, z: b.z, yaw: 0, hw: b.w / 2, hd: b.d / 2 });
+    }
+  }
+
+  // =================================================================================================
+  // C5a: THE SQUAT: the lobby. A condemned tenement just past the south fence; its roof (26 m up, looking
+  // north over the whole city to Uptown's towers) is a cardboard camp where you wait for the match.
+  // =================================================================================================
+  let lobby: LobbyDef;
+  {
+    const Y = 26, roof = R(-15, 15, -140, -120);
+    const cx = 0, cz = -130;
+    // the building (a real box: you could stand on its roof even without the deck)
+    boxes.push({ ...box(cx, cz, roof.maxX - roof.minX, roof.maxZ - roof.minZ, Y, "building"), color: "#6e4a3a", windows: true, face: [0, 1] });
+    // parapet all round, and a tall chain-link fence on it (see-through; too high to climb)
+    const wall = (x: number, z: number, w: number, d: number, h: number, base: number, kind: Box["kind"], extra: Partial<Box> = {}) => boxes.push({ ...box(x, z, w, d, h, kind, base), ...extra });
+    for (const [x, z, w, d] of [[cx, roof.maxZ - 0.2, 30, 0.4], [cx, roof.minZ + 0.2, 30, 0.4], [roof.minX + 0.2, cz, 0.4, 20], [roof.maxX - 0.2, cz, 0.4, 20]]) {
+      wall(x, z, w, d, 1.0, Y, "wall", { color: "#8a6a58" });
+      wall(x, z, w, d * 0.25 + 0.02, 2.9, Y + 1.0, "fence", { chain: true });
+    }
+    // Uncle Dumpster's camp round a burning barrel: a sagging couch, crate seats, tarp tents, box huts
+    const fire = { x: 0, z: -129 };
+    wall(fire.x, fire.z, 0.7, 0.7, 1.0, Y, "crate", { hide: true });
+    wall(0, -131.6, 2.6, 0.9, 0.5, Y, "sofa", { color: "#7a4f8f" });
+    for (const [x, z] of [[-2.7, -128.9], [2.5, -129.2]]) wall(x, z, 0.6, 0.6, 0.45, Y, "crate", { color: "#a8743f" });
+    const tents = [
+      { x: -11.5, z: -124.3, w: 3.2, d: 2.6, yaw: 0, color: "#3f7fc9" },
+      { x: -11.5, z: -129.0, w: 3.2, d: 2.6, yaw: 0, color: "#d8542c" },
+      { x: 11.8, z: -137.6, w: 3.2, d: 2.4, yaw: Math.PI, color: "#4f9a3a" },
+    ];
+    for (const t of tents) wall(t.x, t.z, t.w, t.d, 1.5, Y, "crate", { hide: true });
+    // the water tank on its stand, with the painted city map across the front
+    const tank = { x: -11.5, z: -136.6 };
+    for (const [dx, dz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) wall(tank.x + dx, tank.z + dz, 0.25, 0.25, 3.2, Y, "wall", { color: "#5a4636" });
+    wall(tank.x, tank.z, 3.6, 3.6, 3.4, Y + 3.2, "wall", { hide: true });
+    const map = { x: tank.x, y: Y + 2.4, z: tank.z + 1.95, w: 6.2, h: 4.2, yaw: 0 };
+    wall(map.x, map.z - 0.08, map.w, 0.16, map.h, map.y - map.h / 2, "wall", { hide: true });
+    // practice corner: a punching dummy, crates to climb, a wall to tag
+    prop("dummy", 8.8, -137.2, 0, 0, 0, 0, { y: Y });
+    wall(8.8, -137.2, 0.5, 0.5, 1.8, Y, "crate", { hide: true });
+    wall(13.2, -133.6, 1.2, 1.2, 1.0, Y, "crate", { color: "#a8743f" });
+    wall(13.2, -132.2, 1.2, 1.4, 1.6, Y, "crate", { color: "#9a6a3c" });
+    wall(13.2, -130.6, 1.2, 1.6, 2.2, Y, "crate", { color: "#8e5f35" });
+    wall(-2.5, -139.2, 6, 0.4, 2.6, Y, "wall", { color: "#9a948c", sign: "TAG PRACTICE", face: [0, 1] });
+    // THROW-O-MATIC: a lane along the east side, three targets on the fence, a rack of bin lids
+    prop("throwgame", 8.6, -123.6, -Math.PI / 2, 0, 0, 0, { y: Y });
+    wall(8.6, -123.6, 0.9, 0.9, 1.6, Y, "crate", { hide: true });
+    const targets = [
+      { id: "tgt1", x: 14.35, y: Y + 1.7, z: -124.8, r: 0.75, yaw: -Math.PI / 2 },
+      { id: "tgt2", x: 14.35, y: Y + 2.6, z: -127.4, r: 0.6, yaw: -Math.PI / 2 },
+      { id: "tgt3", x: 14.35, y: Y + 1.4, z: -129.8, r: 0.5, yaw: -Math.PI / 2 },
+    ];
+    for (const t of targets) wall(t.x + 0.12, t.z, 0.1, t.r * 2.1, t.r * 2.1, t.y - t.r * 1.05, "wall", { hide: true });
+    // TROLLEY GRAND PRIX: four cones round the camp; start/finish by the starter's post
+    const race = [{ x: -5.2, z: -122.9, r: 2.2 }, { x: 5.8, z: -122.9, r: 2.2 }, { x: 5.8, z: -134.6, r: 2.2 }, { x: -5.2, z: -134.6, r: 2.2 }];
+    prop("racegame", -7.2, -122.4, Math.PI, 0, 0, 0, { y: Y });
+    wall(-7.2, -122.4, 0.3, 0.3, 1.6, Y, "wall", { hide: true });
+    // the locked stairwell hut, the pigeon coop, two cardboard huts (drawn by the renderer)
+    wall(-7.2, -138.2, 2.4, 2.4, 2.6, Y, "wall", { hide: true });
+    wall(13.3, -122.4, 1.6, 1.0, 1.1, Y, "wall", { hide: true });
+    wall(-13.2, -121.8, 1.6, 1.1, 1.15, Y, "crate", { hide: true });
+    wall(-8.6, -121.6, 1.2, 1.1, 1.15, Y, "crate", { hide: true });
+    // where you wake up: in a row facing the view
+    const spawnsL = [-1.5, 0, 1.5, 3, -3, 4.5, -4.5, 6].map((x) => ({ x, z: -124.6, yaw: 0 }));
+    posts.push({ kind: "uncle_dumpster", x: 2.6, z: -127.2, yaw: 0, y: Y });
+    lobby = {
+      rect: roof, y: Y, spawns: spawnsL, map, race, targets, tents, fire,
+      pile: { x: 3.6, z: -138.2 }, lids: { x: 10.4, z: -122.4 },
+      trolleys: [{ x: -3.2, z: -121.3 }, { x: -1.2, z: -121.3 }], cans: { x: -2.5, z: -138.3 },
+    };
+  }
 
   // C4a: street things you can smash, one prop per box (shop windows, bus-stop glass, hydrants, mailboxes,
   // benches, planters, café and picnic tables, pallets). Broken = the box stops blocking until dawn.
@@ -1198,6 +1431,10 @@ export function buildTrashington(): ArenaLayout {
     // trolleys outside Corner Mart
     const mart = units[0];
     for (const s2 of [-1.6, 1.6]) put("shopping_trolley", mart.doorX + mart.out[0] * 2.4 - mart.out[1] * s2, mart.doorZ + mart.out[1] * 2.4 + mart.out[0] * s2, 0.6, Math.atan2(mart.out[0], mart.out[1]));
+    // C4b: spray cans: in the skate park, a few alleys, the build yard, under the railway arches
+    for (const [x, z] of [[(pit.minX + pit.maxX) / 2 - 3, pit.maxZ - 5.5], [(pit.minX + pit.maxX) / 2 + 2, (pit.minZ + pit.maxZ) / 2 - 1], [pit.minX + 5.5, pit.minZ + 6], [-109, 10], [-109, 42]]) put("spray_can", x, z, 0.1);
+    [[6, 8], [-6, 6], [4, -6], [-4, -8], [8, 0], [0, 10]].some(([dx, dz]) => put("spray_can", T.x + dx, T.z + dz, 0.1));
+    loot.filter((l) => l.zone === "alley").filter((_, i) => i % 3 === 1).forEach((l) => put("spray_can", l.x - 0.9, l.z - 0.9, 0.1));
     // fish at the Market Row stalls and the marina
     for (const [x, z] of [[50, -11.5], [60, -11.5], [97, 75], [97, 88]]) put("smelly_fish", x, z, 0.15);
   }
@@ -1205,7 +1442,7 @@ export function buildTrashington(): ArenaLayout {
   return {
     halfSize: HALF, boxes, spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
-    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots,
+    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue,
   };
 }
 
@@ -1258,6 +1495,10 @@ function fixtures(spec: UnitSpec, B: UnitBox, loot: [number, number, number][], 
       for (let v = 1.2; v <= 8.5; v += 0.9) F(-6.65, v, 0.8, 0.8, 1.0, "washer");
       for (let u = 2.9; u <= 6.5; u += 0.9) F(u, 9.2, 0.8, 0.8, 1.9, "washer");
       F(-3.3, 5, 1, 3, 0.85, "table");
+      // (C4b: a row of plastic seats to wait on, a soap shelf, laundry baskets)
+      F(-4.4, 1.9, 1.6, 0.5, 0.45, "chair");
+      F(6.3, 2.6, 0.5, 1.4, 1.6, "shelf");
+      F(-3.3, 8.1, 1.8, 0.6, 0.3, "cage");
       loot.push([-6.65, 2.1, 1.0], [-6.65, 5.7, 1.0], [-6.65, 8.4, 1.0], [-3.3, 4.2, 0.85], [-3.3, 5.8, 0.85]);
       break;
     }

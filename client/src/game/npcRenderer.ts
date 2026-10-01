@@ -27,6 +27,8 @@ const LOOKS: Record<string, Look> = {
   gym_bro: { body: "#2fb6ff", legs: "#3e4350", skin: "#d99a6c", hat: "#2b2433", hatShape: "cap", prop: "none", bulk: 1.35 },
   mall_cop: { body: "#3d5a9e", legs: "#2b3350", skin: "#e8b48a", hat: "#2b3350", hatShape: "cap", prop: "none", bulk: 1.15 },
   mime: { body: "#f4f1ea", legs: "#1b1420", skin: "#ffffff", hat: "#1b1420", hatShape: "beret", prop: "none" },
+  old_lady: { body: "#9f5fd6", legs: "#6b4c9a", skin: "#f0c8a0", hat: "#e8e2d4", hatShape: "scarf", prop: "cane", bulk: 1.05 },
+  uncle_dumpster: { body: "#8e1f2e", legs: "#e0a878", skin: "#e0a878", hat: "#d8d0c4", hatShape: "band", prop: "none", bulk: 1.15 },
   fisherman: { body: "#4f6b3a", legs: "#3a4a2a", skin: "#e0a878", hat: "#8a9a5b", hatShape: "sunhat", prop: "rod", bulk: 1.15 },
   doorman: { body: "#6b1f2e", legs: "#1b1420", skin: "#e8b48a", hat: "#6b1f2e", hatShape: "cap", prop: "none", bulk: 1.2 },
   cashier: { body: "#d6264a", legs: "#2b2433", skin: "#e8b48a", hat: "#ffcf3a", hatShape: "cap", prop: "none" },
@@ -118,6 +120,17 @@ export class NpcRenderer {
     for (const ex of [-0.07, 0.07]) {
       const eye = part(MeshBuilder.CreateSphere("eye", { diameter: 0.06, segments: 4 }, sc), "#1b1420", head, 0);
       eye.position.set(ex, 0.03, 0.18);
+    }
+    if (v.kind === "uncle_dumpster") {
+      // C5a: a long grey beard, bushy eyebrows, a bathrobe with a belt and lapels, fluffy slippers, a mug of tea
+      const beard = part(MeshBuilder.CreateCylinder("beard", { diameterTop: 0.3, diameterBottom: 0.08, height: 0.5, tessellation: 8 }, sc), "#d8d0c4", head, 0.015); beard.position.set(0, -0.28, 0.1);
+      const mo = part(MeshBuilder.CreateTorus("tache", { diameter: 0.18, thickness: 0.05, tessellation: 8 }, sc), "#d8d0c4", head, 0.01); mo.position.set(0, -0.07, 0.17); mo.rotation.x = Math.PI / 2; mo.scaling.y = 0.5;
+      for (const ex of [-0.08, 0.08]) { const br = part(MeshBuilder.CreateBox("brow", { width: 0.1, height: 0.03, depth: 0.03 }, sc), "#d8d0c4", head, 0); br.position.set(ex, 0.1, 0.18); br.rotation.z = ex > 0 ? -0.3 : 0.3; }
+      const belt = part(MeshBuilder.CreateTorus("robeBelt", { diameter: 0.56, thickness: 0.05, tessellation: 12 }, sc), "#f3e2b8", pivot, 0.01); belt.position.y = 0.98;
+      const skirt = part(MeshBuilder.CreateCylinder("robe", { diameterTop: 0.52, diameterBottom: 0.62, height: 0.45, tessellation: 12 }, sc), "#8e1f2e", pivot, 0.02); skirt.position.y = 0.66;
+      for (const sx of [-1, 1]) { const lap = part(MeshBuilder.CreateBox("lapel", { width: 0.1, height: 0.4, depth: 0.03 }, sc), "#f3e2b8", pivot, 0); lap.position.set(sx * 0.1, 1.22, 0.27); lap.rotation.z = sx * 0.35; }
+      for (const sx of [-0.14, 0.14]) { const sl = part(MeshBuilder.CreateSphere("slipper", { diameter: 0.22, segments: 6 }, sc), "#ff8fa3", pivot, 0.015); sl.position.set(sx, 0.06, 0.06); sl.scaling.set(1, 0.6, 1.4); }
+      const mug = part(MeshBuilder.CreateCylinder("mug", { diameter: 0.12, height: 0.14, tessellation: 10 }, sc), "#f4f1ea", pivot, 0.01); mug.position.set(0.36, 1.05, 0.2);
     }
     if (v.kind === "mime") { const mouth = part(MeshBuilder.CreateBox("mouth", { width: 0.12, height: 0.03, depth: 0.02 }, sc), "#d62c2c", head, 0); mouth.position.set(0, -0.08, 0.19); }
     // hats
@@ -335,7 +348,8 @@ export class NpcRenderer {
       while (dy < -Math.PI) dy += Math.PI * 2;
       const yaw = a.yaw + dy * k;
       // distance culling (keeps the crowd affordable)
-      const far = Math.hypot(x - cam.x, z - cam.z) > (n.big ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" ? COP_DRAW_DISTANCE : DRAW_DISTANCE);
+      const far = Math.hypot(x - cam.x, z - cam.z) > (n.big ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" ? COP_DRAW_DISTANCE : DRAW_DISTANCE)
+        || n.view.state === "sleep"; // (C4b: the old lady asleep upstairs isn't drawn)
       if (far === n.enabled) { n.enabled = !far; n.root.setEnabled(!far); }
       const speed = dt > 0 ? Math.hypot(x - n.lastX, z - n.lastZ) / dt : 0;
       n.lastX = x; n.lastZ = z;

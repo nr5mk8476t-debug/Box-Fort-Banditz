@@ -113,13 +113,15 @@ test("celebrity: award trophy; the fans film it (extra heat); crypto bro: a wall
 });
 
 test("the entourage follows the boss around (and doesn't get stuck behind)", () => {
-  const { w } = setup(5);
-  const m = w.npc.spawnBigShot("millionaire")!;
-  let far = 0;
-  for (let i = 0; i < 60; i++) {
-    run(w, 0.5);
-    const g = [...w.npc.npcs.values()].find((n) => n.leader === m.id);
-    if (g && Math.hypot(g.move.x - m.move.x, g.move.z - m.move.z) > 5) far++;
+  for (const seed of [3, 4, 6]) { // (C5a: three walks; the city's random walks shift whenever an NPC is added)
+    const { w } = setup(seed);
+    const m = w.npc.spawnBigShot("millionaire")!;
+    let far = 0;
+    for (let i = 0; i < 60; i++) {
+      run(w, 0.5);
+      const g = [...w.npc.npcs.values()].find((n) => n.leader === m.id);
+      if (g && Math.hypot(g.move.x - m.move.x, g.move.z - m.move.z) > 5) far++;
+    }
+    assert.ok(far <= 3, `seed ${seed}: bodyguard strayed ${far}/60 times`);
   }
-  assert.ok(far <= 3, `bodyguard strayed ${far}/60 times`);
 });

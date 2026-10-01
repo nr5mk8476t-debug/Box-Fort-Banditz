@@ -20,10 +20,11 @@ assert(bob.colorIdx !== st.players.get(a.sessionId).colorIdx, "distinct colours"
 
 // Alice walks forward for 1s (60 inputs)
 const startZ = st.players.get(a.sessionId).z;
-for (let i = 0; i < 60; i++) { a.send(MSG.INPUT, [{ seq: i, mx: 0, mz: 1, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false }]); await sleep(16); }
+// (C5a: Alice starts on the squat's roof facing the view; she walks back into the camp, away from the parapet)
+for (let i = 0; i < 60; i++) { a.send(MSG.INPUT, [{ seq: i, mx: 0, mz: 1, yaw: Math.PI, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false }]); await sleep(16); }
 await sleep(300);
 const alice = (b.state as any).players.get(a.sessionId);
-assert(alice.z - startZ > 4 && alice.z - startZ < 6, `Bob sees Alice moved ~5m: ${(alice.z - startZ).toFixed(2)}`);
+assert(startZ - alice.z > 4 && startZ - alice.z < 6, `Bob sees Alice moved ~5m: ${(startZ - alice.z).toFixed(2)}`);
 assert(alice.lastSeq === 59, `server acked all inputs: ${alice.lastSeq}`);
 
 // Speed hack attempt: 200 inputs at once should NOT all be applied instantly
@@ -58,7 +59,7 @@ assert(evs.some((e) => e.t === "whiff" && e.p === a.sessionId), "grabbing a far 
 
 // Phase 2.5: pedestrians are synced
 const npcCount = (b.state as any).npcs.size;
-assert(npcCount === 37, `pedestrians + cashiers + the doorman + the fisherman synced to clients: ${npcCount} (20 + 15 + 2)`);
+assert(npcCount === 40, `pedestrians + cashiers + the doorman, fisherman, old lady, Uncle Dumpster and 2 bank guards synced to clients: ${npcCount} (20 + 14 + 6)`);
 {
   const st2: any = a.state;
   assert(st2.cars.size === CAR_COUNT, `traffic synced: ${st2.cars.size} cars`);

@@ -516,6 +516,159 @@ export function buildLootModel(scene: Scene, type: string, outlineColor?: Color3
       for (const [x, z] of [[-0.22, -0.32], [0.22, -0.32], [-0.22, 0.32], [0.22, 0.32]]) { const w = P(MB.CreateCylinder("w", { diameter: 0.14, height: 0.05, tessellation: 8 }, scene), "#1b1420", 0.01); w.rotation.z = Math.PI / 2; w.position.set(x, -0.52, z); }
       break;
     }
+    // ---- C4b: laundry finds + spray cans ----
+    case "odd_sock": {
+      const leg = P(MB.CreateBox("leg", { width: 0.08, height: 0.16, depth: 0.05 }, scene), "#ff8fa3", 0.01); leg.position.y = 0.03;
+      const foot = P(MB.CreateBox("foot", { width: 0.08, height: 0.06, depth: 0.14 }, scene), "#ff8fa3", 0.01); foot.position.set(0, -0.05, 0.05);
+      const stripe = P(MB.CreateBox("st", { width: 0.085, height: 0.03, depth: 0.055 }, scene), "#43c7a6", 0); stripe.position.y = 0.08;
+      break;
+    }
+    case "single_shoe": {
+      const sole = P(MB.CreateBox("sole", { width: 0.1, height: 0.03, depth: 0.26 }, scene), "#f4f1ea", 0.01); sole.position.y = -0.05;
+      const up = P(MB.CreateBox("up", { width: 0.1, height: 0.08, depth: 0.2 }, scene), "#d6264a", 0.012); up.position.set(0, 0.0, -0.02);
+      break;
+    }
+    case "novelty_undies": {
+      const b = P(MB.CreateBox("u", { width: 0.22, height: 0.12, depth: 0.03 }, scene), "#ffe14a", 0.01);
+      void b;
+      for (const x of [-0.06, 0.05]) { const dot = P(MB.CreateCylinder("pz", { diameter: 0.04, height: 0.035, tessellation: 3 }, scene), "#e14b4b", 0); dot.rotation.x = Math.PI / 2; dot.position.set(x, 0.01, 0); }
+      break;
+    }
+    case "fresh_laundry": case "designer_hoodie": {
+      const col = type === "designer_hoodie" ? "#1b1420" : "#4f7fd1";
+      const body = P(MB.CreateBox("h", { width: 0.28, height: 0.07, depth: 0.22 }, scene), col, 0.012); void body;
+      const hood = P(MB.CreateBox("hd", { width: 0.14, height: 0.05, depth: 0.08 }, scene), col, 0.01); hood.position.set(0, 0.05, -0.08);
+      if (type === "designer_hoodie") { const logo = P(MB.CreateBox("g", { width: 0.09, height: 0.075, depth: 0.09 }, scene), "#d9a632", 0); logo.position.set(0, 0.0, 0.04); }
+      else { const tag = P(MB.CreateBox("t", { width: 0.1, height: 0.075, depth: 0.03 }, scene), "#f4f1ea", 0); tag.position.set(0, 0.0, 0.1); }
+      break;
+    }
+    case "designer_scarf": {
+      for (let i = 0; i < 3; i++) { const seg = P(MB.CreateBox("s", { width: 0.07, height: 0.02, depth: 0.1 }, scene), i % 2 ? "#d9a632" : "#8a1f2e", 0.008); seg.position.set(-0.06 + i * 0.06, 0, (i % 2) * 0.03); seg.rotation.y = i * 0.5; }
+      break;
+    }
+    // ---- C5b: Chinatown ----
+    case "dumpling_box": {
+      P(MB.CreateBox("b", { width: 0.2, height: 0.08, depth: 0.14 }, scene), "#f4f1ea", 0.01);
+      for (let i = 0; i < 3; i++) { const dp = P(MB.CreateSphere("d", { diameter: 0.06, segments: 5 }, scene), "#f3e2b8", 0.005); dp.scaling.y = 0.6; dp.position.set(-0.06 + i * 0.06, 0.05, 0); }
+      const lid = P(MB.CreateBox("l", { width: 0.2, height: 0.01, depth: 0.05 }, scene), "#c0282a", 0); lid.position.set(0, 0.045, -0.06);
+      break;
+    }
+    case "bao_bun": {
+      const b = P(MB.CreateSphere("b", { diameter: 0.15, segments: 8 }, scene), "#f7efe0", 0.01); b.scaling.y = 0.7;
+      const top = P(MB.CreateSphere("t", { diameter: 0.04, segments: 4 }, scene), "#e8d8b0", 0); top.position.y = 0.05;
+      break;
+    }
+    case "fortune_cookie": {
+      const c = P(MB.CreateTorus("c", { diameter: 0.07, thickness: 0.04, tessellation: 8 }, scene), "#e8b45a", 0.008); c.scaling.set(1, 0.6, 1.4);
+      const slip = P(MB.CreateBox("s", { width: 0.06, height: 0.005, depth: 0.015 }, scene), "#f4f1ea", 0); slip.position.set(0.05, 0, 0);
+      break;
+    }
+    case "mooncake": {
+      P(MB.CreateCylinder("m", { diameter: 0.15, height: 0.06, tessellation: 12 }, scene), "#c98a2a", 0.01);
+      const pat = P(MB.CreateTorus("p", { diameter: 0.1, thickness: 0.012, tessellation: 12 }, scene), "#a8641e", 0); pat.position.y = 0.03;
+      break;
+    }
+    case "live_crab": {
+      const b = P(MB.CreateSphere("b", { diameter: 0.18, segments: 6 }, scene), "#e0502c", 0.01); b.scaling.y = 0.5;
+      for (const sx of [-1, 1]) {
+        const cl = P(MB.CreateSphere("c", { diameter: 0.07, segments: 5 }, scene), "#e0502c", 0.008); cl.position.set(sx * 0.1, 0.02, 0.09);
+        for (let k = 0; k < 3; k++) { const lg = P(MB.CreateBox("l", { width: 0.08, height: 0.012, depth: 0.012 }, scene), "#c8401e", 0); lg.position.set(sx * 0.1, -0.02, -0.04 + k * 0.04); lg.rotation.z = sx * 0.4; }
+      }
+      for (const sx of [-0.03, 0.03]) { const e = P(MB.CreateSphere("e", { diameter: 0.025, segments: 4 }, scene), "#1b1420", 0); e.position.set(sx, 0.05, 0.07); }
+      break;
+    }
+    case "paper_fan": {
+      const f = P(MB.CreateCylinder("f", { diameter: 0.26, height: 0.01, tessellation: 12, arc: 0.5 }, scene), "#c0282a", 0.008); void f;
+      const h = P(MB.CreateBox("h", { width: 0.015, height: 0.012, depth: 0.1 }, scene), "#8a5a3a", 0); h.position.set(0, 0, -0.04);
+      break;
+    }
+    case "lucky_cat": {
+      P(MB.CreateBox("b", { width: 0.14, height: 0.14, depth: 0.1 }, scene), "#f4f1ea", 0.01);
+      const hd = P(MB.CreateSphere("h", { diameter: 0.13, segments: 8 }, scene), "#f4f1ea", 0.01); hd.position.y = 0.12;
+      for (const sx of [-0.04, 0.04]) { const ear = P(MB.CreateCylinder("e", { diameterTop: 0, diameterBottom: 0.04, height: 0.04, tessellation: 4 }, scene), "#f4f1ea", 0.005); ear.position.set(sx, 0.18, 0); }
+      const paw = P(MB.CreateBox("p", { width: 0.035, height: 0.08, depth: 0.035 }, scene), "#f4f1ea", 0.005); paw.position.set(0.08, 0.14, 0.02);
+      const coin = P(MB.CreateCylinder("c", { diameter: 0.06, height: 0.01, tessellation: 10 }, scene), "#ffd54a", 0); coin.rotation.x = Math.PI / 2; coin.position.set(0, 0.0, 0.055);
+      const collar = P(MB.CreateBox("col", { width: 0.1, height: 0.015, depth: 0.08 }, scene), "#c0282a", 0); collar.position.y = 0.075;
+      break;
+    }
+    case "jade_dragon": {
+      const base = P(MB.CreateCylinder("base", { diameter: 0.4, height: 0.08, tessellation: 12 }, scene), "#5a3a2a", 0.02); base.position.y = -0.2;
+      for (let i = 0; i < 6; i++) { const seg = P(MB.CreateSphere("s", { diameter: 0.16 - i * 0.012, segments: 6 }, scene), "#3fae78", 0.01); seg.position.set(Math.sin(i * 1.1) * 0.12, -0.12 + i * 0.07, Math.cos(i * 1.1) * 0.08); }
+      const head = P(MB.CreateBox("h", { width: 0.12, height: 0.1, depth: 0.16 }, scene), "#3fae78", 0.01); head.position.set(0, 0.32, 0.06);
+      for (const sx of [-0.04, 0.04]) { const horn = P(MB.CreateCylinder("hr", { diameterTop: 0, diameterBottom: 0.025, height: 0.08, tessellation: 4 }, scene), "#e8b422", 0); horn.position.set(sx, 0.4, 0.02); }
+      break;
+    }
+    case "red_envelope": {
+      P(MB.CreateBox("e", { width: 0.1, height: 0.01, depth: 0.16 }, scene), "#d8261e", 0.008);
+      const g = P(MB.CreateBox("g", { width: 0.05, height: 0.012, depth: 0.05 }, scene), "#ffd54a", 0); g.position.set(0, 0.002, 0.02);
+      break;
+    }
+    // ---- C5c: the bank and the golden stashes ----
+    case "cash_bag": {
+      const b = P(MB.CreateSphere("b", { diameter: 0.26, segments: 8 }, scene), "#c9b98a", 0.012); b.scaling.y = 0.85;
+      const neck = P(MB.CreateCylinder("n", { diameterTop: 0.1, diameterBottom: 0.06, height: 0.07, tessellation: 8 }, scene), "#c9b98a", 0.008); neck.position.y = 0.13;
+      const tie = P(MB.CreateTorus("t", { diameter: 0.07, thickness: 0.015, tessellation: 10 }, scene), "#8a5a3a", 0); tie.position.y = 0.11;
+      const d = P(MB.CreateBox("d", { width: 0.02, height: 0.1, depth: 0.02 }, scene), "#2f7a4f", 0); d.position.set(0, 0.0, 0.112);
+      for (const y of [0.025, -0.025]) { const bar = P(MB.CreateBox("s", { width: 0.07, height: 0.016, depth: 0.02 }, scene), "#2f7a4f", 0); bar.position.set(0, y, 0.11); }
+      break;
+    }
+    case "pearl_necklace": {
+      for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, pr = P(MB.CreateSphere("p", { diameter: 0.035, segments: 5 }, scene), "#f7f3ec", 0.004); pr.position.set(Math.cos(a) * 0.08, 0, Math.sin(a) * 0.1); }
+      const cl = P(MB.CreateSphere("c", { diameter: 0.03, segments: 4 }, scene), "#ffd54a", 0); cl.position.set(0, 0, -0.1);
+      break;
+    }
+    case "bearer_bond": {
+      const sheet = P(MB.CreateBox("s", { width: 0.2, height: 0.008, depth: 0.14 }, scene), "#e8e0c8", 0.006); void sheet;
+      const border = P(MB.CreateBox("b", { width: 0.17, height: 0.01, depth: 0.11 }, scene), "#2f7a4f", 0); border.position.y = 0.001;
+      const inner = P(MB.CreateBox("i", { width: 0.15, height: 0.011, depth: 0.09 }, scene), "#e8e0c8", 0); inner.position.y = 0.002;
+      const seal = P(MB.CreateCylinder("se", { diameter: 0.035, height: 0.013, tessellation: 10 }, scene), "#c0282a", 0); seal.position.set(0.05, 0.004, -0.03);
+      break;
+    }
+    case "family_photo": {
+      P(MB.CreateBox("f", { width: 0.16, height: 0.2, depth: 0.02 }, scene), "#8a5a3a", 0.008);
+      const ph = P(MB.CreateBox("p", { width: 0.13, height: 0.16, depth: 0.022 }, scene), "#9fc8e0", 0); void ph;
+      for (let i = 0; i < 3; i++) { const hd = P(MB.CreateSphere("h", { diameter: 0.035, segments: 4 }, scene), "#f0c8a0", 0); hd.position.set(-0.04 + i * 0.04, 0.02, 0.013); const bd = P(MB.CreateBox("b", { width: 0.03, height: 0.05, depth: 0.004 }, scene), ["#c0282a", "#ffd54a", "#3d6fb5"][i], 0); bd.position.set(-0.04 + i * 0.04, -0.03, 0.012); }
+      break;
+    }
+    case "bank_keycard": {
+      P(MB.CreateBox("k", { width: 0.13, height: 0.008, depth: 0.085 }, scene), "#f4f1ea", 0.006);
+      const stripe = P(MB.CreateBox("s", { width: 0.13, height: 0.01, depth: 0.02 }, scene), "#1b1420", 0); stripe.position.z = -0.025;
+      const chip = P(MB.CreateBox("c", { width: 0.025, height: 0.011, depth: 0.02 }, scene), "#ffd54a", 0); chip.position.set(-0.035, 0, 0.015);
+      const logo = P(MB.CreateBox("l", { width: 0.03, height: 0.011, depth: 0.03 }, scene), "#2f7a4f", 0); logo.position.set(0.035, 0, 0.015);
+      const lanyard = P(MB.CreateTorus("y", { diameter: 0.12, thickness: 0.008, tessellation: 12 }, scene), "#c0282a", 0); lanyard.position.set(0, 0, 0.1);
+      break;
+    }
+    case "gold_nose": {
+      const n = P(MB.CreateSphere("n", { diameter: 0.18, segments: 10 }, scene), "#ffd54a", 0.01); n.scaling.set(0.85, 0.8, 1.5);
+      for (const sx of [-0.03, 0.03]) { const nos = P(MB.CreateSphere("h", { diameter: 0.03, segments: 4 }, scene), "#8a6a1a", 0); nos.position.set(sx, -0.05, 0.08); }
+      break;
+    }
+    case "mayors_medal": {
+      const m = P(MB.CreateCylinder("m", { diameter: 0.12, height: 0.02, tessellation: 16 }, scene), "#ffd54a", 0.008); m.rotation.x = Math.PI / 2;
+      const star = P(MB.CreateCylinder("s", { diameter: 0.07, height: 0.024, tessellation: 5 }, scene), "#e8b83a", 0); star.rotation.x = Math.PI / 2;
+      for (const [x, c] of [[-0.02, "#c0282a"], [0.02, "#3d6fb5"]] as const) { const rb = P(MB.CreateBox("r", { width: 0.035, height: 0.1, depth: 0.012 }, scene), c, 0.004); rb.position.set(x, 0.1, 0); }
+      break;
+    }
+    case "golden_toilet_seat": {
+      const ring = P(MB.CreateTorus("r", { diameter: 0.42, thickness: 0.09, tessellation: 20 }, scene), "#ffd54a", 0.015); ring.scaling.z = 1.25;
+      const lid = P(MB.CreateCylinder("l", { diameter: 0.5, height: 0.03, tessellation: 20 }, scene), "#e8b83a", 0.012); lid.scaling.z = 1.2; lid.position.set(0, 0.2, -0.26); lid.rotation.x = -1.35;
+      for (const sx of [-0.12, 0.12]) { const h = P(MB.CreateCylinder("h", { diameter: 0.05, height: 0.07, tessellation: 8 }, scene), "#c99a22", 0.006); h.rotation.z = Math.PI / 2; h.position.set(sx, 0.02, -0.28); }
+      break;
+    }
+    case "diamond_pigeon": {
+      const body = P(MB.CreatePolyhedron("b", { type: 1, size: 0.1 }, scene), "#bfe8ff", 0.008); body.scaling.set(1, 0.9, 1.5);
+      const head = P(MB.CreatePolyhedron("h", { type: 1, size: 0.05 }, scene), "#e8f7ff", 0.006); head.position.set(0, 0.1, 0.12);
+      const beak = P(MB.CreateCylinder("k", { diameterTop: 0, diameterBottom: 0.03, height: 0.05, tessellation: 4 }, scene), "#ffd54a", 0); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.1, 0.18);
+      const tail = P(MB.CreateBox("t", { width: 0.1, height: 0.02, depth: 0.1 }, scene), "#9fd4f0", 0.004); tail.position.set(0, 0.02, -0.16); tail.rotation.x = -0.3;
+      const base = P(MB.CreateCylinder("base", { diameter: 0.14, height: 0.03, tessellation: 12 }, scene), "#ffd54a", 0.006); base.position.y = -0.1;
+      break;
+    }
+    case "spray_can": {
+      P(MB.CreateCylinder("c", { diameter: 0.075, height: 0.18, tessellation: 12 }, scene), "#43c7a6", 0.01);
+      const cap = P(MB.CreateCylinder("cap", { diameter: 0.07, height: 0.04, tessellation: 12 }, scene), "#ff5a3c", 0.008); cap.position.y = 0.11;
+      const nz = P(MB.CreateBox("nz", { width: 0.02, height: 0.02, depth: 0.03 }, scene), "#f4f1ea", 0); nz.position.set(0, 0.14, 0.02);
+      break;
+    }
     default: {
       P(MB.CreateBox("unknown", { size: 0.4 }, scene), "#ff00ff");
     }

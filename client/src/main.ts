@@ -7,6 +7,8 @@ import { HOST_LEFT } from "./p2p/peerRoom.ts";
 import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
+import { drawCityMap, type MapMarker } from "./game/look.ts";
+import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST } from "@bfb/shared";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
@@ -163,7 +165,7 @@ async function startSolo() {
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
   $("lp-hint").textContent = "Press ENTER to start. Each cycle: 3 min scavenge, 1 min NIGHT scavenge (x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
-  $("mode-badge").textContent = "CITY C4a / SOLO";
+  $("mode-badge").textContent = "CITY C5c / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -265,6 +267,7 @@ function updateMatchHud(a: ArenaScene) {
     if (m.evKind === "truck") { ev = m.evStage === "warn" ? `GARBAGE TRUCK IN ${m.evT}s - CLEAR THE ROAD!` : "GARBAGE TRUCK ON THE ROAD!"; bad = true; }
     if (m.evKind === "airdrop") ev = m.evStage === "warn" ? `AIRDROP IN ${m.evT}s - WATCH FOR THE RED TARGET` : "AIRDROP CRATE FALLING - FIND THE RED TARGET!";
     if (m.evKind === "raccoons") { ev = m.evStage === "warn" ? "RACCOONS INCOMING..." : "RACCOONS ARE RAIDING THE FORTS!"; bad = true; }
+    if (m.evKind === "parade") ev = m.evStage === "warn" ? `DRAGON PARADE IN CHINATOWN IN ${m.evT}s` : "DRAGON PARADE IN CHINATOWN: GRAB THE RED ENVELOPES!";
   }
   if (ev + bad !== eventSig) {
     eventSig = ev + bad;
@@ -331,14 +334,14 @@ function updateMatchHud(a: ArenaScene) {
 
 function renderTally(a: ArenaScene, starter: boolean) {
   const m = a.match;
-  let lines: { id: string; name: string; colorIdx: number; banked: number; bankedValue: number; lost: number; lostValue: number; stolen: number; cash: number }[] = [];
+  let lines: { id: string; name: string; colorIdx: number; banked: number; bankedValue: number; lost: number; lostValue: number; stolen: number; cash: number; aura?: number }[] = [];
   try { lines = JSON.parse(m.results || "[]"); } catch { /* keep empty */ }
   const over = m.phase === "over";
   $("tally-title").textContent = over ? `RICHEST BANDIT: ${lines[0]?.name ?? "?"}` : `CYCLE ${m.round}: SUNRISE`;
   const table = $("tally-table") as HTMLTableElement;
   table.innerHTML = "";
   const head = table.insertRow();
-  for (const h of over ? ["BANDIT", "LOST", "CASH"] : ["BANDIT", "FORT LOOT", "LOST", "CASH"]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+  for (const h of over ? ["BANDIT", "LOST", "AURA", "CASH"] : ["BANDIT", "FORT LOOT", "LOST", "AURA", "CASH"]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
   lines.forEach((l, i) => {
     const tr = table.insertRow();
     if (i === 0 && over) tr.className = "winner";
@@ -348,6 +351,7 @@ function renderTally(a: ArenaScene, starter: boolean) {
     if (!over) { const b = tr.insertCell(); b.className = "money"; b.textContent = `$${l.bankedValue}` + (l.banked ? ` (${l.banked})` : ""); }
     const lost = tr.insertCell(); lost.className = l.lost || l.stolen ? "neg" : "";
     lost.textContent = [l.lost ? `${l.lost} item${l.lost > 1 ? "s" : ""}` : "", l.stolen ? `${l.stolen} to raccoons` : ""].filter(Boolean).join(", ") || "-";
+    const au = tr.insertCell(); au.className = "aura"; au.textContent = l.aura ? `${l.aura}` : "-"; // (C4b: tags sprayed; the race for Mayor uses these later)
     const tot = tr.insertCell(); tot.className = "money"; tot.textContent = "$" + l.cash;
   });
   $("tally-foot").textContent = over
@@ -437,7 +441,7 @@ async function enterOnline(r: GameRoom) {
   $("lp-title").textContent = "LOBBY";
   show("lp-code-row");
   $("lp-code").textContent = r.roomId;
-  $("mode-badge").textContent = r.isHost ? "CITY C4a / HOSTING" : "CITY C4a / ONLINE";
+  $("mode-badge").textContent = r.isHost ? "CITY C5c / HOSTING" : "CITY C5c / ONLINE";
 
   r.onMessage(MSG.ANNOUNCE, (m: { text: string }) => toast(m.text));
   r.onDrop(() => {
@@ -692,6 +696,88 @@ window.addEventListener("keydown", (e) => {
 });
 
 // ---------------------------------------------------------------------------
+// C5a: the lobby squat panel (what's up here, the mini-game you're in, everyone's bests) and the M-key map
+function netView(): any { return local ? local.view : room?.state; }
+function myPlayerId(): string { return local ? SOLO_ID : room?.sessionId ?? ""; }
+let squatSig = "";
+function updateLobbyHud(a: ArenaScene) {
+  const v = netView(), L = a.arenaLayout.lobby, m = a.moveState;
+  const me = v?.players?.get(myPlayerId());
+  const up = !!L && !!m && !!me && inLobby(a.arenaLayout, m.x, m.z, 3) && m.y > L.y - 4;
+  if (!up) { if (squatSig !== "") { squatSig = ""; show("lobby-hud", false); } return; }
+  const g = String(me.lg ?? "");
+  const rows: [string, number, number][] = [];
+  v.players.forEach((p: any) => rows.push([p.name, p.tb ?? 0, p.rb ?? 0]));
+  const phase = a.match.phase ?? "lobby";
+  const sig = g + "|" + rows.map((r) => r.join(",")).join(";") + "|" + phase;
+  if (sig === squatSig) return;
+  squatSig = sig;
+  const el = $("lobby-hud");
+  el.innerHTML = "";
+  const h = document.createElement("h3"); h.textContent = "THE SQUAT"; el.append(h);
+  const sub = document.createElement("div"); sub.className = "dim";
+  sub.textContent = phase === "lobby" ? "Waiting for the match. Practise, race, throw. Nothing up here counts." : "Nothing up here counts.";
+  el.append(sub);
+  if (g) {
+    const [kind, secs, n] = g.split(":");
+    const box = document.createElement("div"); box.className = "game";
+    box.textContent = kind === "throw" ? `THROW-O-MATIC  ${Math.max(0, 30 - Number(secs))}s  ${n} pts` : `GRAND PRIX  ${secs}s  cone ${Math.min(4, Number(n))}/4`;
+    el.append(box);
+  }
+  const tbl = document.createElement("div");
+  const head = document.createElement("div"); head.className = "row dim"; head.innerHTML = "<span>BANDIT</span><span>THROW</span><span>LAP</span>"; tbl.append(head);
+  for (const [name, tb, rb] of rows) {
+    const r = document.createElement("div"); r.className = "row";
+    for (const t of [name, tb ? String(tb) : "-", rb ? rb.toFixed(1) + "s" : "-"]) { const c = document.createElement("span"); c.textContent = t; r.append(c); }
+    tbl.append(r);
+  }
+  el.append(tbl);
+  show("lobby-hud", true);
+}
+let mapOpen = false, mapT = 0;
+const roughSpots = new Map<string, { slot: number; x: number; z: number; r: number }>();
+function drawMap(a: ArenaScene) {
+  const cv = $("city-map") as HTMLCanvasElement, c = cv.getContext("2d");
+  if (!c) return;
+  const v = netView(), markers: MapMarker[] = [];
+  // (C5c.1: you always; other bandits only once they're WANTED: 1-2 stars = a rough area that moves every 8 s,
+  //  3 stars = exactly where they are. Stars and bounty under the name.)
+  const slot = Math.floor(performance.now() / 8000);
+  v?.players?.forEach((p: any, id: string) => {
+    const mine = id === myPlayerId(), m = mine ? a.moveState : null;
+    const heat = p.heat ?? 0, st = starsOf(heat), color = MAP_COLORS[p.colorIdx % MAP_COLORS.length];
+    const wanted = st > 0 && (p.jailT ?? 0) <= 0 ? `${"\u2605".repeat(st)} $${Math.round(heat * ARREST.perHeat)}` : undefined;
+    if (mine) { markers.push({ x: m?.x ?? p.x, z: m?.z ?? p.z, yaw: m?.yaw ?? p.yaw, color, label: "YOU", me: true, wanted }); return; }
+    if (!wanted || !p.connected) return;
+    if (st >= 3) { markers.push({ x: p.x, z: p.z, yaw: p.yaw, color, label: p.name, wanted }); return; }
+    const cached = roughSpots.get(id);
+    let spot = cached && cached.slot === slot ? cached : null;
+    if (!spot) {
+      const r = st === 1 ? 26 : 16, h = [...(id + slot)].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7);
+      const ang = (h % 360) * Math.PI / 180, off = ((h >> 9) % 100) / 100 * r * 0.7; // (you're somewhere inside the circle, not at its middle)
+      spot = { slot, x: p.x + Math.cos(ang) * off, z: p.z + Math.sin(ang) * off, r };
+      roughSpots.set(id, spot);
+    }
+    markers.push({ x: spot.x, z: spot.z, color, label: p.name, wanted, area: spot.r });
+  });
+  drawCityMap(c, a.arenaLayout, cv.width, { markers, extraSouth: 30 });
+}
+function toggleMap(force?: boolean) {
+  mapOpen = force ?? !mapOpen;
+  show("map-wrap", mapOpen);
+  if (mapOpen && arena) { mapT = 0; drawMap(arena); }
+}
+window.addEventListener("keydown", (e) => { // (C5c.1: held down for the cops: SPACE wriggles)
+  if (e.code === "Space" && !e.repeat && screen === "playing" && arena?.pinBy) arena.struggle();
+});
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "KeyM" || e.repeat || screen !== "playing" || !arena) return;
+  const tgt = e.target as HTMLElement | null;
+  if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA")) return;
+  toggleMap();
+});
+
+// ---------------------------------------------------------------------------
 // HUD (5A.1): health (heart) + stamina (lightning bolt) bars bottom-left, dodge-ready "Q" chip
 let hudStaminaShown = -1, hudHpShown = -1, hpLag = 100;
 function updateHud(a: ArenaScene) {
@@ -713,6 +799,8 @@ function updateHud(a: ArenaScene) {
     $("health").classList.toggle("low", hp > 0 && hp <= 34);
   }
   $("hp-lag").style.width = hpLag.toFixed(1) + "%";
+  updateLobbyHud(a);
+  if (mapOpen) { mapT -= engine.getDeltaTime() / 1000; if (mapT <= 0) { mapT = 0.1; drawMap(a); } }
 
   // Look prompt: "[E] Grab Old CRT TV  $34"
   const t = a.lookTarget;
@@ -722,7 +810,9 @@ function updateHud(a: ArenaScene) {
   const robbing = a.robT >= 0;
   const rt = a.robTarget;
   const jailed = a.jailT > 0;
-  const sig = jailed ? "jail" : robbing ? "rob" : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : "";
+  const tagT = a.tagTarget, tagHolding = a.throwCharge >= 0 && !!tagT && a.canUses > 0;
+  const at = a.arrestTarget;
+  const sig = jailed ? "jail" : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
     const key = document.createElement("span"); key.className = "key"; key.textContent = keyText;
@@ -735,15 +825,31 @@ function updateHud(a: ArenaScene) {
   if (sig !== promptSig) {
     promptSig = sig;
     if (jailed) prompt.classList.add("hidden");
+    else if (a.pinBy) simple("SPACE", " PINNED! Mash to wriggle free ", "", `${Math.round(a.pinS * 100)}% free - or hope a friend knocks them off you`);
+    else if (a.pinOn) simple("", " Holding them down for the cops... ", "", "don't move! (they're wriggling; the cops are on their way)");
+    else if (a.arrestTarget) simple("E", " Citizen's arrest: ", a.arrestTarget.name, `hold them down for the cops: bounty $${a.arrestTarget.bounty} (taken off them)`);
+    else if (robbing && a.openingMachine) simple("E", " Opening quietly... ", "", "don't move! (or punch it open: quick but LOUD)");
+    else if (robbing && a.holdKind === "vaultdoor") simple("E", " DRILLING THE VAULT... ", "", "keep still! 20 s. Alarms are ringing, the guards are coming!");
+    else if (robbing && a.holdKind === "keycard") simple("E", " Swiping the keycard... ", "", "quietly... (don't let a guard see)");
+    else if (robbing && a.holdKind === "nose") simple("E", " Prising off the gold nose... ", "", "keep still! (heat if anyone sees)");
     else if (robbing) simple("HOLD R", " Robbing ", "the till", "keep holding... don't move!");
+    else if (!t && ut && (ut.kind === "steamer" || ut.kind === "trinkets")) simple("E", " Help yourself: ", ut.name, ut.empty ? "SOLD OUT - more soon" : ut.kind === "steamer" ? "dumplings, buns, mooncakes (the stall keeper yells if anyone sees)" : "fans, fortune cookies, lucky cats... (the stall keeper yells if anyone sees)");
+    else if (!t && ut && ut.kind === "vaultdoor") simple("E", a.carryingType("bank_keycard") ? " Swipe the keycard: " : " Drill ", ut.name, ut.empty ? "OPEN (it shuts again at dawn)" : a.carryingType("bank_keycard") ? "opens quietly in 3 s" : "20 s, LOUD: alarms, 3 stars, the guards come. (Find the manager's keycard for a quiet job)");
+    else if (!t && ut && ut.kind === "nose") simple("E", " Prise off ", ut.name, ut.empty ? "already gone (glued back at dawn)" : "5 s. A golden prize (heat if anyone sees)");
+    else if (!t && ut && ut.kind === "depositbox") simple("E", " Open ", ut.name, ut.empty ? "EMPTY (new deposits tomorrow)" : "someone's valuables...");
+    else if (!t && ut && ut.kind === "stash") simple("E", " Search ", ut.name, ut.empty ? "found already today" : "something glints behind it...");
+    else if (!t && ut && ut.kind === "throwgame") simple("E", " Play ", ut.name, "30 s: throw bin lids at the 3 targets (bullseye = 3 points)");
+    else if (!t && ut && ut.kind === "racegame") simple("E", " Race ", ut.name, "drag a trolley round the 4 cones and back here");
+    else if (!t && ut && (ut.kind === "washer" || ut.kind === "dryer")) simple("E", " Open ", ut.name, ut.empty ? "EMPTIED - new loads tomorrow" : "quietly (2 s) - or PUNCH it open: fast but loud");
     else if (!t && ut) simple("E", " Search ", ut.name, ut.empty ? "EMPTY - refills later" : "random junk inside (maybe treasure, maybe a raccoon)");
     else if (!t && rt) simple("HOLD R", " Rob ", "the till", rt.empty ? "EMPTY right now (refills later)" : "3 s hold-up: sets off the alarm");
     else if (!t && pt?.prop) {
-      simple("CLICK", " Smash ", pt.name, pt.empty ? "already smashed - comes back later" : pt.kind === "car" ? "grab what's on the seat (car alarm!)" : "loot inside");
+      simple("CLICK", pt.kind === "washer" || pt.kind === "dryer" ? " Force open " : " Smash ", pt.name, pt.empty ? "already smashed - comes back later" : pt.kind === "car" ? "grab what's on the seat (car alarm!)" : pt.kind === "dummy" ? "practice your punches (nothing counts up here)" : pt.kind === "fishtank" ? "SPLASH: live crabs inside (loud!)" : pt.kind === "washer" || pt.kind === "dryer" ? "LOUD: wakes the old lady upstairs" : "loot inside");
     } else if (!t && pt) {
       // "[CLICK] Bonk Gym Bro  - fights back!"
       simple("CLICK", " Bonk ", pt.name, pt.kind === "bodyguard" ? "protects the boss: hits hard" : pt.kind === "cashier" ? "drops the float... and sets off the alarm" : pt.kind === "cop" ? "RESISTING ARREST: huge heat, 3 hits to drop them" : pt.fighter ? "FIGHTS BACK - land 2 hits before they do" : "might drop something");
-    } else if (!t) prompt.classList.add("hidden");
+    } else if (!t && tagT) simple("HOLD E", tagHolding ? " Tagging... " : " Tag ", tagHolding ? "" : "this wall", `${a.canUses} tag${a.canUses === 1 ? "" : "s"} left in the can: +1 aura each (heat if anyone sees)`);
+    else if (!t) prompt.classList.add("hidden");
     else {
       const d = t.def;
       const rarity = d.mystery && d.rarity !== "common" ? "mystery" : d.rarity;
@@ -933,6 +1039,18 @@ enterTitle();
     worldProp: (id: string) => { const ps = local?.world.props.props.get(id); return ps ? { ready: ps.ready, hp: ps.hp } : null; },
     worldMe: () => { const p = local?.world.players.get(SOLO_ID); return p ? { x: p.move.x, z: p.move.z, knockT: p.move.knockT, punchCd: p.punchCd, hand: p.hand, sel: p.sel, respawnT: p.respawnT, connected: p.connected } : null; },
     blockedAt: (x: number, z: number) => { const a = arena?.arenaLayout; if (!a) return null; return nearBoxes(a, x, z, 0.1).some((b) => Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2 && b.y - b.h / 2 < 1 && b.y + b.h / 2 > 0.3); },
+    // C5a: the lobby squat and the map
+    lobby: () => { const me = netView()?.players?.get(myPlayerId()); const m = arena?.moveState; return { phase: arena?.match.phase ?? null, onRoof: !!(arena && m && inLobby(arena.arenaLayout, m.x, m.z, 3) && m.y > 20), y: m?.y ?? null, tb: me?.tb ?? 0, rb: me?.rb ?? 0, lg: me?.lg ?? "", hud: !$("lobby-hud").classList.contains("hidden") }; },
+    mapOpen: () => mapOpen,
+    forceNight: (on: boolean) => { if (arena) arena.forceNight = on; },
+    toggleMap: (on?: boolean) => toggleMap(on),
+    lobbyNpc: () => { const out: any[] = []; netView()?.npcs?.forEach((n: any, id: string) => { if (n.kind === "uncle_dumpster") out.push({ id, x: n.x, y: n.y, z: n.z, state: n.state }); }); return out[0] ?? null; },
+    // C4b: tags on walls, my aura, and a noise (solo) to wake the old lady
+    tags: () => { const out: any[] = []; const v: any = local ? local.view : room?.state; v?.tags?.forEach((t: any, id: string) => out.push({ id, ...t })); return out; },
+    aura: () => { const v: any = local ? local.view : room?.state; return v?.players?.get(local ? SOLO_ID : room?.sessionId)?.aura ?? null; },
+    noise: (x: number, z: number, r: number) => { const w = local?.world; const p = w?.players.get(SOLO_ID); if (w && p) w.noise(p, x, z, r); },
+    canUses: () => (arena as any)?.canUses ?? -1,
+    tagAim: () => !!(arena as any)?.tagTarget,
     // C3: the park's pigeons
     pigeons: () => ({ count: arena?.city.pigeonCount ?? 0, flying: arena?.city.pigeonsFlying ?? 0, scatters: arena?.city.scatters ?? 0 }),
     units: () => (arena as any)?.arena?.units?.map((u: any) => ({ id: u.id, name: u.name, use: u.use, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, upper: u.upper, access: u.access })) ?? [],
@@ -989,9 +1107,12 @@ enterTitle();
     punchTarget: () => arena?.punchTarget ?? null,
     heat: () => arena?.heat ?? null,
     // ---- Phase 4 police + jail
+    finishHold: (id: string, quiet = false) => { const w = local?.world; const ps = w?.props.props.get(id); if (w && ps) w.props.finishHold(w.players.get(SOLO_ID)!, ps, quiet); return !!ps; },
     setHeat: (v: number) => { if (local) { const p = local.world.players.get(SOLO_ID)!; p.notoriety = 0; local.world.addHeat(p, v); } else room?.send("dbg", { op: "heat", v }); },
     bust: () => { if (local) local.world.police.bust(local.world.players.get(SOLO_ID)!, "test", false); else room?.send("dbg", { op: "bust" }); },
     setJailTime: (t: number) => { if (local) { const p = local.world.players.get(SOLO_ID)!; if (p.jailT > 0) p.jailT = t; } else room?.send("dbg", { op: "jailTime", t }); },
+    knockMe: (t: number) => { if (local) { const p = local.world.players.get(SOLO_ID)!; p.move.knockT = t; p.hp = 0; } else room?.send("dbg", { op: "knock", t }); },
+    arrest: () => arena ? { target: arena.arrestTarget, pinOn: arena.pinOn, pinBy: arena.pinBy, pinS: arena.pinS, others: [...arena.others].map(([id, o]) => ({ id, ...o })) } : null,
     clearCops: () => { if (local) local.world.police.reset(); else room?.send("dbg", { op: "clearCops" }); },
     jail: () => arena ? { jailT: arena.jailT, seed: arena.lockSeed, open: arena.lock.open, set: arena.lock.run?.set ?? 0, pins: arena.lock.run?.def.pins.length ?? 0, sel: arena.lock.sel, history: [...arena.lock.history], solved: !!arena.lock.run?.solved, noise: arena.lock.run?.noise ?? 0, cx: arena.lock.cx, cy: arena.lock.cy, hover: arena.lock.hoverPin() } : null,
     /** Pick the lock perfectly THROUGH the real UI (keys + timing), like a very good player. */

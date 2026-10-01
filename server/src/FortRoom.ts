@@ -17,7 +17,7 @@ export class FortRoom extends Room<{ state: FortRoomState }> {
   state = new FortRoomState();
   // Generous flood limit: 60 input packets/s + actions. Abusive clients get disconnected.
   maxMessagesPerSecond = 180;
-  private world = new World({ seed: (Math.random() * 2 ** 31) | 0 });
+  private world = new World({ seed: (Math.random() * 2 ** 31) | 0, lobby: true });
   private pendingEvents: WorldEvent[] = [];
 
   onCreate() {

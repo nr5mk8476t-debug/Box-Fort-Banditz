@@ -1,7 +1,7 @@
 // Simple, deterministic physics for loose items (thrown, dropped, bouncing).
 // Items are spheres for collision (cheap and stable); they look like TVs and chickens.
 // Shared by the server and solo mode, and by the client to predict your own throws.
-import { nearBoxes, type ArenaLayout, type Box } from "./arena.js";
+import { nearBoxes, inLobby, type ArenaLayout, type Box } from "./arena.js";
 
 export interface ItemBody {
   x: number; y: number; z: number; // centre of the collision sphere
@@ -102,7 +102,7 @@ export function stepItem(b: ItemBody, radius: number, bounce: number, arena: Are
     }
   }
   const lim = arena.halfSize + 2;
-  if (!Number.isFinite(b.x + b.y + b.z) || b.y < -5 || Math.abs(b.x) > lim || Math.abs(b.z) > lim) res.outOfBounds = true;
+  if (!Number.isFinite(b.x + b.y + b.z) || b.y < -5 || ((Math.abs(b.x) > lim || Math.abs(b.z) > lim) && !inLobby(arena, b.x, b.z, 1))) res.outOfBounds = true;
   return res;
 }
 

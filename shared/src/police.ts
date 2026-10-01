@@ -399,6 +399,7 @@ export class PoliceSystem {
     if (p.jailT > 0 || p.respawnT > 0) return;
     w.props.cancelRob(p);
     const { count, value } = w.confiscateAll(p);
+    w.payBounty(p, value); // (C5c.1: somebody held them down for us)
     p.notoriety = 0; p.seenT = -99;
     const cells = w.arena.station?.cells ?? [];
     const taken = new Set([...w.players.values()].filter((o) => o !== p && o.jailT > 0).map((o) => o.jailCell));

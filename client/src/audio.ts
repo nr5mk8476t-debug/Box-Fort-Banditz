@@ -84,8 +84,9 @@ function blip(freq: number, dur: number, type: OscillatorType, vol: number, slid
 }
 
 let noiseBuf: AudioBuffer | null = null;
-function noise(dur: number, vol: number, filterFreq: number, when = 0, q = 1) {
-  if (!ctx) return;
+let sprayHiss: AudioBufferSourceNode | null = null;
+function noise(dur: number, vol: number, filterFreq: number, when = 0, q = 1): AudioBufferSourceNode | null {
+  if (!ctx) return null;
   if (!noiseBuf) {
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
@@ -103,6 +104,7 @@ function noise(dur: number, vol: number, filterFreq: number, when = 0, q = 1) {
   src.connect(f).connect(g).connect(sfxBus);
   src.start(t, Math.random() * 0.5);
   src.stop(t + dur + 0.05);
+  return src;
 }
 
 export const sfx = {
@@ -190,10 +192,32 @@ export const sfx = {
   chitter(gain = 1) { for (let i = 0; i < 5; i++) blip(1800 + Math.random() * 900, 0.04, "square", 0.04 * gain, 2600, i * 0.06); },
   // ---- Phase 3.5: loot sources, hold-ups, traffic ----
   search(gain = 1) { noise(0.35, 0.14 * gain, 900, 0, 0.6); blip(140, 0.12, "square", 0.06 * gain, 90, 0.05); noise(0.1, 0.1 * gain, 3000, 0.3); },
+  // C4b: spray paint: a rattle, then a hiss while you hold it (cut short if you let go)
+  spray(gain = 1) {
+    for (let i = 0; i < 3; i++) blip(2600, 0.03, "square", 0.03 * gain, 1800, i * 0.07);
+    sprayHiss?.stop(); sprayHiss = noise(1.6, 0.09 * gain, 6500, 0.22, 0.7);
+  },
+  sprayStop() { try { sprayHiss?.stop(); } catch { /* already done */ } sprayHiss = null; },
+  // C5b: Chinatown: the parade's drum and gong, firecrackers, a seafood tank bursting
+  drum(gain = 1) { blip(80, 0.18, "sine", 0.22 * gain, 50); noise(0.06, 0.08 * gain, 300); },
+  gong() { [98, 147, 196].forEach((f, i) => blip(f, 2.2, "sine", 0.1, f * 0.97, i * 0.01)); noise(0.4, 0.05, 2500); },
+  firecracker(gain = 1) { for (let i = 0; i < 9; i++) noise(0.04, 0.2 * gain, 4000, i * 0.07 + Math.random() * 0.04, 2); },
+  // C5c: the bank heist + golden stashes
+  drill(gain = 1) { blip(180 + Math.random() * 30, 0.4, "sawtooth", 0.05 * gain, 220); noise(0.35, 0.1 * gain, 4200, 0, 2); },
+  vault(gain = 1) { noise(0.6, 0.2 * gain, 250, 0, 0.6); blip(70, 0.8, "sine", 0.2 * gain, 45); [523, 659, 784, 1046].forEach((f, i) => blip(f, 0.14, "triangle", 0.08 * gain, undefined, 0.6 + i * 0.08)); },
+  stash(gain = 1) { [1318, 1568, 2093, 2637].forEach((f, i) => blip(f, 0.12, "sine", 0.08 * gain, undefined, i * 0.06)); noise(0.2, 0.04 * gain, 7000, 0.2); },
+  // C5a: the lobby mini-games
+  target(pts: number, gain = 1) { noise(0.06, 0.12 * gain, 2200); blip(pts === 3 ? 1318 : 880, 0.08, "square", 0.08 * gain); if (pts === 3) blip(1760, 0.14, "square", 0.08 * gain, undefined, 0.08); },
+  gameStart() { [392, 523, 659].forEach((f, i) => blip(f, 0.1, "square", 0.08, undefined, i * 0.12)); blip(1046, 0.3, "square", 0.08, undefined, 0.4); },
+  checkpoint() { blip(988, 0.07, "triangle", 0.1); blip(1318, 0.1, "triangle", 0.1, undefined, 0.07); },
+  gameDone() { [523, 659, 784, 1046, 784, 1046].forEach((f, i) => blip(f, 0.1, "triangle", 0.1, undefined, i * 0.09)); },
+  // C4b: the old lady yelling out of her window
+  oldLady(gain = 1) { [620, 540, 700, 480].forEach((f, i) => blip(f, 0.12, "sawtooth", 0.05 * gain, f * 0.8, i * 0.14)); },
   smash(kind: string, gain = 1) {
     // C4a: glass shatters, wood cracks, a hydrant clanks
     if (kind === "shopglass" || kind === "busstop") { noise(0.5, 0.28 * gain, 6000, 0, 3); [2637, 3136, 2349, 3520].forEach((f, i) => blip(f, 0.12, "triangle", 0.05 * gain, undefined, 0.05 + i * 0.07)); return; }
     if (kind === "bench" || kind === "pallet" || kind === "table") { noise(0.18, 0.22 * gain, 1400, 0, 1); blip(180, 0.15, "square", 0.08 * gain, 90); return; }
+    if (kind === "fishtank") { noise(0.4, 0.25 * gain, 5000, 0, 3); noise(1.0, 0.12 * gain, 900, 0.1, 0.5); return; } // (glass, then a big splash)
     if (kind === "hydrant") { blip(520, 0.3, "square", 0.08 * gain, 260); noise(1.2, 0.12 * gain, 2500, 0.1, 0.5); return; }
     if (kind === "car" || kind === "vending" || kind === "phone") { noise(0.3, 0.2 * gain, 5200, 0, 2); blip(2400, 0.2, "triangle", 0.06 * gain, 1200, 0.02); }
     blip(kind === "meter" ? 900 : 300, 0.2, "square", 0.08 * gain, kind === "meter" ? 600 : 160);

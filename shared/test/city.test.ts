@@ -29,13 +29,13 @@ function faceProp(w: World, id: string, d: PropDef, gap = 1.0) {
 const propsOf = (w: World, kind: string) => (w.arena.props ?? []).filter((p) => p.kind === kind);
 const count = (w: World, type: string) => [...w.items.values()].filter((i) => i.type === type).length;
 
-test("city (Slice 2A, C1 layout): ~230 m, towers, 15 shops with cashiers, roads with crosswalks, every kind of loot source", () => {
+test("city (Slice 2A, C1 layout): ~230 m, towers, 14 shops with cashiers (C4b: the laundromat has none), roads with crosswalks, every kind of loot source", () => {
   const c = buildTrashington();
   assert.equal(c.halfSize, 115);
   const towers = c.boxes.filter((b) => b.kind === "tower");
   assert.ok(towers.length >= 20, `mostly towers (${towers.length})`);
   assert.ok(Math.max(...towers.map((b) => b.y + b.h / 2)) >= 50, "some are really tall");
-  assert.equal(c.shops!.length, 15);
+  assert.equal(c.shops!.length, 14);
   assert.equal(c.units!.length, 20);
   assert.equal(c.units!.filter((u) => u.use === "closed").length, 4, "bank, 2 clubs, bar: closed until their slices");
   for (const sh of c.shops!) {
@@ -54,7 +54,8 @@ test("city (Slice 2A, C1 layout): ~230 m, towers, 15 shops with cashiers, roads 
   // the landmarks tests rely on are open ground
   const solid = c.boxes.filter((b) => b.y + b.h / 2 > 0.4);
   for (const [name, lm] of Object.entries(c.landmarks!)) {
-    assert.ok(!solid.some((b) => Math.abs(lm.x - b.x) < b.w / 2 + 0.4 && Math.abs(lm.z - b.z) < b.d / 2 + 0.4 && b.y - b.h / 2 < 1.8), `landmark ${name} is clear`);
+    const y0 = (lm as { y?: number }).y ?? 0; // (C5a: the squat's spot is on its roof)
+    assert.ok(!solid.some((b) => Math.abs(lm.x - b.x) < b.w / 2 + 0.4 && Math.abs(lm.z - b.z) < b.d / 2 + 0.4 && b.y + b.h / 2 > y0 + 0.4 && b.y - b.h / 2 < y0 + 1.8), `landmark ${name} is clear`);
   }
 });
 
@@ -316,7 +317,7 @@ test("2A: every shop and lobby can be walked into from the street, and out the b
 test("2A: every upstairs can be reached: inside stairs climb to the floor above, fire escapes lead to the back door", () => {
   const c = buildTrashington();
   const ups = c.units!.filter((u) => u.upper);
-  assert.equal(ups.length, 8, "stockrooms (3: C1 gave Cracked Screens one), offices, apartments (3), the gym");
+  assert.equal(ups.length, 9, "stockrooms (3: C1 gave Cracked Screens one), offices, apartments (4: C4b the old lady above the laundromat), the gym");
   for (const u of ups) {
     const P = unitP(u);
     const hw = UNIT.w / 2, run = UNIT.stepRun * UNIT.steps;
@@ -348,7 +349,7 @@ test("2A: loot is mostly indoors (shops + upstairs), and there's loot upstairs",
   for (const seed of [1, 2, 3]) {
     const w = new World({ seed, npcs: 0 });
     const c = w.arena;
-    const indoor = (x: number, z: number) => c.units!.some((u) => inRect(u.rect, x, z)) || c.shops!.some((s) => inRect(s.rect, x, z, 1.5));
+    const indoor = (x: number, z: number) => c.units!.some((u) => inRect(u.rect, x, z)) || c.shops!.some((s) => inRect(s.rect, x, z, 1.5)) || (!!c.bank && inRect(c.bank.rect, x, z)); // (C5c: the bank)
     for (const it of w.items.values()) {
       if (indoor(it.body.x, it.body.z)) vin += it.value; else vout += it.value;
       if (it.body.y > UNIT.upper) up++;
@@ -394,16 +395,19 @@ test("2A: the pond: you wade through it slowly, pedestrians walk round it", () =
 });
 
 test("2A: pedestrians wander into shops (and back out)", () => {
-  const w = new World({ seed: 6 });
-  const units = w.arena.units!.filter((u) => u.use === "shop");
+  // (C4b: two 3-minute crowds: one crowd can happen to visit only 2 shops; across 8 seeds it's 2-7)
   const visited = new Set<string>();
-  for (let i = 0; i < 60 * 180; i++) {
-    w.tick(); w.takeEvents();
-    if (i % 30) continue;
-    for (const n of w.npc.npcs.values()) {
-      if (n.kind === "cashier") continue;
-      for (const u of units) if (inRect(u.rect, n.move.x, n.move.z, -1)) visited.add(u.name);
+  for (const seed of [6, 8]) {
+    const w = new World({ seed });
+    const units = w.arena.units!.filter((u) => u.use === "shop");
+    for (let i = 0; i < 60 * 180; i++) {
+      w.tick(); w.takeEvents();
+      if (i % 30) continue;
+      for (const n of w.npc.npcs.values()) {
+        if (n.kind === "cashier") continue;
+        for (const u of units) if (inRect(u.rect, n.move.x, n.move.z, -1)) visited.add(u.name);
+      }
     }
   }
-  assert.ok(visited.size >= 3, `pedestrians went into ${[...visited].join(", ") || "no shops"}`);
+  assert.ok(visited.size >= 4, `pedestrians went into ${[...visited].join(", ") || "no shops"}`);
 });

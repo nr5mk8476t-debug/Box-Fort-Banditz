@@ -7,7 +7,13 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   // C1.1: the apartment tower's doorman (stands at his door, very snooty, fights back)
   | "doorman"
   // C3: the park's fisherman (sits on his jetty, hates noise, whacks you with his rod)
-  | "fisherman";
+  | "fisherman"
+  // C4b: lives above the laundromat; noise wakes her, she yells, calls the cops and comes down with her cane
+  | "old_lady"
+  // C5a: the lobby squat's mentor: a grubby, wise old hobo in a bathrobe who talks about trash like a kung-fu master
+  | "uncle_dumpster"
+  // C5c: the Trashington Bank's guards (come for you when the vault alarm goes)
+  | "bank_guard";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -24,6 +30,8 @@ export interface NpcDef {
   dodge: number;
   /** extra notoriety when you hit this one (mall cop reports you) */
   notoriety: number;
+  /** C4b: chase speed (m/s) if not the usual 5.6 */
+  chase?: number;
   spawnWeight: number;
   loot: [string, number][];
   /** big shot: rare, announced, marked with $$$, carries a jackpot (Phase 4.5) */
@@ -81,6 +89,17 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
     lines: { idle: ["*chitter*", "*sniff sniff*"], hit: ["*SKREEE!*", "*angry chitter*"], win: ["*triumphant chitter*"] },
   },
   // Phase 3.5: one behind every shop counter. Never fights, never leaves the shop.
+  bank_guard: {
+    kind: "bank_guard", name: "Bank Guard", walk: 1.3, flee: 5.0, fighter: true, hp: 3, dodge: 0, notoriety: 20, spawnWeight: 0, chase: 6.2,
+    loot: [["coin_pile", 3], ["donut", 1]],
+    lines: {
+      idle: ["Welcome to Trashington Bank. Please don't.", "No loitering near the vault.", "I've got my eye on you. Both eyes.", "Deposits only. No withdrawals of the stealing kind."],
+      hit: ["Assaulting a guard! That's a fine!", "My badge!", "I'm pressing the button! THE BUTTON!"],
+      fight: ["FREEZE! ...Please?", "Step away from the vault!", "Not on my shift!", "Halt in the name of compound interest!"],
+      win: ["Case closed.", "Account frozen.", "Have a secure day."],
+      lose: ["Tell the manager... I tried..."],
+    },
+  },
   doorman: {
     kind: "doorman", name: "Doorman", walk: 1.4, flee: 4.8, fighter: true, hp: 3, dodge: 0, notoriety: 12, spawnWeight: 0,
     loot: [["coin_pile", 4], ["sunglasses", 1], ["gold_chain", 0.4]],
@@ -101,6 +120,41 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       fight: ["Take THIS, you land-lubber!", "I've wrestled catfish bigger than you!"],
       win: ["Catch and release, pal.", "Back to fishing."],
       lose: ["The fish... will avenge me..."],
+    },
+  },
+  uncle_dumpster: {
+    kind: "uncle_dumpster", name: "Uncle Dumpster", walk: 1.0, flee: 3.0, fighter: false, hp: 99, dodge: 1, notoriety: 0, spawnWeight: 0,
+    loot: [["pocket_lint", 1]],
+    lines: {
+      // (his tips: he goes round them in order while anyone's near)
+      idle: [
+        "Welcome, young bandit. The city is a dumpster. And the dumpster... is a city.",
+        "E picks things up. Small things go in your pockets. Big things fill your hands.",
+        "Carry treasure home to your box fort. Loot inside your yard is banked.",
+        "Punch a phone booth, a vending machine, a parking meter: coins fall out. Also: fun.",
+        "Hold E at a shop till to rob it. The cashier will not enjoy this.",
+        "Heat comes from being SEEN. An empty alley is a quiet friend.",
+        "Wanted? Crouch in a bush. Cops walk right past a good bush.",
+        "A spray can holds five tags. Every tag is aura. Aura is how you become Mayor, one day.",
+        "Drag a trolley round the cones for the Grand Prix. I once did it in eleven seconds. In 1987.",
+        "Throw bin lids at the targets. Aim for the middle, like life.",
+        "Press M for the map. Even I use the map. The map does not judge.",
+        "When the host starts the match, you'll wake up at your fort. Make me proud.",
+      ],
+      hit: ["Ow. Rude."],
+      dodge: ["Too slow, grasshopper.", "You punch like wet cardboard.", "The dumpster sees all.", "*sips tea* Missed.", "Hah! Bathrobe style!"],
+    },
+  },
+  old_lady: {
+    kind: "old_lady", name: "Grumpy Old Lady", walk: 1.3, flee: 3.0, fighter: true, hp: 2, dodge: 0, notoriety: 15, spawnWeight: 0, chase: 4.3,
+    loot: [["coin_pile", 2], ["candy_bar", 1], ["mystery_wallet", 0.5]],
+    lines: {
+      idle: ["*snores*"],
+      yell: ["SOME OF US ARE TRYING TO SLEEP!", "I'M CALLING THE POLICE! AND YOUR MOTHER!", "NOT AGAIN! I'VE GOT MY CANE!", "KEEP IT DOWN, HOOLIGANS!", "THAT'S IT. I'M COMING DOWN THERE."],
+      hit: ["You hit a LADY?!", "I survived three husbands, I'll survive you!", "OW! My hip!"],
+      fight: ["Take THAT, whippersnapper!", "CANE TIME!", "In my day we respected the elderly!"],
+      win: ["And STAY down!", "Back to my stories.", "Hmph. Kids."],
+      lose: ["I'll... tell... the residents' committee..."],
     },
   },
   cashier: {
@@ -167,7 +221,7 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
 /** Pedestrian types that wander the streets (raccoons and cashiers have their own jobs). */
 export const NPC_KINDS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => NPC_DEFS[k].spawnWeight > 0);
 /** Kinds that are never part of the everyday crowd (own jobs, own counts). */
-export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
+export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
 /** The four big shots. */
 export const BIG_SHOTS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => !!NPC_DEFS[k].bigShot);
 

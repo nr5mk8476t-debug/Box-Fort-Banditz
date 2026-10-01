@@ -13,7 +13,9 @@ import { fortAt } from "./arena.js";
 import type { World, ItemSim, PlayerSim } from "./world.js";
 
 export type MatchPhase = "lobby" | "intro" | "scavenge" | "dusk" | "night" | "dawn" | "shop" | "upgrades" | "over";
-export type CityEventKind = "airdrop" | "truck" | "happyhour" | "raccoons";
+export type CityEventKind = "airdrop" | "truck" | "happyhour" | "raccoons" | "parade";
+/** C5b: the dragon parade: walking pace, how far behind the head each of the dragon's body segments is, red envelopes every few metres */
+export const PARADE = { speed: 1.6, segments: 9, gap: 1.15, envelopeEvery: 2.6, push: 5.5, r: 1.0 };
 
 export const CYCLES = 3;
 /** (kept for older code: a "round" is now a whole cycle) */
@@ -43,6 +45,7 @@ export interface RoundLine {
   lost: number; lostValue: number; // carried outside the fort at time-up (+ unsold at the shop)
   stolen: number; // items raccoons got away with
   cash: number; // cash so far
+  aura: number; // C4b: aura points (tags); the race for Mayor uses them later
 }
 
 /** What clients need to show the current event. */
@@ -53,6 +56,8 @@ export interface EventView {
   timeLeft: number;
   // garbage truck
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
+  /** C5b: how far the dragon's head has walked along Chinatown's route (-1 = no parade) */
+  paradeD: number;
 }
 
 interface ActiveEvent {
@@ -93,6 +98,9 @@ export class MatchSystem {
   private lost = new Map<string, { n: number; v: number }>();
   ev: ActiveEvent | null = null;
   truck = { on: false, x: 0, z: 0, yaw: 0 };
+  /** C5b: the dragon parade (distance walked; -1 = not on) */
+  paradeD = -1;
+  private nextEnvelope = 0;
 
   constructor(private w: World) {}
 
@@ -110,6 +118,7 @@ export class MatchSystem {
   start(): boolean {
     if (this.phase !== "lobby" && this.phase !== "over") return false;
     for (const p of this.w.players.values()) p.cash = 0;
+    this.w.lobby.matchStart(); // (C5a: off the roof; aura starts at 0)
     this.round = 0;
     this.results = [];
     this.nextCycle();
@@ -272,7 +281,7 @@ export class MatchSystem {
       out.push({
         id: p.id, name: p.name, colorIdx: p.colorIdx,
         banked: items.length, bankedValue: items.reduce((a, it) => a + itemWorth(it), 0),
-        lost: l.n, lostValue: l.v, stolen: p.stolenThisRound, cash: p.cash,
+        lost: l.n, lostValue: l.v, stolen: p.stolenThisRound, cash: p.cash, aura: p.aura,
       });
     }
     return out.sort((a, b) => b.cash + b.bankedValue - (a.cash + a.bankedValue));
@@ -307,7 +316,7 @@ export class MatchSystem {
   // ---------------------------------------------------------------- events
   /** Escalation: round 1 gets 1 event, round 2 gets 2, round 3+ gets 3, all different kinds. */
   private planEvents() {
-    const kinds: CityEventKind[] = ["airdrop", "truck", "happyhour", "raccoons"];
+    const kinds: CityEventKind[] = ["airdrop", "truck", "happyhour", "raccoons", ...(this.w.arena.chinatown ? ["parade" as const] : [])];
     for (let i = kinds.length - 1; i > 0; i--) { const j = Math.floor(this.w.random() * (i + 1)); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
     const n = Math.min(3, this.round);
     // spread between 25 s in and 45 s before the end, at least ~35 s apart
@@ -333,6 +342,9 @@ export class MatchSystem {
     } else if (kind === "happyhour") {
       const zn = this.happyZones[Math.floor(rnd() * this.happyZones.length)];
       this.ev = { kind, stage: "warn", t: 0, x: zn.x, z: zn.z, r: zn.r };
+    } else if (kind === "parade") {
+      const r0 = this.w.arena.chinatown?.route[0] ?? { x: 0, z: 0 };
+      this.ev = { kind, stage: "warn", t: 0, x: r0.x, z: r0.z, r: 0 };
     } else {
       this.ev = { kind, stage: "warn", t: 0, x: 0, z: 0, r: 0 };
     }
@@ -364,6 +376,7 @@ export class MatchSystem {
         break;
       }
       case "truck": this.truckTick(e, dt); break;
+      case "parade": this.paradeTick(dt); break;
       case "happyhour": {
         for (const it of this.w.items.values()) if (it.mode === "free" && it.fort < 0 && inZone(it, e)) it.mult = 2;
         if (e.t >= HAPPY_HOUR_TIME) this.stopEvent();
@@ -393,7 +406,54 @@ export class MatchSystem {
       }
     } else if (e.kind === "raccoons") {
       for (const p of this.w.players.values()) if (p.connected) this.w.npc.spawnRaccoon(p.colorIdx);
+    } else if (e.kind === "parade") {
+      this.paradeD = 0; this.nextEnvelope = PARADE.envelopeEvery;
     }
+  }
+
+  /** C5b: where along Chinatown's route a point `d` metres from the start is (and which way it faces) */
+  paradeAt(d: number): { x: number; z: number; yaw: number } {
+    const rt = this.w.arena.chinatown?.route ?? [{ x: 0, z: 0 }, { x: 0, z: 1 }];
+    let left = Math.max(0, d);
+    for (let i = 0; i < rt.length - 1; i++) {
+      const a = rt[i], b = rt[i + 1], len = Math.hypot(b.x - a.x, b.z - a.z);
+      if (left <= len || i === rt.length - 2) { const k = Math.min(1, left / len); return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, yaw: Math.atan2(b.x - a.x, b.z - a.z) }; }
+      left -= len;
+    }
+    return { x: rt[0].x, z: rt[0].z, yaw: 0 };
+  }
+  private routeLength() {
+    const rt = this.w.arena.chinatown?.route ?? [];
+    let n = 0; for (let i = 0; i < rt.length - 1; i++) n += Math.hypot(rt[i + 1].x - rt[i].x, rt[i + 1].z - rt[i].z);
+    return n;
+  }
+
+  /**
+   * C5b: the dragon dances up Chinatown: anyone in its way gets bumped aside (no knockdown), and it scatters
+   * red envelopes of lucky money as it goes. Done when its tail has passed the far gate.
+   */
+  private paradeTick(dt: number) {
+    this.paradeD += PARADE.speed * dt;
+    const d = this.paradeD;
+    for (const p of this.w.players.values()) {
+      if (!p.connected || p.move.y > 2.5) continue;
+      for (let s = 0; s <= PARADE.segments; s++) {
+        const q = this.paradeAt(d - s * PARADE.gap);
+        const dx = p.move.x - q.x, dz = p.move.z - q.z, dist = Math.hypot(dx, dz);
+        if (dist > PARADE.r + 0.4 || d - s * PARADE.gap < 0) continue;
+        const fx = Math.sin(q.yaw), fz = Math.cos(q.yaw), side = dx * fz - dz * fx >= 0 ? 1 : -1;
+        p.move.vx = fz * side * PARADE.push; p.move.vz = -fx * side * PARADE.push;
+        p.move.stumbleT = Math.max(p.move.stumbleT, 0.25);
+        break;
+      }
+    }
+    if (d >= this.nextEnvelope && d <= this.routeLength()) {
+      this.nextEnvelope += PARADE.envelopeEvery;
+      const h = this.paradeAt(d), side = this.w.random() < 0.5 ? -1 : 1;
+      this.w.popLoot("red_envelope", h.x, 2.2, h.z, Math.cos(h.yaw) * side, -Math.sin(h.yaw) * side);
+      this.w.emit({ t: "firecracker", x: h.x, z: h.z });
+    }
+    if (d >= this.routeLength() + PARADE.segments * PARADE.gap + 2) this.stopEvent();
   }
 
   private truckTick(e: ActiveEvent, dt: number) {
@@ -442,6 +502,7 @@ export class MatchSystem {
       for (const it of this.w.items.values()) if (it.mode === "free" && it.fort < 0 && inZone(it, e)) it.mult = 1;
     }
     if (e.kind === "truck") this.truck.on = false;
+    if (e.kind === "parade") this.paradeD = -1;
     if (e.kind === "raccoons") this.w.npc.clearRaccoons();
     if (e.kind === "airdrop" && e.crate) { const c = this.w.items.get(e.crate); if (c) c.chute = false; }
     this.w.emit({ t: "cityEvent", kind: e.kind, stage: "end", x: e.x, z: e.z, detail: "" });
@@ -455,6 +516,7 @@ export class MatchSystem {
     out.x = e?.x ?? 0; out.z = e?.z ?? 0; out.r = e?.r ?? 0;
     out.timeLeft = !e ? 0 : e.stage === "warn" ? Math.max(0, (e.kind === "happyhour" ? 3 : EVENT_WARN) - e.t) : e.kind === "happyhour" ? Math.max(0, HAPPY_HOUR_TIME - e.t) : 0;
     out.truckOn = this.truck.on; out.truckX = this.truck.x; out.truckZ = this.truck.z; out.truckYaw = this.truck.yaw;
+    out.paradeD = this.paradeD;
     return out;
   }
 }

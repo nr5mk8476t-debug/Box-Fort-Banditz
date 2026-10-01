@@ -1,6 +1,7 @@
 // Shared "look" helpers: toon materials + thick outlines. This is the start of the
 // Box Fort Banditz art style; it will be refined in the art/polish phases.
 import { CellMaterial, Color3, DynamicTexture, Mesh, VertexBuffer, type Scene, type TransformNode, StandardMaterial } from "./babylon.ts";
+import { tierAt, type ArenaLayout } from "@bfb/shared";
 
 const cache = new Map<string, CellMaterial>();
 
@@ -123,4 +124,127 @@ export function unlitTextured(scene: Scene, tex: DynamicTexture, name: string): 
   m.useAlphaFromDiffuseTexture = tex.hasAlpha;
   m.backFaceCulling = false;
   return m;
+}
+
+// C5a: the city map. One drawing, used twice: painted on the squat's water tank (the lobby), and the
+// M-key map you can open during a match (with you, your friends and the forts on it).
+
+export interface MapMarker { x: number; z: number; color: string; label?: string; yaw?: number; me?: boolean;
+  /** C5c.1 WANTED: a rough area (metres) instead of an exact arrow; the stars and bounty line under the name */
+  area?: number; wanted?: string }
+
+const TIER_FILL = ["#a0826a", "#c9b08a", "#e6dcc4"];
+const TIER_BLDG = ["#6e4a3a", "#8a6f55", "#b8ab94"];
+/** District names and where to write them */
+const DISTRICTS: [string, number, number][] = [
+  ["UPTOWN", 0, 94], ["MARKET ROW", 60, 34], ["OLD BRICK", -72, 22], ["THE YARDS", -24, -70],
+  ["TENT TOWN", 0, -104], ["RAIL YARD", -105, 30], ["CANAL", 105, 30], ["THE PARK", 0, 0],
+];
+/** Places worth knowing (from the layout, where they are) */
+const POI: [string, (a: ArenaLayout) => { x: number; z: number } | null][] = [
+  ["City Hall", () => ({ x: 0, z: 79 })],
+  ["Casino", () => ({ x: 69.5, z: 68 })],
+  ["Police", (a) => a.station ? { x: (a.station.rect.minX + a.station.rect.maxX) / 2, z: (a.station.rect.minZ + a.station.rect.maxZ) / 2 } : null],
+  ["The Pit", (a) => { const b = a.blocks?.find((q) => q.name.startsWith("The Pit")); return b ? { x: (b.rect.minX + b.rect.maxX) / 2, z: (b.rect.minZ + b.rect.maxZ) / 2 } : null; }],
+  ["Laundromat", (a) => { const u = a.units?.find((q) => q.name === "SPIN CYCLE"); return u ? { x: u.x, z: u.z } : null; }],
+  ["Market Hall", () => ({ x: 55, z: 0 })],
+  ["Chinatown", (a) => a.chinatown ? { x: 81, z: 0 } : null],
+  ["Skyscraper", () => ({ x: 47, z: -72 })],
+  ["Bank", (a) => a.bank ? { x: (a.bank.rect.minX + a.bank.rect.maxX) / 2, z: (a.bank.rect.minZ + a.bank.rect.maxZ) / 2 } : null],
+  ["Mayor Statue", (a) => a.statue ? { x: a.statue.x, z: a.statue.z } : null],
+];
+
+/**
+ * Draw the city onto a 2D canvas: north (+z) up. `size` px square, the city fills it with a margin.
+ * `painted`: the hand-painted look for the water tank (thicker lines, a wobbly frame, no markers).
+ */
+export function drawCityMap(c: CanvasRenderingContext2D, arena: ArenaLayout, size: number, opts: { painted?: boolean; markers?: MapMarker[]; extraSouth?: number } = {}) {
+  const H = arena.halfSize, south = opts.extraSouth ?? 0;
+  const span = H * 2 + south, m = size * 0.04, k = (size - m * 2) / span;
+  const X = (x: number) => m + (x + H) * k, Z = (z: number) => m + (H - z) * k;
+  const rect = (r: { minX: number; maxX: number; minZ: number; maxZ: number }) => [X(r.minX), Z(r.maxZ), (r.maxX - r.minX) * k, (r.maxZ - r.minZ) * k] as const;
+  c.save();
+  c.fillStyle = opts.painted ? "#2b2530" : "rgba(24,20,30,0.92)";
+  c.fillRect(0, 0, size, size);
+  // ground by tier
+  for (let t = 0; t < 3; t++) {
+    const z0 = t === 0 ? -H : t === 1 ? -46 : 46, z1 = t === 0 ? -46 : t === 1 ? 46 : H;
+    c.fillStyle = TIER_FILL[t];
+    c.fillRect(X(-H), Z(z1), H * 2 * k, (z1 - z0) * k);
+  }
+  // water
+  c.fillStyle = "#4f9fd9";
+  for (const r of arena.deepWater ?? []) c.fillRect(...rect(r));
+  for (const s of arena.pondShape ?? []) { c.beginPath(); c.arc(X(s.x), Z(s.z), s.r * k, 0, Math.PI * 2); c.fill(); }
+  // grass (the park lawn and the garden)
+  c.fillStyle = "#6fae4f";
+  for (const d of arena.decor ?? []) if (d.kind === "grass" && d.w && d.d) c.fillRect(X(d.x - d.w / 2), Z(d.z + d.d / 2), d.w * k, d.d * k);
+  for (const s of arena.scenery ?? []) if (s.kind === "grassdisc" && s.r) { c.beginPath(); c.arc(X(s.x), Z(s.z), s.r * k, 0, Math.PI * 2); c.fill(); }
+  // roads
+  c.fillStyle = opts.painted ? "#3a3444" : "#4a4452";
+  for (const r of arena.roads ?? []) c.fillRect(...rect(r));
+  c.strokeStyle = c.fillStyle;
+  for (const g of arena.roadRings ?? []) { c.lineWidth = (g.r1 - g.r0) * k; c.beginPath(); c.arc(X(g.x), Z(g.z), ((g.r0 + g.r1) / 2) * k, 0, Math.PI * 2); c.stroke(); }
+  // buildings
+  for (const b of arena.boxes) {
+    if ((b.kind !== "building" && b.kind !== "tower") || b.y - b.h / 2 > 1 || Math.abs(b.z) > H || Math.abs(b.x) > H) continue;
+    c.fillStyle = b.kind === "tower" ? "#5b5566" : TIER_BLDG[tierAt(b.z)];
+    c.fillRect(X(b.x - b.w / 2), Z(b.z + b.d / 2), b.w * k, b.d * k);
+  }
+  // forts
+  (arena.forts ?? []).forEach((f, i) => {
+    c.fillStyle = ["#ff5a3c", "#43c7a6", "#ffe14a", "#9f5fd6"][i % 4];
+    c.fillRect(X(f.x) - 4 * k, Z(f.z) - 4 * k, 8 * k, 8 * k);
+  });
+  // labels
+  const font = (px: number) => `bold ${Math.round(px)}px "Bungee", "Arial Black", sans-serif`;
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.lineJoin = "round";
+  for (const [name, x, z] of DISTRICTS) {
+    c.save(); c.translate(X(x), Z(z));
+    if (Math.abs(x) > 100) c.rotate(x < 0 ? -Math.PI / 2 : Math.PI / 2); // (the rail yard and the canal: written along them)
+    c.font = font(size * 0.034);
+    c.lineWidth = size * 0.008; c.strokeStyle = "#1b1420"; c.strokeText(name, 0, 0);
+    c.fillStyle = "#fff4c2"; c.fillText(name, 0, 0);
+    c.restore();
+  }
+  for (const [name, at] of POI) {
+    const p = at(arena);
+    if (!p) continue;
+    c.fillStyle = "#ff5a3c";
+    c.beginPath(); c.arc(X(p.x), Z(p.z), size * 0.008, 0, Math.PI * 2); c.fill();
+    c.font = font(size * 0.02);
+    c.lineWidth = size * 0.005; c.strokeStyle = "#1b1420"; c.strokeText(name, X(p.x), Z(p.z) - size * 0.02);
+    c.fillStyle = "#ffffff"; c.fillText(name, X(p.x), Z(p.z) - size * 0.02);
+  }
+  // the squat, off the south edge (the painted map says YOU ARE HERE)
+  if (arena.lobby && south > 0) {
+    const L = arena.lobby;
+    c.fillStyle = "#6e4a3a"; c.fillRect(...rect(L.rect));
+    c.font = font(size * 0.022); c.fillStyle = "#ffe14a";
+    c.fillText(opts.painted ? "YOU ARE HERE" : "THE SQUAT", X(0), Z(L.rect.minZ) + size * 0.03);
+  }
+  // players
+  for (const mk of opts.markers ?? []) {
+    const x = X(mk.x), y = Z(mk.z), r = size * (mk.me ? 0.018 : 0.013);
+    if (mk.area) { // (C5c.1: 1-2 stars: somewhere round here)
+      c.save(); c.globalAlpha = 0.28; c.fillStyle = "#ff3b30"; c.beginPath(); c.arc(x, y, mk.area * k, 0, Math.PI * 2); c.fill();
+      c.globalAlpha = 0.9; c.setLineDash([6, 5]); c.strokeStyle = "#ff3b30"; c.lineWidth = 2; c.stroke(); c.restore();
+      c.font = font(size * 0.018); c.fillStyle = "#fff"; c.fillText(mk.label ?? "", x, y - size * 0.006);
+      if (mk.wanted) { c.fillStyle = "#ffd54a"; c.fillText(mk.wanted, x, y + size * 0.018); }
+      continue;
+    }
+    if (mk.wanted) { c.save(); c.strokeStyle = "#ff3b30"; c.lineWidth = 3; c.beginPath(); c.arc(x, y, r * 2.2, 0, Math.PI * 2); c.stroke(); c.restore(); }
+    c.save(); c.translate(x, y); c.rotate(mk.yaw ?? 0);
+    c.fillStyle = mk.color; c.strokeStyle = "#1b1420"; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(0, -r * 1.4); c.lineTo(r, r); c.lineTo(0, r * 0.4); c.lineTo(-r, r); c.closePath(); c.fill(); c.stroke();
+    c.restore();
+    if (mk.label) { c.font = font(size * 0.018); c.fillStyle = "#fff"; c.fillText(mk.label, x, y + r * 2.2 + (mk.wanted ? r * 0.8 : 0)); }
+    if (mk.wanted) { c.font = font(size * 0.018); c.fillStyle = "#ffd54a"; c.fillText(mk.wanted, x, y + r * 2.2 + size * 0.022); }
+  }
+  // a north arrow and a frame
+  c.font = font(size * 0.03); c.fillStyle = "#fff4c2"; c.fillText("N", size - m * 1.2 - size * 0.02, m + size * 0.03);
+  c.strokeStyle = opts.painted ? "#fff4c2" : "#ffe14a"; c.lineWidth = opts.painted ? size * 0.012 : 3;
+  c.strokeRect(m * 0.5, m * 0.5, size - m, size - m);
+  c.restore();
 }

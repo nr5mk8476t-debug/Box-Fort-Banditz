@@ -1,8 +1,8 @@
 // Solo mode: runs the same World simulation the server uses, right here in the browser.
 // The game talks to it exactly like it talks to the server, so solo = multiplayer rules.
 import {
-  World, playerView, itemView, npcView, matchView, propView, carView, copCarView, SIM_DT, makeMoveState,
-  type WorldView, type PlayerView, type ItemView, type NpcView, type PropView, type CarView, type CopCarView, type WorldEvent, type WorldAction, type MoveInput,
+  World, playerView, itemView, npcView, matchView, propView, carView, copCarView, tagView, SIM_DT,
+  type WorldView, type PlayerView, type ItemView, type NpcView, type PropView, type CarView, type CopCarView, type TagView, type WorldEvent, type WorldAction, type MoveInput,
 } from "@bfb/shared";
 
 export const SOLO_ID = "me";
@@ -16,13 +16,14 @@ export class LocalSession {
   private propsV = new Map<string, PropView>();
   private carsV = new Map<string, CarView>();
   private copCarsV = new Map<string, CopCarView>();
+  private tagsV = new Map<string, TagView>();
   private acc = 0;
 
   /** `id` is the local player's id (a browser host uses its own id, solo uses "me"). */
   constructor(name: string, readonly id = SOLO_ID) {
-    this.world = new World({ seed: (Math.random() * 2 ** 31) | 0 });
+    this.world = new World({ seed: (Math.random() * 2 ** 31) | 0, lobby: true });
     this.world.addPlayer(id, name);
-    this.view = { players: this.players, items: this.items, npcs: this.npcs, props: this.propsV, cars: this.carsV, copCars: this.copCarsV, phase: "arena", ownerId: id, code: "" };
+    this.view = { players: this.players, items: this.items, npcs: this.npcs, props: this.propsV, cars: this.carsV, copCars: this.copCarsV, tags: this.tagsV, phase: "arena", ownerId: id, code: "" };
     this.refresh();
   }
 
@@ -69,17 +70,16 @@ export class LocalSession {
     });
     for (const c of this.world.police.cars) this.copCarsV.set(c.id, copCarView(this.world, c.id, this.copCarsV.get(c.id) ?? ({} as CopCarView)));
     for (const id of [...this.copCarsV.keys()]) if (!this.world.police.cars.some((c) => c.id === id)) this.copCarsV.delete(id);
+    // C4b: tags (sprayed once, gone at dawn)
+    for (const id of this.world.tags.keys()) if (!this.tagsV.has(id)) this.tagsV.set(id, tagView(this.world, id));
+    for (const id of [...this.tagsV.keys()]) if (!this.world.tags.has(id)) this.tagsV.delete(id);
   }
 
   // ---- test helpers (used by automated tests with ?test=1) ----
   teleport(x: number, z: number, yaw: number) {
-    const p = this.world.players.get(this.id);
-    if (!p) return;
-    const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
-    p.move = { ...makeMoveState(x, z, yaw), ...keep };
-    p.queue.length = 0;
+    this.world.debugTeleport(this.id, x, z, yaw); // (C5a: lands you on the squat's roof when that's where x, z is)
   }
-  spawnItem(type: string, x: number, z: number): string { return this.world.placeItem(type, x, 0.3, z); }
+  spawnItem(type: string, x: number, z: number): string { return this.world.placeItem(type, x, this.world.floorAt(x, z) + 0.3, z); }
   /** Put a specific pedestrian at a spot (standing still until the next wander decision). */
   placeNpc(kind: string, x: number, z: number, yaw: number): string {
     const id = this.world.npc.place(kind as never, x, z, yaw).id;

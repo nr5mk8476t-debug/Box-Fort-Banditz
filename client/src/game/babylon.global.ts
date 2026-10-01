@@ -15,6 +15,7 @@ export const Vector3 = B.Vector3;
 export const Color3 = B.Color3;
 export const Color4 = B.Color4;
 export const Matrix = B.Matrix;
+export const Quaternion = B.Quaternion;
 export const Scalar = B.Scalar;
 export const MeshBuilder = B.MeshBuilder;
 export const Mesh = B.Mesh;

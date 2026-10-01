@@ -22,7 +22,17 @@ export interface Box {
   /** Slice 2A: drawn only when the camera is near this building (interiors); see ArenaLayout.units */
   unit?: number;
   /** C4a: smashed (a broken bench / shop window): collision ignores it until the city resets */
-  off?: boolean;
+  off?: boolean
+  /** C4b: a wall covered in background graffiti (looks only) */
+  art?: boolean;
+  /** C5a: a chain-link fence (drawn see-through) */
+  chain?: boolean;
+  /** C5a: collision only: something else draws it (tents, the water tank, the map board, the practice dummy...) */
+  hide?: boolean;
+  /** C5c: the Mayor's statue's plinth: tagging it is worth 5 aura (and big heat) */
+  mayor?: boolean;
+  /** C5b: a Chinatown shophouse (curved tiled roof, eaves, lanterns, a hanging sign) */
+  china?: { roof: string; sign2: string };
   /** C2: a street building's ground floor: a shopfront (glass, door, awning) or a tower lobby */
   front?: "shop" | "lobby";
 }
@@ -38,7 +48,11 @@ export type BoxKind =
   // Slice 2A city overhaul: storefront glass, stairs, shop fixtures, upstairs furniture, street clutter
   | "glass" | "step" | "arcade" | "washer" | "rack" | "case" | "table" | "chair" | "cage"
   | "bed" | "sofa" | "desk" | "cooler" | "gymbench" | "boxes" | "plinth" | "rim" | "dock" | "truck"
-  | "hydrant" | "mailbox" | "bikerack" | "board" | "pot" | "bags" | "pallet" | "portaloo" | "mixer" | "trolley";
+  | "hydrant" | "mailbox" | "bikerack" | "board" | "pot" | "bags" | "pallet" | "portaloo" | "mixer" | "trolley"
+  // C5b: Chinatown's street stalls
+  | "steamer" | "fishtank" | "trinkets"
+  // C5c: the bank's vault door (it swings open: the box stops blocking), deposit boxes, the WANTED screen's control box
+  | "vaultdoor" | "depositbox";
 
 export interface SpawnPoint {
   x: number; y: number; z: number; zone: LootZone;
@@ -56,13 +70,24 @@ export const inRect = (r: Rect, x: number, z: number, pad = 0) => x >= r.minX - 
 /** Things you can search, smash or rob (Phase 3.5). Static list; their state lives in the World. */
 export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "newsbox" | "car" | "till"
   // C4a: street things you can smash (each is one of the arena's boxes; broken = it stops blocking until dawn)
-  | "shopglass" | "busstop" | "hydrant" | "mailbox" | "bench" | "planter" | "table" | "pallet";
+  | "shopglass" | "busstop" | "hydrant" | "mailbox" | "bench" | "planter" | "table" | "pallet"
+  // C4b: the laundromat's machines (E: open quietly, slowly; punch: force it, loud)
+  | "washer" | "dryer"
+  // C5a: the lobby squat's practice gear and mini-game buttons
+  | "dummy" | "throwgame" | "racegame"
+  // C5b: Chinatown: a dumpling steamer cart (E: grab a bite), a souvenir stall (E), a live-seafood tank (punch: SPLASH)
+  | "steamer" | "trinkets" | "fishtank"
+  // C5c: the bank (its vault door, safety deposit boxes), the Mayor's statue's gold nose, the WANTED screen's
+  // control box, and the golden stashes hidden at every landmark
+  | "vaultdoor" | "depositbox" | "nose" | "stash";
 export interface PropDef {
   id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
   /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
   box?: number;
   /** C4a: half-size of its footprint (for reach checks on long things like benches and shop windows) */
   hw?: number; hd?: number;
+  /** C5c: what a golden stash holds */
+  loot?: string[];
 }
 
 export type ShopType = "mart" | "pawn" | "bakery" | "gadget"
@@ -223,7 +248,11 @@ export interface ArenaLayout {
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
   /** C1.1: people who stand at a spot (the apartment tower's doorman) */
-  posts?: { kind: "doorman" | "fisherman"; x: number; z: number; yaw: number }[];
+  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard"; x: number; z: number; yaw: number;
+    /** C5a: standing height (Uncle Dumpster lives on a rooftop) */
+    y?: number;
+    /** C4b: where she leans out of her window (the old lady) */
+    window?: { x: number; y: number; z: number } }[];
   /** C4a: where the street junk sits each day (chairs by café tables, lids by bins, bricks on building sites...) */
   junkSpots?: { type: string; x: number; z: number; y?: number; yaw?: number }[];
   /** C3: bushes you can crouch in to hide from the cops (walk-through) */
@@ -237,8 +266,49 @@ export interface ArenaLayout {
   blocks?: BlockDef[];
   /** C1: purely visual scenery the renderer draws (highway deck, rails, canal...) */
   scenery?: { kind: "highway" | "rail" | "canal" | "light" | "grassdisc" | "pillar" | "clock" | "ladder" | "lamp"; x: number; z: number; w?: number; d?: number; h?: number; r?: number; yaw?: number; node?: number; approach?: number }[];
+  /** C5a: the lobby: a rooftop squat just past the south edge of town where you wait for the match */
+  lobby?: LobbyDef;
+  /** C5c: the Trashington Bank (the renderer dresses it; the rules put the vault's gold in each morning) */
+  bank?: { rect: Rect; vault: Rect; vaultSpots: { type: string; x: number; y: number; z: number }[]; keycardSpots: { x: number; y: number; z: number }[]; door: { x: number; z: number }; cols?: [number, number][] };
+  /** C5c: the Mayor's Golden Statue (for the renderer) */
+  statue?: { x: number; z: number; plinthH: number; yaw: number };
+  /** C5b: Chinatown: the street (for the renderer's lanterns and the dragon parade's route), its two gates */
+  chinatown?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
   /** named places, used by tests and tutorials */
   landmarks?: Record<string, { x: number; z: number; yaw: number; [extra: string]: number }>;
+}
+
+/**
+ * C5a: the rooftop squat (lobby). Players wait here before the match (and practise); when the host starts,
+ * everyone goes to their fort. It sits just outside the city's edge, high up, looking north over the city.
+ */
+export interface LobbyDef {
+  /** the roof (players can be here even though it's past the city's edge) */
+  rect: Rect;
+  /** roof height */
+  y: number;
+  spawns: { x: number; z: number; yaw: number }[];
+  /** the painted city map (on the water tank's board) */
+  map: { x: number; y: number; z: number; w: number; h: number; yaw: number };
+  /** the trolley race: pass the checkpoints in order dragging a trolley (start/finish = checkpoint 0) */
+  race: { x: number; z: number; r: number }[];
+  /** the throw game's targets (bin lids thrown at them score by how close to the middle) */
+  targets: { id: string; x: number; y: number; z: number; r: number; yaw: number }[];
+  /** the free-stuff pile (it refills while you wait) */
+  pile: { x: number; z: number };
+  /** where the bin lids for the throw game are stacked, the trolley bay, the spray can for the tag wall */
+  lids: { x: number; z: number };
+  trolleys: { x: number; z: number }[];
+  cans: { x: number; z: number };
+  /** decoration the renderer draws (collision boxes are in the arena's boxes) */
+  tents: { x: number; z: number; w: number; d: number; yaw: number; color: string }[];
+  fire: { x: number; z: number };
+}
+
+/** C5a: on the lobby roof (x/z inside it)? */
+export function inLobby(arena: ArenaLayout, x: number, z: number, pad = 0): boolean {
+  const l = arena.lobby;
+  return !!l && x >= l.rect.minX - pad && x <= l.rect.maxX + pad && z >= l.rect.minZ - pad && z <= l.rect.maxZ + pad;
 }
 
 /** On the road surface (straight roads or the roundabout ring)? */

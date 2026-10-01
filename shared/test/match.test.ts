@@ -386,3 +386,35 @@ test("events escalate: 1 in cycle 1, 2 in cycle 2, 3 in cycle 3 (day only), neve
   for (const c of counts) assert.equal(new Set(c).size, c.length);
   assert.equal(w.match.phase, "over");
 });
+
+// ============================================================================ C5b: Chinatown's dragon parade
+import { PARADE } from "../src/index.js";
+
+test("C5b the dragon parade: warns, dances up Chinatown, bumps you out of its way, drops red envelopes of lucky money, then leaves", () => {
+  const { w, ps } = quiet(1);
+  toScavenge(w);
+  const C = w.arena.chinatown!;
+  assert.ok(C && C.route.length >= 2, "Chinatown has a parade route");
+  const p = ps[0];
+  w.match.trigger("parade");
+  assert.equal(w.match.ev?.kind, "parade");
+  assert.equal(w.match.paradeD, -1, "not moving during the warning");
+  // stand in the street, a bit ahead of the start
+  const at = w.match.paradeAt(8);
+  w.debugTeleport(p.id, at.x, at.z, 0);
+  const ev: WorldEvent[] = [];
+  run(w, 5.1, ev);
+  assert.ok(w.match.paradeD >= 0, "live");
+  let bumped = false;
+  for (let i = 0; i < 12 * 60 && !bumped; i++) { run(w, 1 / 60, ev); if (Math.abs(p.move.x - at.x) > 0.8) bumped = true; }
+  assert.ok(bumped, `the dragon bumped the bandit aside (x ${p.move.x.toFixed(2)} vs ${at.x})`);
+  assert.equal(p.move.knockT, 0, "a bump, not a knockdown");
+  const total = C.route.slice(1).reduce((s, q, i) => s + Math.hypot(q.x - C.route[i].x, q.z - C.route[i].z), 0);
+  run(w, (total + PARADE.segments * PARADE.gap + 4) / PARADE.speed, ev);
+  assert.equal(w.match.ev, null, "the parade has left");
+  assert.equal(w.match.paradeD, -1);
+  const env = [...w.items.values()].filter((it) => it.type === "red_envelope");
+  assert.ok(env.length >= 12, `${env.length} red envelopes scattered`);
+  assert.ok(ev.filter((e) => e.t === "firecracker").length >= 12, "firecrackers");
+  assert.ok(env.filter((it) => Math.abs(it.body.x - 72) < 8).length >= env.length * 0.7, `mostly along the street: ${env.map((it) => it.body.x.toFixed(0)).join(",")}`);
+});

@@ -12,10 +12,11 @@ import { LOOT, lootDef, rollValue, carrySpeedMul, type LootDef } from "./loot.js
 import type { ArenaLayout, LootZone } from "./arena.js";
 import { buildTrashington } from "./city.js";
 import { sanitizeName } from "./names.js";
-import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent } from "./npcSim.js";
+import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby } from "./arena.js";
+import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
 import { PropSystem, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
 import { PoliceSystem, type PoliceEvent } from "./police.js";
@@ -88,7 +89,22 @@ export interface ItemSim {
   /** Phase 5A tug of war (giant items): -1 = holder wins .. +1 = challenger (holder2) wins */
   tug: number;
   tugT: number;
+  /** C4b: uses left (a spray can holds 5 tags) */
+  uses?: number;
 }
+
+/** C4b: a spray-painted tag on a wall (gone at dawn) */
+export interface TagSim { id: string; x: number; y: number; z: number; nx: number; nz: number; colorIdx: number; by: string; style: number; }
+/** C4b: tagging: hold the use key this long on a blank wall, how far you can reach, spacing between tags */
+/**
+ * C5c.1 citizen's arrest (Blake): knock a wanted bandit (1+ star) down, then E to pin them for the cops. Hold your
+ * ground (moving over 1.2 m, getting knocked down or 60 s ends it); they mash SPACE to wriggle free (14 presses).
+ * When a cop cuffs them you get the bounty: their heat x $5, out of what they were carrying, then their cash.
+ */
+export const ARREST = { reach: 1.9, minHeat: 30, perHeat: 5, maxTime: 60, breakFree: 14, moveCancel: 1.2, struggleCd: 0.07 };
+/** C5c: tagging the Mayor's statue */
+export const MAYOR_TAG = { aura: 5, heat: 15 };
+export const TAG = { hold: 1.5, reach: 2.6, spacing: 1.6, uses: 5, heat: 2 };
 
 export interface PlayerSim {
   id: string;
@@ -117,7 +133,15 @@ export interface PlayerSim {
   cash: number;
   stolenThisRound: number;
   /** Phase 3.5: hold-up in progress at a till */
-  rob: { prop: string; t: number; x: number; z: number } | null;
+  rob: { prop: string; t: number; x: number; z: number; quiet?: boolean } | null;
+  /** C4b: aura points (tags sprayed this match; the race for Mayor uses them later) */
+  aura: number;
+  /** C5a: lobby mini-game bests (throw game: points; trolley race: seconds, 0 = none yet) and the game you're playing */
+  throwBest: number;
+  raceBest: number;
+  lobbyGame: LobbyGame | null;
+  /** C4b: a tag being sprayed: when it started, where you stood */
+  tagging: { t0: number; x: number; z: number; pending?: { x: number; y: number; z: number; nx: number; nz: number } } | null;
   /** Phase 3.5: seconds until you respawn at your fort after a car wiped you out (0 = alive) */
   respawnT: number;
   /** Phase 4: seconds left in jail (0 = free), which cell, the lock you're picking */
@@ -137,6 +161,8 @@ export interface PlayerSim {
   raidAlarmT: number;
   /** C1: which fort yard this player is standing in (-1 = none), and the last "raider in your yard" alarm on YOUR fort */
   inFort: number; raidEnterT: number;
+  /** C5c.1: a bandit you're holding down for the cops (and how hard they've wriggled) */
+  pin: { target: string; x: number; z: number; t: number; heat: number; struggle: number; cd: number } | null;
 }
 
 export type WorldEvent =
@@ -146,6 +172,14 @@ export type WorldEvent =
   | { t: "throw"; p: string; item: string; speed: number }
   | { t: "impact"; item: string; speed: number; x: number; y: number; z: number }
   | { t: "bonk"; item: string; p: string; by: string }
+  // C4b: a tag sprayed (tagStart: the hiss starts)
+  | { t: "tag"; p: string; tag: string; left: number }
+  | { t: "tagStart"; p: string }
+  // C5c.1: citizen's arrest: someone pinned a wanted bandit / it ended / the cops cuffed them and the bounty was paid
+  | { t: "pin"; p: string; target: string; heat: number }
+  | { t: "pinFail"; p: string; reason: string }
+  | { t: "pinEnd"; p: string; target: string; why: string }
+  | { t: "bounty"; p: string; target: string; value: number; want: number }
   // C4a: a loud noise (for sounds / debugging); r = how far it carries
   | { t: "noise"; p: string; x: number; z: number; r: number }
   | { t: "tumble"; item: string }
@@ -177,15 +211,21 @@ export type WorldEvent =
   | { t: "pawn"; p: string; item: string; r: "up" | "offended" | "sold"; offer: number }
   | { t: "cityEvent"; kind: CityEventKind; stage: "warn" | "live" | "end"; x: number; z: number; detail: string }
   | { t: "swept"; item: string; type: string; x: number; z: number }
+  | { t: "firecracker"; x: number; z: number } // (C5b: the dragon parade)
   | { t: "raccoonGrab"; npc: string; item: string; p: string }
   | { t: "raccoonEscaped"; npc: string; item: string; type: string; p: string; value: number }
   | PropEvent
   | TrafficEvent
   | PoliceEvent
-  | BigShotEvent;
+  | BigShotEvent
+  | OldLadyEvent
+  | LobbyEvent;
 
 export type WorldAction =
   | { a: "grab"; item: string }
+  // C4b: spray a tag (hold the use key on a blank wall with a can out)
+  | { a: "tagStart" }
+  | { a: "tag"; x: number; y: number; z: number; nx: number; nz: number }
   | { a: "drop" }
   | { a: "throw"; charge: number; yaw: number; pitch: number }
   | { a: "cycle"; dir?: number } // mouse wheel: next / previous carried item (or fists)
@@ -196,6 +236,7 @@ export type WorldAction =
   | { a: "pick"; pin: number; t: number } // jail lock-pick press (t = seconds since locked up)
   // Phase 5A
   | { a: "tug" } // mash E in a tug of war
+  | { a: "arrest"; p: string } | { a: "struggle" } // C5c.1: pin a knocked-down wanted bandit for the cops / wriggle free
   | { a: "sell"; item: string } | { a: "haggle"; item: string } | { a: "sellAll" } // pawn shop
   | { a: "ready" }; // done shopping / upgrading
 
@@ -213,7 +254,10 @@ export function makeRng(seed: number) {
 /** Rarity boost per spawn zone: the plaza, rooftops and shops are high-risk, high-reward. */
 const ZONE_RARE_BOOST: Record<LootZone, number> = { plaza: 3, rooftop: 2.2, shop: 2, yard: 1, alley: 1, street: 0.7, room: 1.6 };
 
-export interface WorldOptions { seed?: number; arena?: ArenaLayout; spawnLoot?: boolean; npcs?: number; }
+export interface WorldOptions { seed?: number; arena?: ArenaLayout; spawnLoot?: boolean; npcs?: number;
+  /** C5a: players who join before the match arrive at the squat (the lobby roof). The game turns this on;
+   *  rule tests leave it off so players start at their forts as before. */
+  lobby?: boolean; }
 
 export class World {
   readonly arena: ArenaLayout;
@@ -226,30 +270,40 @@ export class World {
   private spawnTimer = 0;
   private recycleTimer = 0;
   private spawnLoot: boolean;
+  private lobbySpawn: boolean;
+  /** C5a: is the lobby squat in use (players arrive there, it restocks)? */
+  get lobbyOn() { return this.lobbySpawn && !!this.arena.lobby; }
   readonly npc: NpcSystem;
   readonly match: MatchSystem;
   readonly props: PropSystem;
+  /** C4b: spray-painted tags on the walls (reset at dawn) */
+  readonly tags = new Map<string, TagSim>();
+  private nextTag = 1;
   readonly traffic: TrafficSystem;
   readonly police: PoliceSystem;
   readonly pawn: PawnSystem;
+  readonly lobby: LobbySystem;
 
   constructor(opts: WorldOptions = {}) {
     this.arena = opts.arena ?? buildTrashington();
     this.rng = makeRng(opts.seed ?? 12345);
     this.spawnLoot = opts.spawnLoot ?? true;
-    if (this.spawnLoot) this.fillLoot();
+    this.lobbySpawn = opts.lobby ?? false;
+    if (this.spawnLoot) this.fillLoot(true);
     this.npc = new NpcSystem(this.npcHost(), opts.npcs ?? (opts.arena ? 0 : NPC_COUNT));
     this.match = new MatchSystem(this);
     this.props = new PropSystem(this);
     this.traffic = new TrafficSystem(this, undefined, opts.seed ?? 12345);
     this.police = new PoliceSystem(this);
     this.pawn = new PawnSystem(this);
+    this.lobby = new LobbySystem(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
   /** Raise a player's heat (notoriety), capped at 100. Cops who see it happen come running. */
   addHeat(p: PlayerSim, n: number) {
     if (p.jailT > 0) return;
+    if (n > 0 && this.lobby?.on(p)) return; // (C5a: the lobby squat: practice, nothing counts)
     if (n > 0 && this.match.night) n *= 2; // night: heat builds twice as fast
     p.notoriety = Math.min(100, p.notoriety + n);
     if (n > 0) { p.knownX = p.move.x; p.knownZ = p.move.z; p.crimeT = this.time; this.police.onCrime(p); } // somebody calls it in
@@ -260,8 +314,10 @@ export class World {
    * pedestrians nearby flinch. (C4b: it will also wake the old lady.)
    */
   noise(p: PlayerSim, x: number, z: number, r: number) {
+    if (this.lobby.on(p)) return; // (C5a: nobody down there hears the squat)
     this.police.hear(p, x, z, r);
     this.npc.startle(x, z, r * 0.6);
+    this.npc.wakeOldLady(p.id, x, z, r); // (C4b: the old lady above the laundromat)
     this.emit({ t: "noise", p: p.id, x, z, r });
   }
 
@@ -269,7 +325,7 @@ export class World {
   witnessed(p: PlayerSim): boolean {
     const m = p.move;
     for (const n of this.npc.npcs.values()) {
-      if (n.state === "ko" || n.kind === "raccoon") continue;
+      if (n.state === "ko" || n.state === "sleep" || n.kind === "raccoon") continue;
       const d = Math.hypot(n.move.x - m.x, n.move.z - m.z);
       if (d > WITNESS_RANGE || Math.abs(n.move.y - m.y) > 6) continue;
       if (n.kind === "cop" ? this.police.canSee(n, p) : this.police.los(n.move.x, n.move.y + 1.6, n.move.z, m.x, m.y + 1.2, m.z)) return true;
@@ -344,7 +400,8 @@ export class World {
       if (keepForts && slot >= 0 && this.match.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; continue; }
       this.items.delete(it.id);
     }
-    if (this.spawnLoot) { this.fillLoot(); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only)
+    if (!keepForts) this.tags.clear(); // (C4b: the city gets scrubbed clean at dawn)
+    if (this.spawnLoot) { this.fillLoot(!keepForts); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only; C5c: the bank's vault refills at dawn)
     else this.props.reset(!keepForts);
     for (const p of this.players.values()) {
       p.hand = ""; p.pockets.fill(""); p.queued = null;
@@ -353,7 +410,7 @@ export class World {
       p.move = makeMoveState(sp.x, sp.z, sp.yaw);
       p.lastSeq = keepSeq;
       p.queue.length = 0;
-      p.notoriety = 0; p.hp = HEALTH.max; p.knockCount = 0; p.stolenThisRound = 0; p.rob = null; p.respawnT = 0;
+      p.notoriety = 0; p.hp = HEALTH.max; p.knockCount = 0; p.stolenThisRound = 0; p.rob = null; p.respawnT = 0; p.pin = null;
       this.updateCarry(p);
     }
   }
@@ -517,16 +574,19 @@ export class World {
     const used = new Set([...this.players.values()].map((p) => p.colorIdx));
     let colorIdx = 0;
     while (used.has(colorIdx) && colorIdx < PLAYER_COLORS.length - 1) colorIdx++;
-    const sp = this.arena.spawns[colorIdx % this.arena.spawns.length];
+    // C5a: before the match (the lobby) you arrive at the rooftop squat; once it's on, at your fort
+    const lob = this.lobbySpawn && this.arena.lobby && this.match?.phase === "lobby" ? this.arena.lobby.spawns : null;
+    const sp = lob ? lob[this.players.size % lob.length] : this.arena.spawns[colorIdx % this.arena.spawns.length];
     const p: PlayerSim = {
       id, name: sanitizeName(rawName), colorIdx, connected: true,
       move: makeMoveState(sp.x, sp.z, sp.yaw), lastSeq: -1, queue: [], credit: 0,
       hand: "", pockets: Array(POCKETS).fill(""), sel: FISTS, actionCd: 0, queued: null,
       punchCd: 0, notoriety: 0, hp: HEALTH.max, hurtT: -99, knockCount: 0, knockWindowT: 0,
-      cash: 0, stolenThisRound: 0, rob: null, respawnT: 0,
+      cash: 0, stolenThisRound: 0, rob: null, respawnT: 0, aura: 0, tagging: null, throwBest: 0, raceBest: 0, lobbyGame: null,
       jailT: 0, jailCell: -1, lock: null, lockSeed: 0, lockT0: 0, seenT: -99, knownX: 0, knownZ: 0, crimeT: -99,
-      tugCd: 0, raidAlarmT: -99, inFort: -1, raidEnterT: -99,
+      tugCd: 0, raidAlarmT: -99, inFort: -1, raidEnterT: -99, pin: null,
     };
+    if (lob) p.move.y = this.arena.lobby!.y;
     this.players.set(id, p);
     return p;
   }
@@ -580,11 +640,15 @@ export class World {
       if (act.a === "pick") this.police.pick(p, Number((act as any).pin), Number((act as any).t));
       return;
     }
+    if (act.a === "struggle") { this.struggle(p); return; } // (C5c.1: pinned down: wriggle)
     if (p.move.knockT > 0 || p.move.trapT > 0) return; // can't do anything while flattened / boxed in
     if (p.respawnT > 0) return; // wiped out: waiting to respawn
     if (p.move.stunT > 0) return; // tased
     if (act.a === "tug") { this.tugPress(p); return; }
+    if (act.a === "arrest") { this.arrest(p, String((act as any).p ?? "")); return; }
     if (act.a === "punch") { this.punch(p, Number((act as any).yaw), Number((act as any).pitch)); return; }
+    if (act.a === "tagStart") { this.tagStart(p); return; }
+    if (act.a === "tag") { const a = act as any; this.tag(p, Number(a.x), Number(a.y), Number(a.z), Number(a.nx), Number(a.nz)); return; }
     if (act.a === "robStop") { this.props.cancelRob(p); return; }
     if (act.a === "use") { this.props.use(p, String((act as any).prop ?? "")); return; }
     if (act.a === "cycle") { this.cycleSel(p, Number((act as any).dir) < 0 ? -1 : 1); return; }
@@ -625,7 +689,7 @@ export class World {
       const score = d + Math.abs(ang) * 1.5;
       if (!best || score < best.score) best = { kind, id, score };
     };
-    for (const n of this.npc.npcs.values()) if (n.state !== "ko") consider("npc", n.id, n.move.x, n.move.y, n.move.z);
+    for (const n of this.npc.npcs.values()) if (n.state !== "ko" && n.state !== "sleep" && n.state !== "yell") consider("npc", n.id, n.move.x, n.move.y, n.move.z);
     for (const o of this.players.values()) if (o.id !== p.id && o.connected && o.jailT <= 0 && o.move.knockT <= 0) consider("player", o.id, o.move.x, o.move.y, o.move.z);
     // smashable props (phone booths, vending machines, meters, newspaper boxes, parked cars)
     for (const ps of this.props.props.values()) {
@@ -782,6 +846,136 @@ export class World {
    * The item in your hands right now: whatever you're holding, else the pocket item you've
    * selected (it's drawn in your hand). Fists selected = nothing (a click punches).
    */
+  // ------------------------------------------------------------------ C4b: tagging
+  /** The spray can you have out (in your hand slot or the selected pocket), if it has paint left. */
+  private sprayCan(p: PlayerSim): ItemSim | null {
+    const a = this.activeItem(p);
+    return a && a.item.type === "spray_can" && (a.item.uses ?? TAG.uses) > 0 ? a.item : null;
+  }
+  private tagStart(p: PlayerSim) {
+    if (!this.sprayCan(p)) return;
+    p.tagging = { t0: this.time, x: p.move.x, z: p.move.z };
+    this.emit({ t: "tagStart", p: p.id });
+  }
+  /**
+   * C4b: finish a tag at (x, y, z) on a wall facing (nx, nz). You must have held still with a can out for
+   * TAG.hold seconds, be in reach, and the spot must be a blank wall (a building, wall or fence face, not
+   * glass), not too close to another tag. +1 aura point; heat if somebody sees you.
+   */
+  tag(p: PlayerSim, x: number, y: number, z: number, nx: number, nz: number): boolean {
+    const t = p.tagging;
+    if (t && this.time - t.t0 < TAG.hold * 0.5 && [x, y, z, nx, nz].every(Number.isFinite)) { t.pending = { x, y, z, nx, nz }; return false; } // (the host's clock is behind: finish it when it catches up)
+    p.tagging = null;
+    const can = this.sprayCan(p);
+    if (!t || !can || ![x, y, z, nx, nz].every(Number.isFinite)) return false;
+    if (Math.hypot(p.move.x - t.x, p.move.z - t.z) > 0.6) return false;
+    if (Math.hypot(x - p.move.x, z - p.move.z) > TAG.reach || y < p.move.y + 0.3 || y > p.move.y + 2.6) return false;
+    const nl = Math.hypot(nx, nz);
+    if (nl < 0.5) return false;
+    const ux = Math.round(nx / nl), uz = Math.round(nz / nl);
+    // a real wall face right there
+    const wall = nearBoxes(this.arena, x, z, 0.5).find((b) => {
+      if (!["building", "tower", "wall", "fence"].includes(b.kind) && !b.mayor) return false;
+      if (y < b.y - b.h / 2 || y > b.y + b.h / 2) return false;
+      if (ux) return Math.abs(x - (b.x + ux * b.w / 2)) < 0.15 && Math.abs(z - b.z) < b.d / 2 - 0.3;
+      return Math.abs(z - (b.z + uz * b.d / 2)) < 0.15 && Math.abs(x - b.x) < b.w / 2 - 0.3;
+    });
+    if (!wall) return false;
+    for (const o of this.tags.values()) if (Math.hypot(o.x - x, o.z - z) < TAG.spacing && Math.abs(o.y - y) < 1.5) return false;
+    const id = "t" + this.nextTag++;
+    this.tags.set(id, { id, x, y, z, nx: ux, nz: uz, colorIdx: p.colorIdx, by: p.id, style: Math.floor(this.rng() * 6) });
+    can.uses = (can.uses ?? TAG.uses) - 1;
+    // C5c: the Mayor's statue is worth a lot more (and everyone notices)
+    const onMayor = !!wall.mayor;
+    p.aura += onMayor ? MAYOR_TAG.aura : 1;
+    if (onMayor) this.addHeat(p, MAYOR_TAG.heat);
+    else if (this.witnessed(p)) this.addHeat(p, TAG.heat);
+    this.emit({ t: "tag", p: p.id, tag: id, left: can.uses });
+    if (can.uses <= 0) { // the can's empty: tossed
+      if (p.hand === can.id) p.hand = ""; else { const i = p.pockets.indexOf(can.id); if (i >= 0) p.pockets[i] = ""; }
+      this.items.delete(can.id);
+      this.updateCarry(p);
+    }
+    return true;
+  }
+
+  /** C5c: an item you're carrying is used up (the keycard stays in the vault's lock) */
+  consumeItem(p: PlayerSim, id: string) {
+    if (p.hand === id) p.hand = ""; else { const i = p.pockets.indexOf(id); if (i >= 0) p.pockets[i] = ""; }
+    this.items.delete(id);
+    this.updateCarry(p);
+  }
+
+  // ------------------------------------------------------------------ C5c: the giant WANTED screen
+  // ------------------------------------------------------------------ C5c.1 citizen's arrest
+  /** Who's holding this player down (null = nobody) */
+  pinnerOf(p: PlayerSim): PlayerSim | null {
+    for (const q of this.players.values()) if (q.pin && q.pin.target === p.id) return q;
+    return null;
+  }
+  private arrest(p: PlayerSim, targetId: string) {
+    const t = this.players.get(targetId);
+    const no = (reason: string) => this.emit({ t: "pinFail", p: p.id, reason });
+    if (!t || t === p || p.pin || p.rob || p.jailT > 0) return;
+    if (this.lobby.on(p) || this.lobby.on(t)) return no("lobby");
+    if (Math.hypot(t.move.x - p.move.x, t.move.z - p.move.z) > ARREST.reach || Math.abs(t.move.y - p.move.y) > 1.2) return no("far");
+    if (t.notoriety < ARREST.minHeat) return no("clean");
+    if (t.move.knockT <= 0 || t.jailT > 0 || t.respawnT > 0) return no("standing");
+    if (this.pinnerOf(t)) return no("taken");
+    this.props.cancelRob(p);
+    p.pin = { target: t.id, x: p.move.x, z: p.move.z, t: 0, heat: t.notoriety, struggle: 0, cd: 0 };
+    t.knownX = t.move.x; t.knownZ = t.move.z; t.seenT = this.time;
+    this.emit({ t: "pin", p: p.id, target: t.id, heat: Math.round(t.notoriety) });
+  }
+  private struggle(p: PlayerSim) {
+    const q = this.pinnerOf(p);
+    if (!q || !q.pin || q.pin.cd > 0) return;
+    q.pin.cd = ARREST.struggleCd;
+    q.pin.struggle++;
+  }
+  private endPin(q: PlayerSim, why: "free" | "rescued" | "moved" | "time" | "gone") {
+    const pin = q.pin!;
+    q.pin = null;
+    this.emit({ t: "pinEnd", p: q.id, target: pin.target, why });
+    const t = this.players.get(pin.target);
+    if (why === "free" && t) { t.move.knockT = Math.min(t.move.knockT, 0.05); q.move.stunT = Math.max(q.move.stunT, 0.8); } // (you wriggle out; they fall back a bit dazed)
+  }
+  private tickPins(dt: number) {
+    for (const q of this.players.values()) {
+      const pin = q.pin;
+      if (!pin) continue;
+      const t = this.players.get(pin.target);
+      pin.t += dt; pin.cd = Math.max(0, pin.cd - dt);
+      if (!t || !t.connected || t.jailT > 0 || t.respawnT > 0) { this.endPin(q, "gone"); continue; }
+      if (pin.struggle >= ARREST.breakFree) { this.endPin(q, "free"); continue; }
+      if (q.move.knockT > 0 || q.move.stunT > 0 || q.respawnT > 0 || q.jailT > 0 || !q.connected) { this.endPin(q, "rescued"); continue; }
+      if (Math.hypot(q.move.x - pin.x, q.move.z - pin.z) > ARREST.moveCancel || Math.hypot(t.move.x - q.move.x, t.move.z - q.move.z) > ARREST.reach + 0.6) { this.endPin(q, "moved"); continue; }
+      if (pin.t > ARREST.maxTime) { this.endPin(q, "time"); continue; }
+      // held down: they stay flat, the heat stays on, and the cops know exactly where
+      t.move.knockT = Math.max(t.move.knockT, 0.25);
+      t.move.vx = 0; t.move.vz = 0;
+      t.notoriety = Math.max(t.notoriety, pin.heat);
+      t.seenT = this.time; t.knownX = t.move.x; t.knownZ = t.move.z;
+    }
+  }
+  /**
+   * The police cuffed p: if somebody was holding them down, pay the bounty (heat x $5), taken first out of the
+   * loot the cops just confiscated (worth `seized`), then out of p's cash. Returns what was paid.
+   */
+  payBounty(p: PlayerSim, seized: number): number {
+    const q = this.pinnerOf(p);
+    if (!q || !q.pin) return 0;
+    const want = Math.round(q.pin.heat * ARREST.perHeat);
+    const fromLoot = Math.min(want, Math.max(0, seized));
+    const fromCash = Math.min(want - fromLoot, Math.max(0, p.cash));
+    p.cash -= fromCash;
+    const paid = fromLoot + fromCash;
+    q.cash += paid;
+    q.pin = null;
+    this.emit({ t: "bounty", p: q.id, target: p.id, value: paid, want });
+    return paid;
+  }
+
   private activeItem(p: PlayerSim): { item: ItemSim; from: "hand" | number } | null {
     if (p.hand) { const it = this.items.get(p.hand); if (it) return { item: it, from: "hand" }; p.hand = ""; }
     if (p.sel >= 0 && p.sel < POCKETS && p.pockets[p.sel]) {
@@ -936,6 +1130,8 @@ export class World {
       if (p.hp <= 0) { if (p.move.knockT <= 0) p.hp = HEALTH.max; }
       else if (p.hp < HEALTH.max && this.time - p.hurtT >= HEALTH.regenDelay) p.hp = Math.min(HEALTH.max, p.hp + HEALTH.regenRate * dt);
       if (p.knockWindowT > 0) { p.knockWindowT -= dt; if (p.knockWindowT <= 0) p.knockCount = 0; }
+      const tp = p.tagging?.pending; // (C4b: a tag the client finished before this host's clock did)
+      if (tp && this.time - p.tagging!.t0 >= TAG.hold * 0.5) this.tag(p, tp.x, tp.y, tp.z, tp.nx, tp.nz);
       if (!p.connected) continue;
       p.credit = Math.min(p.credit + 1, MAX_INPUTS_PER_TICK);
       while (p.credit >= 1 && p.queue.length) {
@@ -952,7 +1148,9 @@ export class World {
     this.stepFreeItems(dt);
     this.match.tick(dt);
     this.props.tick(dt);
+    this.lobby.tick(dt);
     this.traffic.tick(dt);
+    this.tickPins(dt);
     this.police.tick(dt);
     this.raidWatch();
     // C1.1: fall in the canal and whatever's in your hands floats off
@@ -1049,6 +1247,11 @@ export class World {
       }
       if (res.impact > 2.5) this.emit({ t: "impact", item: it.id, speed: res.impact, x: it.body.x, y: it.body.y, z: it.body.z });
       if (res.outOfBounds) this.respawnItem(it);
+      // C5a: the lobby's throw game targets
+      if (res.impact > 1.5 && it.thrownT < 2 && it.lastThrower && this.arena.lobby) {
+        const thrower = this.players.get(it.lastThrower);
+        if (thrower && this.lobby.itemImpact(it, thrower)) it.thrownT = 2;
+      }
       // C4a: a thrown thing slamming into something smashable counts as the thrower's hit on it
       if (res.impact > 4 && it.thrownT < 2 && it.lastThrower) {
         const thrower = this.players.get(it.lastThrower);
@@ -1067,7 +1270,7 @@ export class World {
       const sp = Math.hypot(it.body.vx, it.body.vy, it.body.vz);
       if (sp > 6 && it.thrownT < 2 && it.lastThrower) {
         for (const n of this.npc.npcs.values()) {
-          if (n.state === "ko" || n.state === "stunned") continue;
+          if (n.state === "ko" || n.state === "stunned" || n.state === "sleep" || n.state === "yell") continue; // (C4b: the old lady's upstairs)
           const dx = it.body.x - n.move.x, dz = it.body.z - n.move.z, dy = it.body.y - (n.move.y + 0.9);
           if (Math.hypot(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
             const r = this.npc.hit(n.id, it.lastThrower, it.body.x - it.body.vx * 0.1, it.body.z - it.body.vz * 0.1);
@@ -1101,8 +1304,16 @@ export class World {
   }
 
   // ------------------------------------------------------------------ loot spawning
-  private fillLoot() {
+  private fillLoot(newDay: boolean) {
     for (let i = 0; i < this.itemTarget; i++) this.spawnOne();
+    // C5c: a new day: the bank's vault is restocked, and the manager has lost his keycard somewhere in Uptown again
+    const bank = this.arena.bank;
+    if (newDay && bank) {
+      for (const it of [...this.items.values()]) if (it.type === "bank_keycard") this.items.delete(it.id);
+      for (const v of bank.vaultSpots) if (![...this.items.values()].some((it) => it.type === v.type && Math.hypot(it.body.x - v.x, it.body.z - v.z) < 0.3 && Math.abs(it.body.y - v.y) < 0.6)) this.placeItem(v.type, v.x, v.y, v.z);
+      const k = bank.keycardSpots[Math.floor(this.rng() * bank.keycardSpots.length)];
+      if (k) this.placeItem("bank_keycard", k.x, k.y, k.z);
+    }
     // C4a: street junk back at its spots (chairs by the café tables, lids by the bins, bricks on the building site...)
     for (const j of this.arena.junkSpots ?? []) {
       if ([...this.items.values()].some((it) => it.type === j.type && it.mode === "free" && Math.hypot(it.body.x - j.x, it.body.z - j.z) < 0.8)) continue;
@@ -1171,8 +1382,12 @@ export class World {
     if (!p) return;
     const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
     p.move = { ...makeMoveState(x, z, yaw), ...keep };
+    if (inLobby(this.arena, x, z) && this.arena.lobby) p.move.y = this.arena.lobby.y; // (C5a: onto the squat's roof)
     p.queue.length = 0;
   }
+
+  /** C5a: the floor height at (x, z) for test helpers: the squat's roof, or the street */
+  floorAt(x: number, z: number): number { return inLobby(this.arena, x, z) && this.arena.lobby ? this.arena.lobby.y : 0; }
 
   /** Test/debug helper: put a specific item somewhere (skips the spawn cap on purpose). */
   placeItem(type: string, x: number, y: number, z: number): string {

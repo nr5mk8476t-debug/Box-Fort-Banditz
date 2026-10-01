@@ -210,6 +210,94 @@ Note on the automated browser test: it renders 3D on the CPU, so it runs at sing
 
 Note: the one failure in each e2e run was a test wait that was too short for this very slow test box (the truck's 5 s warning took ~50 s of real time; the charge ring check sampled before a frame had drawn). Later runs also exposed test (not game) timing issues: an unconfirmed drop before the tug test, a KO check reading C's body a moment before it caught up, and a joiner tab stalling past the 8 s silence limit and auto-reconnecting. All were fixed in the test (it now waits/retries and logs what happened, e.g. C's health after each landed punch: 100 -> 66 -> 32 -> 0). The final full run passed 219/219.
 
+## City Redesign C5c.1 checks: bounties and citizen's arrests (2026-10-01)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Arrest + bounty | pin a knocked-down 1-star bandit; a real cop walks up and cuffs them while you hold them; the bounty = heat × $5, paid from the seized loot then their cash; B never got up | unit | pass |
+| Rules | refused if clean / standing / too far; 14 SPACE presses wriggle free; walking off lets go; getting knocked down lets go | unit | pass |
+| Online | A sees C's heat and that C is down; the prompt names the bounty; E pins C (C's screen knows who); B sees it; C mashes SPACE free | e2e | pass |
+| Map | wanted bandits as rough areas (1-2 stars) or exact (3 stars) with stars and bounty; clean bandits hidden | e2e screenshot 64 | reviewed |
+| Screen removed | no screen, box or hack; Mile East is a plaza with the Diamond Pigeon stash in a low wall | unit + screenshot (test-output/c5c/09-mile-east) | pass |
+| Totals | 175 shared unit + 2 client unit; smoke (matchmaking 8/8, server all); browser e2e **282/282 normal and 282/282 at 110 ms** (host upload 34.1 / 33.0 KB/s) | all | pass |
+
+Notes from the C5c.1 runs:
+- **First runs: test ids.** The online arrest checks matched C by the page's session id, but the host's world uses different player ids. The test now finds C as the one wanted bandit.
+- **The prompt.** A giant item lying nearby took the prompt and E. The arrest prompt and E now win over grabbing.
+- **Two real bugs, both fixed:**
+  - Who you can pin was worked out from where C is *drawn*, which can trail behind on a slow connection. It now uses the latest snapshot.
+  - SPACE was only noticed if it was down during a frame, so quick presses got lost at 1 fps. A key-down listener now catches every press.
+- **Cops in the test.** One run had a cop bust C before the arrest check. The test now keeps clearing cops while it checks the arrest.
+- **A first-punch miss.** One normal run missed the first punch, so 2 punch checks failed (280/282). The test now waits until A's world has C at the spot before swinging. The final normal and 110 ms runs both passed 282/282.
+
+## City Redesign C5c checks: Uptown landmarks (2026-10-01)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Bank layout | a walk-in marble hall where the country club was: the vault, 4 deposit boxes, 2 guards, a golden stash; the keycard is at one of 6 spots in Uptown | unit + e2e (walk in through the front door) | pass |
+| Loud heist | E on the vault with no keycard: the drill; heat 92 at once, bank alarm, both guards chase; 20 s of holding still and the door opens and stops blocking; dawn shuts it and restocks the gold | unit + e2e (drill starts, heat 90+, WANTED screen shows you, door opens, doorway clear, gold and cash inside) | pass |
+| Sneaky heist | with the manager's keycard: open in 3 s, no heat if nobody sees; the card stays in the lock | unit | pass |
+| Deposit boxes | each searchable once a day | unit | pass |
+| Mayor's statue | hold E 5 s: his gold nose pops off (heat if seen, gone till dawn); tagging the plinth gives +5 aura, +15 heat | unit + e2e (nose) | pass |
+| WANTED screen (removed in C5c.1) | shows the hottest bandit; hack (6 s): someone else for a minute, your heat -25, theirs +15; alone it's the Mayor | unit + e2e (hack: THE MAYOR) | pass |
+| Golden stashes | 3 stashes, one golden item each, once a day | unit | pass |
+| Screenshots | bank front, from above, the lobby, the counter, the vault shut, open and inside, the statue, the WANTED screen (a bandit and the Mayor) (test-output/c5c + e2e 59-62) | visual | reviewed |
+| Totals | 174 shared unit + 2 client unit; matchmaking smoke; server smoke; browser e2e **278/278 normal and 278/278 at 110 ms lag** (host upload 35.7 KB/s normal, 32.0 KB/s at 110 ms) | all | pass |
+
+Notes from this slice's runs (test-box timing and two real fixes):
+- The first two normal runs crashed on this CPU-only box before the end:
+  - one on a screenshot that took over 30 s to draw;
+  - one on the first friend's join, which took over 8 min.
+- I measured a lone joiner on this box: 6.4 min for the last commit, 8.9 min with C5c. The difference is mostly load, not the game: the city builds 12.2 s vs 11.3 s.
+- The fixes:
+  - The e2e now allows 120 s for a screenshot, 15 min for a join and 8 min to open a page.
+  - Performance mode skips the landmarks' small dressing (chandeliers, queue ropes, flowers, spikes...). Friends' test windows run in Performance mode.
+- One more failure was the test checking the vault doorway before the host's news reached the screen. It now waits for it.
+- The first 110 ms run was 277/278. "Stood around: BUSTED" missed its 90 s wait by a moment, and the jail checks right after it passed. A second try also timed out at 180 s because your heat cooled below 1 star before the slow cop arrived. The test now keeps the heat on while it waits (up to 5 min) and logs the game time it took. The final 110 ms run was busted after 7 s of game time and passed 278/278. The normal-speed 278/278 run used the earlier 90 s wait.
+- While chasing these I found and fixed a real bug of mine in the dawn reset: an `else` had slipped onto the wrong `if`. Props were reset twice between rounds, and not at all at dawn in worlds without loot (only the rule tests use those).
+
+## City Redesign C5b checks: Chinatown (2026-09-30)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Layout | 6 shophouses by the canal in the middle tier, each with an English sign and a Chinese one; 2 gates; 4 lantern rows; a stall with its own collision box in front of each shophouse | unit | pass |
+| Stalls | E on a steamer: food pops out, then it's sold out; with a watcher the keeper yells and +3 heat | unit + e2e (solo: E on a steamer) | pass |
+| Seafood tank | punch: SPLASH, a crab or a fish; stays broken at night; fixed at dawn | unit | pass |
+| Parade | warns first; walks up Chinatown; bumps a bandit aside without knocking them down; leaves after the tail passes the far gate; 12+ red envelopes, mostly along the street; firecrackers | unit | pass |
+| Screenshots | the south gate, the street, the shophouses, the stalls, from above, the parade, the lanterns at night (test-output/c5b) | visual | reviewed |
+| Totals | 167 shared unit + 2 client unit, matchmaking smoke 8/8, server smoke (all), browser e2e **265/265 normal and 265/265 at 110 ms**. Two earlier normal runs were 264/265: one failed the "cars drive the new roads" check and one the "ENTER starts the match" check. Both were wall-clock waits on this slow box; both now wait on the game (up to 30-60 s) | all | pass |
+
+## City Redesign C5a checks: the lobby squat (2026-09-30)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Arrive | before the match you arrive on the squat's roof (26 m, past the south fence); a friend does too; once the host starts, everyone is at their fort and aura is 0; joining mid-match goes straight to your fort | unit + e2e (solo) | pass |
+| Fence | sprint and jump at it from the middle in 6 directions for 8 s each: still on the roof | unit | pass |
+| Nothing counts | no heat, no noise on the roof; the dummy goes THWACK and never breaks | unit | pass |
+| Restock | the free-stuff pile, bin lids, 2 trolleys and a spray can appear and come back; stops (and the roof is cleared) once the match is on | unit | pass |
+| THROW-O-MATIC | E starts 30 s; bullseye = 3, rim = 1; time up gives 4 points, best kept | unit + e2e (E starts it) | pass |
+| Grand Prix | E at the post; cones don't count without a trolley; with one: 3 cones then the finish, lap time kept | unit | pass |
+| Uncle Dumpster | on the roof, stays there; his tips in order while you're near; dodges every punch; no heat | unit + e2e | pass |
+| HUD | the squat panel shows on the roof; M opens and closes the map | e2e | pass |
+| Old tests | rule tests make worlds without the lobby (`lobby` option); crowd counts +1 (Uncle Dumpster); statistical doorman/fisherman greeting waits 90 s; the entourage test walks 3 seeds; the solo sprint check now starts on the runway | unit + e2e | pass |
+| Screenshots | the view north, the camp, both sides of the roof, the building from outside, the map, the panel (test-output/c5a) | visual | reviewed |
+| Speed | host upload 31.5-31.9 KB/s for 2 players (C4a: 32.9-38.3) | e2e | recorded |
+| Totals | 163 shared unit + 2 client unit, matchmaking smoke 8/8, server smoke (all; 38 NPCs incl. Uncle Dumpster), browser e2e **262/262 normal and 262/262 at 110 ms**. An earlier C5a run was 259/262: the throw-game check put the solo player at y 0 inside the squat building (the solo teleport helper now lands you on the roof), the roof's "patch" meshes tripped the old gold-sleeve-patch check (renamed), and the host's first placement counted as a prediction snap (it no longer does). A later run failed the gym-bro and traffic checks on wall-clock waits (now game-clock waits) | all | pass |
+
+## City Redesign C4b checks: laundromat, old lady, tagging, THE PIT (2026-09-29/30)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Laundromat | 9 washers + 4 dryer stacks; E opens one in 2.2 s (walk off: cancelled); quiet (no noise, no heat); one search per machine per day (night keeps it empty, dawn refills) | unit | pass |
+| Force open | punching a washer: open at once, a noise, the old lady wakes and calls it in | unit | pass |
+| Old lady | asleep upstairs; a noise across town doesn't wake her; one outside does: she yells, +12 heat, then chases you; if you're gone she goes back to bed; asleep she can't be punched or hit and isn't a witness | unit + e2e | pass |
+| Tagging | needs a can out, the full hold and a real wall face; 1.6 m apart; 5 per can (then it's gone); +1 aura each; heat only if seen; night keeps tags, dawn scrubs them; a host whose clock is behind finishes the tag when it catches up | unit + e2e (solo and online: B sees A's tag) | pass |
+| THE PIT | in the low end; 12+ ramp steps; 9 spray cans around town (3 in the pit) | unit + e2e | pass |
+| Fixes | the precinct is in the middle tier by the canal; the tutorial ledges and tunnel are gone (the mantle and crawl tests use the freight dock and the sewer pipe); wall textures never cover glass | unit + e2e + screenshots | pass |
+| Old tests | 14 shops with cashiers; 9 upstairs; crowd count +3; the pit's funbox loot moved off the rail | unit | pass |
+| Screenshots | THE PIT, the laundromat inside and out, the old lady at her window, the precinct, the freight dock (test-output/c4b) | visual | reviewed |
+| e2e runs | 252/255, 252/255 (online tag test: A's keys weren't switched on yet; fixed), 253/256 (all C4b checks pass; the gym-bro slap check failed while I was compiling at the same time) | e2e | noted |
+
 ## City Redesign C4a checks: mess (2026-09-29)
 
 | Area | Check | How | Result |
@@ -314,6 +402,32 @@ Notes on the C1 browser runs: earlier runs failed on test problems, each fixed a
 | Totals | 128 shared unit + 2 client unit + matchmaking smoke 8/8 + browser e2e 224/224 and 224/224 at 110 ms lag | all | pass |
 
 Note on the browser test for 2A: earlier runs failed on test problems (not game bugs), all fixed in the test: the cashier count (4 -> 15), the police station's cell position (it moved), waits too short for the heavier city on this CPU-only test box (respawn, joining, refresh), a punch check that didn't allow for healing between missed clicks, and a test-only seat-hold override (?seathold=) because reloading the city here can take over 2 minutes. Friends' test windows now render at 800x450 so 4 windows fit on the box.
+
+## Manual checklist for Blake (City Redesign C5c)
+
+- [ ] Rob the bank both ways: drill it (loud) and find the keycard (sneaky). Is 20 s of drilling too long with the guards on you?
+- [ ] Prise off the Mayor's nose and tag his plinth.
+- [ ] With a friend: get 1 star, let them find you on the M map, knock you down and hold you for the cops. Is $5 per heat point the right bounty? Is 14 SPACE presses to wriggle free about right?
+- [ ] Find the 3 golden stashes (hint: look for a gold glint on a loose brick).
+
+## Manual checklist for Blake (City Redesign C5b)
+
+- [ ] Walk Chinatown by day and at night. Does it feel right? Anything that looks off or not respectful?
+- [ ] Help yourself at a stall, and punch the seafood tank.
+- [ ] Catch a dragon parade and grab the red envelopes. Too long, too short, too much money?
+
+## Manual checklist for Blake (City Redesign C5a)
+
+- [ ] Start a room: does the view from the squat make you want to go down there?
+- [ ] Listen to Uncle Dumpster for a minute. Funny enough? Too chatty?
+- [ ] Play a round of THROW-O-MATIC and a lap of the Trolley Grand Prix. Too easy or too hard?
+- [ ] Press M in a match. Is the map easy to read?
+
+## Manual checklist for Blake (City Redesign C4b)
+
+- [ ] Open a washer quietly, then punch one open. Did the old lady get you?
+- [ ] Tag the walls in THE PIT. Does +1 aura per tag feel worth the heat?
+- [ ] Run up the quarter pipes and along the fun box.
 
 ## Manual checklist for Blake (City Redesign C4a)
 

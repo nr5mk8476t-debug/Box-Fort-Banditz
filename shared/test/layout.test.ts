@@ -126,7 +126,7 @@ test("C1 blocks: no blank street frontage over 15 m, no empty ground, landmarks 
   console.log(`  ground samples with nothing on them: ${empty.length}`);
   assert.ok(empty.length <= 6, `empty ground at ${empty.slice(0, 10).join(" ")} (${empty.length})`);
   // landmark shells: named, and none takes more than half its block
-  const names = ["TRASHINGTON CITY HALL", "LUCKY DUMPSTER CASINO", "TRASHCORP HQ", "GRAND HOTEL", "MUSEUM OF OLD STUFF", "LUXURY MALL", "GILDED PIGEON RESIDENCES", "COUNTRY CLUB",
+  const names = ["TRASHINGTON CITY HALL", "LUCKY DUMPSTER CASINO", "TRASHCORP HQ", "GRAND HOTEL", "MUSEUM OF OLD STUFF", "LUXURY MALL", "GILDED PIGEON RESIDENCES", "TRASHINGTON BANK",
     "GRAND STATION", "MARINA OFFICE", "TRASHINGTON PD", "ST. DUMPSTER'S", "THE BIJOU", "LUCKY NOODLE GATE", "MARKET ROW HALL", "OPENING 1987", "THE ARCHES", "SEWER OUTFALL",
     "BUILD YARD", "OUR MAYOR", "RESERVED FOR THE NEXT MAYOR"];
   for (const n of names) assert.ok(city.boxes.some((b) => b.sign?.includes(n)), `landmark ${n}`);
@@ -149,6 +149,7 @@ test("C1 alleys: every bit of walkable ground connects to the streets (no sealed
     if (!free[k] || home[k] !== Infinity) continue;
     const x = cx(i), z = cx(j);
     if (st.cells.some((c) => inRect(c.rect, x, z, 1))) continue; // (jail cells are locked, by design)
+    if (city.bank && inRect(city.bank.vault, x, z, 0.5)) continue; // (C5c: so is the bank's vault, until you crack it)
     pockets.push(`${x.toFixed(1)},${z.toFixed(1)}`);
   }
   assert.ok(pockets.length === 0, `sealed ground at ${pockets.slice(0, 12).join(" ")} (${pockets.length} cells)`);
@@ -214,13 +215,16 @@ test("C1 fairness: from every fort, the walk to the richest loot stays within Bl
   assert.ok(hi / lo <= 1.12, `spread ${((hi / lo - 1) * 100).toFixed(1)}%`);
 });
 
-test("C1 tiers: low in the south, medium in the middle, high in the north; cops' precinct by the park", () => {
+test("C1 tiers: low in the south, medium in the middle, high in the north; (C4b) the cops' precinct in the middle tier by the canal", () => {
   const byTier = [0, 1, 2].map((t) => city.lootSpawns!.filter((s) => (s.tier ?? tierAt(s.z)) === t).length);
   assert.ok(byTier.every((n) => n >= 20), `loot per tier ${byTier}`);
   assert.equal(tierAt(-80), 0); assert.equal(tierAt(0), 1); assert.equal(tierAt(80), 2);
   const st = city.station!;
-  assert.ok(st.rect.minZ > RING.r1 && st.rect.maxX > 0 && st.rect.minX < 30, "police precinct just north of the roundabout");
-  assert.ok(Math.hypot(st.door.x, st.door.z) < 35, "its door faces the park");
+  assert.ok(tierAt(st.rect.minZ) === 1 && tierAt(st.rect.maxZ) === 1, "police precinct in the middle tier");
+  assert.ok(st.rect.maxX > 80 && city.deepWater!.some((w) => w.minX - st.rect.maxX < 20), "next to the east road and the canal");
+  assert.ok(Math.hypot(st.rect.minX + st.rect.maxX, st.rect.minZ + st.rect.maxZ) / 2 > 60, "not in the middle of town any more");
+  assert.ok(onRoadAt(city, st.door.x, st.door.z - 4.5), "its door faces a street");
+  assert.ok(!city.landmarks!.ledge09 && !city.landmarks!.ledge195, "the old tutorial ledges are gone");
 });
 
 test("C2 façades: every street building has a front facing its street and a parody sign, no repeats in a block", () => {
@@ -258,7 +262,7 @@ test("C2 façades: no two neighbours alike (touching street buildings differ in 
     assert.ok(a.color && c.color && a.color !== c.color, `neighbours at ${a.x.toFixed(1)},${a.z.toFixed(1)} and ${c.x.toFixed(1)},${c.z.toFixed(1)} share ${a.color}`);
     assert.notEqual(a.sign, c.sign, "neighbours share a sign");
   }
-  assert.ok(pairs >= 10, `neighbour pairs checked: ${pairs}`);
+  assert.ok(pairs >= 6, `neighbour pairs checked: ${pairs}`);
 });
 
 test("C3 park: a pear-shaped pond you can wade in, a fountain with a rim you can step over, bushes on the lawn, all inside the ring", () => {

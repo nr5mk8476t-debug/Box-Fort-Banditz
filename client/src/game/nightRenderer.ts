@@ -37,6 +37,14 @@ export class NightRenderer {
   private sunDay: number;
   private fogStartDay: number;
   private fogEndDay: number;
+  /** C5a: up on the squat's roof you can see much further (fog pushed back) */
+  private far = 1;
+  setFarView(f: number) {
+    if (Math.abs(f - this.far) < 0.01) return;
+    this.far = f;
+    this.camera.maxZ = f > 1 ? 1200 : 500;
+    this.apply();
+  }
 
   constructor(private scene: Scene, arena: ArenaLayout, private hemi: HemisphericLight, private sun: DirectionalLight, private camera: UniversalCamera) {
     this.hemiDay = hemi.intensity;
@@ -107,8 +115,8 @@ export class NightRenderer {
     const sky = Color3.Lerp(DAY_SKY, NIGHT_SKY, n);
     sc.clearColor = new Color4(sky.r, sky.g, sky.b, 1);
     sc.fogColor = sky;
-    sc.fogStart = this.fogStartDay * (1 - 0.35 * n);
-    sc.fogEnd = this.fogEndDay * (1 - 0.3 * n);
+    sc.fogStart = this.fogStartDay * (1 - 0.35 * n) * this.far;
+    sc.fogEnd = this.fogEndDay * (1 - 0.3 * n) * this.far;
     this.poolMat.alpha = 0.6 * n;
     this.pools?.setEnabled(n > 0.01);
     this.moon.setEnabled(n > 0.05);
