@@ -64,6 +64,7 @@ export function whenAudioUnlocked(f: () => void): void {
 // Sound effects
 
 function env(g: GainNode, t: number, a: number, peak: number, d: number) {
+  if (!(peak > 0.0001)) peak = 0.0001; // (C5c.3: a sound faded right out must never be 0 here: that throws and stops the frame)
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + a);
   g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
@@ -206,6 +207,14 @@ export const sfx = {
   drill(gain = 1) { blip(180 + Math.random() * 30, 0.4, "sawtooth", 0.05 * gain, 220); noise(0.35, 0.1 * gain, 4200, 0, 2); },
   vault(gain = 1) { noise(0.6, 0.2 * gain, 250, 0, 0.6); blip(70, 0.8, "sine", 0.2 * gain, 45); [523, 659, 784, 1046].forEach((f, i) => blip(f, 0.14, "triangle", 0.08 * gain, undefined, 0.6 + i * 0.08)); },
   stash(gain = 1) { [1318, 1568, 2093, 2637].forEach((f, i) => blip(f, 0.12, "sine", 0.08 * gain, undefined, i * 0.06)); noise(0.2, 0.04 * gain, 7000, 0.2); },
+  // C5c.2: Le Dumpstère's grand piano, played badly
+  // C5c.3: THE COMPACTOR: the bass drum (and a hat) through the walls, THE DROP, a record scratch; PAWN-O-RAMA's case
+  kick(gain = 1) { blip(110, 0.16, "sine", 0.3 * gain, 42); noise(0.03, 0.05 * gain, 900); },
+  hat(gain = 1) { noise(0.03, 0.04 * gain, 9000); },
+  clubDrop(gain = 1) { sweepNoise(1.2, 0.08 * gain, 400, 6000); blip(55, 0.9, "sine", 0.4 * gain, 30, 1.0); noise(0.5, 0.3 * gain, 200, 1.0, 0.6); [523, 659, 784, 1046].forEach((f, i) => blip(f, 0.12, "square", 0.05 * gain, undefined, 1.05 + i * 0.05)); for (let i = 0; i < 6; i++) noise(0.25, 0.05 * gain, 1500 + i * 300, 1.1 + i * 0.07, 0.5); },
+  scratch(gain = 1) { for (let i = 0; i < 4; i++) sweepNoise(0.09, 0.12 * gain, i % 2 ? 3000 : 600, i % 2 ? 600 : 3000); blip(180, 0.4, "sawtooth", 0.06 * gain, 90, 0.36); },
+  glass(gain = 1) { for (let i = 0; i < 7; i++) blip(2400 + Math.random() * 2400, 0.12, "triangle", 0.05 * gain, 1800, i * 0.035); noise(0.3, 0.2 * gain, 5200, 0, 1.5); },
+  piano(gain = 1) { [262, 330, 392, 311, 523, 247, 440, 349].forEach((f, i) => { blip(f, 0.35, "triangle", 0.09 * gain, f * 0.995, i * 0.16); blip(f * 2, 0.2, "sine", 0.03 * gain, undefined, i * 0.16); }); },
   // C5a: the lobby mini-games
   target(pts: number, gain = 1) { noise(0.06, 0.12 * gain, 2200); blip(pts === 3 ? 1318 : 880, 0.08, "square", 0.08 * gain); if (pts === 3) blip(1760, 0.14, "square", 0.08 * gain, undefined, 0.08); },
   gameStart() { [392, 523, 659].forEach((f, i) => blip(f, 0.1, "square", 0.08, undefined, i * 0.12)); blip(1046, 0.3, "square", 0.08, undefined, 0.4); },
@@ -229,6 +238,8 @@ export const sfx = {
   },
   robStart() { blip(220, 0.4, "sawtooth", 0.07, 330); },
   crash(gain = 1) { noise(0.5, 0.3 * gain, 600, 0, 0.6); blip(90, 0.4, "sine", 0.25 * gain, 40); sweepNoise(0.4, 0.1 * gain, 3000, 400); [1568, 1318, 1568].forEach((f, i) => blip(f, 0.08, "triangle", 0.05 * gain, undefined, 0.5 + i * 0.1)); },
+  /** D1: hit by a car: a cartoon crunch, a spring BOING and a slide-whistle up as you fly */
+  splat(gain = 1) { noise(0.3, 0.28 * gain, 500, 0, 0.6); blip(80, 0.3, "sine", 0.25 * gain, 40); blip(300, 0.45, "square", 0.08 * gain, 900, 0.05); blip(500, 0.7, "sine", 0.1 * gain, 1700, 0.15); [1568, 1318, 1568, 1318].forEach((f, i) => blip(f, 0.08, "triangle", 0.05 * gain, undefined, 0.9 + i * 0.1)); },
   respawn() { [392, 523, 659].forEach((f, i) => blip(f, 0.1, "triangle", 0.09, undefined, i * 0.07)); },
   honk(gain = 1) { blip(370, 0.35, "square", 0.08 * gain); blip(440, 0.35, "square", 0.06 * gain); },
   engine(gain = 1) { noise(0.38, 0.07 * gain, 220, 0, 0.8); blip(70, 0.35, "sawtooth", 0.03 * gain, 75); },

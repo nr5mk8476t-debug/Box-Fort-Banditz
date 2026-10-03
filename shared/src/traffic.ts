@@ -12,7 +12,6 @@
 // They do NOT stop for bandits: a moving car that hits you wipes you out (cartoon pancake),
 // everything you carried spills on the road, and you respawn at your fort 10 s later.
 // Runs inside the World on the host and in solo mode (deterministic: its own seeded dice).
-import { makeMoveState } from "./movement.js";
 import { PLAYER } from "./constants.js";
 import type { RoadNet, RoadEdge } from "./arena.js";
 import type { World, PlayerSim } from "./world.js";
@@ -20,6 +19,12 @@ import type { World, PlayerSim } from "./world.js";
 export const CAR_HALF_LEN = 2.1;
 export const CAR_HALF_WIDTH = 0.95;
 export const WIPEOUT_TIME = 10;
+/**
+ * D1 (Blake): getting hit by a car: you're launched up and along (spinning), land flat, and lie there stunned for
+ * WIPEOUT_TIME seconds from the moment you land (no moving, punching, grabbing). Everything you carry scatters
+ * across the road. Then you get up where you landed, with GRACE seconds where cars can't hit you again.
+ */
+export const SPLAT = { launchUp: 8.5, launchAlong: 0.75, launchMin: 6, grace: 3, scatter: 4.5 };
 const ACCEL = 4, BRAKE = 10;
 /** cars in the city */
 export const CAR_COUNT = 22;
@@ -341,8 +346,10 @@ export class TrafficSystem {
     // respawn timers for wiped-out bandits
     for (const p of w.players.values()) {
       if (p.respawnT <= 0) continue;
-      p.respawnT -= dt;
-      if (p.respawnT <= 0) this.respawn(p);
+      // (the 10 s only start once you've landed; meanwhile you stay flat)
+      if (p.move.grounded) { p.respawnT -= dt; p.move.vx *= 0.82; p.move.vz *= 0.82; } // (SPLAT: you skid a moment and stop flat)
+      p.move.knockT = Math.max(p.move.knockT, p.respawnT + 0.05);
+      if (p.respawnT <= 0) this.getUp(p);
     }
     if (!this.lanes.length) return;
     const truck = w.match.truck;
@@ -467,7 +474,7 @@ export class TrafficSystem {
       return Math.abs(along) < CAR_HALF_LEN + pad && Math.abs(side) < CAR_HALF_WIDTH + pad ? { along, side } : null;
     };
     for (const p of w.players.values()) {
-      if (!p.connected || p.respawnT > 0 || p.jailT > 0 || p.move.y > 1.4) continue;
+      if (!p.connected || p.respawnT > 0 || p.jailT > 0 || p.move.y > 1.4 || p.splatGrace > w.time) continue; // (D1: a grace period after getting up)
       const hit = inside(p.move.x, p.move.z, PLAYER.radius);
       if (!hit) continue;
       if (car.v > 2) this.wipeout(p, car);
@@ -497,22 +504,34 @@ export class TrafficSystem {
   wipeout(p: PlayerSim, car: CarSim) {
     const w = this.w;
     w.props.cancelRob(p);
+    // everything you carry flies out across the road
+    const items = w.carriedItems(p);
     w.dropAll(p);
-    p.move.vx = Math.sin(car.yaw) * 6; p.move.vz = Math.cos(car.yaw) * 6;
-    p.move.knockT = WIPEOUT_TIME + 1;
-    p.move.immuneT = WIPEOUT_TIME + 4;
-    p.move.mantleT = 0; p.move.slideT = 0; p.move.dodgeT = 0;
+    const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
+    for (const it of items) {
+      if (it.mode !== "free") continue;
+      const a = w.random() * Math.PI * 2, sp = SPLAT.scatter * (0.5 + w.random() * 0.8);
+      w.freeItem(it, p.move.x, p.move.y + 1.0, p.move.z, fx * car.v * 0.5 + Math.cos(a) * sp, 4 + w.random() * 3, fz * car.v * 0.5 + Math.sin(a) * sp);
+    }
+    // launched: up and along the way the car was going (and a bit to the side you were standing on)
+    const side = (p.move.x - car.x) * fz - (p.move.z - car.z) * fx >= 0 ? 1 : -1;
+    const along = Math.max(SPLAT.launchMin, car.v * SPLAT.launchAlong + 3);
+    const m = p.move;
+    m.vx = fx * along + fz * side * 2.5; m.vz = fz * along - fx * side * 2.5; m.vy = SPLAT.launchUp;
+    m.y += 0.05; m.grounded = false;
+    m.knockT = WIPEOUT_TIME + 0.05;
+    m.mantleT = 0; m.slideT = 0; m.dodgeT = 0; m.crouching = false;
+    p.hp = 0; p.hurtT = w.time;
     p.respawnT = WIPEOUT_TIME;
     w.emit({ t: "wipeout", p: p.id, car: car.id, x: p.move.x, z: p.move.z });
   }
 
-  private respawn(p: PlayerSim) {
+  /** D1: the stun's over: you get up right where you landed, with a few seconds' grace from traffic */
+  private getUp(p: PlayerSim) {
     p.respawnT = 0;
-    const sp = this.w.arena.spawns[p.colorIdx % this.w.arena.spawns.length];
-    const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
-    p.move = { ...makeMoveState(sp.x, sp.z, sp.yaw), ...keep };
-    p.move.immuneT = 3;
-    p.queue.length = 0;
+    p.move.knockT = 0;
+    p.move.immuneT = Math.max(p.move.immuneT, 1.5);
+    p.splatGrace = this.w.time + SPLAT.grace;
     this.w.emit({ t: "respawn", p: p.id });
   }
 }

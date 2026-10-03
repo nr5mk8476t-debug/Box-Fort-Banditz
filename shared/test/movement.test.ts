@@ -312,3 +312,25 @@ test("never ends up inside a box, whatever you press (fuzz)", () => {
     }
   }
 });
+
+test("D1 snappier: walk 5.8 in ~0.12 s, sprint 9.4, a sprint stops in ~0.3 s with a little skid, reversing bites harder, heavy loot still slows you", () => {
+  assert.ok(PLAYER.walkSpeed >= 5.8 && PLAYER.sprintSpeed >= 9.4, "faster");
+  // off the mark: walk speed within 8 frames (0.13 s)
+  const a = run(makeMoveState(0, 0), empty, 8 / SIM_HZ, { mz: 1 });
+  assert.ok(horizontalSpeed(a) > PLAYER.walkSpeed - 0.01, `walk speed after 8 frames: ${horizontalSpeed(a).toFixed(2)}`);
+  // stopping from a full sprint: under 0.35 s, but not instant (a skid of at least a little distance)
+  const b = run(makeMoveState(0, 0), empty, 1, { mz: 1, sprint: true });
+  const z0 = b.z;
+  let frames = 0;
+  while (horizontalSpeed(b) > 0.01 && frames < 60) { stepMovement(b, input({}, 100 + frames), empty); frames++; }
+  assert.ok(frames / SIM_HZ < 0.35 && frames > 4, `stopped in ${(frames / SIM_HZ).toFixed(2)} s`);
+  assert.ok(b.z - z0 > 0.4, `skidded ${(b.z - z0).toFixed(2)} m`);
+  // reversing out of a sprint: going the other way within 0.25 s
+  const c = run(makeMoveState(0, 0), empty, 1, { mz: 1, sprint: true });
+  let rf = 0;
+  while (c.vz > -1 && rf < 60) { stepMovement(c, input({ mz: -1 }, 200 + rf), empty); rf++; }
+  assert.ok(rf / SIM_HZ < 0.25, `reversed in ${(rf / SIM_HZ).toFixed(2)} s`);
+  // carrying: the carry multiplier still applies on top (something heavy at 0.6 = 40% slower)
+  const d = makeMoveState(0, 0); d.carryMul = 0.6; run(d, empty, 1, { mz: 1, sprint: true });
+  assert.ok(Math.abs(horizontalSpeed(d) - PLAYER.sprintSpeed * 0.6) < 1e-6, "loaded down: clearly slower");
+});

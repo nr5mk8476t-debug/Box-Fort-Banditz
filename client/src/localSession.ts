@@ -76,8 +76,8 @@ export class LocalSession {
   }
 
   // ---- test helpers (used by automated tests with ?test=1) ----
-  teleport(x: number, z: number, yaw: number) {
-    this.world.debugTeleport(this.id, x, z, yaw); // (C5a: lands you on the squat's roof when that's where x, z is)
+  teleport(x: number, z: number, yaw: number, y?: number) {
+    this.world.debugTeleport(this.id, x, z, yaw, y); // (C5a: lands you on the squat's roof when that's where x, z is)
   }
   spawnItem(type: string, x: number, z: number): string { return this.world.placeItem(type, x, this.world.floorAt(x, z) + 0.3, z); }
   /** Put a specific pedestrian at a spot (standing still until the next wander decision). */

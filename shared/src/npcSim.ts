@@ -478,11 +478,11 @@ export class NpcSystem {
    * wakes up, leans out of her window yelling (and calls the cops on whoever did it). Returns her id if she woke.
    */
   /** C5c: the bank's alarm: every bank guard comes after whoever set it off */
-  guardsAlert(byPlayer: string) {
+  guardsAlert(byPlayer: string, kind: NpcKind = "bank_guard") {
     for (const n of this.npcs.values()) {
-      if (n.kind !== "bank_guard" || n.state === "ko") continue;
+      if (n.kind !== kind || n.state === "ko") continue;
       n.state = "chase"; n.target = byPlayer; n.chaseT = 0;
-      this.say(n, NPC_DEFS.bank_guard.lines.fight, true);
+      this.say(n, NPC_DEFS[kind].lines.fight ?? NPC_DEFS[kind].lines.hit, true);
     }
   }
 
@@ -632,7 +632,7 @@ export class NpcSystem {
             n.state = "huff"; n.stateT = 1.5; n.target = "";
             break;
           }
-          tx = p.x; tz = p.z; speed = def.chase ?? 5.6;
+          tx = p.x; tz = p.z; speed = def.chase ?? 6.5; // (D1: a touch faster than you walk, slower than you sprint)
           const d = Math.hypot(p.x - n.move.x, p.z - n.move.z);
           if (d < ATTACK_RANGE && n.attackCd <= 0 && !p.immune) { n.state = "windup"; n.stateT = WINDUP; }
           else if (d < 1.1) speed = 0;

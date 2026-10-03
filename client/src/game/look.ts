@@ -152,6 +152,9 @@ const POI: [string, (a: ArenaLayout) => { x: number; z: number } | null][] = [
   ["Skyscraper", () => ({ x: 47, z: -72 })],
   ["Bank", (a) => a.bank ? { x: (a.bank.rect.minX + a.bank.rect.maxX) / 2, z: (a.bank.rect.minZ + a.bank.rect.maxZ) / 2 } : null],
   ["Mayor Statue", (a) => a.statue ? { x: a.statue.x, z: a.statue.z } : null],
+  ["Le Dumpstere", (a) => a.resto ? { x: (a.resto.rect.minX + a.resto.rect.maxX) / 2, z: (a.resto.rect.minZ + a.resto.rect.maxZ) / 2 } : null],
+  ["The Compactor", (a) => a.club ? { x: (a.club.rect.minX + a.club.rect.maxX) / 2, z: (a.club.rect.minZ + a.club.rect.maxZ) / 2 } : null],
+  ["Pawn-O-Rama", (a) => a.pawnShop && a.units ? { x: a.units[a.pawnShop.unit].x, z: a.units[a.pawnShop.unit].z } : null],
 ];
 
 /**

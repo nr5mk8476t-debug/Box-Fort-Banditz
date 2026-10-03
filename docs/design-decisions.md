@@ -452,3 +452,116 @@ Blake's asks (29 Sep): a small skate park in the low end of town; fix the brick 
   - The bounty rate is $5 per point of heat, up to $500 at 100 heat.
   - A pin lasts at most 60 s, and it takes 14 SPACE presses to wriggle free.
   - The pinner doesn't get heat for the knockdown punches beyond the usual rules.
+
+## City Redesign slice C5c.2 (Mile East: LE DUMPSTÈRE), built 2026-10-01
+- Blake first picked a nightclub ("CLUB TRASHCAN", built and screenshotted), then scrapped it and chose a **fancy restaurant** instead. Nothing of the club shipped; the restaurant reuses its shell (a doorman at the door, a roof terrace up the stairs). A real basement was ruled out: the city has no underground.
+- **Le Dumpstère** ("three bins in the guide"): a two-storey burgundy restaurant with a gold sign, a striped awning, a red carpet, topiaries, lanterns and a menu easel ("CANAL TROUT A LA BIN").
+- **The maître d'** at the front door lets you in only if:
+  - you've **booked a table** (E at his podium: $20, good until dawn); or
+  - you're **dressed for it** (carrying something designer: a hoodie, scarf, sunglasses, gold chain, Rolecks or pearls).
+  - Anyone else stepping into the doorway is put back on the pavement ("Do you have a reservation?").
+- **Other ways in:**
+  - knock the maître d' out (hp 3, fights back);
+  - go round the back through the **kitchen door**;
+  - climb the crate and boxes onto the **roof terrace** and come down the stairs.
+- **Inside (each once a day, restocked at dawn):**
+  - the **cloakroom**: designer stuff, wallets, a Rolecks, pearls;
+  - the **dessert trolley**: macarons, cake, fancy cheese;
+  - the **kitchen stove**: silver cutlery, fancy cheese, baguettes; the chef yells and you get +3 heat if anyone sees you;
+  - the **grand piano**: bash out a tune for +3 aura (and a noise);
+  - the **chef's table** on the roof: Fancy Fizz, silver cutlery, a gold chain, sometimes a diamond ring or cash.
+- **Golden stashes:**
+  - the **Golden Truffle** ($260-480), behind a loose brick in the roof parapet;
+  - the **Diamond Pigeon**, now in a brick on the back wall.
+- **Looks:**
+  - posh diners (top hats, pearls) eating at candlelit tables;
+  - chandeliers, gold-framed paintings, a red carpet runner;
+  - a white-tiled kitchen with steaming pots and a chef who shakes his pan;
+  - the roof terrace has herb beds, string lights and umbrellas.
+  - Performance mode skips the diners, chef and chandeliers.
+- **New items:** Fancy Fizz (sparkling apple juice), Silver Cutlery, Box of Macarons, Golden Truffle.
+- **M map:** Le Dumpstere is on it.
+- **Also fixed:** at 3 stars a 4th cop could turn up if the cop car arrived after the third foot cop. A car on its way now counts as the cop it brings.
+- **My calls (logged; easy to change):**
+  - The table fee is $20.
+  - These count as designer: hoodie, scarf, sunglasses, gold chain, Rolecks, pearls.
+  - The restaurant is open all day; there's no closing time.
+  - The kitchen door is always open, but the chef yells and gives +3 heat if he sees you.
+
+## Overhaul agreed 2026-10-01 (Blake): city life, scale and movement
+- Five jobs, built as separate tested slices, **feel first**:
+  - **D1:** snappier movement and slapstick car hits.
+  - **D2:** a giant multi-level bank with a basement vault (needs real underground floors in the engine).
+  - **D3:** the **scrapyard with the car crusher** replaces the Pit (my pick, Blake agreed). C5d becomes just the blimp and the bus fort.
+  - **D4:** the interiors overhaul (every shop gets its own clutter and story; several buildings get extra floors).
+
+## D1: faster, snappier movement + slapstick car hits, built 2026-10-01
+- **Movement:**
+  - walk 5.0 → 5.8 m/s, sprint 7.8 → 9.4, crouch 2.3 → 2.7;
+  - acceleration 20 → 48 (full walk speed in about 0.12 s), stopping 17 → 34 (a sprint stops in about 0.28 s, a little skid left);
+  - pushing against your own momentum (reversing, hard cuts) bites 1.6x harder;
+  - air steering 5 → 8;
+  - slide 9.4 → 11.2 (it needs 7.0 to start), dodge 10.5 → 12.
+  - Carrying still multiplies your speed the same way, so heavy loot is still clearly slower.
+- **Chasers kept in step:** foot cops 5.6 → 6.5 (still between walking and sprinting), the default fighter chase speed 5.6 → 6.5, bank guards 6.2 → 7.2, the old lady 4.3 → 5.0.
+- **Hit by a car:**
+  - You're launched up (8.5 m/s) and along the car's direction (at least 6 m/s), knocked a little to the side, and cartwheel through the air.
+  - Other players see you spin with dizzy stars; your own camera rolls and lurches.
+  - Everything you carry is flung across the road.
+  - You land flat, and the 10 s stun starts when you land. You can't move, punch, grab or sprint (inputs do nothing; you just slide to a stop).
+  - A small yellow ring above the hotbar counts the seconds down ("SPLAT!").
+  - Then you get up right where you landed (no more trip back to your fort). You get 3 s where cars can't hit you, and 1.5 s where nobody can knock you down again.
+  - Sounds and effects: a honk plus a cartoon crunch, a spring BOING and a slide whistle; a dust puff and a "SPLAT!/BOINK!/KA-THUNK!" pop.
+- **Tested (2026-10-02):** 181 shared + 2 client unit, matchmaking smoke 8/8, server smoke pass, browser e2e 288/288 normal and 288/288 at 110 ms lag (shipped together with C5c.2 Le Dumpstère). Next: D2, the multi-level bank with a basement.
+
+## C5c.3: THE COMPACTOR (nightclub) + PAWN-O-RAMA, built 2026-10-02
+Blake's answers: the club gets a new lot and the restaurant stays; the theme is THE COMPACTOR; the pawn shop does fence plus pawn loans; build both before D2. ("Make this the most unique night club, do not hold off from detail.")
+
+- **Where:**
+  - THE COMPACTOR takes the whole Old Brick West South block on Crooked St, backing onto the rail yard. It replaces THE SWEATBOX's "club opening soon" shutter.
+  - LAWYERS 4 LESS moved to the empty Uptown West block. The empty block keeps its place in the random sequence, so the blocks after it look the same as before.
+  - PAWN-O-RAMA replaces THE DIVE's "bar opening soon" shutter in the Yards (Yards Rd). The bar can come back with Night & Life.
+- **The building:**
+  - An old trash-compactor plant: a double-height main hall (10 m) with a one-storey backstage wing on the west side.
+  - A 22 m smokestack, with neon letters down its side and lasers off the top at night.
+  - Tall factory windows that glow pink and teal.
+- **The door:**
+  - The front door is a garbage-truck hopper mouth with steel teeth and rubber flaps, with a velvet-rope queue on the pavement.
+  - Big Crunch the bouncer lets in anyone who has paid the $15 cover at the rope (stamped till dawn) and VIPs (5+ aura, or carrying a VIP wristband).
+  - Anyone else stepping into the doorway is put back on the pavement. If he's knocked out, the door's open to all.
+- **Sneaky ways in:**
+  - **The trash conveyor:** a moving belt (1.7 m/s) from the loading dock through a 1.3 m rubber flap in the west wall. Standing, the flap stops you; crouched, it carries you into the sorting room.
+  - **The climb:** dock, then a bale, then the bale stack, then the back roof. From there, the maintenance door opens onto the VIP balcony.
+- **The crusher-bed dance floor (7 x 8 m):**
+  - It bobs with the beat (124 bpm, never above step height).
+  - Every 75 s comes **THE DROP**: the floor builds up to 1.6 m over 6 s, holds, then slams down. Everyone on it is launched up at 12 m/s, along with any loose items, and confetti fires.
+  - A giant ram over the floor comes down as the floor goes up.
+  - The floor is a moving collision box. Its height depends only on the city clock and the time the drop started (`clubB`, synced), so the host, the client prediction and joiners all work it out the same way. Errors from lag are a few cm.
+- **DJ Crunch's crane cab:**
+  - It hangs over the north end of the floor, reached across the balcony.
+  - Hijacking the decks (E, every 40 s) gives +3 aura and a roar (a 14 m noise), and starts the drop right away.
+- **Inside the hall:**
+  - A conveyor-belt bar that carries drinks round (E for neon fizz or glow sticks; restocks).
+  - A back bar of glowing bottles, speaker stacks that thump, moving-head light beams, and a mirror ball made of 2,000 crushed cans.
+  - Crushed-car-cube seats, a photo booth, posters, and the VIP "Bale Room" balcony (a booth to rummage).
+  - A crowd: a few by day, the full crowd at night. They dance, put their arms up on the build and fly on the drop.
+  - The bass can be heard through the walls.
+- **Backstage:**
+  - The sorting room: a sort bin, lockers, a forklift, recycling cages.
+  - The green room: the DJ's rider ("only blue jellybeans"), a mirror with bulbs.
+  - The stair room: staff stairs up to the back roof.
+  - The manager's office with **the safe**. Hold E for 6 s (loud) for a bag holding $40 plus every cover charge paid that day. It sets off the alarm, gives 30 heat, and Big Crunch comes for you.
+- **The roof:** a lounge with string lights, a "Dumpster Jacuzzi" and the **Golden Record** stash. It's reached by the service stair on the back roof.
+- **PAWN-O-RAMA:**
+  - "Honest" Sal (the shop's cashier, in a cardigan with glasses and a gold tooth) and his nephew Big Vinnie (a fighter).
+  - **Fence:** E at the counter with something out: 40% of its value in cash right away (the end-of-day shop pays 50-75% plus haggling).
+  - **Pawn:** E at the window case with something out: 30% now. The item sits in the case tagged in your colour. Buy it back before dawn for 40%; at dawn it goes on sale to anybody for 70%.
+  - **Smash & grab:** 3 punches on the case. Everything in it spills out, the alarm goes, you get 25 heat, and Vinnie comes swinging. The case is fixed at dawn.
+  - Dressing: a wall of guitars, a stack of tellies showing static, a suit of armour, a stuffed bear, a trophy shelf, bars over the counter, Sal's dog Collateral asleep in his basket. Outside: the three gold balls, "WE BUY ANYTHING* (*ALMOST)", "CASH 4 GOLD (AND SPOONS)", bars on the windows.
+- **New loot:** glow stick (junk), neon fizz, rare vinyl, DJ headphones, VIP wristband, crushed-can mirror ball (heavy), the Golden Record (legendary).
+- **Engine:**
+  - `Box.pump` (a dance floor that follows the clock) and `Box.belt` (carries whatever stands on it).
+  - `PropView.note` (the pawn case's contents, synced), `MatchView.clubB`.
+  - The client runs the city clock on between snapshots.
+- **Fixed on the way:** a lobby washing-line mesh flagged double-sided stopped a whole batch of city meshes merging (over 100 extra draw calls). The geometry is still double-sided, but the flag is now normal.
+- **Tested (2026-10-03):** 189 shared + 2 client unit, matchmaking smoke 8/8, server smoke pass (44 NPCs), browser e2e 305/305 normal and 305/305 at 110 ms lag. Next: D2, the multi-level bank with a basement.

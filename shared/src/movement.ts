@@ -415,7 +415,9 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
       s.vz += dirZ * PLAYER.slideSteer * dt;
     }
   } else if (!dodging) {
-    const accel = s.grounded ? (hasInput ? PLAYER.groundAccel : PLAYER.groundDecel) : PLAYER.airAccel;
+    let accel = s.grounded ? (hasInput ? PLAYER.groundAccel : PLAYER.groundDecel) : PLAYER.airAccel;
+    // D1: turning hard against your own momentum (reversing, a sharp cut) bites harder, so weaving feels snappy
+    if (s.grounded && hasInput && s.vx * wishX + s.vz * wishZ < 0) accel *= PLAYER.turnBoost;
     // Accelerate the velocity vector toward the wish vector (keeps diagonal speed correct).
     if (s.grounded || hasInput) {
       const dvx = wishX - s.vx;
@@ -508,6 +510,14 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
       }
     }
   }
+  // ---- 11. C5c.3: a conveyor belt carries whatever stands on it ------------------------------------
+  if (s.grounded && s.knockT <= 0) {
+    for (const b of arena.boxes) {
+      if (!b.belt || Math.abs(b.y + b.h / 2 - s.y) > 0.03 || !footprintOverlapsAt(s.x, s.z, b, 0.2)) continue;
+      s.x += b.belt[0] * dt; s.z += b.belt[1] * dt;
+      break;
+    }
+  }
   return s;
 }
 
@@ -528,10 +538,10 @@ export function horizontalSpeed(s: MoveState): number {
 }
 
 /** High-level pose, used by animation (hands, other players) and sounds. */
-export type MovePose = "knocked" | "mantle" | "stumble" | "slide" | "dodge" | "air" | "crouch" | "crouchWalk" | "sprint" | "walk" | "idle";
+export type MovePose = "tumble" | "knocked" | "mantle" | "stumble" | "slide" | "dodge" | "air" | "crouch" | "crouchWalk" | "sprint" | "walk" | "idle";
 
 export function movePose(s: MoveState): MovePose {
-  if (s.knockT > 0) return "knocked";
+  if (s.knockT > 0) return s.grounded ? "knocked" : "tumble"; // (D1: flying through the air after a car hit)
   if (s.mantleT > 0) return "mantle";
   if (s.stumbleT > 0 || s.stunT > 0) return "stumble";
   if (s.slideT > 0) return "slide";

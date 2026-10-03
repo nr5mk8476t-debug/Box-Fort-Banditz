@@ -210,6 +210,48 @@ Note on the automated browser test: it renders 3D on the CPU, so it runs at sing
 
 Note: the one failure in each e2e run was a test wait that was too short for this very slow test box (the truck's 5 s warning took ~50 s of real time; the charge ring check sampled before a frame had drawn). Later runs also exposed test (not game) timing issues: an unconfirmed drop before the tug test, a KO check reading C's body a moment before it caught up, and a joiner tab stalling past the 8 s silence limit and auto-reconnecting. All were fixed in the test (it now waits/retries and logs what happened, e.g. C's health after each landed punch: 100 -> 66 -> 32 -> 0). The final full run passed 219/219.
 
+## C5c.3 checks: THE COMPACTOR (nightclub) + PAWN-O-RAMA (2026-10-02)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Layout | the club fills Old Brick's west block (medium tier): hall, backstage wing, the crusher bed, a conveyor, 8 club props, Big Crunch, the Golden Record; nothing on a road; THE SWEATBOX and THE DIVE shutters gone; the lawyers moved uptown | unit | pass |
+| The floor | bobs to the beat but never above step height; THE DROP builds to 1.6 m, holds, slams; you ride it up and get launched when it slams; its collision follows the clock | unit + e2e (rides up, launched past 2 m) | pass |
+| Online | the host starts a drop, a joiner's crusher bed rises too (synced club clock) | e2e (online) | pass |
+| The door | no cover = put back on the pavement; $15 at the rope (it goes in the safe) = in until dawn; VIP (5 aura or a wristband) = in free; Big Crunch knocked out = open | unit + e2e (bounced, paid, walked in) | pass |
+| Ways in | crouched on the conveyor you ride under the flap into the sorting room (standing, the flap stops you); dock -> bale -> bale stack -> back roof -> maintenance door -> balcony -> crane cab; both staircases; the service stair to the roof | unit (real walks and climbs) + e2e (conveyor) | pass |
+| Inside | DJ decks: +3 aura, a noise, the drop starts now, then cools down; the bar, rider, lockers, sort bin and VIP booth give things; the safe (6 s): $40 + today's covers in one bag, alarm, 30 heat, Big Crunch | unit + e2e (hijacked the decks) | pass |
+| Pawn shop | in the Yards; fence 40%; pawn 30% (buy back 40% before dawn, only you); at dawn it's on sale to anyone at 70%; 3 punches smash the case: everything spills, heat, Vinnie chases you; broken until dawn | unit + e2e (sold a chain to Sal; the case shows what's in it) | pass |
+| Screens | club front by day and night, from above, the hall, the build and the drop, backstage, dock, roof, office, green room; the pawn shop front, inside, the counter, the case, the wall of guitars (test-output/c5c3-compactor + e2e 67-70) | visual | reviewed |
+| Totals | 189 shared + 2 client unit; matchmaking smoke 8/8; server smoke pass (44 NPCs); browser e2e **305/305** normal (host upload 32.7 KB/s) and **305/305** at 110 ms lag (32.0 KB/s) | all | pass |
+
+Notes: the first run found two out-of-date test expectations (14 shops, a mesh named "beam") and a real bug: a sound faded right out reached the audio engine as 0, which throws and stopped the game loop. Sounds now never go below a floor level. The first 110 ms run passed 304/305: in the solo controls check the key 1 press landed after the click, so it punched instead of throwing. The test's waits went from 5 s to 15 s and the second 110 ms run passed (the normal run was on the same game code). A lobby washing-line mesh flagged double-sided had been stopping a whole batch of city meshes from merging; that's fixed too.
+
+## Overhaul D1 checks: faster movement + slapstick car hits (2026-10-02)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Speed | walk 5.8, sprint 9.4, crouch 2.7 m/s; acceleration 48, braking 34, turning back 1.6x faster; slide 11.2, dodge 12 | unit + e2e (solo sprint 9.4, online walk 5.8) | pass |
+| Chasers | cops 6.5, fighters 6.5, bank guards 7.2, the old lady 5.0: a sprinting player can still get away | unit | pass |
+| Car hits | a moving car launches you up and along its path (SPLAT pop, honk, dust), what you carried flies out, you lie stunned 10 s with a countdown ring, then get up where you landed (no teleport) with 3 s of grace from cars | unit + e2e (in the open, launched > 0.8 m, ring shown, up near the landing spot) | pass |
+| Tumble | spinning ragdoll pose with dizzy stars for others, camera roll/lurch for you; camera never flips | e2e + screenshot review | pass |
+| Smoke | server smoke updated: Alice sprints into the camp (not into the roof parapet) and stops before crouching (a full-sprint crouch is now a slide) | smoke | pass |
+| Totals | 181 shared + 2 client unit; matchmaking smoke 8/8; server smoke pass; browser e2e **288/288** normal (final run, host upload 37.0 KB/s) and **288/288** at 110 ms lag (35.6 KB/s) | all | pass |
+| | earlier normal runs: one interrupted by a container restart (269 checks, no failures); then 287/288 three times, each one too-short test wait on this slow box: the online lock-pick helper read "time served" when the server's release beat its poll, the two-player suitcase look (15 s -> 40 s), the solo cop dispatch (45 s -> 150 s) | e2e | noted |
+
+Note: the 110 ms run was on the build before the last three test-only fixes above (the lock-pick test helper and two waits); game code is unchanged since.
+
+## City Redesign C5c.2 checks: Le Dumpstère (2026-10-01)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Layout | on Mile East in Uptown; podium, cloakroom, dessert trolley, piano, chef's table, stove; the maitre d'; the Golden Truffle and Diamond Pigeon stashes; 15 stairs ending at the roof | unit | pass |
+| The door | no booking and not dressed up = put back outside; broke = no booking; book ($20) or carry a designer scarf = walk in; bookings end at dawn | unit + e2e (turned away at the door) | pass |
+| Other ways in | maitre d' knocked out = open; walk in the kitchen's back door; really climb crate -> boxes -> roof, and walk up the stairs | unit + e2e (in through the kitchen door) | pass |
+| Inside | cloakroom, trolley, chef's table, stove: 1-2 things once a day; the piano: +3 aura and a noise; all restocked at dawn | unit | pass |
+| Cops | 3 stars = exactly 3 cops, counting the one the car brings, however the timing falls | unit | pass |
+| Screenshots | front by day and night, from above, the dining room, the piano, the kitchen, the roof, the climb (test-output/c5c2-resto + e2e 65-66) | visual | reviewed |
+| Totals | shipped with D1 below: 181 shared + 2 client unit; matchmaking smoke 8/8; server smoke pass (41 NPCs); browser e2e 288/288 normal and 288/288 at 110 ms | all | pass |
+
 ## City Redesign C5c.1 checks: bounties and citizen's arrests (2026-10-01)
 
 | Area | Check | How | Result |

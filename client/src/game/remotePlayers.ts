@@ -3,7 +3,7 @@
 // blend between updates ("interpolation") so they move smoothly, not in jumps.
 // Poses (crouch, slide, dodge, climb, stumble) use the same ease-toward-target
 // animation approach as the first-person hands, so they can't get stuck.
-import { Scene, MeshBuilder, TransformNode, Mesh, Vector3 } from "./babylon.ts";
+import { Scene, MeshBuilder, TransformNode, Mesh, Vector3, StandardMaterial, Color3 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured } from "./look.ts";
 import { PLAYER, PLAYER_COLORS, movePose, readMoveState, type MovePose } from "@bfb/shared";
 
@@ -30,6 +30,8 @@ interface Remote {
   carry: CarryKind;
   yaw: number;
   punchT: number;
+  /** D1: cartwheeling through the air after a car hit; the dizzy stars over a knocked-out head */
+  spin?: number; stars?: TransformNode;
 }
 
 export type CarryKind = "none" | "small" | "big" | "giant";
@@ -221,6 +223,19 @@ export class RemotePlayers {
       if (p === "sprint") { tLean = 0.28; }
       if (p === "walk") { tLean = 0.1; }
       if (p === "knocked") { tLean = -1.45; tArmUp = 0.9; tCrouch = 0.2; }
+      if (p === "tumble") { tArmUp = 1; } // (D1: launched by a car: arms and legs everywhere, spinning)
+      r.spin = p === "tumble" ? (r.spin ?? 0) + dt * 13 : 0;
+      // D1: dizzy stars circling a flattened bandit's head
+      if (p === "knocked" || p === "tumble") {
+        if (!r.stars) {
+          const st = new TransformNode("dizzy", this.scene); st.parent = r.root;
+          for (let i = 0; i < 3; i++) { const s = MeshBuilder.CreateSphere("dizzyStar", { diameter: 0.14, segments: 4 }, this.scene); const m = new StandardMaterial("dizzyStar", this.scene); m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#ffe14a"); s.material = m; s.parent = st; s.isPickable = false; const a = i / 3 * Math.PI * 2; s.position.set(Math.cos(a) * 0.35, 0, Math.sin(a) * 0.35); }
+          r.stars = st;
+        }
+        r.stars.setEnabled(true);
+        r.stars.position.y = p === "knocked" ? 0.55 : 2.0;
+        r.stars.rotation.y += dt * 5;
+      } else if (r.stars) r.stars.setEnabled(false);
       if (r.carry === "big" || r.carry === "giant") tLean -= 0.15; // lean back under the weight
       const f = 1 - Math.exp(-dt * 14);
       r.crouch += (tCrouch - r.crouch) * f;
@@ -241,7 +256,7 @@ export class RemotePlayers {
       const moving = Math.min(1, speed / 5);
       const bob = Math.abs(Math.sin(r.phase)) * 0.08 * moving;
 
-      r.bodyPivot.rotation.set(r.lean, 0, r.roll);
+      r.bodyPivot.rotation.set(r.lean + (r.spin ?? 0), 0, r.roll + (r.spin ? Math.sin(r.spin * 0.7) * 0.8 : 0));
       r.bodyPivot.scaling.set(1 + r.squash * 0.5, 1 - r.crouch * 0.32 - r.squash, 1 + r.squash * 0.5);
       r.bodyPivot.position.y = bob;
       // arms: swing when walking, raise for climb/slide/stumble

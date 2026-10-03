@@ -229,7 +229,7 @@ test("C1 tiers: low in the south, medium in the middle, high in the north; (C4b)
 
 test("C2 façades: every street building has a front facing its street and a parody sign, no repeats in a block", () => {
   const fronts = city.boxes.filter((b) => b.front);
-  assert.ok(fronts.length > 50, `street buildings with a front: ${fronts.length}`);
+  assert.ok(fronts.length > 45, `street buildings with a front: ${fronts.length}`); // (C5c.3: THE COMPACTOR took a whole block)
   let signed = 0;
   for (const b of fronts) {
     assert.ok(b.face, "a front knows which way its street is");

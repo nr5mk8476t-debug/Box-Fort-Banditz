@@ -663,6 +663,74 @@ export function buildLootModel(scene: Scene, type: string, outlineColor?: Color3
       const base = P(MB.CreateCylinder("base", { diameter: 0.14, height: 0.03, tessellation: 12 }, scene), "#ffd54a", 0.006); base.position.y = -0.1;
       break;
     }
+    // ---- C5c.2: LE DUMPSTÈRE ----
+    case "fancy_fizz": {
+      P(MB.CreateCylinder("b", { diameter: 0.1, height: 0.24, tessellation: 10 }, scene), "#2f7a4f", 0.008);
+      const neck = P(MB.CreateCylinder("n", { diameterTop: 0.04, diameterBottom: 0.09, height: 0.1, tessellation: 10 }, scene), "#2f7a4f", 0.006); neck.position.y = 0.17;
+      const foil = P(MB.CreateCylinder("f", { diameter: 0.05, height: 0.05, tessellation: 8 }, scene), "#ffd54a", 0); foil.position.y = 0.24;
+      const lbl = P(MB.CreateCylinder("l", { diameter: 0.104, height: 0.08, tessellation: 10 }, scene), "#f4f1ea", 0); lbl.position.y = -0.02;
+      break;
+    }
+    case "silver_cutlery": {
+      for (let i = 0; i < 3; i++) { const h = P(MB.CreateBox("c", { width: 0.025, height: 0.012, depth: 0.2 }, scene), "#d8dce4", 0.004); h.position.x = -0.04 + i * 0.04; const head = P(MB.CreateBox("h", { width: 0.04, height: 0.013, depth: 0.05 }, scene), "#e8ecf2", 0.004); head.position.set(-0.04 + i * 0.04, 0, 0.12); }
+      const ribbon = P(MB.CreateBox("r", { width: 0.14, height: 0.016, depth: 0.03 }, scene), "#6b1f2e", 0); ribbon.position.z = 0.02;
+      break;
+    }
+    case "macaron_box": {
+      P(MB.CreateBox("b", { width: 0.22, height: 0.06, depth: 0.1 }, scene), "#ffd6e6", 0.008);
+      ["#ff8fa3", "#b6ff3c", "#ffd54a", "#9fd4f0"].forEach((c, i) => { const m = P(MB.CreateCylinder("m", { diameter: 0.045, height: 0.035, tessellation: 10 }, scene), c, 0.003); m.rotation.z = Math.PI / 2; m.position.set(-0.075 + i * 0.05, 0.045, 0); });
+      break;
+    }
+    case "golden_truffle": {
+      const t = P(MB.CreateSphere("t", { diameter: 0.16, segments: 6 }, scene), "#ffd54a", 0.01); t.scaling.set(1, 0.85, 1.1);
+      for (let i = 0; i < 6; i++) { const b = P(MB.CreateSphere("k", { diameter: 0.05, segments: 4 }, scene), "#e8b83a", 0); b.position.set(Math.cos(i) * 0.07, Math.sin(i * 2.1) * 0.04, Math.sin(i) * 0.07); }
+      const cush = P(MB.CreateBox("c", { width: 0.2, height: 0.03, depth: 0.2 }, scene), "#8e1f4e", 0.006); cush.position.y = -0.08;
+      break;
+    }
+    // ---- C5c.3: THE COMPACTOR ----
+    case "glow_stick": {
+      const g = P(MB.CreateCylinder("g", { diameter: 0.045, height: 0.3, tessellation: 8 }, scene), "#5aff7a", 0.006); g.rotation.z = 0.3;
+      const cap = P(MB.CreateCylinder("c", { diameter: 0.05, height: 0.03, tessellation: 8 }, scene), "#f4f1ea", 0); cap.position.set(-0.044, 0.142, 0);
+      break;
+    }
+    case "neon_fizz": {
+      P(MB.CreateCylinder("b", { diameter: 0.09, height: 0.2, tessellation: 10 }, scene), "#ff3cac", 0.008);
+      const neck = P(MB.CreateCylinder("n", { diameterTop: 0.035, diameterBottom: 0.08, height: 0.08, tessellation: 10 }, scene), "#ff3cac", 0.006); neck.position.y = 0.14;
+      const cap = P(MB.CreateCylinder("c", { diameter: 0.04, height: 0.03, tessellation: 8 }, scene), "#5aff7a", 0); cap.position.y = 0.195;
+      const lbl = P(MB.CreateCylinder("l", { diameter: 0.094, height: 0.07, tessellation: 10 }, scene), "#1b1420", 0); lbl.position.y = -0.01;
+      break;
+    }
+    case "vinyl_record": {
+      const sl = P(MB.CreateBox("s", { width: 0.32, height: 0.32, depth: 0.02 }, scene), "#ffd54a", 0.008); sl.rotation.x = -0.2;
+      const rec = P(MB.CreateCylinder("r", { diameter: 0.3, height: 0.012, tessellation: 18 }, scene), "#1b1420", 0.004); rec.rotation.x = Math.PI / 2 - 0.2; rec.position.set(0.09, 0.03, -0.01);
+      const lab = P(MB.CreateCylinder("l", { diameter: 0.1, height: 0.014, tessellation: 12 }, scene), "#ff3cac", 0); lab.rotation.x = Math.PI / 2 - 0.2; lab.position.set(0.09, 0.03, -0.012);
+      break;
+    }
+    case "dj_headphones": {
+      const band = P(MB.CreateTorus("b", { diameter: 0.24, thickness: 0.03, tessellation: 14 }, scene), "#1b1420", 0.006); band.rotation.x = Math.PI / 2; band.scaling.y = 1.1;
+      for (const s of [-1, 1]) { const cup = P(MB.CreateCylinder("c", { diameter: 0.11, height: 0.06, tessellation: 12 }, scene), "#ff3cac", 0.006); cup.rotation.z = Math.PI / 2; cup.position.set(s * 0.12, -0.05, 0); }
+      break;
+    }
+    case "vip_wristband": {
+      const b = P(MB.CreateTorus("w", { diameter: 0.11, thickness: 0.025, tessellation: 14 }, scene), "#ffd54a", 0.005); b.rotation.x = 0.4;
+      const tag = P(MB.CreateBox("t", { width: 0.05, height: 0.03, depth: 0.01 }, scene), "#ff3cac", 0); tag.position.set(0, 0.0, 0.06);
+      break;
+    }
+    case "mirror_ball": {
+      const ball = P(MB.CreateSphere("m", { diameter: 0.5, segments: 8 }, scene), "#c9ccd4", 0.012);
+      void ball;
+      for (let i = 0; i < 14; i++) { const a = i * 2.4, e = Math.sin(i * 1.7) * 0.9; const can = P(MB.CreateBox("c", { width: 0.07, height: 0.07, depth: 0.02 }, scene), ["#d6264a", "#3d6fb5", "#ffd54a", "#e8ecf2"][i % 4], 0); can.position.set(Math.cos(a) * Math.cos(e) * 0.25, Math.sin(e) * 0.25, Math.sin(a) * Math.cos(e) * 0.25); can.lookAt(can.position.scale(2)); }
+      const hook = P(MB.CreateTorus("h", { diameter: 0.08, thickness: 0.015, tessellation: 8 }, scene), "#3a3444", 0); hook.position.y = 0.27;
+      break;
+    }
+    case "golden_record": {
+      const fr = P(MB.CreateBox("f", { width: 0.36, height: 0.36, depth: 0.03 }, scene), "#1b1420", 0.008);
+      void fr;
+      const rec = P(MB.CreateCylinder("r", { diameter: 0.28, height: 0.012, tessellation: 20 }, scene), "#ffd54a", 0.004); rec.rotation.x = Math.PI / 2; rec.position.z = 0.02;
+      const lab = P(MB.CreateCylinder("l", { diameter: 0.09, height: 0.014, tessellation: 12 }, scene), "#d6264a", 0); lab.rotation.x = Math.PI / 2; lab.position.z = 0.022;
+      const plate = P(MB.CreateBox("p", { width: 0.16, height: 0.03, depth: 0.005 }, scene), "#e8b83a", 0); plate.position.set(0, -0.155, 0.02);
+      break;
+    }
     case "spray_can": {
       P(MB.CreateCylinder("c", { diameter: 0.075, height: 0.18, tessellation: 12 }, scene), "#43c7a6", 0.01);
       const cap = P(MB.CreateCylinder("cap", { diameter: 0.07, height: 0.04, tessellation: 12 }, scene), "#ff5a3c", 0.008); cap.position.y = 0.11;

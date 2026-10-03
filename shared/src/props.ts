@@ -28,6 +28,9 @@ const REFILL: Record<PropKind, number> = {
   dummy: 0, throwgame: 0, racegame: 0, // (C5a: the lobby's practice dummy and mini-game machines never run out)
   steamer: 60, trinkets: 90, fishtank: 1e9, // (C5b: the seafood tank's glass gets fixed at dawn)
   vaultdoor: 1e9, depositbox: 1e9, nose: 1e9, stash: 1e9, // (C5c: once a day)
+  podium: 0, cloakroom: 1e9, dessertcart: 1e9, piano: 1e9, chefstable: 1e9, kitchen: 1e9, // (C5c.2: once a day; the podium never runs out)
+  // C5c.3: the rope and the counter never run out; the bar restocks; the decks cool down; the rest once a day
+  clubrope: 0, djdecks: 40, clubbar: 45, clubsafe: 1e9, rider: 1e9, lockers: 1e9, sortbin: 1e9, vipbooth: 1e9, pawncounter: 0, pawncase: 1e9,
 };
 /** How far a prop's surface is from its centre (for punch / use reach). Breakables use their box (hw/hd) instead. */
 export const PROP_RADIUS: Record<PropKind, number> = {
@@ -35,12 +38,14 @@ export const PROP_RADIUS: Record<PropKind, number> = {
   shopglass: 0, busstop: 0, hydrant: 0, mailbox: 0, bench: 0, planter: 0, table: 0, pallet: 0, washer: 0, dryer: 0,
   dummy: 0.35, throwgame: 0.6, racegame: 0.3, steamer: 0.75, trinkets: 0.85, fishtank: 0.7,
   vaultdoor: 1.1, depositbox: 0.3, nose: 0.5, stash: 0.3,
+  podium: 0.4, cloakroom: 0.6, dessertcart: 0.6, piano: 0.9, chefstable: 0.6, kitchen: 0.8,
+  clubrope: 0.4, djdecks: 0.9, clubbar: 1.2, clubsafe: 0.45, rider: 0.6, lockers: 0.9, sortbin: 0.9, vipbooth: 0.8, pawncounter: 0.9, pawncase: 0,
 };
-export const SMASHABLE = new Set<PropKind>(["phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank"]);
+export const SMASHABLE = new Set<PropKind>(["phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank", "pawncase"]);
 /** C5a: the lobby's mini-game machines (E to play) */
 export const LOBBY_GAMES = new Set<PropKind>(["throwgame", "racegame"]);
 /** C4a: things that break (and stop blocking) after this many hits, by size */
-export const BREAK_HP: Partial<Record<PropKind, number>> = { shopglass: 2, busstop: 1, hydrant: 2, mailbox: 2, bench: 2, planter: 2, table: 1, pallet: 1 };
+export const BREAK_HP: Partial<Record<PropKind, number>> = { pawncase: 3, shopglass: 2, busstop: 1, hydrant: 2, mailbox: 2, bench: 2, planter: 2, table: 1, pallet: 1 };
 export const BREAKABLE = new Set(Object.keys(BREAK_HP) as PropKind[]);
 /** C4a: how far away a noise is heard (m) */
 export const NOISE = { smash: 12, alarm: 25, machine: 10 };
@@ -57,18 +62,42 @@ export function propNearest(d: PropDef, x: number, z: number): { x: number; z: n
   if (d.hw === undefined || d.hd === undefined) return { x: d.x, z: d.z };
   return { x: Math.max(d.x - d.hw, Math.min(d.x + d.hw, x)), z: Math.max(d.z - d.hd, Math.min(d.z + d.hd, z)) };
 }
-export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "depositbox", "stash"]);
+export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "depositbox", "stash", "cloakroom", "dessertcart", "chefstable", "kitchen",
+  "clubbar", "rider", "lockers", "sortbin", "vipbooth"]);
+/** C5c.3: E on these does something of its own: pay Big Crunch's cover, hijack the DJ's decks, sell to Sal, the pawn case */
+export const CLUB_USE = new Set<PropKind>(["clubrope", "djdecks", "pawncounter", "pawncase"]);
+/** C5c.2: E on these does something other than a search: book a table at the podium, play the grand piano */
+export const RESTO_USE = new Set<PropKind>(["podium", "piano"]);
 /**
  * C5c: things you hold E on for a while (a progress ring): the vault door (drilling it is loud and slow;
  * with the manager's keycard it opens quietly in 3 s), the Mayor's statue's gold nose, the WANTED screen's box.
  */
-export const HOLD_TIME: Partial<Record<PropKind, number>> = { vaultdoor: 20, nose: 5 };
+export const HOLD_TIME: Partial<Record<PropKind, number>> = { vaultdoor: 20, nose: 5, clubsafe: 6 };
 export const KEYCARD_TIME = 3;
 /** C5c: the bank heist: heat for drilling (3 stars straight away), for being seen with the keycard, the drill's noise */
 export const BANK = { drillHeat: 92, keycardSeenHeat: 30, noseHeat: 25, noiseEvery: 2 };
 const DEPOSIT_LOOT: [string, number][] = [["pearl_necklace", 3], ["rolecks_watch", 2], ["bearer_bond", 1.5], ["family_photo", 3], ["cash_bag", 2], ["gold_bar", 0.8]];
 /** C5c: things that reset once a day, at dawn (not at night) */
-const DAILY = new Set<PropKind>(["washer", "dryer", "fishtank", "vaultdoor", "depositbox", "nose", "stash"]);
+const DAILY = new Set<PropKind>(["washer", "dryer", "fishtank", "vaultdoor", "depositbox", "nose", "stash", "cloakroom", "dessertcart", "piano", "chefstable", "kitchen", "clubsafe", "rider", "lockers", "sortbin", "vipbooth", "pawncase"]);
+/** C5c.2: LE DUMPSTÈRE: the table fee, what counts as dressed up, the piano's aura (and noise), the chef's yell,
+ *  what the cloakroom, the dessert trolley, the chef's table and the kitchen hold */
+export const RESTO = { fee: 20, pianoAura: 3, pianoNoise: 12, chefHeat: 3, dressy: ["designer_hoodie", "designer_scarf", "sunglasses", "gold_chain", "rolecks_watch", "pearl_necklace"] };
+export const RESTO_LOOT: Partial<Record<PropKind, [string, number][]>> = {
+  cloakroom: [["designer_hoodie", 2], ["designer_scarf", 2.5], ["sunglasses", 3], ["mystery_wallet", 3], ["rolecks_watch", 0.8], ["pearl_necklace", 0.8]],
+  dessertcart: [["macaron_box", 5], ["birthday_cake", 1.5], ["fancy_cheese", 2]],
+  chefstable: [["fancy_fizz", 3], ["silver_cutlery", 3], ["gold_chain", 1.2], ["diamond_ring", 0.6], ["cash_bundle", 1.5]],
+  kitchen: [["silver_cutlery", 3], ["fancy_cheese", 3], ["baguette", 3], ["macaron_box", 1.5], ["smelly_fish", 1]],
+};
+/** C5c.3: THE COMPACTOR: what the bar's belt, the DJ's rider, the lockers, the sorting bins and the VIP booths hold */
+export const CLUB_LOOT: Partial<Record<PropKind, [string, number][]>> = {
+  clubbar: [["neon_fizz", 4], ["glow_stick", 4], ["soda_can", 1.5]],
+  rider: [["vinyl_record", 3], ["dj_headphones", 1.2], ["candy_bar", 2], ["energy_drink", 2], ["fancy_fizz", 0.8]],
+  lockers: [["glow_stick", 3], ["vip_wristband", 1.5], ["mystery_wallet", 1.2], ["sunglasses", 1.5], ["odd_sock", 2], ["phone_handset", 1]],
+  sortbin: [["soda_can", 4], ["trash_bag", 3], ["newspaper", 3], ["glow_stick", 2], ["vinyl_record", 0.6], ["cursed_sneakers", 0.6]],
+  vipbooth: [["vip_wristband", 2], ["sunglasses", 2], ["gold_chain", 1], ["fancy_fizz", 2], ["rolecks_watch", 0.3], ["mirror_ball", 0.35]],
+};
+/** C5c.3: the club safe: what's always in it (on top of every cover charge paid today), its heat */
+export const CLUB_SAFE = { base: 40, heat: 30 };
 /** C5b: Chinatown's stalls: help yourself (the stall keeper yells if anybody sees, a little heat) */
 export const STALL_LOOT: Partial<Record<PropKind, [string, number][]>> = {
   steamer: [["dumpling_box", 4], ["bao_bun", 5], ["fortune_cookie", 3], ["mooncake", 1.5]],
@@ -109,7 +138,8 @@ export type PropEvent =
   | { t: "robCancel"; p: string; prop: string }
   | { t: "robDone"; p: string; prop: string; value: number }
   | { t: "shoplift"; p: string; shop: number; npc: string }
-  | { t: "empty"; p: string; prop: string };
+  | { t: "empty"; p: string; prop: string }
+  | { t: "safeCracked"; p: string; prop: string; value: number };
 
 export class PropSystem {
   readonly props = new Map<string, PropSim>();
@@ -230,6 +260,26 @@ export class PropSystem {
     if (d.kind === "till") return this.startRob(p, ps);
     if (HOLD_TIME[d.kind] !== undefined) return this.startHold(p, ps);
     if (LOBBY_GAMES.has(d.kind)) { this.w.lobby.start(p, d.kind === "throwgame" ? "throw" : "race"); return; }
+    if (d.kind === "podium") { this.w.bookTable(p); return; }
+    // C5c.3: THE COMPACTOR's rope and decks, PAWN-O-RAMA's counter and case
+    if (d.kind === "clubrope") { this.w.payCover(p); return; }
+    if (d.kind === "pawncounter") { this.w.pawn.fence(p); return; }
+    if (d.kind === "pawncase") { if (ps.ready) this.w.pawn.caseUse(p); else this.w.emit({ t: "empty", p: p.id, prop: d.id }); return; }
+    if (d.kind === "djdecks") {
+      if (!ps.ready) { this.w.emit({ t: "empty", p: p.id, prop: d.id }); return; }
+      ps.ready = false; ps.t = REFILL[d.kind];
+      this.w.djHijack(p, d);
+      return;
+    }
+    if (d.kind === "piano") {
+      // C5c.2: bang out a tune on the grand piano: aura for you, a noise (the diners are appalled), once a day
+      if (!ps.ready) { this.w.emit({ t: "empty", p: p.id, prop: d.id }); return; }
+      ps.ready = false; ps.t = REFILL[d.kind];
+      p.aura += RESTO.pianoAura;
+      this.w.noise(p, d.x, d.z, RESTO.pianoNoise);
+      this.w.emit({ t: "piano", p: p.id, prop: d.id });
+      return;
+    }
     if (MACHINES.has(d.kind)) {
       if (!ps.ready) { this.w.emit({ t: "empty", p: p.id, prop: d.id }); return; }
       if (!p.rob) { p.rob = { prop: d.id, t: 0, x: p.move.x, z: p.move.z }; this.w.emit({ t: "robStart", p: p.id, prop: d.id }); }
@@ -245,6 +295,21 @@ export class PropSystem {
       for (let i = 0; i < n; i++) this.w.popLoot(pickWeighted(table, () => this.w.random()), d.x, d.y + 0.9, d.z, p.move.x - d.x, p.move.z - d.z);
       this.w.emit({ t: "search", p: p.id, prop: d.id, found: n, raccoon: false });
       if (d.kind === "stash") this.w.emit({ t: "stashFound", p: p.id, prop: d.id });
+      return;
+    }
+    const club = CLUB_LOOT[d.kind];
+    if (club) { // C5c.3: THE COMPACTOR's bar, the DJ's rider, the lockers, the sorting bins, the VIP booths: 1-2 things
+      const n = 1 + (this.w.random() < 0.4 ? 1 : 0);
+      for (let i = 0; i < n; i++) this.w.popLoot(pickWeighted(club, () => this.w.random()), d.x, d.y + 0.5, d.z, p.move.x - d.x, p.move.z - d.z);
+      this.w.emit({ t: "search", p: p.id, prop: d.id, found: n, raccoon: false });
+      return;
+    }
+    const resto = RESTO_LOOT[d.kind];
+    if (resto) { // C5c.2: Le Dumpstère's cloakroom, dessert trolley, chef's table and kitchen: 1-2 things
+      const n = 1 + (this.w.random() < 0.4 ? 1 : 0);
+      for (let i = 0; i < n; i++) this.w.popLoot(pickWeighted(resto, () => this.w.random()), d.x, d.y + 0.6, d.z, p.move.x - d.x, p.move.z - d.z);
+      this.w.emit({ t: "search", p: p.id, prop: d.id, found: n, raccoon: false });
+      if (d.kind === "kitchen" && this.w.witnessed(p)) { this.w.addHeat(p, RESTO.chefHeat); this.w.emit({ t: "chefYell", p: p.id, prop: d.id }); } // (the chef saw that)
       return;
     }
     const stall = STALL_LOOT[d.kind];
@@ -321,6 +386,18 @@ export class PropSystem {
         if (this.w.witnessed(p)) { this.w.addHeat(p, BANK.keycardSeenHeat); this.w.npc.guardsAlert(p.id); }
       }
       this.w.emit({ t: "vault", p: p.id, prop: d.id, quiet });
+    } else if (d.kind === "clubsafe") {
+      // C5c.3: the club's safe: tonight's takings (every cover charge paid today) in one fat bag; the alarm goes, Big Crunch comes
+      const id = this.w.popLoot("cash_bag", d.x, d.y + 0.5, d.z, p.move.x - d.x, p.move.z - d.z);
+      const it = this.w.items.get(id);
+      const value = CLUB_SAFE.base + this.w.clubPot;
+      if (it) it.value = value;
+      this.w.clubPot = 0;
+      this.alarm(ps, "shop");
+      this.w.noise(p, d.x, d.z, NOISE.alarm);
+      this.w.addHeat(p, CLUB_SAFE.heat);
+      this.w.npc.guardsAlert(p.id, "bouncer");
+      this.w.emit({ t: "safeCracked", p: p.id, prop: d.id, value });
     } else if (d.kind === "nose") {
       this.w.popLoot("gold_nose", d.x, d.y + 0.3, d.z, p.move.x - d.x, p.move.z - d.z);
       if (this.w.witnessed(p)) this.w.addHeat(p, BANK.noseHeat);
@@ -399,6 +476,7 @@ export class PropSystem {
     }
     const ax = p.move.x - at.x, az = p.move.z - at.z;
     const rnd = () => this.w.random();
+    if (d.kind === "pawncase") { this.w.pawn.smash(p, at.x, at.z); return true; } // (C5c.3: everything in it spills; Vinnie comes swinging)
     if (d.kind === "mailbox") { this.w.popLoot(pickWeighted([["newspaper", 3], ["expired_coupon", 3], ["coin_pile", 1], ["mystery_wallet", 0.4]], rnd), at.x, 1.0, at.z, ax, az); }
     if (d.kind === "shopglass") {
       // a smashed shop window: the alarm goes off, the cashier yells
@@ -441,9 +519,9 @@ export class PropSystem {
   /** C4a: is this prop a broken breakable right now? */
   isBroken(id: string): boolean { const ps = this.props.get(id); return !!ps && BREAKABLE.has(ps.def.kind) && !ps.ready; }
 
-  stateOf(id: string): { ready: boolean; alarm: boolean } {
+  stateOf(id: string): { ready: boolean; alarm: boolean; note: string } {
     const ps = this.props.get(id)!;
-    return { ready: ps.ready, alarm: ps.alarmT > 0 };
+    return { ready: ps.ready, alarm: ps.alarmT > 0, note: ps.def.kind === "pawncase" ? this.w.pawn.caseNote() : "" };
   }
 }
 

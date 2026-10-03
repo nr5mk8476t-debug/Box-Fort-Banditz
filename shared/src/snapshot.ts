@@ -80,10 +80,12 @@ export interface MatchView {
   paradeD: number;
   /** C1: the traffic-light clock (seconds, wraps every 10 min) */
   lightT: number;
+  /** C5c.3: when THE COMPACTOR's last DROP started building (on the same wrapped clock as lightT) */
+  clubB: number;
 }
 
 /** Phase 3.5: dynamic state of a static prop (dumpster emptied, phone booth smashed, alarm ringing). */
-export interface PropView { ready: boolean; alarm: boolean; }
+export interface PropView { ready: boolean; alarm: boolean; /** C5c.3: the pawn case's contents (JSON, "" = empty) */ note: string; }
 export interface CarView { x: number; z: number; yaw: number; }
 /** Phase 4: police cruisers chasing someone. */
 export interface CopCarView { x: number; z: number; yaw: number; siren: boolean; }
@@ -164,6 +166,7 @@ export function matchView(w: World, out: Record<string, any>): MatchView {
   const m = w.match;
   out.phase = m.phase; out.round = m.round; out.rounds = ROUNDS;
   out.lightT = Math.round((w.traffic.clock % 600) * 10) / 10;
+  out.clubB = w.clubB < 0 ? -999 : Math.round((w.clubB % 600) * 100) / 100;
   out.timeLeft = Math.ceil(m.timeLeft * 10) / 10;
   if (m.results !== lastResults) { lastResults = m.results; lastResultsJson = JSON.stringify(m.results); }
   out.results = lastResultsJson;
@@ -177,7 +180,7 @@ export function matchView(w: World, out: Record<string, any>): MatchView {
 
 export function propView(w: World, id: string, out: Record<string, any> = {}): PropView {
   const st = w.props.stateOf(id);
-  out.ready = st.ready; out.alarm = st.alarm;
+  out.ready = st.ready; out.alarm = st.alarm; out.note = st.note;
   return out as PropView;
 }
 

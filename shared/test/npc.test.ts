@@ -50,7 +50,7 @@ test("the crowd wanders for 2 minutes: never inside walls, never stuck, never Na
   const w = new World({ seed: 5, spawnLoot: false });
   const walkers = () => [...w.npc.npcs.values()].filter((n) => !n.post);
   assert.equal(walkers().length, NPC_COUNT);
-  assert.equal(w.npc.npcs.size - NPC_COUNT, w.arena.shops!.length + 6, "one cashier per shop, the doorman, the fisherman, the old lady, Uncle Dumpster and the 2 bank guards");
+  assert.equal(w.npc.npcs.size - NPC_COUNT, w.arena.shops!.length + 9, "one cashier per shop, the doorman, the fisherman, the old lady, Uncle Dumpster, the 2 bank guards, the maitre d', Big Crunch and Big Vinnie");
   const start = new Map([...w.npc.npcs.values()].map((n) => [n.id, { x: n.move.x, z: n.move.z }]));
   const travelled = new Map<string, number>();
   const last = new Map([...start]);

@@ -15,6 +15,7 @@ export const MAX_PLAYERS = 4;
 
 // Phase 1 tuning: "weighty & a bit clumsy" (Blake's choice). Momentum matters,
 // stopping and turning take a moment, big falls make you stumble.
+// D1 (Blake, 1 Oct): faster and snappier: quicker off the mark, sharper stops and turns, still a little skid.
 export const PLAYER = {
   radius: 0.38,
   height: 1.7,
@@ -23,13 +24,14 @@ export const PLAYER = {
   crouchEyeHeight: 1.0,
   slideEyeHeight: 0.75,
 
-  walkSpeed: 5.0,
-  sprintSpeed: 7.8,
-  crouchSpeed: 2.3,
+  walkSpeed: 5.8,
+  sprintSpeed: 9.4,
+  crouchSpeed: 2.7,
   backwardFactor: 0.75,
-  groundAccel: 20, // lower = heavier (0 -> walk speed in ~0.25 s)
-  groundDecel: 17, // stopping from a sprint takes ~0.45 s: slight skid
-  airAccel: 5, // limited steering in the air
+  groundAccel: 48, // lower = heavier (0 -> walk speed in ~0.12 s)
+  groundDecel: 34, // stopping from a sprint takes ~0.28 s: a little skid
+  turnBoost: 1.6, // D1: pushing against your own momentum (reversing, hard turns) bites this much harder
+  airAccel: 8, // limited steering in the air
   gravity: 26,
   jumpSpeed: 7.8,
   stepHeight: 0.4, // curbs lower than this are walked up automatically
@@ -42,8 +44,8 @@ export const PLAYER = {
   windedRecover: 0.35, // after emptying the bar, sprint unlocks again at this level
 
   // Belly slide: sprint + press crouch
-  slideMinSpeed: 6.0,
-  slideSpeed: 9.4,
+  slideMinSpeed: 7.0,
+  slideSpeed: 11.2,
   slideTime: 0.85,
   slideFriction: 6.5,
   slideSteer: 3,
@@ -51,7 +53,7 @@ export const PLAYER = {
   slideStamina: 0.1,
 
   // Dodge / dive
-  dodgeSpeed: 10.5,
+  dodgeSpeed: 12.0,
   dodgeHop: 3.2,
   dodgeTime: 0.22,
   dodgeCooldown: 1.4,

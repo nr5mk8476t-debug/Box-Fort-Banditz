@@ -35,6 +35,12 @@ export interface Box {
   china?: { roof: string; sign2: string };
   /** C2: a street building's ground floor: a shopfront (glass, door, awning) or a tower lobby */
   front?: "shop" | "lobby";
+  /** C5c.3: THE COMPACTOR's dance floor (the crusher bed): its height follows the club clock (see applyClubFloor) */
+  pump?: boolean;
+  /** C5c.3: the renderer dresses this box up as something particular (a speaker stack, a trash bale, a car cube...) */
+  deco?: string;
+  /** C5c.3: a conveyor belt: what's standing on it gets carried along at this velocity (m/s on x, z) */
+  belt?: [number, number];
 }
 
 export type BoxKind =
@@ -79,7 +85,12 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   | "steamer" | "trinkets" | "fishtank"
   // C5c: the bank (its vault door, safety deposit boxes), the Mayor's statue's gold nose, the WANTED screen's
   // control box, and the golden stashes hidden at every landmark
-  | "vaultdoor" | "depositbox" | "nose" | "stash";
+  | "vaultdoor" | "depositbox" | "nose" | "stash"
+  | "podium" | "cloakroom" | "dessertcart" | "piano" | "chefstable" | "kitchen"
+  // C5c.3: THE COMPACTOR (the bouncer's rope, the DJ's decks in the crane cab, the conveyor bar, the cash safe, the
+  // DJ's rider, the staff lockers, the sorting bin, a VIP booth) and PAWN-O-RAMA (Sal's counter, the pawn case)
+  | "clubrope" | "djdecks" | "clubbar" | "clubsafe" | "rider" | "lockers" | "sortbin" | "vipbooth"
+  | "pawncounter" | "pawncase";
 export interface PropDef {
   id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
   /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
@@ -248,7 +259,7 @@ export interface ArenaLayout {
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
   /** C1.1: people who stand at a spot (the apartment tower's doorman) */
-  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard"; x: number; z: number; yaw: number;
+  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie"; x: number; z: number; yaw: number;
     /** C5a: standing height (Uncle Dumpster lives on a rooftop) */
     y?: number;
     /** C4b: where she leans out of her window (the old lady) */
@@ -270,6 +281,17 @@ export interface ArenaLayout {
   lobby?: LobbyDef;
   /** C5c: the Trashington Bank (the renderer dresses it; the rules put the vault's gold in each morning) */
   bank?: { rect: Rect; vault: Rect; vaultSpots: { type: string; x: number; y: number; z: number }[]; keycardSpots: { x: number; y: number; z: number }[]; door: { x: number; z: number }; cols?: [number, number][] };
+  /** C5c.2: LE DUMPSTÈRE: the building, the front door (the maître d's rule: x/z rect just inside it, where you get
+   *  pushed back to), the dining room, the kitchen (its back door), the stairwell to the rooftop terrace */
+  /** C5c.3: THE COMPACTOR nightclub: the building, the main hall, the backstage wing, the front door (and where the
+   *  bouncer puts you), the crusher-bed dance floor, the DJ's crane cab, the manager's office, the conveyor, the roofs */
+  club?: { rect: Rect; hall: Rect; wing: Rect; door: Rect; out: { x: number; z: number; yaw: number }; floor: Rect; cab: Rect; cabY: number;
+    office: Rect; belt: Rect; beltY: number; balcony: Rect; balconyY: number; wingY: number; roofY: number; stack: { x: number; z: number; r: number; h: number } };
+  /** C5c.3: PAWN-O-RAMA ("Honest" Sal's shop in the Yards): its unit and the pawn case (where pawned things sit) */
+  pawnShop?: { unit: number; shop: number; caseX: number; caseY: number; caseZ: number; yaw: number };
+  /** C5c.3: indexes of the boxes that pump (the dance floor) */
+  pumpBoxes?: number[];
+  resto?: { rect: Rect; door: Rect; out: { x: number; z: number; yaw: number }; hall: Rect; kitchen: Rect; stairs: Rect; roofY: number };
   /** C5c: the Mayor's Golden Statue (for the renderer) */
   statue?: { x: number; z: number; plinthH: number; yaw: number };
   /** C5b: Chinatown: the street (for the renderer's lanterns and the dragon parade's route), its two gates */
@@ -467,4 +489,32 @@ function nearBoxesAll(arena: ArenaLayout, x: number, z: number, r: number): Box[
 export function localArena(arena: ArenaLayout, x: number, z: number, r: number): ArenaLayout {
   if (arena.boxes.length < 64 && !arena.offCount) return arena;
   return { ...arena, boxes: nearBoxes(arena, x, z, r) };
+}
+
+// ---- C5c.3: THE COMPACTOR's crusher-bed dance floor ----------------------------------------------------------
+/** The beat bob, and THE DROP: the floor builds up slowly, holds, then slams down and launches everyone on it. */
+export const CLUB = { base: 0.3, bob: 0.12, bpm: 124, cycle: 75, build: 6, hold: 0.9, slam: 0.3, top: 1.6, launch: 12, cover: 15, vipAura: 5, djAura: 3, djNoise: 14, djCooldown: 40, beltSpeed: 1.7 };
+/** seconds since the last build started -> where we are in the drop ("" = just the beat) */
+export function clubStage(d: number): "build" | "hold" | "slam" | "" {
+  if (d < 0) return "";
+  if (d < CLUB.build) return "build";
+  if (d < CLUB.build + CLUB.hold) return "hold";
+  if (d < CLUB.build + CLUB.hold + CLUB.slam) return "slam";
+  return "";
+}
+/** Height of the dance floor's top. clock: the city clock (seconds); clubB: when the last build started. */
+export function clubFloorY(clock: number, clubB: number): number {
+  const d = clock - clubB;
+  const st = clubStage(d);
+  const beat = CLUB.base + CLUB.bob * Math.abs(Math.sin(Math.PI * clock * CLUB.bpm / 60 / 2));
+  if (st === "build") { const k = d / CLUB.build; const e = k * k * (3 - 2 * k); return beat + (CLUB.top - beat) * e + 0.03 * Math.sin(d * 40) * k; }
+  if (st === "hold") return CLUB.top;
+  if (st === "slam") { const k = (d - CLUB.build - CLUB.hold) / CLUB.slam; return CLUB.top + (0.05 - CLUB.top) * k * k; }
+  return beat;
+}
+/** Move the dance floor's collision to the clock (the host before it steps everyone, the client before it predicts). */
+export function applyClubFloor(arena: ArenaLayout, clock: number, clubB: number): number {
+  const y = clubFloorY(clock, clubB);
+  for (const i of arena.pumpBoxes ?? []) { const b = arena.boxes[i]; b.h = y; b.y = y / 2; }
+  return y;
 }

@@ -35,9 +35,9 @@ test("city (Slice 2A, C1 layout): ~230 m, towers, 14 shops with cashiers (C4b: t
   const towers = c.boxes.filter((b) => b.kind === "tower");
   assert.ok(towers.length >= 20, `mostly towers (${towers.length})`);
   assert.ok(Math.max(...towers.map((b) => b.y + b.h / 2)) >= 50, "some are really tall");
-  assert.equal(c.shops!.length, 14);
-  assert.equal(c.units!.length, 20);
-  assert.equal(c.units!.filter((u) => u.use === "closed").length, 4, "bank, 2 clubs, bar: closed until their slices");
+  assert.equal(c.shops!.length, 15); // (C5c.3: + PAWN-O-RAMA)
+  assert.equal(c.units!.length, 19); // (C5c.3: THE SWEATBOX's shutter is now THE COMPACTOR, its own landmark)
+  assert.equal(c.units!.filter((u) => u.use === "closed").length, 2, "the cheque cashers and CLUB SUB-PAR: closed until their slices (C5c.3: the bar's shutter is PAWN-O-RAMA, THE SWEATBOX is THE COMPACTOR)");
   for (const sh of c.shops!) {
     assert.ok(inRect(sh.rect, sh.cashier.x, sh.cashier.z), `${sh.name}: cashier inside`);
     const n = c.lootSpawns!.filter((s) => s.shop === sh.id && inRect(sh.rect, s.x, s.z, 1)).length;
@@ -227,31 +227,55 @@ test("traffic: cars drive their lanes, keep their distance, and stop for pedestr
   assert.ok(car!.v < 0.5, `stopped for the pedestrian (v=${car!.v.toFixed(2)})`);
 });
 
-test("hit by a car: wiped out, your loot spills on the road, respawn at your fort after 10 s", () => {
+test("D1 hit by a car: launched up and along, your loot scatters, 10 s flat from the moment you land (no moving or punching), then up where you landed with 3 s grace from traffic", () => {
   const { w, p } = world();
-  // hold something, then stand in the lane in front of a moving car
+  // hold something and pocket something, then stand in the lane in front of a moving car
   const tv = w.placeItem("crt_tv", p.move.x, 1, p.move.z + 1);
   run(w, 0.3);
   w.action("a", { a: "grab", item: tv });
   assert.equal(p.hand, tv);
   const ev: WorldEvent[] = [];
-  let hit = false;
+  let hit = false, hitAt = { x: 0, z: 0 };
   for (let k = 0; k < w.traffic.cars.length && !hit; k++) {
     const c = w.traffic.cars[(7 + k) % w.traffic.cars.length];
     w.debugTeleport("a", c.x + Math.sin(c.yaw) * 12, c.z + Math.cos(c.yaw) * 12, c.yaw + Math.PI);
-    run(w, 2.5, ev);
-    hit = ev.some((e) => e.t === "wipeout" && e.p === "a");
+    for (let i = 0; i < 150 && !hit; i++) { w.pushInputs("a", [inp(p.lastSeq + 1)]); w.tick(); const e = w.takeEvents(); ev.push(...e); if (e.some((x) => x.t === "wipeout" && x.p === "a")) { hit = true; hitAt = { x: p.move.x, z: p.move.z }; } }
   }
-  assert.ok(hit, "wiped out");
+  assert.ok(hit, "hit");
   assert.equal(p.hand, "", "dropped everything");
-  assert.equal(w.items.get(tv)?.mode, "free", "the TV is lying in the road");
-  assert.ok(p.respawnT > 0 && p.move.knockT > 0);
+  const t = w.items.get(tv)!;
+  assert.equal(t.mode, "free", "the TV is flying across the road");
+  assert.ok(Math.hypot(t.body.vx, t.body.vz) > 1 || t.body.vy > 1, "scattered, not just dropped");
+  // the flight
+  let peak = p.move.y, airborne = 0;
+  while (!p.move.grounded && airborne < 5 * 60) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, sprint: true })]); w.tick(); w.takeEvents(); peak = Math.max(peak, p.move.y); airborne++; }
+  assert.ok(peak > 1.2 && airborne > 20, `launched (peak ${peak.toFixed(1)} m, ${(airborne / 60).toFixed(2)} s in the air)`);
+  const landed = { x: p.move.x, z: p.move.z };
+  assert.ok(Math.hypot(landed.x - hitAt.x, landed.z - hitAt.z) > 2, "flew along the road");
+  // flat for 10 s from landing: inputs do nothing, punches do nothing
+  w.takeEvents();
   w.action("a", { a: "punch", yaw: 0, pitch: 0 });
-  run(w, WIPEOUT_TIME + 0.2, ev);
-  assert.ok(ev.some((e) => e.t === "respawn" && e.p === "a"), "respawned");
-  const pad = w.arena.forts!.find((f) => f.slot === p.colorIdx)!;
-  assert.ok(Math.hypot(p.move.x - pad.padX, p.move.z - pad.padZ) < 1, "back home");
-  assert.ok(p.move.immuneT > 0, "brief safety after respawning");
+  assert.ok(!w.takeEvents().some((e) => e.t === "punch"), "can't punch while stunned");
+  for (let i = 0; i < Math.round((WIPEOUT_TIME - 0.3) * 60); i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, sprint: true })]); w.tick(); ev.push(...w.takeEvents()); }
+  assert.ok(p.respawnT > 0 && p.move.knockT > 0, "still flat just before the 10 s are up");
+  assert.ok(Math.hypot(p.move.x - landed.x, p.move.z - landed.z) < 1.5, "couldn't crawl off (only slid to a stop)");
+  const ev2: WorldEvent[] = [];
+  for (let i = 0; i < 40; i++) { w.pushInputs("a", [inp(p.lastSeq + 1)]); w.tick(); ev2.push(...w.takeEvents()); }
+  assert.ok(ev2.some((e) => e.t === "respawn" && e.p === "a"), "up again");
+  assert.equal(p.move.knockT, 0);
+  assert.ok(Math.hypot(p.move.x - landed.x, p.move.z - landed.z) < 1.5, "right where you landed (not teleported home)");
+  assert.ok(p.splatGrace > w.time, "a few seconds' grace");
+  // grace: a car driving straight through you doesn't hit you again
+  const c = w.traffic.cars[0];
+  c.x = p.move.x - Math.sin(c.yaw) * 1.0; c.z = p.move.z - Math.cos(c.yaw) * 1.0; c.v = 8;
+  const ev3: WorldEvent[] = [];
+  for (let i = 0; i < 20; i++) { w.pushInputs("a", [inp(p.lastSeq + 1)]); w.tick(); ev3.push(...w.takeEvents()); }
+  assert.ok(!ev3.some((e) => e.t === "wipeout"), "not chained by the next car");
+  // movement works again
+  const x0 = p.move.x, z0 = p.move.z;
+  run(w, 0.5);
+  for (let i = 0; i < 30; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1 })]); w.tick(); }
+  assert.ok(Math.hypot(p.move.x - x0, p.move.z - z0) > 0.5, "walking again");
 });
 
 test("cars honk at bandits in the road (they won't stop for you!)", () => {
@@ -317,7 +341,7 @@ test("2A: every shop and lobby can be walked into from the street, and out the b
 test("2A: every upstairs can be reached: inside stairs climb to the floor above, fire escapes lead to the back door", () => {
   const c = buildTrashington();
   const ups = c.units!.filter((u) => u.upper);
-  assert.equal(ups.length, 9, "stockrooms (3: C1 gave Cracked Screens one), offices, apartments (4: C4b the old lady above the laundromat), the gym");
+  assert.equal(ups.length, 10, "stockrooms (3: C1 gave Cracked Screens one), offices, apartments (5: C4b the old lady above the laundromat; C5c.3 Sal's flat over PAWN-O-RAMA), the gym");
   for (const u of ups) {
     const P = unitP(u);
     const hw = UNIT.w / 2, run = UNIT.stepRun * UNIT.steps;

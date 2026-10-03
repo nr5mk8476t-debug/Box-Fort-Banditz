@@ -9,15 +9,15 @@ import { PLAYER, SIM_DT, MAX_PLAYERS, MAX_INPUTS_PER_TICK, PLAYER_COLORS } from 
 import { makeMoveState, stepMovement, sanitizeInput, groundHeightAt, type MoveInput, type MoveState } from "./movement.js";
 import { stepItem, type ItemBody } from "./itemPhysics.js";
 import { LOOT, lootDef, rollValue, carrySpeedMul, type LootDef } from "./loot.js";
-import type { ArenaLayout, LootZone } from "./arena.js";
+import type { ArenaLayout, LootZone, PropDef } from "./arena.js";
 import { buildTrashington } from "./city.js";
 import { sanitizeName } from "./names.js";
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater, nearBoxes, inLobby } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby, CLUB, clubStage, applyClubFloor } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
-import { PropSystem, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
+import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
 import { PoliceSystem, type PoliceEvent } from "./police.js";
 import type { LockRun } from "./lockpick.js";
@@ -163,6 +163,8 @@ export interface PlayerSim {
   inFort: number; raidEnterT: number;
   /** C5c.1: a bandit you're holding down for the cops (and how hard they've wriggled) */
   pin: { target: string; x: number; z: number; t: number; heat: number; struggle: number; cd: number } | null;
+  /** D1: world time until which cars can't hit you again (just got up after a car hit) */
+  splatGrace: number;
 }
 
 export type WorldEvent =
@@ -175,6 +177,23 @@ export type WorldEvent =
   // C4b: a tag sprayed (tagStart: the hiss starts)
   | { t: "tag"; p: string; tag: string; left: number }
   | { t: "tagStart"; p: string }
+  // C5c.2: LE DUMPSTÈRE: booked a table / couldn't / the maître d' turned you away / someone played the piano / the chef saw you
+  | { t: "seated"; p: string; paid: number }
+  | { t: "restoNo"; p: string; reason: "broke" | "have" }
+  | { t: "bounced"; p: string; reason: "dress" | "cover" }
+  // C5c.3: THE COMPACTOR: paid the cover / the VIP nod / couldn't pay; the floor's DROP launched people; somebody hijacked the decks
+  | { t: "cover"; p: string; paid: number; vip: boolean }
+  | { t: "coverNo"; p: string; reason: "broke" | "have" }
+  | { t: "clubDrop"; n: number; by: string }
+  | { t: "djHijack"; p: string; prop: string }
+  // C5c.3: PAWN-O-RAMA: sold to Sal / pawned / bought back (or off the sale shelf) / couldn't / the case got smashed
+  | { t: "fenced"; p: string; type: string; cash: number }
+  | { t: "pawned"; p: string; type: string; cash: number }
+  | { t: "redeemed"; p: string; type: string; cash: number; sale: boolean }
+  | { t: "pawnNo"; p: string; reason: "hands" | "full" | "broke" | "nothing" }
+  | { t: "caseSmashed"; p: string }
+  | { t: "piano"; p: string; prop: string }
+  | { t: "chefYell"; p: string; prop: string }
   // C5c.1: citizen's arrest: someone pinned a wanted bandit / it ended / the cops cuffed them and the bounty was paid
   | { t: "pin"; p: string; target: string; heat: number }
   | { t: "pinFail"; p: string; reason: string }
@@ -400,7 +419,7 @@ export class World {
       if (keepForts && slot >= 0 && this.match.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; continue; }
       this.items.delete(it.id);
     }
-    if (!keepForts) this.tags.clear(); // (C4b: the city gets scrubbed clean at dawn)
+    if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
     if (this.spawnLoot) { this.fillLoot(!keepForts); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only; C5c: the bank's vault refills at dawn)
     else this.props.reset(!keepForts);
     for (const p of this.players.values()) {
@@ -584,7 +603,7 @@ export class World {
       punchCd: 0, notoriety: 0, hp: HEALTH.max, hurtT: -99, knockCount: 0, knockWindowT: 0,
       cash: 0, stolenThisRound: 0, rob: null, respawnT: 0, aura: 0, tagging: null, throwBest: 0, raceBest: 0, lobbyGame: null,
       jailT: 0, jailCell: -1, lock: null, lockSeed: 0, lockT0: 0, seenT: -99, knownX: 0, knownZ: 0, crimeT: -99,
-      tugCd: 0, raidAlarmT: -99, inFort: -1, raidEnterT: -99, pin: null,
+      tugCd: 0, raidAlarmT: -99, inFort: -1, raidEnterT: -99, pin: null, splatGrace: -99,
     };
     if (lob) p.move.y = this.arena.lobby!.y;
     this.players.set(id, p);
@@ -907,6 +926,114 @@ export class World {
   }
 
   // ------------------------------------------------------------------ C5c: the giant WANTED screen
+  // ------------------------------------------------------------------ C5c.2 LE DUMPSTÈRE
+  /** who's booked a table today (the maître d' lets you in until dawn) */
+  readonly restoPass = new Set<string>();
+  /** the restaurant's maître d', if he's on his feet */
+  private maitreUp(): boolean {
+    for (const n of this.npc.npcs.values()) if (n.kind === "maitre_d") return n.state !== "ko";
+    return false;
+  }
+  /** C5c.2: are you dressed for Le Dumpstère? (carrying something designer) */
+  dressedUp(p: PlayerSim): boolean { return this.carriedItems(p).some((it) => RESTO.dressy.includes(it.type)); }
+  /** E at the podium: book a table (slip the maître d' $20) */
+  bookTable(p: PlayerSim) {
+    if (this.restoPass.has(p.id)) return this.emit({ t: "restoNo", p: p.id, reason: "have" });
+    if (p.cash < RESTO.fee) return this.emit({ t: "restoNo", p: p.id, reason: "broke" });
+    p.cash -= RESTO.fee;
+    this.restoPass.add(p.id);
+    this.emit({ t: "seated", p: p.id, paid: RESTO.fee });
+  }
+  /**
+   * The front door: the maître d' only lets in bandits who've booked a table, or who are dressed for it (carrying
+   * something designer). Anybody else stepping into the doorway is put back on the pavement. Knock him out and
+   * the door's open to all; or go round the back, through the kitchen (the chef yells if he sees you).
+   */
+  private restoDoor() {
+    const c = this.arena.resto;
+    if (!c) return;
+    const up = this.maitreUp();
+    for (const p of this.players.values()) {
+      if (!p.connected || p.jailT > 0 || p.respawnT > 0) continue;
+      const m = p.move;
+      if (m.x < c.door.minX || m.x > c.door.maxX || m.z < c.door.minZ || m.z > c.door.maxZ || m.y > 1.5) continue;
+      if (!up || this.restoPass.has(p.id) || this.dressedUp(p)) continue;
+      m.x = c.out.x; m.z = c.out.z; m.vx = Math.sin(c.out.yaw) * 3; m.vz = Math.cos(c.out.yaw) * 3; m.slideT = 0;
+      this.emit({ t: "bounced", p: p.id, reason: "dress" });
+    }
+  }
+
+  // ------------------------------------------------------------------ C5c.3 THE COMPACTOR
+  /** who's paid the cover today (Big Crunch's stamp lasts till dawn) */
+  readonly clubPass = new Set<string>();
+  /** every cover charge paid today: it's all in the manager's safe */
+  clubPot = 0;
+  /** city clock time the last DROP started building (the dance floor follows it) */
+  clubB = -999;
+  private clubLastD = 1e9;
+  private bouncerUp(): boolean {
+    for (const n of this.npc.npcs.values()) if (n.kind === "bouncer") return n.state !== "ko";
+    return false;
+  }
+  /** VIPs walk straight in: 5+ aura, or a VIP wristband on you */
+  clubVip(p: PlayerSim): boolean { return p.aura >= CLUB.vipAura || this.carriedItems(p).some((it) => it.type === "vip_wristband"); }
+  /** E at the rope: pay Big Crunch's cover ($15; it goes in the safe), or get the VIP nod */
+  payCover(p: PlayerSim) {
+    if (this.clubPass.has(p.id)) return this.emit({ t: "coverNo", p: p.id, reason: "have" });
+    if (this.clubVip(p)) { this.clubPass.add(p.id); return this.emit({ t: "cover", p: p.id, paid: 0, vip: true }); }
+    if (p.cash < CLUB.cover) return this.emit({ t: "coverNo", p: p.id, reason: "broke" });
+    p.cash -= CLUB.cover; this.clubPot += CLUB.cover;
+    this.clubPass.add(p.id);
+    this.emit({ t: "cover", p: p.id, paid: CLUB.cover, vip: false });
+  }
+  /** E at the DJ's decks: your track, +3 aura, a roar from the crowd (noise), and the DROP starts building right now */
+  djHijack(p: PlayerSim, d: PropDef) {
+    p.aura += CLUB.djAura;
+    this.noise(p, d.x, d.z, CLUB.djNoise);
+    if (!clubStage(this.traffic.clock - this.clubB)) { this.clubB = this.traffic.clock; this.clubBy = p.id; }
+    this.emit({ t: "djHijack", p: p.id, prop: d.id });
+  }
+  private clubBy = "";
+  /** the dance floor: the beat, a DROP every 75 s (or when somebody hijacks the decks); the door */
+  private clubTick() {
+    const c = this.arena.club;
+    if (!c) return;
+    const clock = this.traffic.clock;
+    if (clock - this.clubB >= CLUB.cycle) { this.clubB = clock; this.clubBy = ""; }
+    const d = clock - this.clubB;
+    applyClubFloor(this.arena, clock, this.clubB);
+    // the slam's over: everybody on the floor goes flying (and anything lying on it)
+    const end = CLUB.build + CLUB.hold + CLUB.slam;
+    if (this.clubLastD < end && d >= end) {
+      let n = 0;
+      const f = c.floor;
+      for (const p of this.players.values()) {
+        const m = p.move;
+        if (m.x < f.minX - 0.2 || m.x > f.maxX + 0.2 || m.z < f.minZ - 0.2 || m.z > f.maxZ + 0.2 || m.y > CLUB.top + 0.6 || p.jailT > 0) continue;
+        m.vy = CLUB.launch; m.grounded = false; m.slideT = 0; m.mantleT = 0;
+        m.vx += (this.rng() - 0.5) * 3; m.vz += (this.rng() - 0.5) * 3;
+        n++;
+      }
+      for (const it of this.items.values()) {
+        const b = it.body;
+        if (it.mode !== "free" || b.x < f.minX || b.x > f.maxX || b.z < f.minZ || b.z > f.maxZ || b.y > CLUB.top + 0.6) continue;
+        b.vy = 7 + this.rng() * 3; b.vx = (this.rng() - 0.5) * 3; b.vz = (this.rng() - 0.5) * 3; b.resting = false;
+      }
+      this.emit({ t: "clubDrop", n, by: this.clubBy });
+    }
+    this.clubLastD = d;
+    // the front door: Big Crunch only lets in people who've paid the cover today, or VIPs
+    const up = this.bouncerUp();
+    for (const p of this.players.values()) {
+      if (!p.connected || p.jailT > 0 || p.respawnT > 0) continue;
+      const m = p.move;
+      if (m.x < c.door.minX || m.x > c.door.maxX || m.z < c.door.minZ || m.z > c.door.maxZ || m.y > 1.5) continue;
+      if (!up || this.clubPass.has(p.id) || this.clubVip(p)) continue;
+      m.x = c.out.x; m.z = c.out.z; m.vx = Math.sin(c.out.yaw) * 3; m.vz = Math.cos(c.out.yaw) * 3; m.slideT = 0;
+      this.emit({ t: "bounced", p: p.id, reason: "cover" });
+    }
+  }
+
   // ------------------------------------------------------------------ C5c.1 citizen's arrest
   /** Who's holding this player down (null = nobody) */
   pinnerOf(p: PlayerSim): PlayerSim | null {
@@ -976,7 +1103,7 @@ export class World {
     return paid;
   }
 
-  private activeItem(p: PlayerSim): { item: ItemSim; from: "hand" | number } | null {
+  activeItem(p: PlayerSim): { item: ItemSim; from: "hand" | number } | null {
     if (p.hand) { const it = this.items.get(p.hand); if (it) return { item: it, from: "hand" }; p.hand = ""; }
     if (p.sel >= 0 && p.sel < POCKETS && p.pockets[p.sel]) {
       const it = this.items.get(p.pockets[p.sel]);
@@ -1121,6 +1248,7 @@ export class World {
   // ------------------------------------------------------------------ simulation
   tick(dt = SIM_DT) {
     this.time += dt;
+    if (this.arena.club) applyClubFloor(this.arena, this.traffic.clock, this.clubB); // (C5c.3: the dance floor moves before anybody steps on it)
     for (const p of this.players.values()) {
       p.actionCd = Math.max(0, p.actionCd - dt);
       if (p.queued && p.actionCd <= 0) { const q = p.queued; p.queued = null; this.action(p.id, q); }
@@ -1153,6 +1281,8 @@ export class World {
     this.tickPins(dt);
     this.police.tick(dt);
     this.raidWatch();
+    this.restoDoor();
+    this.clubTick();
     // C1.1: fall in the canal and whatever's in your hands floats off
     for (const p of this.players.values()) {
       if (p.hand && inDeepWater(this.arena, p.move.x, p.move.z, p.move.y)) {
@@ -1377,12 +1507,13 @@ export class World {
   }
 
   /** Test/debug helper: move a player (keeps what they carry). */
-  debugTeleport(id: string, x: number, z: number, yaw: number) {
+  debugTeleport(id: string, x: number, z: number, yaw: number, y?: number) {
     const p = this.players.get(id);
     if (!p) return;
     const keep = { carryMul: p.move.carryMul, carryHeavy: p.move.carryHeavy, handsFull: p.move.handsFull };
     p.move = { ...makeMoveState(x, z, yaw), ...keep };
     if (inLobby(this.arena, x, z) && this.arena.lobby) p.move.y = this.arena.lobby.y; // (C5a: onto the squat's roof)
+    if (y !== undefined && Number.isFinite(y)) p.move.y = y; // (C5c.3 tests: onto a balcony, a conveyor, a crane cab)
     p.queue.length = 0;
   }
 

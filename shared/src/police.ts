@@ -31,7 +31,7 @@ export function starsOf(heat: number): number { return heat >= STAR_HEAT[2] ? 3 
 export const JAIL_TIME = 30;
 /** Heat right after a break-out: 1 star, and it takes a while to cool. */
 export const BREAKOUT_HEAT = 55;
-export const COP_RUN = 5.6; // walk 5.0 < cop 5.6 < sprint 7.8 (Blake: light nerf, was 6.1)
+export const COP_RUN = 6.5; // walk 5.8 < cop 6.5 < sprint 9.4 (D1: scaled with the faster movement; was 5.6)
 export const COP_JOG = 3.8;
 export const COP_SIGHT = 24;
 export const COP_HEAR = 3; // this close they notice you even without line of sight
@@ -146,7 +146,8 @@ export class PoliceSystem {
       if (!this.wanted(p)) continue;
       const stars = starsOf(p.notoriety);
       if (!stars) continue;
-      const on = cops.filter((c) => c.target === p.id && c.state !== "leave").length;
+      // (a car on its way counts as the cop it's bringing, so 3 stars stays 3 cops however the timing falls)
+      const on = cops.filter((c) => c.target === p.id && c.state !== "leave").length + this.cars.filter((c) => c.target === p.id && c.mode !== "leave" && !c.deployed).length;
       const want = this.night ? stars * 2 : stars;
       if (on < want && cops.length < (this.night ? MAX_COPS_NIGHT : MAX_COPS) && (this.nextCop.get(p.id) ?? 0) <= w.time) {
         const c = this.spawnCop(p);

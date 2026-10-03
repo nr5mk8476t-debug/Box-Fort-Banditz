@@ -77,6 +77,7 @@ export const PropState = schema({
   ready: t.boolean(),
   hp: t.uint8(),
   alarm: t.boolean(),
+  note: t.string(),
 }, "PropState");
 export type PropState = SchemaType<typeof PropState> & Record<string, any>;
 
@@ -116,6 +117,7 @@ export const FortRoomState = schema({
   truckYaw: t.float32(),
   paradeD: t.float32(),
   lightT: t.float32(),
+  clubB: t.float32(),
   players: t.map(PlayerState),
   items: t.map(ItemState),
   npcs: t.map(NpcState),

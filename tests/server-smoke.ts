@@ -37,10 +37,13 @@ assert(moved < 3, `burst inputs rate-limited (moved ${moved.toFixed(2)}m in 0.1s
 
 // Phase 1 state reaches other players: stamina drain and crouch
 let seq = 1000;
-for (let i = 0; i < 90; i++) { a.send(MSG.INPUT, [{ seq: seq++, mx: 0, mz: 1, yaw: 0, pitch: 0, sprint: true, jump: false, crouch: false, dodge: false }]); await sleep(16); }
+// (D1: sprint is 9.4 m/s now, so she sprints on into the camp instead of straight into the roof parapet, where a stopped sprint drains nothing)
+for (let i = 0; i < 90; i++) { a.send(MSG.INPUT, [{ seq: seq++, mx: 0, mz: 1, yaw: Math.PI, pitch: 0, sprint: true, jump: false, crouch: false, dodge: false }]); await sleep(16); }
 await sleep(300);
 const aView = (b.state as any).players.get(a.sessionId);
 assert(aView.stamina < 0.9, `Bob sees Alice's stamina drop: ${aView.stamina.toFixed(2)}`);
+// (D1: stop first: crouching at a full sprint is a slide, not a crouch)
+for (let i = 0; i < 30; i++) { a.send(MSG.INPUT, [{ seq: seq++, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false }]); await sleep(16); }
 for (let i = 0; i < 20; i++) { a.send(MSG.INPUT, [{ seq: seq++, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: true, dodge: false }]); await sleep(16); }
 await sleep(300);
 assert((b.state as any).players.get(a.sessionId).crouching === true, "Bob sees Alice crouching");
@@ -59,7 +62,7 @@ assert(evs.some((e) => e.t === "whiff" && e.p === a.sessionId), "grabbing a far 
 
 // Phase 2.5: pedestrians are synced
 const npcCount = (b.state as any).npcs.size;
-assert(npcCount === 40, `pedestrians + cashiers + the doorman, fisherman, old lady, Uncle Dumpster and 2 bank guards synced to clients: ${npcCount} (20 + 14 + 6)`);
+assert(npcCount === 44, `pedestrians + cashiers (Sal too) + the doorman, fisherman, old lady, Uncle Dumpster, 2 bank guards, the maitre d', Big Crunch and Big Vinnie synced to clients: ${npcCount} (20 + 15 + 9)`);
 {
   const st2: any = a.state;
   assert(st2.cars.size === CAR_COUNT, `traffic synced: ${st2.cars.size} cars`);

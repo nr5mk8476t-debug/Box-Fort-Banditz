@@ -25,7 +25,7 @@
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
 import {
   box, tierAt, inRect, type Box, type ArenaLayout, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
-  type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef,
+  CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef,
 } from "./arena.js";
 
 const HALF = 115;
@@ -77,7 +77,7 @@ export const TIER_TOWERS: string[][] = [
 /** What each kind of shop has on its shelves (Slice 2C adds themed items for the new shops). */
 export const SHOP_POOLS: Record<ShopType, string[]> = {
   mart: ["canned_beans", "energy_drink", "candy_bar", "soda_can", "lottery_ticket", "fancy_cheese"],
-  pawn: ["gold_chain", "guitar", "sunglasses", "golden_spork", "snow_globe", "mixtape"],
+  pawn: ["gold_chain", "guitar", "sunglasses", "golden_spork", "snow_globe", "mixtape", "crt_tv", "award_trophy", "vinyl_record", "rolecks_watch"],
   bakery: ["bagel", "baguette", "birthday_cake", "fancy_cheese", "donut"],
   gadget: ["phone_handset", "fancy_earbuds", "laptop", "crt_tv", "mixtape", "spray_can"], // (C4b: the hardware corner sells spray paint)
   donut: ["donut", "soda_can", "energy_drink", "birthday_cake", "candy_bar"],
@@ -100,7 +100,7 @@ interface UnitSpec {
   use: "shop" | "lobby" | "closed";
   type?: ShopType;
   /** fixtures layout on the shop floor */
-  layout?: "shelves" | "food" | "arcade" | "laundry" | "thrift" | "jeweller" | "barber" | "office" | "apart";
+  layout?: "shelves" | "food" | "arcade" | "laundry" | "thrift" | "jeweller" | "barber" | "office" | "apart" | "pawn";
   /** back fixture kind for "shelves" shops */
   back?: "fridge" | "table" | "cage" | "shelf";
   backroom?: boolean;
@@ -131,9 +131,9 @@ const U: Record<string, UnitSpec> = {
   hair: { name: "HAIR TODAY", use: "shop", type: "barber", layout: "barber", wall: "#b03a48", floor: "#f4f1ea" },
   pet: { name: "PET PEEVES", use: "shop", type: "pet", layout: "shelves", back: "cage", wall: "#6aa84f", floor: "#eef5e6" },
   subpar: { name: "CLUB SUB-PAR", use: "closed", sub: "OPENS AFTER DARK (SOON)", wall: "#2b1f3a", floor: "#1f1a28" },
-  dive: { name: "THE DIVE", use: "closed", sub: "BAR (OPENING SOON)", wall: "#5a3a24", floor: "#3a2a1c" },
+  // (C5c.3: THE DIVE's empty shutter is now PAWN-O-RAMA; the bar comes back with Night & Life)
+  pawn: { name: "PAWN-O-RAMA", use: "shop", type: "pawn", layout: "pawn", backroom: true, upper: "apart", access: "fire", wall: "#b8862f", floor: "#d9cfb8" },
   lawyers: { name: "LAWYERS 4 LESS", use: "lobby", layout: "office", upper: "office", access: "inside", wall: "#4a5a6b", floor: "#d8d4cc" },
-  sweatbox: { name: "THE SWEATBOX", use: "closed", sub: "CLUB (OPENING SOON)", wall: "#3a1f2b", floor: "#1f1a28" },
   arms: { name: "THE CRUMBLING ARMS", use: "lobby", layout: "apart", upper: "apart", access: "inside", wall: "#8a6a5a", floor: "#d8ccc0" },
 };
 
@@ -152,6 +152,8 @@ interface BlockSpec {
   keep?: Rect[];
   /** no courtyard alley gap (thin blocks) */
   noAlley?: boolean;
+  /** C5c.3: built separately (a landmark took the block): only keeps the random sequence in step */
+  phantom?: boolean;
 }
 
 export function buildTrashington(): ArenaLayout {
@@ -167,6 +169,7 @@ export function buildTrashington(): ArenaLayout {
   const deepWater: Rect[] = [];
   const water: Rect[] = [];
   const streetLoot: [number, number][] = [];
+  let pawnShop: ArenaLayout["pawnShop"];
   const spawnAt = (x: number, z: number, zone: LootZone, y = 0, extra: Partial<SpawnPoint> = {}) => loot.push({ x, y, z, zone, tier: tierAt(z), ...extra });
   const count: Record<string, number> = {};
   /** An interactable prop (with its collision box, if it has one). Dimensions are for yaw 0 (facing +z). */
@@ -332,6 +335,14 @@ export function buildTrashington(): ArenaLayout {
       B(4.6, 4.0, 4, 1, 1.05, "counter", inside); // front desk (nobody home)
     }
     fixtures(spec, B, lootSpots, inside);
+    if (spec.layout === "pawn") {
+      // C5c.3: PAWN-O-RAMA: the pawn case by the window, Sal's counter (ring the bell), Big Vinnie by the guitars
+      const [kx, kz] = P(-5.2, 2.0), [qx, qz] = P(3.0, 3.5), [vx, vz] = P(-2.6, 6.4);
+      props.push({ id: "pawncase1", kind: "pawncase", x: kx, y: 1.05, z: kz, yaw: yawOut, hw: alongX ? 0.5 : 1.7, hd: alongX ? 1.7 : 0.5 });
+      props.push({ id: "pawncounter1", kind: "pawncounter", x: qx, y: 1.05, z: qz, yaw: yawOut });
+      posts.push({ kind: "vinnie", x: vx, z: vz, yaw: yawOut });
+      pawnShop = { unit: uid, shop: shopId, caseX: kx, caseY: 1.05, caseZ: kz, yaw: yawOut };
+    }
     for (const [u, v, y] of lootSpots) {
       const [x, z] = P(u, v);
       if (shopId >= 0) spawnAt(x, z, "shop", y, { pool: SHOP_POOLS[spec.type!], shop: shopId });
@@ -647,6 +658,7 @@ export function buildTrashington(): ArenaLayout {
   const fillBlock = (b: BlockSpec) => {
     const r = b.rect, tier = tierAt((r.minZ + r.maxZ) / 2);
     bseed++;
+    if (b.phantom) return;
     const H = (k: number) => hash(bseed * 7.13 + k, bseed * 1.7 + k * 0.37);
     ground(r, "sidewalk", undefined, b.ring);
     blocks.push({ name: b.name, rect: r, tier, open: b.open, sides: b.sides });
@@ -799,9 +811,10 @@ export function buildTrashington(): ArenaLayout {
     B("Yards: Corner Mart block", -53, -5, -85, -52, ALL, { units: [{ spec: U.mart, dir: "N", at: -40 }, { spec: U.thrift, dir: "N", at: -18 }] }),
     // (C4b: "Yards: West" is now THE PIT, the skate park; see below)
     B("Yards: Skyscraper block", 5, 55, -85, -56, ALL, { units: [{ spec: U.arcade, dir: "N", at: 17 }, { spec: U.pizza, dir: "N", at: 34 }], keep: [LM.skyscraper] }),
-    B("Yards: East", 61, 87, -85, -56, ALL, { units: [{ spec: U.dive, dir: "N", at: 74 }] }),
+    B("Yards: East", 61, 87, -85, -56, ALL, { units: [{ spec: U.pawn, dir: "N", at: 74 }] }),
     // ---- MEDIUM: Old Brick (west), Market Row (east), round the park ----
-    B("Old Brick: West South", -87, -59, -44, -4, ALL, { units: [{ spec: U.sweatbox, dir: "N", at: -73 }, { spec: U.lawyers, dir: "E", at: -29.5 }] }),
+    // (C5c.3: "Old Brick: West South" is now THE COMPACTOR; see below. Its slot stays, so the blocks after it keep their looks)
+    B("Old Brick: West South", -87, -59, -44, -4, ALL, { phantom: true }),
     B("Old Brick: West North", -87, -59, 4, 44, ALL, { units: [{ spec: U.bank, dir: "S", at: -73 }], keep: [LM.church] }),
     B("Old Brick: Laundromat block", -53, -5, -44, -4, ALL, { ring: true, open: ["N", "E"], units: [{ spec: U.spin, dir: "W", at: -32 }, { spec: U.hair, dir: "N", at: -41 }], keep: [LM.cinema] }),
     B("Old Brick: Crumbling Arms block", -53, -5, 4, 44, ALL, { ring: true, open: ["S", "E"], units: [{ spec: U.pet, dir: "S", at: -41 }, { spec: U.subpar, dir: "W", at: 30.5 }, { spec: U.arms, dir: "N", at: -27 }] }),
@@ -813,7 +826,7 @@ export function buildTrashington(): ArenaLayout {
     B("Market Row: North of the park", 5, 35, 3, 48, ["W", "N"], { ring: true, open: ["W"] }),
     B("Market Row: North", 35, 87, 21, 48, ["N", "E", { dir: "S", from: 35, to: 75 }], { units: [{ spec: U.pharm, dir: "S", at: 44 }, { spec: U.gizmo, dir: "S", at: 60 }, { spec: U.kicks, dir: "S", at: 75.5 }] }),
     // ---- HIGH: Uptown ----
-    B("Uptown: West", -87, -59, 52, 80, ALL),
+    B("Uptown: West", -87, -59, 52, 80, ALL, { units: [{ spec: U.lawyers, dir: "E", at: 66 }] }), // (C5c.3: the lawyers moved uptown)
     B("Uptown: Hotel block", -53, -24, 52, 80, ["S", "N", "W", { dir: "E", from: 67, to: 80 }], { units: [{ spec: U.bling, dir: "S", at: -41.5 }], keep: [LM.hotel] }),
     B("Uptown: HQ block", 24, 53, 56, 80, ["S", "N", "E", { dir: "W", from: 67, to: 80 }], { units: [{ spec: U.cracked, dir: "S", at: 41.5 }], keep: [LM.hq] }),
     B("Uptown: Casino block", 59, 87, 56, 80, ALL, { keep: [LM.casino] }),
@@ -826,7 +839,7 @@ export function buildTrashington(): ArenaLayout {
   // C5c: UPTOWN LANDMARKS: the Trashington Bank (where the country club was), the Mayor's Golden Statue
   // (Mile West), and a golden stash in each (Mile East plaza too).
   // =================================================================================================
-  let bank: NonNullable<ArenaLayout["bank"]>, statue: NonNullable<ArenaLayout["statue"]>;
+  let bank: NonNullable<ArenaLayout["bank"]>, statue: NonNullable<ArenaLayout["statue"]>, resto: NonNullable<ArenaLayout["resto"]>;
   {
     // ---- the Trashington Bank: a marble hall you can walk into: lobby, teller counter, the back corridor,
     // the vault (a round door: drill it, or open it with the manager's keycard), the manager's office
@@ -895,16 +908,206 @@ export function buildTrashington(): ArenaLayout {
     spawnAt(-19.5, 59.5, "street", 0.15); spawnAt(-9, 59.5, "street", 0.15);
     statue = { x: sx - 0.4, z: sz, plinthH: 3.0, yaw: Math.PI / 2 };
 
-    // ---- Mile East: a plain plaza for now (Blake dropped the WANTED screen; another landmark goes here later).
-    // A low stone wall by the benches hides the Diamond Pigeon stash.
+    // ---- C5c.2: LE DUMPSTÈRE on Mile East (Blake: a fancy restaurant). The maître d' at the front door only
+    // lets you in if you've booked a table ($20 at his podium) or you're dressed for it (carrying something
+    // designer); knock him out, or slip in the kitchen's back door (the chef yells if he sees you), or climb the
+    // crates round the back onto the roof terrace and come down the stairs. Inside: the dining room (a grand
+    // piano, the cloakroom, the dessert trolley), the kitchen; up top: the chef's table, herb beds, a golden stash.
+    // (The Diamond Pigeon's brick is round the back.)
     const me = R(5, 24, 56, 67);
-    ground(me, "sidewalk"); // (just paving: a nested plaza patch here drew dark under its outline)
-    blocks.push({ name: "Uptown: Mile East plaza", rect: me, tier: 2, open: ["N", "S", "E", "W"] });
-    boxes.push({ ...box(10.5, 61.5, 0.8, 4.2, 0.6, "wall"), color: "#d8d0c4" });
-    prop("stash", 10.1 - 0.02, 62.6, -Math.PI / 2, 0, 0, 0, { y: 0.3, loot: ["diamond_pigeon"] });
-    for (const [x, z] of [[17, 59], [17, 64], [21.5, 61.5], [9, 58], [9, 65]]) boxes.push(box(x, z, 0.6, 0.6, 3, "tree"));
-    boxes.push({ ...box(14, 61.5, 0.7, 3, 0.5, "bench") });
-    spawnAt(19, 61.5, "street", 0.15);
+    ground(me, "sidewalk");
+    blocks.push({ name: "Uptown: LE DUMPSTERE", rect: me, tier: 2, open: ["N", "S", "E", "W"] });
+    const C = R(6.5, 21.5, 57.5, 65.5), CH = 5, CT = 0.4, wallC = "#6b1f2e", roofY = CH + 0.3;
+    const cw = (x0: number, x1: number, z0: number, z1: number, h: number, y = 0, col = wallC) => boxes.push({ ...box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, "wall", y), color: col });
+    boxes.push({ ...box(14, 61.5, C.maxX - C.minX - 0.8, C.maxZ - C.minZ - 0.8, 0.03, "shopfloor", 0.15), color: "#d8c8a8" });
+    cw(C.minX, C.minX + CT, C.minZ, 60.5, CH); cw(C.minX, C.minX + CT, 62.5, C.maxZ, CH); cw(C.minX, C.minX + CT, 60.5, 62.5, CH - 3.2, 3.2); // (west: the front door, 2 m wide)
+    cw(C.maxX - CT, C.maxX, C.minZ, 61.0, CH); cw(C.maxX - CT, C.maxX, 62.6, C.maxZ, CH); cw(C.maxX - CT, C.maxX, 61.0, 62.6, CH - 2.8, 2.8); // (east: the kitchen's back door)
+    cw(C.minX, C.maxX, C.minZ, C.minZ + CT, CH); cw(C.minX, C.maxX, C.maxZ - CT, C.maxZ, CH);
+    // the kitchen wall (a swing-door gap) between the dining room and the kitchen
+    const KX = 17.9;
+    cw(KX, KX + 0.25, C.minZ + CT, 61.0, CH, 0, "#e8e2d4"); cw(KX, KX + 0.25, 62.4, C.maxZ - CT, CH, 0, "#e8e2d4"); cw(KX, KX + 0.25, 61.0, 62.4, CH - 2.6, 2.6, "#e8e2d4");
+    // the roof (a hole over the stairs) and its parapet (a gap on the east side, where the crates are)
+    const SX0 = 11, SX1 = 17.75, SZ0 = C.minZ + CT, SZ1 = SZ0 + 1.2;
+    const roof = (x0: number, x1: number, z0: number, z1: number) => boxes.push({ ...box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0.3, "roof", CH), color: "#5a5163" });
+    roof(C.minX, C.maxX, SZ1, C.maxZ); roof(C.minX, SX0, C.minZ, SZ1); roof(SX1, C.maxX, C.minZ, SZ1);
+    const par = (x0: number, x1: number, z0: number, z1: number, h = 0.9) => cw(x0, x1, z0, z1, h, roofY, "#e8e2d4");
+    par(C.minX, C.minX + 0.3, C.minZ, C.maxZ); par(C.minX, C.maxX, C.maxZ - 0.3, C.maxZ); par(C.minX, C.maxX, C.minZ, C.minZ + 0.3);
+    par(C.maxX - 0.3, C.maxX, C.minZ, 59.4); par(C.maxX - 0.3, C.maxX, 60.6, C.maxZ);
+    par(SX0, SX1, SZ1, SZ1 + 0.1, 1.0); par(SX0 - 0.1, SX0, SZ0, SZ1, 1.0); // (a rail round the stairwell)
+    // the stairs up to the roof (15 steps along the south wall)
+    for (let i = 0; i < 15; i++) boxes.push({ ...box(SX0 + 0.225 + i * 0.45, (SZ0 + SZ1) / 2, 0.45, 1.2, (i + 1) * 0.35, "step"), color: "#8e7a63" });
+    // the climb round the back: a crate, then a stack of boxes, then the gap in the parapet
+    boxes.push({ ...box(23.2, 58.6, 1.4, 1.2, 1.6, "crate") });
+    boxes.push({ ...box(22.3, 60.0, 1.4, 1.4, 3.4, "boxes") });
+    prop("stash", C.maxX + 0.02, 63.8, Math.PI / 2, 0, 0, 0, { y: 0.35, loot: ["diamond_pigeon"] });
+    // the dining room: four tables with white cloths, a grand piano, the cloakroom by the door, the dessert trolley
+    for (const [x, z] of [[10.4, 61.6], [13.9, 61.6], [10.4, 64.0], [13.9, 64.0]]) {
+      boxes.push({ ...box(x, z, 1.2, 1.2, 0.76, "desk"), color: "#f4f1ea" });
+      for (const s of [-1, 1]) boxes.push({ ...box(x + s * 0.95, z, 0.45, 0.45, 0.5, "chair"), color: "#6b1f2e" });
+    }
+    boxes.push({ ...box(16.4, 60.4, 1.3, 1.7, 1.0, "desk"), color: "#1b1420" });
+    prop("piano", 16.4, 60.4, -Math.PI / 2, 0, 0, 0, { y: 1.0 });
+    boxes.push({ ...box(8.4, 58.8, 2.4, 0.7, 1.1, "counter"), color: "#6b3f22" });
+    prop("cloakroom", 8.4, 58.8, Math.PI, 0, 0, 0, { y: 1.1 });
+    prop("dessertcart", 16.3, 64.2, Math.PI, 0, 0, 0, { y: 0.9 });
+    // the kitchen: a stove along the north wall, a prep counter along the south
+    boxes.push({ ...box(19.75, 64.55, 2.7, 0.8, 1.0, "counter"), color: "#c9ccd4" });
+    prop("kitchen", 19.75, 64.55, 0, 0, 0, 0, { y: 1.0 });
+    boxes.push({ ...box(19.75, 58.45, 2.7, 0.8, 1.0, "counter"), color: "#c9ccd4" });
+    for (const [x, z] of [[9, 62.8], [12.2, 62.8], [19.5, 61.8]]) spawnAt(x, z, "shop", 0.18);
+    // the rooftop terrace: the chef's table, herb beds, banquettes, the Golden Truffle behind a loose brick in the parapet
+    boxes.push({ ...box(15, 63.5, 1.6, 0.9, 0.75, "desk", roofY), color: "#f4f1ea" });
+    prop("chefstable", 15, 63.5, Math.PI, 0, 0, 0, { y: roofY + 0.75 });
+    boxes.push({ ...box(19.4, 63.4, 2.4, 2.4, 0.6, "rim", roofY), color: "#8b5a2b" });
+    for (const [x, z, w, d] of [[10, 64.6, 2.6, 0.9], [7.4, 62.5, 0.9, 2.4]] as const) boxes.push({ ...box(x, z, w, d, 0.5, "sofa", roofY), color: "#6b1f2e" });
+    prop("stash", 12.2, C.maxZ - 0.3 - 0.02, Math.PI, 0, 0, 0, { y: roofY + 0.4, loot: ["golden_truffle"] });
+    spawnAt(12.5, 62.5, "rooftop", roofY);
+    // the maître d's podium and the maître d' out front
+    prop("podium", 5.6, 59.8, -Math.PI / 2, 0, 0, 0, {});
+    posts.push({ kind: "maitre_d", x: 5.75, z: 63.0, yaw: -Math.PI / 2 });
+    spawnAt(22.8, 64.5, "street", 0.15);
+    resto = { rect: C, door: R(6.3, 7.4, 60.5, 62.5), out: { x: 5.2, z: 61.5, yaw: -Math.PI / 2 }, hall: R(7, KX, SZ1, C.maxZ - CT), kitchen: R(KX + 0.25, C.maxX - CT, C.minZ + CT, C.maxZ - CT), stairs: R(SX0, SX1, SZ0, SZ1), roofY };
+  }
+  // =================================================================================================
+  // C5c.3: THE COMPACTOR (Blake: "the most unique night club, do not hold off from detail"). An old trash-compactor
+  // plant on Crooked St, backing onto the rail yard. Big Crunch on the door ($15 cover, or VIPs: 5+ aura or a VIP
+  // wristband). Sneak in on the trash conveyor at the loading dock (crouch under the rubber flap), or climb the dock's
+  // bales onto the back roof and take the maintenance door onto the balcony. Inside: the main hall with the CRUSHER-BED
+  // dance floor (it pumps to the beat; every 75 s THE DROP builds it up, slams it down and launches everyone on it),
+  // the DJ in a crane cab over the floor (hijack the decks: aura, a roar, and the drop starts NOW), the conveyor-belt
+  // bar, the VIP "Bale Room" balcony; backstage: the sorting room, the green room (the DJ's rider), the manager's
+  // office (the safe holds every cover charge paid today). Up top: the smokestack and a roof lounge with a dumpster
+  // hot tub and the Golden Record.
+  // =================================================================================================
+  let club: NonNullable<ArenaLayout["club"]>;
+  const pumpBoxes: number[] = [];
+  {
+    const blk = R(-87, -59, -44, -4);
+    ground(blk, "sidewalk");
+    blocks.push({ name: "Old Brick: THE COMPACTOR", rect: blk, tier: 1, open: ["N", "S", "E", "W"] });
+    const C = R(-82, -64, -39, -9), HH = 10, WH = 5, wingY = 5.3, roofY = HH + 0.3, balY = 5.3;
+    const brick = "#8a3f30", inner = "#2b2433";
+    const cw = (x0: number, x1: number, z0: number, z1: number, h: number, y = 0, col = brick, extra: Partial<Box> = {}) =>
+      boxes.push({ ...box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, "wall", y), color: col, ...extra });
+    const bx = (x0: number, x1: number, z0: number, z1: number, h: number, kind: Box["kind"], y = 0, extra: Partial<Box> = {}) => {
+      boxes.push({ ...box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, kind, y), ...extra });
+      return boxes.length - 1;
+    };
+    const at = (x: number, z: number, w: number, d: number, h: number, kind: Box["kind"], y = 0, extra: Partial<Box> = {}) => bx(x - w / 2, x + w / 2, z - d / 2, z + d / 2, h, kind, y, extra);
+    // floors: black rubber in the hall, concrete backstage
+    bx(-74.8, -64.4, -38.6, -9.4, 0.03, "shopfloor", 0.15, { color: "#1f1a28" });
+    bx(-81.6, -75.2, -38.6, -9.4, 0.03, "shopfloor", 0.15, { color: "#6a6670" });
+    // ---- outer walls: the backstage wing (west, one storey) and the main hall (east, double height) ----
+    cw(-82, -75, -39, -38.6, WH); cw(-75, -64, -39, -38.6, HH);
+    cw(-82, -75, -9.4, -9, WH); cw(-75, -64, -9.4, -9, HH);
+    // west: the conveyor's rubber flap (1.3 m high over the belt: crouch to get through)
+    cw(-82, -81.6, -39, -21.7, WH); cw(-82, -81.6, -20.3, -9, WH); cw(-82, -81.6, -21.7, -20.3, WH - 2.2, 2.2, brick, { deco: "flap" });
+    // east (Crooked St): the front door through the hopper mouth, THE COMPACTOR over it
+    cw(-64.4, -64, -39, -30.5, HH); cw(-64.4, -64, -28.5, -9, HH);
+    cw(-64.4, -64, -30.5, -28.5, HH - 3.2, 3.2, brick); // (its neon sign is drawn by the renderer)
+    // the partition between the wing and the hall (the hall's west wall above the wing's roof): a staff door at the
+    // bottom (under the balcony), the maintenance door onto the balcony from the wing's roof
+    cw(-75.2, -74.8, -39, -14.4, HH, 0, inner); cw(-75.2, -74.8, -13.0, -11.6, HH, 0, inner); cw(-75.2, -74.8, -10.4, -9, HH, 0, inner);
+    cw(-75.2, -74.8, -14.4, -13.0, HH - 2.4, 2.4, inner);
+    cw(-75.2, -74.8, -11.6, -10.4, wingY, 0, inner); cw(-75.2, -74.8, -11.6, -10.4, HH - 7.6, 7.6, inner, { deco: "maintdoor" });
+    // ---- backstage: the office | the green room | the sorting room | the stair room (doors at x -78.7..-77.3) ----
+    for (const z of [-33.2, -27.2, -16.6]) {
+      cw(-81.6, -78.7, z, z + 0.2, WH, 0, "#6b6f86"); cw(-77.3, -75.2, z, z + 0.2, WH, 0, "#6b6f86"); cw(-78.7, -77.3, z, z + 0.2, WH - 2.4, 2.4, "#6b6f86");
+    }
+    // the wing's roof (a hole over the stair room's stairs) and its parapet (a gap on the west, over the dock's bales)
+    const wroof = (x0: number, x1: number, z0: number, z1: number) => bx(x0, x1, z0, z1, 0.3, "roof", WH, { color: "#5c5058" });
+    wroof(-82, -74.8, -39, -12.6); wroof(-80.2, -74.8, -12.6, -9); wroof(-82, -81.6, -12.6, -9); wroof(-81.6, -80.2, -9.4, -9);
+    const wpar = (x0: number, x1: number, z0: number, z1: number, h = 0.6) => cw(x0, x1, z0, z1, h, wingY, "#6f5a50");
+    wpar(-82, -75.2, -39, -38.7); wpar(-82, -75.2, -9.3, -9); wpar(-82, -81.7, -39, -27.2); wpar(-82, -81.7, -25.6, -9.3);
+    wpar(-81.6, -80.2, -12.7, -12.6, 1.0); // (a rail on the stairwell's open side)
+    // the staff stairs in the stair room: 15 steps up the west wall, out onto the wing's roof
+    for (let i = 0; i < 15; i++) bx(-81.5, -80.3, -15.4 + i * 0.4, -15.0 + i * 0.4, ((i + 1) * wingY) / 15, "step", 0, { color: "#5c5866" });
+    // ---- the office: the manager's desk (CCTV monitors), the safe ----
+    at(-78.6, -36.2, 1.8, 0.9, 0.8, "desk", 0, { color: "#3a2a1c", deco: "monitors" });
+    at(-80.8, -37.0, 0.5, 0.5, 0.5, "chair", 0, { color: "#1b1420" });
+    at(-81.15, -35.0, 0.8, 0.9, 1.0, "crate", 0, { deco: "safe", hide: true });
+    prop("clubsafe", -80.68, -35.0, Math.PI / 2, 0, 0, 0, { y: 0.55 });
+    at(-76.0, -38.1, 1.6, 0.6, 2.0, "shelf", 0, { color: "#4a4652", deco: "files" });
+    // ---- the green room: a sofa, the DJ's rider on a table, a clothes rail, a mirror with bulbs ----
+    at(-80.9, -30.1, 0.9, 2.4, 0.5, "sofa", 0, { color: "#9b3fd6" });
+    at(-77.6, -30.1, 1.2, 1.2, 0.8, "table", 0, { color: "#f4f1ea", deco: "rider" });
+    prop("rider", -77.6, -30.1, -Math.PI / 2, 0, 0, 0, { y: 0.8 });
+    at(-76.0, -28.0, 1.6, 0.5, 1.6, "rack", 0, { color: "#2b2433" });
+    at(-75.45, -31.4, 0.1, 1.6, 2.0, "wall", 0, { color: "#f4f1ea", deco: "bulbmirror", hide: true });
+    // ---- the sorting room: the conveyor comes in through the west wall's flap, a recycling cage, bales, the lockers ----
+    const belt = bx(-86.4, -77.6, -21.7, -20.3, 0.9, "platform", 0, { color: "#2b2433", belt: [CLUB.beltSpeed, 0], deco: "belt" });
+    void belt;
+    at(-77.0, -23.4, 1.4, 1.8, 1.2, "dumpster", 0, { color: "#3d8f5a", deco: "sortbin" });
+    prop("sortbin", -77.0, -23.4, Math.PI, 0, 0, 0, { y: 1.2 });
+    at(-80.6, -18.3, 1.6, 1.4, 1.4, "cage", 0, { color: "#8a8a96" });
+    at(-76.3, -18.0, 1.2, 1.2, 1.2, "boxes", 0, { deco: "bale", color: "#6b8f5a" });
+    at(-80.6, -24.2, 1.2, 2.0, 2.0, "boxes", 0, { deco: "forklift", hide: true });
+    at(-79.8, -26.7, 2.4, 0.5, 2.0, "shelf", 0, { color: "#5c7a9e", deco: "lockers" });
+    prop("lockers", -79.8, -26.4, 0, 0, 0, 0, { y: 1.2 });
+    // ---- the stair room: flight cases ----
+    at(-76.6, -11.0, 1.0, 0.8, 0.9, "boxes", 0, { color: "#1b1420", deco: "flightcase" });
+    at(-76.6, -12.3, 1.0, 0.8, 0.6, "boxes", 0, { color: "#1b1420", deco: "flightcase" });
+    // ---- the hall ----
+    // the CRUSHER BED (the dance floor): its height follows the club clock (see applyClubFloor)
+    const floor = R(-73, -66, -25, -17);
+    pumpBoxes.push(bx(floor.minX, floor.maxX, floor.minZ, floor.maxZ, CLUB.base, "platform", 0, { color: "#5c5866", pump: true, deco: "crusher" }));
+    // speaker stacks round the floor
+    at(-74.2, -26.2, 1.0, 1.2, 2.6, "boxes", 0, { color: "#1b1420", deco: "speaker" });
+    at(-74.2, -15.8, 1.0, 1.2, 2.6, "boxes", 0, { color: "#1b1420", deco: "speaker" });
+    at(-65.0, -26.2, 1.0, 1.2, 2.6, "boxes", 0, { color: "#1b1420", deco: "speaker" });
+    // the conveyor-belt bar along the south wall, the back bar, stools
+    at(-70.5, -35.1, 7, 0.8, 1.1, "counter", 0, { color: "#3a3444", deco: "beltbar" });
+    prop("clubbar", -70.5, -35.1, 0, 0, 0, 0, { y: 1.1 });
+    at(-70.5, -38.3, 8, 0.5, 2.4, "shelf", 0, { color: "#2b2433", deco: "backbar" });
+    for (const x of [-73.3, -71.7, -70.1, -68.5]) at(x, -34.2, 0.45, 0.45, 0.7, "chair", 0, { color: "#ff3cac" });
+    // crushed-car-cube seats along the west wall, a photo booth by the door
+    at(-74.1, -30.5, 1.2, 1.6, 0.6, "sofa", 0, { color: "#d6264a", deco: "carcube" });
+    at(-74.1, -32.8, 1.2, 1.6, 0.6, "sofa", 0, { color: "#3d6fb5", deco: "carcube" });
+    at(-72.6, -31.6, 0.8, 0.8, 0.45, "table", 0, { color: "#8a8a96" });
+    at(-65.3, -32.6, 1.2, 1.2, 2.2, "boxes", 0, { deco: "photobooth", hide: true });
+    // the stairs up to the balcony (along the east wall, rising north)
+    for (let i = 0; i < 15; i++) bx(-65.8, -64.4, -19.75 + i * 0.45, -19.3 + i * 0.45, ((i + 1) * balY) / 15, "step", 0, { color: "#4a4652" });
+    // the balcony (the Bale Room, VIPs) across the north end; its railing leaves gaps for the crane cab and the stairs
+    bx(-74.8, -64.4, -13, -9.4, 0.3, "slab", balY - 0.3, { color: "#3a3444" });
+    cw(-74.8, -71.5, -13.1, -13.0, 1.05, balY, "#ffcf3a", { deco: "rail" }); cw(-67.5, -65.8, -13.1, -13.0, 1.05, balY, "#ffcf3a", { deco: "rail" });
+    at(-66.6, -10.4, 1.8, 1.2, 0.6, "sofa", balY, { color: "#ffcf3a", deco: "carcube" });
+    at(-70.5, -9.95, 2.4, 0.7, 0.6, "sofa", balY, { color: "#9b3fd6", deco: "carcube" });
+    at(-70.5, -11.1, 1.0, 0.8, 0.5, "table", balY, { color: "#f4f1ea" });
+    prop("vipbooth", -70.5, -11.1, Math.PI, 0, 0, 0, { y: balY + 0.5 });
+    // the DJ's crane cab, hanging over the north end of the dance floor (in from the balcony)
+    const cab = R(-71.5, -67.5, -17.8, -13);
+    bx(cab.minX, cab.maxX, cab.minZ, cab.maxZ, 0.3, "slab", balY - 0.3, { color: "#ffcf3a", deco: "cab" });
+    cw(cab.minX, cab.minX + 0.15, cab.minZ, cab.maxZ, 1.0, balY, "#ffcf3a"); cw(cab.maxX - 0.15, cab.maxX, cab.minZ, cab.maxZ, 1.0, balY, "#ffcf3a");
+    cw(cab.minX, cab.maxX, cab.minZ, cab.minZ + 0.15, 1.0, balY, "#ffcf3a");
+    bx(cab.minX, cab.maxX, cab.minZ, cab.minZ + 0.1, 1.1, "glass", balY + 1.0);
+    bx(cab.minX, cab.maxX, cab.minZ, cab.maxZ - 0.6, 0.2, "roof", balY + 2.3, { color: "#ffcf3a", deco: "cabroof" });
+    at(-69.5, -17.25, 2.4, 0.7, 1.0, "desk", balY, { color: "#1b1420", deco: "decks" });
+    prop("djdecks", -69.5, -17.25, Math.PI, 0, 0, 0, { y: balY + 1.0 });
+    // ---- the roofs: the smokestack on the wing, the service stair up to the hall's roof, the roof lounge ----
+    bx(-75.2, -64, -39, -9, 0.3, "roof", HH, { color: "#3a3444" });
+    const hpar = (x0: number, x1: number, z0: number, z1: number) => cw(x0, x1, z0, z1, 0.7, roofY, "#6f5a50");
+    hpar(-75.2, -64, -39, -38.7); hpar(-75.2, -64, -9.3, -9); hpar(-64.3, -64, -39, -9); hpar(-75.2, -74.9, -39, -25.3); hpar(-75.2, -74.9, -23.9, -9);
+    const stack = { x: -79, z: -36, r: 1.4, h: 22 };
+    at(stack.x, stack.z, 2.8, 2.8, stack.h, "wall", wingY, { deco: "stack", hide: true });
+    for (let i = 0; i < 13; i++) bx(-76.6, -75.2, -31.1 + i * 0.5, -30.6 + i * 0.5, ((i + 1) * (roofY - wingY)) / 13, "step", wingY, { color: "#5c5866", deco: "fireescape" });
+    at(-69, -33, 2.6, 2.0, 0.6, "rim", roofY, { color: "#3d8f5a", deco: "hottub" });
+    at(-72.6, -28.5, 0.8, 2.0, 0.4, "sofa", roofY, { color: "#ff3cac" });
+    at(-66.2, -28.5, 0.8, 2.0, 0.4, "sofa", roofY, { color: "#43c7a6" });
+    prop("stash", -69.5, -38.68, 0, 0, 0, 0, { y: roofY + 0.4, loot: ["golden_record"] });
+    // ---- outside: the loading dock (west, by the railway), its bales (the climb), the rope and the queue (east) ----
+    bx(-86.4, -82.1, -24.4, -21.7, 0.9, "dock", 0, { color: "#8a8a96" });
+    bx(-86.4, -85.4, -25.2, -24.4, 0.45, "step", 0, { color: "#8a8a96" });
+    at(-84.2, -25.3, 1.4, 1.4, 2.8, "boxes", 0, { deco: "bale", color: "#8a9a5b" });
+    at(-82.9, -26.4, 1.2, 1.4, 4.4, "boxes", 0, { deco: "bale", color: "#6b8f5a" });
+    prop("clubrope", -62.8, -31.6, Math.PI / 2, 0, 0, 0, { y: 1.0 });
+    posts.push({ kind: "bouncer", x: -62.6, z: -27.3, yaw: Math.PI / 2 });
+    spawnAt(-72, -30, "shop", 0.18); spawnAt(-68, -11.5, "shop", 0.18); spawnAt(-79, -19.5, "room", 0.18); spawnAt(-73.6, -10.6, "room", balY); spawnAt(-67, -36, "rooftop", roofY);
+    spawnAt(-84.6, -22.6, "alley", 0.9);
+    club = {
+      rect: C, hall: R(-74.8, -64.4, -38.6, -9.4), wing: R(-81.6, -75.2, -38.6, -9.4), door: R(-64.6, -63.3, -30.5, -28.5),
+      out: { x: -62.0, z: -29.5, yaw: Math.PI / 2 }, floor, cab, cabY: balY, office: R(-81.6, -75.2, -38.6, -33.2),
+      belt: R(-86.4, -77.6, -21.7, -20.3), beltY: 0.9, balcony: R(-74.8, -64.4, -13, -9.4), balconyY: balY, wingY, roofY, stack,
+    };
   }
 
   // C5b: CHINATOWN: the Market Row street by the canal (x 69..75, z -21..21). Two rows of shophouses face
@@ -1442,7 +1645,7 @@ export function buildTrashington(): ArenaLayout {
   return {
     halfSize: HALF, boxes, spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
-    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue,
+    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop,
   };
 }
 
@@ -1525,6 +1728,19 @@ function fixtures(spec: UnitSpec, B: UnitBox, loot: [number, number, number][], 
       F(-6.2, 3, 1.2, 1.2, 0.9, "pot");
       F(-6.2, 6.5, 0.8, 2.4, 0.5, "sofa");
       loot.push([-6.2, 6.5, 0.5]);
+      break;
+    }
+    case "pawn": {
+      // C5c.3: PAWN-O-RAMA: the pawn case by the window (its prop is placed by buildUnit), a wall of guitars, a stack of
+      // telly sets all showing static, a suit of armour, a stuffed bear, a trophy shelf, bars over Sal's counter
+      F(-5.2, 2.0, 3.4, 1.0, 1.05, "case", "#c9a227");
+      B(-6.95, 6.2, 0.3, 4.6, 2.6, "shelf", { ...inside, deco: "guitars", color: "#5a3a24" });
+      B(-4.3, 7.8, 1.6, 1.0, 2.0, "boxes", { ...inside, deco: "tvstack", hide: true });
+      B(-2.6, 8.7, 0.7, 0.7, 2.0, "plinth", { ...inside, deco: "armour", hide: true });
+      B(5.6, 6.6, 0.9, 0.9, 1.5, "plinth", { ...inside, deco: "bear", hide: true });
+      B(6.75, 7.3, 0.3, 3.2, 1.9, "shelf", { ...inside, deco: "trophies", color: "#5a3a24" });
+      B(4.6, 4.45, 4, 0.06, 1.25, "glass", { ...inside, deco: "cagebars" }, 1.05);
+      loot.push([-4.3, 7.8, 2.0], [6.75, 6.3, 1.9], [6.75, 8.2, 1.9], [-1.0, 6.8, 0.18], [3.2, 7.4, 0.18]);
       break;
     }
     case "apart": {

@@ -4,6 +4,7 @@
 import { Scene, MeshBuilder, Mesh, StandardMaterial, Color3, TransformNode, Vector3, DynamicTexture } from "./babylon.ts";
 import { toon, ink, textTexture, unlitTextured } from "./look.ts";
 import { buildCarGlass } from "./carModel.ts";
+import { buildLootModel } from "./models.ts";
 import { PLAYER_COLORS, nearBoxes, type PropDef, type PropView, type TagView, type ArenaLayout } from "@bfb/shared";
 
 /** C4b: the graffiti styles a tag can be (the World picks one per tag) */
@@ -14,7 +15,10 @@ interface Vis { def: PropDef; node: TransformNode; ready: boolean; alarm: boolea
   /** C5a: the practice dummy's swinging body, how hard it's wobbling */
   body?: TransformNode; wobble?: number;
   /** C5c: the vault door (swings open), a deposit box's little door, the stash's glint, the hacked screen */
-  door?: TransformNode; open?: number; glint?: Mesh; }
+  door?: TransformNode; open?: number; glint?: Mesh;
+  /** C5c.3: the pawn case: what's on show inside it (rebuilt when its contents change) */
+  note?: string; items?: TransformNode;
+ }
 
 export class PropRenderer {
   private map = new Map<string, Vis>();
@@ -219,6 +223,10 @@ export class PropRenderer {
         const sm = unlitTextured(scene, textTexture(scene, "TROLLEY GRAND PRIX", { w: 512, h: 170, bg: "#ffe14a", fg: "#8e1f2e" }), "rsign"); sm.backFaceCulling = false; sg.material = sm;
       } else if (d.kind === "vaultdoor" || d.kind === "depositbox" || d.kind === "nose" || d.kind === "stash") {
         this.buildC5c(d, v, node, part);
+      } else if (d.kind === "podium" || d.kind === "cloakroom" || d.kind === "dessertcart" || d.kind === "piano" || d.kind === "chefstable" || d.kind === "kitchen") {
+        this.buildRestoProp(d, v, node, part);
+      } else if (d.kind === "clubrope" || d.kind === "clubsafe" || d.kind === "pawncounter" || d.kind === "pawncase") {
+        this.buildC5c3(d, v, node, part);
       } else {
         continue; // bins, meters, newsboxes: nothing changes visibly (they just go empty)
       }
@@ -288,6 +296,117 @@ export class PropRenderer {
       v.glass = brick; v.glint = this.glint(node, 0.12, 0.05, 0.12);
     }
   }
+  /** C5c.3: Big Crunch's rope stand, the club's safe (its door swings open when it's cracked), Sal's bell, the pawn case's glass */
+  private buildC5c3(d: PropDef, v: Vis, node: TransformNode, part: (m: Mesh, color: string | ReturnType<typeof toon>, outline?: number) => Mesh) {
+    const sc = this.scene, MB = MeshBuilder;
+    const bx = (w: number, h: number, dd: number, x: number, y: number, z: number, col: string, o = 0.01, par: TransformNode = node) => { const m = MB.CreateBox("c53", { width: w, height: h, depth: dd }, sc); m.position.set(x, y, z); part(m, col, o); m.parent = par; return m; };
+    const cyl = (dia: number, h: number, x: number, y: number, z: number, col: string, o = 0.01, par: TransformNode = node, t = 12) => { const m = MB.CreateCylinder("c53c", { diameter: dia, height: h, tessellation: t }, sc); m.position.set(x, y, z); part(m, col, o); m.parent = par; return m; };
+    if (d.kind === "clubrope") {
+      // a little lectern with the stamp pad and the guest list nobody's on, and a COVER sign facing the street
+      bx(0.6, 1.0, 0.45, 0, -0.5, 0, "#1b1420", 0.02);
+      bx(0.7, 0.05, 0.55, 0, 0.02, 0, "#e8b83a", 0.01);
+      bx(0.16, 0.04, 0.12, -0.15, 0.06, 0, "#c41e3a", 0);
+      bx(0.3, 0.02, 0.22, 0.12, 0.05, 0, "#f4f1ea", 0);
+      const sg = MB.CreatePlane("coverSign", { width: 0.9, height: 0.55 }, sc); sg.parent = node; sg.position.set(0, 0.45, 0.24); sg.rotation.y = Math.PI; sg.isPickable = false;
+      const sm = unlitTextured(sc, textTexture(sc, "COVER $15", { w: 256, h: 150, bg: "#ff3cac", fg: "#1b1420" }), "coverSign"); sm.backFaceCulling = false; sg.material = sm;
+      cyl(0.04, 0.5, 0.35, 0.2, 0.2, "#3a3444", 0, node, 4);
+    } else if (d.kind === "clubsafe") {
+      // a squat green safe against the wall (faces local +z): a door with a dial and a handle, swung open once cracked
+      bx(0.9, 1.0, 0.8, 0, -0.05, -0.47, "#3a5a4a", 0.02);
+      const hinge = new TransformNode("safeHinge", sc); hinge.parent = node; hinge.position.set(-0.42, -0.05, -0.05);
+      bx(0.8, 0.85, 0.08, 0.4, 0, 0, "#4a6a5a", 0.015, hinge);
+      const dial = cyl(0.24, 0.05, 0.4, 0.15, 0.05, "#c9ccd4", 0.01, hinge, 16); dial.rotation.x = Math.PI / 2;
+      bx(0.05, 0.2, 0.05, 0.65, -0.1, 0.06, "#e8b83a", 0, hinge);
+      bx(0.35, 0.12, 0.01, 0.4, -0.3, 0.045, "#f4f1ea", 0, hinge);
+      v.door = hinge; v.open = 0;
+      const lamp = MB.CreateSphere("safeAlarm", { diameter: 0.14, segments: 6 }, sc); lamp.parent = node; lamp.position.set(0, 0.6, -0.5); lamp.material = this.alarmOff; lamp.isPickable = false; lamp.setEnabled(false);
+      v.lights = [lamp];
+    } else if (d.kind === "pawncounter") {
+      // Sal's brass bell (ring for service)
+      cyl(0.16, 0.02, 0, 0.01, 0, "#3a3444", 0, node, 12);
+      const dome = MB.CreateSphere("bell", { diameter: 0.16, segments: 8, slice: 0.5 }, sc); dome.position.y = 0.02; part(dome, "#e8b83a", 0.01);
+      cyl(0.02, 0.05, 0, 0.11, 0, "#e8b83a", 0, node, 4);
+    } else if (d.kind === "pawncase") {
+      // a glass lid over the case (it goes when the case is smashed); what's inside comes from the case's note
+      const g = MB.CreateBox("caseGlass", { width: 3.3, height: 0.45, depth: 0.9 }, sc); g.position.y = 0.23; g.parent = node; g.isPickable = false;
+      const gm = new StandardMaterial("caseGlass", sc); gm.diffuseColor = Color3.FromHexString("#9fe3ff"); gm.emissiveColor = Color3.FromHexString("#2a5a70"); gm.alpha = 0.25; gm.backFaceCulling = false; g.material = gm;
+      v.glass = g;
+      const sg = MB.CreatePlane("caseSign", { width: 1.2, height: 0.22 }, sc); sg.parent = node; sg.position.set(0, -0.3, 0.505); sg.rotation.y = Math.PI; sg.isPickable = false;
+      const sm = unlitTextured(sc, textTexture(sc, "PAWNED GOODS", { w: 512, h: 94, bg: "#1b1420", fg: "#ffd54a" }), "caseSign"); sm.backFaceCulling = false; sg.material = sm;
+      v.note = "";
+    }
+  }
+  /** C5c.3: show what's in the pawn case: each thing, a tag in its owner's colour, its price */
+  private fillCase(v: Vis, note: string) {
+    v.items?.dispose(false, true);
+    v.items = undefined;
+    v.note = note;
+    if (!note) return;
+    let list: { t: string; c: number; p: number; s: number }[] = [];
+    try { list = JSON.parse(note); } catch { return; }
+    const sc = this.scene;
+    const root = new TransformNode("caseItems", sc); root.parent = v.node; v.items = root;
+    list.slice(0, 8).forEach((it, i) => {
+      const x = -1.45 + i * 0.41;
+      const mdl = buildLootModel(sc, it.t);
+      mdl.root.parent = root; mdl.root.position.set(x, 0.12, -0.05); mdl.root.scaling.setAll(0.55); mdl.root.rotation.y = 0.4 + i;
+      for (const m of mdl.meshes) m.isPickable = false;
+      const tag = MeshBuilder.CreatePlane("caseTag", { width: 0.34, height: 0.16 }, sc); tag.parent = root; tag.position.set(x, 0.05, 0.43); tag.rotation.y = Math.PI; tag.isPickable = false;
+      const col = it.s ? "#ffd54a" : PLAYER_COLORS[it.c % PLAYER_COLORS.length];
+      const tm = unlitTextured(sc, textTexture(sc, (it.s ? "SALE $" : "$") + it.p, { w: 192, h: 90, bg: col, fg: "#1b1420" }), "caseTag" + i); tm.backFaceCulling = false; tag.material = tm;
+    });
+  }
+  /** C5c.2: Le Dumpstère's props: the maître d's podium, the cloakroom's bell, the dessert trolley, the chef's table, the stove's pots */
+  private buildRestoProp(d: PropDef, v: Vis, node: TransformNode, part: (m: Mesh, color: string | ReturnType<typeof toon>, outline?: number) => Mesh) {
+    const sc = this.scene, MB = MeshBuilder, gold = "#e8b83a", cream = "#f4f1ea";
+    const cyl = (dia: number, h: number, x: number, y: number, z: number, col: string, o = 0.01, t = 10, top?: number) => { const m = MB.CreateCylinder("rp", { diameter: dia, diameterTop: top ?? dia, height: h, tessellation: t }, sc); m.position.set(x, y, z); return part(m, col, o); };
+    const bx = (w: number, h: number, dd: number, x: number, y: number, z: number, col: string, o = 0.01) => { const m = MB.CreateBox("rpb", { width: w, height: h, depth: dd }, sc); m.position.set(x, y, z); return part(m, col, o); };
+    if (d.kind === "podium") {
+      // a little lectern with the reservation book and a lamp
+      cyl(0.5, 0.1, 0, 0.05, 0, "#1b1420", 0.01, 12); cyl(0.12, 1.0, 0, 0.55, 0, gold, 0.01, 8);
+      const top = bx(0.6, 0.06, 0.45, 0, 1.1, 0, "#6b3f22", 0.02); top.rotation.x = -0.25;
+      const book = bx(0.4, 0.04, 0.3, 0, 1.15, 0.02, "#6b1f2e", 0.005); book.rotation.x = -0.25;
+      bx(0.36, 0.045, 0.26, 0, 1.17, 0.02, cream, 0).rotation.x = -0.25;
+      const sg = MB.CreatePlane("podiumSign", { width: 0.8, height: 0.5 }, sc); sg.parent = node; sg.position.set(0, 0.6, 0.15); sg.rotation.y = Math.PI; sg.isPickable = false;
+      const sm = unlitTextured(sc, textTexture(sc, "RESERVATIONS $20", { w: 256, h: 160, bg: "#1b1420", fg: "#ffd54a" }), "podiumSign"); sm.backFaceCulling = false; sg.material = sm;
+    } else if (d.kind === "cloakroom") {
+      const bell = MB.CreateSphere("bell", { diameter: 0.16, segments: 8, slice: 0.5 }, sc); bell.position.set(0.5, 0.0, 0.1); part(bell, gold, 0.01);
+      const tag = MB.CreatePlane("cloakSign", { width: 0.7, height: 0.3 }, sc); tag.parent = node; tag.position.set(-0.4, 0.18, 0.36); tag.rotation.set(-0.4, Math.PI, 0); tag.isPickable = false;
+      tag.material = unlitTextured(sc, textTexture(sc, "CLOAKROOM", { w: 256, h: 110, bg: cream, fg: "#6b1f2e" }), "cloakSign");
+      for (let i = 0; i < 5; i++) bx(0.35, 0.8, 0.12, -0.9 + i * 0.4, 0.3, -0.5, ["#6b1f2e", "#3d6fb5", "#c9a56b", "#2f7a4f", "#1b1420"][i], 0.01);
+      v.glass = cyl(0.25, 0.02, -0.6, 0.01, 0.0, gold, 0, 10); // (the tip dish: gone once it's been raided)
+    } else if (d.kind === "dessertcart") {
+      // a brass trolley with two shelves of cakes under a glass dome
+      bx(1.0, 0.04, 0.6, 0, 0, 0, gold, 0.01); bx(1.0, 0.04, 0.6, 0, -0.45, 0, gold, 0.01);
+      for (const [x, z] of [[-0.45, -0.25], [0.45, -0.25], [-0.45, 0.25], [0.45, 0.25]]) cyl(0.04, 0.9, x, -0.45, z, gold, 0, 5);
+      for (const s of [-1, 1]) { const w = cyl(0.14, 0.03, s * 0.5, -0.8, 0.28, "#1b1420", 0, 10); w.rotation.z = Math.PI / 2; }
+      const cakes = new TransformNode("cakes", sc); cakes.parent = node;
+      const cake = MB.CreateCylinder("cake", { diameter: 0.4, height: 0.2, tessellation: 14 }, sc); cake.position.set(-0.2, 0.12, 0); cake.material = toon(sc, "#ffd6e6"); ink(cake, 0.01); cake.parent = cakes; cake.isPickable = false;
+      const cherry = MB.CreateSphere("cherry", { diameter: 0.07, segments: 5 }, sc); cherry.position.set(-0.2, 0.25, 0); cherry.material = toon(sc, "#d8261e"); cherry.parent = cakes; cherry.isPickable = false;
+      ["#ff8fa3", "#b6ff3c", "#ffd54a", "#9fd4f0", "#ff8fa3"].forEach((c, i) => { const m = MB.CreateCylinder("mac", { diameter: 0.08, height: 0.05, tessellation: 10 }, sc); m.position.set(0.18 + (i % 3) * 0.1, 0.04 + Math.floor(i / 3) * 0.05, -0.05 + (i % 2) * 0.1); m.material = toon(sc, c); m.parent = cakes; m.isPickable = false; });
+      const dome = MB.CreateSphere("dome", { diameter: 0.5, segments: 10, slice: 0.5 }, sc); dome.position.set(-0.2, 0.02, 0); const dm = new StandardMaterial("dome", sc); dm.diffuseColor = Color3.FromHexString("#e8f7ff"); dm.alpha = 0.3; dome.material = dm; dome.parent = cakes; dome.isPickable = false;
+      v.door = cakes;
+    } else if (d.kind === "piano") {
+      // (the piano's body is in the city; here just the music on its stand)
+      const sheet = MB.CreatePlane("sheet", { width: 0.45, height: 0.3 }, sc); sheet.parent = node; sheet.position.set(0, 0.2, 0.35); sheet.rotation.set(-0.2, Math.PI, 0); sheet.isPickable = false;
+      const mm = unlitTextured(sc, textTexture(sc, "CHOPSTICKS", { w: 256, h: 170, bg: cream, fg: "#1b1420" }), "sheetMusic"); mm.backFaceCulling = false; sheet.material = mm;
+      bx(0.5, 0.25, 0.03, 0, 0.12, 0.38, "#1b1420", 0.005).rotation.x = -0.2;
+    } else if (d.kind === "chefstable") {
+      const plates = new TransformNode("chefPlates", sc); plates.parent = node;
+      for (const s of [-1, 1]) { const pl = MB.CreateCylinder("plate", { diameter: 0.34, height: 0.03, tessellation: 14 }, sc); pl.position.set(s * 0.45, 0.02, 0); pl.material = toon(sc, "#ffffff"); ink(pl, 0.005); pl.parent = plates; pl.isPickable = false; const food = MB.CreateSphere("food", { diameter: 0.12, segments: 6 }, sc); food.scaling.y = 0.5; food.position.set(s * 0.45, 0.06, 0); food.material = toon(sc, s < 0 ? "#c98a5a" : "#7fbf4f"); food.parent = plates; food.isPickable = false; }
+      const bt = MB.CreateCylinder("fizz", { diameter: 0.12, diameterTop: 0.04, height: 0.4, tessellation: 8 }, sc); bt.position.set(0, 0.2, 0.1); bt.material = toon(sc, "#2f7a4f"); ink(bt, 0.01); bt.parent = plates; bt.isPickable = false;
+      const dome = MB.CreateSphere("cloche", { diameter: 0.36, segments: 10, slice: 0.5 }, sc); dome.position.set(0, 0.02, -0.2); dome.material = toon(sc, "#c9ccd4"); ink(dome, 0.01); dome.parent = plates; dome.isPickable = false;
+      v.door = plates;
+    } else {
+      // the stove: a big pot of soup and a frying pan
+      const pots = new TransformNode("pots", sc); pots.parent = node;
+      const pot = MB.CreateCylinder("pot", { diameter: 0.5, height: 0.4, tessellation: 14 }, sc); pot.position.set(-0.5, 0.2, 0); pot.material = toon(sc, "#8e8a94"); ink(pot, 0.01); pot.parent = pots; pot.isPickable = false;
+      const soup = MB.CreateCylinder("soup", { diameter: 0.44, height: 0.02, tessellation: 14 }, sc); soup.position.set(-0.5, 0.39, 0); soup.material = toon(sc, "#e0502c"); soup.parent = pots; soup.isPickable = false;
+      const pan = MB.CreateCylinder("pan", { diameter: 0.4, height: 0.05, tessellation: 12 }, sc); pan.position.set(0.5, 0.04, 0); pan.material = toon(sc, "#3a3444"); ink(pan, 0.01); pan.parent = pots; pan.isPickable = false;
+      v.door = pots;
+    }
+  }
+
   /** C5c: a little twinkling star (on the nose, the stashes) */
   private glint(node: TransformNode, x: number, y: number, z: number): Mesh {
     const m = MeshBuilder.CreatePlane("glint", { size: 0.35 }, this.scene);
@@ -373,8 +492,12 @@ export class PropRenderer {
       if (v.glass && (v.def.kind === "car" || v.def.kind === "fishtank")) v.glass.setEnabled(v.ready); // smashed (C5b: the seafood tank too)
       if (v.glass && (v.def.kind === "nose" || v.def.kind === "stash")) v.glass.setEnabled(v.ready); // (C5c: taken)
       if (v.glint) v.glint.setEnabled(v.ready);
+      if (v.door && (v.def.kind === "dessertcart" || v.def.kind === "chefstable" || v.def.kind === "kitchen")) v.door.setEnabled(v.ready); // (C5c.2: raided)
+      if (v.glass && v.def.kind === "cloakroom") v.glass.setEnabled(v.ready);
+      if (v.glass && v.def.kind === "pawncase") v.glass.setEnabled(v.ready); // (C5c.3: smashed)
       if (v.def.kind === "vaultdoor" && v.lights) (v.lights[0].material as StandardMaterial).emissiveColor = Color3.FromHexString(v.ready ? "#ff3b30" : "#6fff8a");
     }
+    if (v.def.kind === "pawncase" && (pv.note ?? "") !== v.note) this.fillCase(v, pv.note ?? ""); // (C5c.3)
     if (pv.alarm !== v.alarm) {
       v.alarm = pv.alarm;
       for (const l of v.lights ?? []) l.setEnabled(pv.alarm);
@@ -409,7 +532,7 @@ export class PropRenderer {
       v.body.rotation.z = Math.cos(this.t * 11) * v.wobble * 0.3;
     }
     for (const v of this.map.values()) { // (C5c: the vault door swings, a deposit box pops open, glints twinkle)
-      if (v.door) {
+      if (v.door && (v.def.kind === "vaultdoor" || v.def.kind === "depositbox" || v.def.kind === "clubsafe")) {
         const want = v.ready ? 0 : 1, sp = v.def.kind === "vaultdoor" ? 0.35 : 2.5;
         if (v.open !== want) {
           v.open = want > v.open! ? Math.min(want, v.open! + dt * sp) : Math.max(want, v.open! - dt * sp);

@@ -13,7 +13,11 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   // C5a: the lobby squat's mentor: a grubby, wise old hobo in a bathrobe who talks about trash like a kung-fu master
   | "uncle_dumpster"
   // C5c: the Trashington Bank's guards (come for you when the vault alarm goes)
-  | "bank_guard";
+  | "bank_guard"
+  // C5c.2: Le Dumpstère's maître d'
+  | "maitre_d"
+  // C5c.3: THE COMPACTOR's bouncer (Big Crunch), and Sal's nephew Big Vinnie at PAWN-O-RAMA
+  | "bouncer" | "vinnie";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -89,8 +93,32 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
     lines: { idle: ["*chitter*", "*sniff sniff*"], hit: ["*SKREEE!*", "*angry chitter*"], win: ["*triumphant chitter*"] },
   },
   // Phase 3.5: one behind every shop counter. Never fights, never leaves the shop.
+  // C5c.3: THE COMPACTOR's bouncer: cover charge or VIP, otherwise you're back on the pavement
+  bouncer: {
+    kind: "bouncer", name: "Big Crunch", walk: 1.2, flee: 5.0, fighter: true, hp: 4, dodge: 0, notoriety: 18, spawnWeight: 0, chase: 7.0,
+    loot: [["vip_wristband", 2], ["glow_stick", 2], ["coin_pile", 2]],
+    lines: {
+      idle: ["Fifteen bucks. Or be somebody.", "Name's not on the list. There is no list. Fifteen bucks.", "No boxes on the dance floor.", "Dress code: not garbage. Well. Less garbage.", "Tonight's DJ: DJ Crunch. My cousin.", "Shoes optional. Attitude mandatory."],
+      hit: ["Did you just... poke me?", "That tickled. Now I'm mad.", "OW. Rude."],
+      fight: ["You're getting COMPACTED.", "Outside. Now.", "Crunch time!"],
+      win: ["And STAY out.", "Next!", "Crunched."],
+      lose: ["Tell DJ Crunch... play my song..."],
+    },
+  },
+  // C5c.3: Sal's nephew: dozes by the guitars, comes swinging if somebody smashes the pawn case
+  vinnie: {
+    kind: "vinnie", name: "Big Vinnie", walk: 1.2, flee: 5.0, fighter: true, hp: 3, dodge: 0, notoriety: 14, spawnWeight: 0, chase: 6.6,
+    loot: [["coin_pile", 3], ["gold_chain", 0.6]],
+    lines: {
+      idle: ["Uncle Sal says no touching.", "You break it, you bought it. Then I break you.", "*picks at a guitar string*", "We don't do refunds. Or questions."],
+      hit: ["HEY! That's my good shirt!", "Uncle Saaaal!"],
+      fight: ["You smashed the CASE?!", "Put it BACK!", "Nobody robs Pawn-O-Rama!"],
+      win: ["Pawned.", "Sold, to the guy on the floor."],
+      lose: ["Uncle Sal's gonna kill me..."],
+    },
+  },
   bank_guard: {
-    kind: "bank_guard", name: "Bank Guard", walk: 1.3, flee: 5.0, fighter: true, hp: 3, dodge: 0, notoriety: 20, spawnWeight: 0, chase: 6.2,
+    kind: "bank_guard", name: "Bank Guard", walk: 1.3, flee: 5.0, fighter: true, hp: 3, dodge: 0, notoriety: 20, spawnWeight: 0, chase: 7.2,
     loot: [["coin_pile", 3], ["donut", 1]],
     lines: {
       idle: ["Welcome to Trashington Bank. Please don't.", "No loitering near the vault.", "I've got my eye on you. Both eyes.", "Deposits only. No withdrawals of the stealing kind."],
@@ -98,6 +126,17 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       fight: ["FREEZE! ...Please?", "Step away from the vault!", "Not on my shift!", "Halt in the name of compound interest!"],
       win: ["Case closed.", "Account frozen.", "Have a secure day."],
       lose: ["Tell the manager... I tried..."],
+    },
+  },
+  maitre_d: {
+    kind: "maitre_d", name: "Maitre d'", walk: 1.3, flee: 5.0, fighter: true, hp: 3, dodge: 0, notoriety: 15, spawnWeight: 0,
+    loot: [["coin_pile", 3], ["silver_cutlery", 1], ["mystery_wallet", 0.6]],
+    lines: {
+      idle: ["Bonjour. Non.", "Do you have a reservation? Of course you don't.", "We have a dress code, monsieur. It is 'not a box'.", "The table for twenty dollars is... available.", "Le Dumpstere. Three bins in the guide.", "Please do not lick the menu."],
+      hit: ["Sacre bleu! My moustache!", "This is a five-bin establishment!", "Not ze face!"],
+      fight: ["Out! OUT!", "You are banned from ze premises!", "Garcon! Ze rolling pin!"],
+      win: ["Bon appetit... elsewhere.", "Next!"],
+      lose: ["Tell ze chef... ze souffle..."],
     },
   },
   doorman: {
@@ -146,7 +185,7 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
     },
   },
   old_lady: {
-    kind: "old_lady", name: "Grumpy Old Lady", walk: 1.3, flee: 3.0, fighter: true, hp: 2, dodge: 0, notoriety: 15, spawnWeight: 0, chase: 4.3,
+    kind: "old_lady", name: "Grumpy Old Lady", walk: 1.3, flee: 3.0, fighter: true, hp: 2, dodge: 0, notoriety: 15, spawnWeight: 0, chase: 5.0,
     loot: [["coin_pile", 2], ["candy_bar", 1], ["mystery_wallet", 0.5]],
     lines: {
       idle: ["*snores*"],
@@ -221,7 +260,7 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
 /** Pedestrian types that wander the streets (raccoons and cashiers have their own jobs). */
 export const NPC_KINDS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => NPC_DEFS[k].spawnWeight > 0);
 /** Kinds that are never part of the everyday crowd (own jobs, own counts). */
-export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
+export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
 /** The four big shots. */
 export const BIG_SHOTS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => !!NPC_DEFS[k].bigShot);
 

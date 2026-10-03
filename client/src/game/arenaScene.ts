@@ -23,7 +23,7 @@ import { LockpickUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, HOLD_TIME, KEYCARD_TIME, ARREST, type PropDef,
+  throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -57,6 +57,10 @@ const PROP_NAMES: Record<string, string> = {
   steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
   // C5c: Uptown's landmarks
   vaultdoor: "the Vault Door", depositbox: "Safety Deposit Box", nose: "the Mayor's Gold Nose", stash: "a Loose Brick",
+  podium: "the Maitre d's Podium", cloakroom: "the Cloakroom", dessertcart: "the Dessert Trolley", piano: "the Grand Piano", chefstable: "the Chef's Table", kitchen: "the Stove",
+  // C5c.3: THE COMPACTOR and PAWN-O-RAMA
+  clubrope: "Big Crunch's Rope", djdecks: "the DJ's Decks", clubbar: "the Conveyor Bar", clubsafe: "the Club Safe", rider: "the DJ's Rider", lockers: "the Staff Lockers", sortbin: "the Sorting Bin", vipbooth: "the VIP Booth",
+  pawncounter: "Sal's Counter", pawncase: "the Pawn Case",
 };
 
 /** Round loop + event state for the HUD (read from the server / solo world). */
@@ -66,6 +70,8 @@ export interface MatchHud {
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
   lightT?: number;
   paradeD?: number;
+  /** C5c.3: when THE COMPACTOR's last DROP started (same clock as lightT) */
+  clubB?: number;
 }
 export interface ScoreLine { id: string; name: string; colorIdx: number; cash: number; bank: number; connected: boolean; me: boolean; }
 /** Where home is, relative to where you're looking. */
@@ -83,7 +89,7 @@ const PUNCH_CD_MS = 550; // matches the server's punch cooldown (the server has 
 const PUNCH_REACH = 2.2;
 /** Gibberish voice pitch per pedestrian type. */
 const NPC_VOICE: Record<string, number> = {
-  tourist: 1.15, businessman: 0.8, influencer: 1.45, jogger: 1.1, gym_bro: 0.62, mall_cop: 0.75, mime: 1.0, pigeon_lady: 1.3, doorman: 0.7, fisherman: 0.75,
+  tourist: 1.15, businessman: 0.8, influencer: 1.45, jogger: 1.1, gym_bro: 0.62, mall_cop: 0.75, mime: 1.0, pigeon_lady: 1.3, doorman: 0.7, fisherman: 0.75, bouncer: 0.5, vinnie: 0.62,
 };
 
 /**
@@ -244,7 +250,7 @@ export class ArenaScene {
   camOverride: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null;
 
   // Phase 3: round loop
-  match: MatchHud = { phase: "lobby", round: 0, rounds: ROUNDS, timeLeft: 0, results: "[]", evKind: "", evStage: "", evX: 0, evZ: 0, evR: 0, evT: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, lightT: 0, paradeD: -1 };
+  match: MatchHud = { phase: "lobby", round: 0, rounds: ROUNDS, timeLeft: 0, results: "[]", evKind: "", evStage: "", evX: 0, evZ: 0, evR: 0, evT: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, lightT: 0, paradeD: -1, clubB: -999 };
   scores: ScoreLine[] = [];
   myColorIdx = 0;
   private events: EventRenderer;
@@ -308,6 +314,11 @@ export class ArenaScene {
   punchTarget: PunchTarget | null = null;
   /** my heat 0..100 (wanted stars at 30 / 60 / 90) */
   heat = 0;
+  /** C5c.3: my cash and aura (prompts at Big Crunch's rope and Sal's counter) */
+  myCash = 0; myAura = 0;
+  /** C5c.3: the club clock (the city clock, run on locally between snapshots) and the pawn case's contents */
+  private clubClock = 0; private clubLastLightT = -1;
+  pawnCase: { t: string; c: number; o: string; p: number; s: number; v: number }[] = [];
   /** 5A.1: my health 0..100 */
   hp = 100;
   private firstWorld = true;
@@ -364,6 +375,7 @@ export class ArenaScene {
     if (sm) sm.refreshRate = 0; // RenderTargetTexture.REFRESHRATE_RENDER_ONCE
     this.items = new ItemRenderer(scene, this.arena);
     this.npcs = new NpcRenderer(scene);
+    { const ps = arena.pawnShop, sh = ps ? arena.shops?.find((x) => x.id === ps.shop) : undefined; if (sh) this.npcs.salAt = { x: sh.cashier.x, z: sh.cashier.z }; } // (C5c.3)
     this.events = new EventRenderer(scene);
     if (this.arena.chinatown) this.dragon = new DragonRenderer(scene, this.arena.chinatown.route, { n: PARADE.segments, gap: PARADE.gap });
     this.propsR = new PropRenderer(scene, this.arena.props ?? []);
@@ -424,6 +436,7 @@ export class ArenaScene {
 
     const before = cloneMoveState(this.cur);
     const s: MoveState = readMoveState(me);
+    this.clubFloorNow();
     for (const inp of this.pending) stepMovement(s, inp, this.arena);
     const ex = before.x - s.x, ey = before.y - s.y, ez = before.z - s.z;
     const err = Math.hypot(ex, ey, ez);
@@ -493,6 +506,7 @@ export class ArenaScene {
         this.serverInv = { hand: p.hand ?? "", pockets: [p.p0 ?? "", p.p1 ?? "", p.p2 ?? ""], sel: p.sel ?? FISTS };
         this.heat = p.heat ?? 0;
         this.hp = p.hp ?? 100;
+        this.myCash = p.cash ?? 0; this.myAura = p.aura ?? 0; // (C5c.3: the club's door, Sal's counter)
         this.respawnT = p.respawnT ?? 0;
         this.robT = p.robT ?? -1;
         if (this.robT < 0 && this.holdKind && this.holdArmed) this.holdKind = ""; // (C5c: the hold ended)
@@ -520,6 +534,7 @@ export class ArenaScene {
     // props (dumpsters emptied, booths smashed, alarms) + traffic
     view.props?.forEach((pv, id) => {
       this.propsR.sync(id, pv); this.propState.set(id, pv.ready);
+      if (pv.note !== undefined && id.startsWith("pawncase")) { try { this.pawnCase = pv.note ? JSON.parse(pv.note) : []; } catch { this.pawnCase = []; } } // (C5c.3)
       // C4a: smashed things vanish and stop blocking (repaired at dawn)
       const bd = this.brkBox.get(id);
       if (bd !== undefined) { this.propsR.syncBreakable(id, pv.ready); this.city.setBroken(id, !pv.ready); setBoxOff(this.arena, bd, !pv.ready); }
@@ -742,6 +757,54 @@ export class ArenaScene {
           if (e.p === me) this.onFeedback?.("A GOLDEN STASH! Every landmark hides one...", "good");
           break;
         }
+        // C5c.2: LE DUMPSTÈRE
+        // C5c.3: THE COMPACTOR
+        case "cover": if (e.p === me) { sfx.cash(); this.onBanner?.(e.vip ? "VIP. GO ON IN." : "STAMPED!", e.vip ? "Big Crunch nods. No charge for somebody like you (until dawn)." : `$${e.paid} cover paid. You're in till dawn. (It all goes in the manager's safe...)`, "good"); } break;
+        case "coverNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"Fifteen bucks." You haven't got $${CLUB.cover}. (Money you've sold loot for counts. Or get ${CLUB.vipAura} aura and be somebody.)` : "You're already stamped. Go on in!", "info"); break;
+        case "clubDrop": {
+          const c = this.arena.club;
+          if (c) {
+            const x = (c.floor.minX + c.floor.maxX) / 2, z = (c.floor.minZ + c.floor.maxZ) / 2, g = gainAt(x, 1, z);
+            if (g > 0.03) sfx.clubDrop(g);
+            this.city.clubBurst();
+            if (g > 0.15) this.pop(e.by && e.by === me ? "YOUR DROP!" : "THE DROP!", x, 4.5, z, "#ff3cac");
+            if (Math.hypot(this.cur.x - x, this.cur.z - z) < 6 && this.cur.y < CLUB.top + 1) this.addTrauma(0.5);
+          }
+          break;
+        }
+        case "djHijack": {
+          const d = this.propsR.def(e.prop); if (d) { const g = gainAt(d.x, 1, d.z); if (g > 0.05) sfx.scratch(g); this.pop("WIKKA WIKKA!", d.x, d.y + 1.2, d.z, "#43c7a6"); }
+          if (e.p === me) this.onBanner?.("YOU'RE THE DJ!", `+${CLUB.djAura} aura. The crowd ROARS. The drop is coming... (everyone on the crusher goes flying)`, "good");
+          else this.onFeedback?.(`${this.nameOf(e.p) ?? "Somebody"} hijacked the decks at THE COMPACTOR!`, "info");
+          break;
+        }
+        case "safeCracked": {
+          const d = this.propsR.def(e.prop); if (d) { const g = gainAt(d.x, 1, d.z); if (g > 0.05) sfx.vault(g); }
+          if (e.p === me) this.onBanner?.("SAFE CRACKED!", `$${e.value} of tonight's takings in one fat bag. The alarm's going, Big Crunch is coming: RUN.`, "good");
+          break;
+        }
+        // C5c.3: PAWN-O-RAMA
+        case "fenced": if (e.p === me) { sfx.cash(); this.onFeedback?.(`"Pleasure doing business." Sal paid $${e.cash} for the ${lootDef(e.type).name}. No questions asked.`, "good"); } break;
+        case "pawned": if (e.p === me) { sfx.cash(); this.onBanner?.("PAWNED", `$${e.cash} now for the ${lootDef(e.type).name}. Buy it back before dawn, or it goes on sale to anybody.`, "good"); } break;
+        case "redeemed": if (e.p === me) { sfx.cash(); this.onFeedback?.(e.sale ? `Bought the ${lootDef(e.type).name} off the sale shelf for $${e.cash}.` : `Got your ${lootDef(e.type).name} back ($${e.cash}).`, "good"); } break;
+        case "pawnNo": if (e.p === me) { sfx.full(); this.onFeedback?.(e.reason === "hands" ? "Sal squints at your empty hands. \"What, you selling air?\" (Have something out in your hands.)" : e.reason === "full" ? "The case is full. Come back when somebody's bought something." : e.reason === "broke" ? "You can't afford it. Sal doesn't do credit. (Well. He does pawn.)" : "Nothing of yours in the case (and nothing on sale yet).", "info"); } break;
+        case "caseSmashed": {
+          const d = this.arena.pawnShop; if (d) { const g = gainAt(d.caseX, 1, d.caseZ); if (g > 0.05) sfx.glass(g); this.pop("SMASH & GRAB!", d.caseX, 2.2, d.caseZ, "#ff3b30"); }
+          if (e.p === me) this.onBanner?.("SMASH & GRAB!", "Everything in the case is on the floor. Big Vinnie's coming. Grab and GO.", "bad");
+          break;
+        }
+        case "bounced":
+          if (e.p === me && e.reason === "cover") { sfx.offended(); this.onFeedback?.(`"Fifteen bucks, or be somebody." Pay Big Crunch's cover at the rope ($${CLUB.cover}), be a VIP (${CLUB.vipAura}+ aura, or a VIP wristband)... or find another way in. Round the back, maybe.`, "bad"); break; }
+          if (e.p === me) { sfx.offended(); this.onFeedback?.(`"Do you have a reservation? No? Out." Book a table ($${RESTO.fee}) at the podium, or come dressed for it (carry something designer)... or try the kitchen door round the back.`, "bad"); }
+          break;
+        case "seated": if (e.p === me) { sfx.cash(); this.onBanner?.("RIGHT THIS WAY", `Table booked ($${e.paid}). The maitre d' will let you in until dawn.`, "good"); } break;
+        case "restoNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `A table's $${RESTO.fee} and you've got less than that. (Money you've sold loot for counts.)` : "You've already got a table. Go on in!", "info"); break;
+        case "piano": {
+          const d = this.propsR.def(e.prop); if (d) { const g = gainAt(d.x, 1, d.z); if (g > 0.05) sfx.piano(g); this.pop("PLINK PLONK!", d.x, 2.4, d.z, "#ffd54a"); }
+          if (e.p === me) this.onFeedback?.(`You bashed out a tune on the grand piano. +${RESTO.pianoAura} aura (the diners are appalled)`, "good");
+          break;
+        }
+        case "chefYell": if (e.p === me) { sfx.offended(); this.onFeedback?.("\"OI! Get out of my kitchen!\" (the chef saw: +heat)", "bad"); } break;
         // C5c.1: citizen's arrests
         case "pin": {
           const a = e.target === me ? { x: this.cur.x, y: this.cur.y, z: this.cur.z } : this.remotes.anchor(e.target);
@@ -792,15 +855,17 @@ export class ArenaScene {
         case "shoplift": if (e.p === me) this.onFeedback?.("The cashier saw that! (+heat)", "bad"); break;
         case "wipeout": {
           const g = gainAt(e.x, 0.5, e.z);
-          if (g > 0.08) sfx.crash(g);
+          if (g > 0.08) { sfx.honk(g); sfx.splat(g); }
+          this.puff(e.x, 0.4, e.z, 1.5);
+          this.pop(["SPLAT!", "BOINK!", "KA-THUNK!", "WHUMP!"][Math.floor(Math.random() * 4)], e.x, 2.0, e.z, "#ff5a3c");
           if (e.p === me) {
             this.addTrauma(1); this.optimistic = null; this.robHeld = false;
             if (this.chargeStart) { this.chargeStart = 0; this.stopChargeTone?.(); this.stopChargeTone = null; this.input.cancelCharge(); this.viewmodel.setCharge(0); }
             this.onScreenFx?.("knocked", 10);
-          } else if (g > 0.1) this.pop("SPLAT!", e.x, 1.2, e.z, "#ff5a3c");
+          }
           break;
         }
-        case "respawn": if (e.p === me) { sfx.respawn(); this.onFeedback?.("Back at your fort. Look both ways next time!", "info"); } break;
+        case "respawn": if (e.p === me) { sfx.respawn(); this.onFeedback?.("You peel yourself off the road. Look both ways next time! (3 s grace from traffic)", "info"); } break;
         case "honk": { const g = gainAt(e.x, 1, e.z); if (g > 0.1) sfx.honk(g); break; }
         // ---- Phase 4: police
         case "copSpawn":
@@ -1126,7 +1191,7 @@ export class ArenaScene {
     if (a === "grab") this.updateLookTarget();
     if (a === "grab" && !this.lookTarget && this.useTarget) {
       const u = this.useTarget;
-      if (u.empty) { sfx.full(); this.onFeedback?.(u.kind === "washer" || u.kind === "dryer" ? "Already emptied today." : "Already searched. It'll refill later.", "info"); return; }
+      if (u.empty) { sfx.full(); this.onFeedback?.(u.kind === "washer" || u.kind === "dryer" ? "Already emptied today." : u.kind === "djdecks" ? "The decks are still warm. Give DJ Crunch a minute." : u.kind === "pawncase" ? "The case is smashed. Sal's boarding it up till dawn." : u.kind === "clubsafe" ? "Cleaned out. The takings start again tomorrow." : "Already searched. It'll refill later.", "info"); return; }
       this.openingMachine = u.kind === "washer" || u.kind === "dryer";
       const ht = HOLD_TIME[u.kind as keyof typeof HOLD_TIME];
       this.holdKind = ht !== undefined ? u.kind : "";
@@ -1294,7 +1359,7 @@ export class ArenaScene {
     const till = this.propInFront((d) => d.kind === "till", USE_RANGE + 0.3);
     if (till) this.robTarget = { id: till.id, kind: "till", name: PROP_NAMES.till, empty: this.propState.get(till.id) === false || !this.registerNear(till) };
     if (this.lookTarget) return;
-    const best = this.propInFront((d) => SEARCHABLE.has(d.kind) || LOBBY_GAMES.has(d.kind) || HOLD_TIME[d.kind] !== undefined, USE_RANGE);
+    const best = this.propInFront((d) => SEARCHABLE.has(d.kind) || LOBBY_GAMES.has(d.kind) || RESTO_USE.has(d.kind) || CLUB_USE.has(d.kind) || HOLD_TIME[d.kind] !== undefined, USE_RANGE);
     if (best) this.useTarget = { id: best.id, kind: best.kind, name: PROP_NAMES[best.kind] ?? best.kind, empty: this.propState.get(best.id) === false };
   }
 
@@ -1345,6 +1410,52 @@ export class ArenaScene {
 
   /** C5c: a player's name (for event messages) */
   nameOf(id: string): string | null { return this.playerNames.get(id) ?? null; }
+  /** C5c.3: the club floor follows the city clock (run on locally between snapshots) */
+  private clubFloorNow() {
+    if (!this.arena.club) return;
+    const b = this.match.clubB ?? -999;
+    const d = b < -900 ? 1e9 : (((this.clubClock - b) % 600) + 600) % 600;
+    applyClubFloor(this.arena, this.clubClock, this.clubClock - d);
+  }
+  private tickClubClock(dt: number) {
+    const lt = this.match.lightT ?? 0;
+    if (lt !== this.clubLastLightT) { const ahead = this.clubClock - lt; if (this.clubLastLightT < 0 || Math.abs(ahead) > 0.5) this.clubClock = lt; this.clubLastLightT = lt; }
+    else this.clubClock += dt;
+  }
+  private clubBeatN = -1;
+  /** C5c.3: the bass through the walls of THE COMPACTOR (muffled outside, loud inside; quiet during the build-up) */
+  private clubBeat() {
+    const c = this.arena.club;
+    if (!c || settings.muted) return;
+    const cx = (c.hall.minX + c.hall.maxX) / 2, cz = (c.hall.minZ + c.hall.maxZ) / 2;
+    const inside = c.hall.minX < this.cur.x && this.cur.x < c.hall.maxX && c.hall.minZ < this.cur.z && this.cur.z < c.hall.maxZ;
+    const d = Math.hypot(this.cur.x - cx, this.cur.z - cz);
+    if (!inside && d > 48) return;
+    const n = Math.floor(this.clubClock * CLUB.bpm / 60 * 2);
+    if (n === this.clubBeatN) return;
+    const first = this.clubBeatN < 0; this.clubBeatN = n;
+    if (first) return;
+    const g = (inside ? 0.55 : 0.28 * (1 - d / 48)) * (0.6 + this.night.level * 0.4);
+    const st = clubStage(this.clubDropT);
+    if (st === "build" || st === "hold") { sfx.hat(g * 1.2); if (n % 2 === 0) sfx.hat(g); return; }
+    if (n % 2 === 0) sfx.kick(g); else if (inside) sfx.hat(g * 0.8);
+  }
+  /** C5c.3: where the DROP is right now (seconds since it started building; huge = none) */
+  get clubDropT(): number { const b = this.match.clubB ?? -999; return b < -900 ? 1e9 : (((this.clubClock - b) % 600) + 600) % 600; }
+  /** C5c.3: what's in the pawn case for me: my own pawned thing (buy back), else the first thing on sale */
+  pawnPick(): { type: string; price: number; sale: boolean } | null {
+    const mine = this.pawnCase.find((x) => x.o === this.myId && !x.s);
+    const s = mine ?? this.pawnCase.find((x) => x.s === 1);
+    return s ? { type: s.t, price: s.p, sale: !!s.s } : null;
+  }
+  get pawnCaseFull() { return this.pawnCase.length >= PAWN_SHOP.caseMax; }
+  /** C5c.3: what's out in my hands (for Sal's prompts): type and value */
+  heldInfo(): { type: string; value: number } | null {
+    const id = this.activeItem(this.inventory)?.id;
+    if (!id) return null;
+    const type = this.itemTypes.get(id);
+    return type ? { type, value: this.itemViews.get(id)?.value ?? 0 } : null;
+  }
   /** C5c: am I carrying one of these (hands or pockets)? */
   carryingType(type: string): boolean {
     const inv = this.inventory;
@@ -1447,6 +1558,7 @@ export class ArenaScene {
         sprint: a.sprint, jump: a.jump, crouch: a.crouch, dodge: a.dodge,
       };
       this.prev = cloneMoveState(this.cur);
+      this.clubFloorNow();
       stepMovement(this.cur, inp, this.arena);
       if (this.networked) {
         this.pending.push(inp);
@@ -1475,7 +1587,7 @@ export class ArenaScene {
     // Eye height follows stance (crouch / slide lower the camera smoothly)
     // (C1.1: floating in the canal: eyes just above the water)
     const swimming = inDeepWater(this.arena, cur.x, cur.z, cur.y);
-    const eyeTarget = pose === "knocked" ? 0.35 : swimming ? 0.6 : pose === "slide" ? PLAYER.slideEyeHeight : cur.crouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight;
+    const eyeTarget = pose === "knocked" || pose === "tumble" ? 0.35 : swimming ? 0.6 : pose === "slide" ? PLAYER.slideEyeHeight : cur.crouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight;
     this.eye += (eyeTarget - this.eye) * ease(12);
 
     // Head bob (off with reduced motion)
@@ -1490,7 +1602,7 @@ export class ArenaScene {
 
     // Roll: slight lean into strafes, more when sliding
     const strafe = this.input.axes().mx;
-    const rollTarget = (pose === "knocked" ? (reduced ? 0.2 : 0.55) : 0) + (reduced ? 0 : (pose === "slide" ? 0.05 : 0) - strafe * 0.018 + (pose === "stumble" ? Math.sin(this.time * 18) * 0.05 : 0));
+    const rollTarget = (pose === "tumble" ? (reduced ? 0.3 : Math.sin(this.time * 9) * 1.1) : 0) + (pose === "knocked" ? (reduced ? 0.2 : 0.55) : 0) + (reduced ? 0 : (pose === "slide" ? 0.05 : 0) - strafe * 0.018 + (pose === "stumble" ? Math.sin(this.time * 18) * 0.05 : 0));
     this.roll += (rollTarget - this.roll) * ease(8);
 
     const camDip = this.camDip.update(dt);
@@ -1503,7 +1615,7 @@ export class ArenaScene {
 
     this.camera.position.set(px, py + this.eye + bob + (reduced ? 0 : camDip), pz);
     // knocked down: you're looking up at the sky from the pavement
-    const lieBack = pose === "knocked" ? -0.55 : 0;
+    const lieBack = pose === "knocked" ? -0.55 : pose === "tumble" && !reduced ? Math.sin(this.time * 11) * 0.5 : 0; // (D1: cartwheeling after a car hit)
     this.lie += (lieBack - this.lie) * ease(8);
     this.camera.rotation.set(safePitch(this.input.pitch + shakeP + this.lie), this.input.yaw + shakeY, clampAbs(this.roll + shakeR, MAX_ROLL));
     if (this.fortView) this.aimAtFort();
@@ -1554,6 +1666,10 @@ export class ArenaScene {
     // C5a: the squat: its fire, and the view from up there
     this.city.updateLobby(dt);
     this.city.updateUptown(dt);
+    // C5c.3: THE COMPACTOR: the crusher bed, the crowd, the lights (only worked out when you're near)
+    this.tickClubClock(dt);
+    this.city.updateClub(dt, this.clubClock, this.clubDropT, this.night.level, this.camera.position.x, this.camera.position.z);
+    this.clubBeat();
     const L = this.arena.lobby;
     this.night.setFarView(L && inLobby(this.arena, this.cur.x, this.cur.z, 3) && this.cur.y > L.y - 4 ? 2.4 : 1);
     this.city.updateLights(this.match.lightT ?? 0);
@@ -1681,9 +1797,10 @@ export class ArenaScene {
   }
 
   /** Test-only (solo, ?test=1): place the player somewhere. */
-  debugTeleport(x: number, z: number, yaw: number) {
+  debugTeleport(x: number, z: number, yaw: number, y?: number) {
     this.cur = makeMoveState(x, z, yaw);
     if (inLobby(this.arena, x, z) && this.arena.lobby) this.cur.y = this.arena.lobby.y; // (C5a: onto the squat's roof)
+    if (y !== undefined) this.cur.y = y;
     this.prev = cloneMoveState(this.cur);
     this.input.yaw = yaw;
     this.input.pitch = 0;

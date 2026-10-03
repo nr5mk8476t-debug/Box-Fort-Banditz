@@ -44,7 +44,7 @@ export class RaidAlert {
 
   /** Every frame: fade it out when time's up, keep the arrow pointing home. */
   update(dt: number, camX: number, camZ: number, camYaw: number) {
-    this.t = Math.max(0, this.t - dt);
+    this.t = Math.max(0, this.t - Math.min(dt, 0.25)); // (D1: a slow frame can't eat the whole alert before you see it)
     const on = this.t > 0;
     this.edge.style.opacity = on ? String(Math.min(1, this.t)) : "0";
     this.arrow.style.display = on ? "block" : "none";

@@ -692,7 +692,7 @@ test("C4b the old lady: sleeps upstairs; a noise nearby wakes her -> yells + hea
   const { w, p } = c4World();
   const lady = [...w.npc.npcs.values()].find((n) => n.kind === "old_lady")!;
   assert.ok(lady && lady.post, "posted at the laundromat");
-  assert.equal(w.npc.npcs.size - [...w.npc.npcs.values()].filter((n) => !n.post).length, w.arena.shops!.length + 6); // (C5a: + Uncle Dumpster; C5c: + 2 bank guards)
+  assert.equal(w.npc.npcs.size - [...w.npc.npcs.values()].filter((n) => !n.post).length, w.arena.shops!.length + 9); // (C5a: + Uncle Dumpster; C5c: + 2 bank guards; C5c.2: + the maitre d'; C5c.3: + Big Crunch, Big Vinnie)
   const post = lady.post!;
   // a noise across town: nothing
   w.noise(p, post.x + 60, post.z, 12);
@@ -1116,4 +1116,393 @@ test("C5c golden stashes: each hides one golden item, found once a day", () => {
   w.action("a", { a: "use", prop: st.def.id });
   assert.ok(w.takeEvents().some((e) => e.t === "empty"), "once a day");
   void p;
+});
+
+// ============================================================================ C5c.2: LE DUMPSTÈRE
+import { RESTO } from "../src/index.js";
+function walkInto(w: World, id: string, yaw: number, seconds: number) {
+  const p = w.players.get(id)!;
+  const ev: WorldEvent[] = [];
+  for (let i = 0; i < Math.round(seconds * 60); i++) { w.pushInputs(id, [inp(p.lastSeq + 1, { mz: 1, yaw })]); w.tick(); ev.push(...w.takeEvents()); }
+  return ev;
+}
+function clubWorld() {
+  const w = new World({ seed: 4, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  const c = w.arena.resto!;
+  return { w, p, c };
+}
+const atFront = (w: World, c: NonNullable<ReturnType<typeof buildTrashington>["resto"]>) => { w.debugTeleport("a", c.out.x - 0.6, (c.door.minZ + c.door.maxZ) / 2, Math.PI / 2); w.players.get("a")!.move.y = 0.15; };
+
+test("C5c.2 LE DUMPSTERE: on Mile East, a 2-storey restaurant: dining room, piano, cloakroom, dessert trolley, kitchen, stairs to a roof terrace, a maitre d', 2 golden stashes", () => {
+  const c = buildTrashington();
+  assert.ok(c.resto && tierAt(c.resto.rect.minZ) === 2, "Uptown");
+  for (const k of ["podium", "cloakroom", "dessertcart", "piano", "chefstable", "kitchen"]) assert.equal(c.props!.filter((p) => p.kind === k).length, 1, k);
+  assert.ok(c.posts!.some((p) => p.kind === "maitre_d"));
+  const stashes = c.props!.filter((p) => p.kind === "stash").map((p) => p.loot?.[0]);
+  assert.ok(stashes.includes("golden_truffle") && stashes.includes("diamond_pigeon"));
+  const steps = c.boxes.filter((b) => b.kind === "step" && inRect(c.resto!.stairs, b.x, b.z));
+  assert.equal(steps.length, 15);
+  assert.ok(Math.abs(steps[steps.length - 1].h - c.resto.roofY) < 0.1);
+});
+
+test("C5c.2 the maitre d': no booking and no designer clothes = put back outside; book a table ($20) or carry something designer and you're in; broke = no; bookings end at dawn", () => {
+  const { w, p, c } = clubWorld();
+  atFront(w, c); settle(w, 0.3); w.takeEvents();
+  let ev = walkInto(w, "a", Math.PI / 2, 3);
+  assert.ok(ev.some((e) => e.t === "bounced" && e.reason === "dress"), "not dressed for it");
+  assert.ok(p.move.x < c.door.minX, `still outside (x ${p.move.x.toFixed(1)})`);
+  const pod = [...w.props.props.values()].find((x) => x.def.kind === "podium")!;
+  w.debugTeleport("a", pod.def.x - 0.9, pod.def.z, Math.PI / 2); settle(w, 0.3); w.takeEvents();
+  w.action("a", { a: "use", prop: pod.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "restoNo" && e.reason === "broke"));
+  p.cash = 50;
+  w.action("a", { a: "use", prop: pod.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "seated"));
+  assert.equal(p.cash, 50 - RESTO.fee);
+  atFront(w, c); settle(w, 0.3); w.takeEvents();
+  ev = walkInto(w, "a", Math.PI / 2, 3);
+  assert.ok(!ev.some((e) => e.t === "bounced"), "shown to your table");
+  assert.ok(p.move.x > c.door.maxX, `inside (x ${p.move.x.toFixed(1)})`);
+  w.resetCity(false);
+  assert.equal(w.restoPass.size, 0, "bookings end at dawn");
+  // dressed up: a designer scarf in your pocket gets you in without booking
+  const { w: w2, p: p2, c: c2 } = clubWorld();
+  atFront(w2, c2); settle(w2, 0.3);
+  const scarf = w2.placeItem("designer_scarf", p2.move.x, 0.3, p2.move.z);
+  w2.action("a", { a: "grab", item: scarf }); settle(w2, 0.5);
+  assert.ok(w2.dressedUp(p2), "dressed for it");
+  atFront(w2, c2); settle(w2, 0.3); w2.takeEvents();
+  ev = walkInto(w2, "a", Math.PI / 2, 3);
+  assert.ok(!ev.some((e) => e.t === "bounced") && p2.move.x > c2.door.maxX, "\"Right this way, monsieur\"");
+});
+
+test("C5c.2 knock the maitre d' out and the front door's open to anyone; the kitchen's back door is always open; the roof: climb the crates", () => {
+  const { w, p, c } = clubWorld();
+  const m = [...w.npc.npcs.values()].find((n) => n.kind === "maitre_d")!;
+  assert.ok(m, "he's there");
+  m.state = "ko"; m.stateT = 60;
+  atFront(w, c); settle(w, 0.3); w.takeEvents();
+  let ev = walkInto(w, "a", Math.PI / 2, 3);
+  assert.ok(!ev.some((e) => e.t === "bounced") && p.move.x > c.door.maxX, "walked straight in");
+  // the back door: from the alley straight into the kitchen
+  m.state = "work";
+  w.debugTeleport("a", c.rect.maxX + 1.2, 61.8, -Math.PI / 2); p.move.y = 0.15; settle(w, 0.3);
+  let inKitchen = false;
+  for (let i = 0; i < 150 && !inKitchen; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw: -Math.PI / 2 })]); w.tick(); inKitchen = inRect(c.kitchen, p.move.x, p.move.z); }
+  assert.ok(inKitchen, `walked into the kitchen (x ${p.move.x.toFixed(1)}, z ${p.move.z.toFixed(1)})`);
+  const crate = w.arena.boxes.find((x) => x.kind === "crate" && Math.abs(x.x - 23.2) < 0.01)!, stack = w.arena.boxes.find((x) => x.kind === "boxes" && Math.abs(x.x - 22.3) < 0.01)!;
+  const top = (x: typeof crate) => x.y + x.h / 2;
+  assert.ok(top(crate) <= PLAYER.mantleMax && top(stack) - top(crate) <= PLAYER.mantleMax && c.roofY - top(stack) <= PLAYER.mantleMax, "every step of the climb is a mantle");
+});
+
+test("C5c.2 inside: the cloakroom, the dessert trolley, the chef's table and the kitchen give 1-2 things once a day (the chef yells if he sees you); the piano: +3 aura and a noise", () => {
+  const { w, p } = clubWorld();
+  for (const k of ["cloakroom", "dessertcart", "chefstable", "kitchen"]) {
+    const ps = [...w.props.props.values()].find((x) => x.def.kind === k)!;
+    w.debugTeleport("a", ps.def.x + Math.sin(ps.def.yaw) * 1.1, ps.def.z + Math.cos(ps.def.yaw) * 1.1, ps.def.yaw + Math.PI);
+    if (k === "chefstable") p.move.y = w.arena.resto!.roofY;
+    settle(w, 0.4); w.takeEvents();
+    w.action("a", { a: "use", prop: ps.def.id });
+    const ev = w.takeEvents();
+    assert.ok(ev.some((e) => e.t === "search" && e.found >= 1), `${k}: found something`);
+    assert.equal(ps.ready, false);
+    settle(w, 30);
+    assert.equal(ps.ready, false, `${k}: not again today`);
+  }
+  const pn = [...w.props.props.values()].find((x) => x.def.kind === "piano")!;
+  w.debugTeleport("a", pn.def.x - 1.2, pn.def.z, Math.PI / 2); settle(w, 0.4); w.takeEvents();
+  const a0 = p.aura;
+  w.action("a", { a: "use", prop: pn.def.id });
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "piano"));
+  assert.ok(ev.some((e) => e.t === "noise" && e.r >= RESTO.pianoNoise));
+  assert.equal(p.aura - a0, RESTO.pianoAura);
+  w.resetCity(false);
+  assert.ok([...w.props.props.values()].filter((x) => ["cloakroom", "dessertcart", "chefstable", "kitchen", "piano"].includes(x.def.kind)).every((x) => x.ready), "restocked at dawn");
+});
+
+test("C5c.2 the climb round the back really works: crate -> boxes -> over the parapet gap onto the roof", () => {
+  const { w, p, c } = clubWorld();
+  w.debugTeleport("a", 23.2, 57.0, 0); p.move.y = 0.15; settle(w, 0.3); // (standing on the pavement)
+  // (walk + hop at each ledge; stop once you're standing on top of the next one)
+  const go = (yaw: number, s: number, top: number) => { for (let i = 0; i < s * 60; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw, jump: i % 20 < 10 })]); w.tick(); if (p.move.grounded && p.move.y > top - 0.05) return; } };
+  go(0, 3, 1.6); // north onto the crate
+  assert.ok(p.move.y > 1.4, `on the crate (y ${p.move.y.toFixed(2)})`);
+  w.debugTeleport("a", 22.8, 58.7, 0); p.move.y = 1.6; settle(w, 0.2); // (from the crate's corner by the stack)
+  go(0, 3, 3.4); // north onto the boxes
+  assert.ok(p.move.y > 3.2, `on the boxes (y ${p.move.y.toFixed(2)})`);
+  w.debugTeleport("a", 22.3, 60.0, -Math.PI / 2); p.move.y = 3.4; settle(w, 0.2);
+  go(-Math.PI / 2, 3, w.arena.resto!.roofY); // west through the gap onto the roof
+  assert.ok(p.move.y > c.roofY - 0.1 && p.move.x < c.rect.maxX, `on the roof (y ${p.move.y.toFixed(2)}, x ${p.move.x.toFixed(1)})`);
+  // and the stairs inside: walk straight up them from the dance floor to the roof
+  const st = w.arena.resto!.stairs;
+  w.debugTeleport("a", st.minX - 0.6, (st.minZ + st.maxZ) / 2, Math.PI / 2); p.move.y = 0.18; settle(w, 0.2);
+  for (let i = 0; i < 6 * 60 && p.move.y < w.arena.resto!.roofY - 0.1; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw: Math.PI / 2 })]); w.tick(); }
+  assert.ok(p.move.y > w.arena.resto!.roofY - 0.2, `walked up the stairs (y ${p.move.y.toFixed(2)})`);
+});
+
+// ============================================================================ C5c.3: THE COMPACTOR + PAWN-O-RAMA
+import { CLUB, CLUB_SAFE, PAWN_SHOP, clubFloorY, applyClubFloor, onRoadAt } from "../src/index.js";
+function compactor() {
+  const w = new World({ seed: 5, npcs: 0 });
+  const p = w.addPlayer("a", "A");
+  const c = w.arena.club!;
+  return { w, p, c };
+}
+const cprop = (w: World, kind: string) => [...w.props.props.values()].find((x) => x.def.kind === kind)!;
+const facing = (w: World, kind: string, dist = 1.1, y?: number) => {
+  const ps = cprop(w, kind);
+  w.debugTeleport("a", ps.def.x + Math.sin(ps.def.yaw) * dist, ps.def.z + Math.cos(ps.def.yaw) * dist, ps.def.yaw + Math.PI);
+  if (y !== undefined) w.players.get("a")!.move.y = y;
+  return ps;
+};
+
+test("C5c.3 THE COMPACTOR: in Old Brick on Crooked St: hall + backstage wing, crusher-bed floor, DJ crane cab, bar, balcony, safe, stack, roof stash, Big Crunch; the lawyers moved uptown", () => {
+  const c = buildTrashington();
+  assert.ok(c.club && tierAt(c.club.rect.minZ) === 1, "Old Brick (medium)");
+  for (const k of ["clubrope", "djdecks", "clubbar", "clubsafe", "rider", "lockers", "sortbin", "vipbooth"]) assert.equal(c.props!.filter((p) => p.kind === k).length, 1, k);
+  assert.ok(c.posts!.some((p) => p.kind === "bouncer"));
+  assert.ok(c.props!.some((p) => p.kind === "stash" && p.loot?.[0] === "golden_record"), "the Golden Record");
+  assert.equal(c.pumpBoxes!.length, 1, "one crusher bed");
+  assert.ok(c.boxes[c.pumpBoxes![0]].pump, "it pumps");
+  assert.ok(c.boxes.some((b) => b.belt), "a conveyor");
+  assert.ok(!c.units!.some((u) => u.name === "THE SWEATBOX" || u.name === "THE DIVE"), "the two empty shutters are gone");
+  const law = c.units!.find((u) => u.name === "LAWYERS 4 LESS")!;
+  assert.ok(law && tierAt(law.rect.minZ) === 2, "the lawyers are uptown now");
+  // nothing of the club pokes into the road
+  for (const b of c.boxes) if (inRect(c.club.rect, b.x, b.z)) assert.ok(!onRoadAt(c, b.x, b.z), `box at ${b.x},${b.z} on a road`);
+});
+
+test("C5c.3 the crusher bed: bobs to the beat under step height, THE DROP builds it up, holds, slams it down; a launch when the slam ends", () => {
+  for (let t = 0; t < 30; t += 0.07) { const y = clubFloorY(t, -999); assert.ok(y >= CLUB.base - 1e-6 && y <= CLUB.base + CLUB.bob + 1e-6 && y < 0.18 + PLAYER.stepHeight, `beat y ${y}`); }
+  assert.ok(clubFloorY(100 + CLUB.build * 0.5, 100) > CLUB.base + CLUB.bob, "building up");
+  assert.ok(Math.abs(clubFloorY(100 + CLUB.build + 0.2, 100) - CLUB.top) < 1e-6, "held at the top");
+  assert.ok(clubFloorY(100 + CLUB.build + CLUB.hold + CLUB.slam * 0.99, 100) < 0.2, "slammed down");
+  const { w, p, c } = compactor();
+  const f = c.floor;
+  // stand on the floor; wait for a drop: the floor carries you up, and at the slam you go flying
+  w.debugTeleport("a", (f.minX + f.maxX) / 2, (f.minZ + f.maxZ) / 2, 0);
+  const idle = () => { w.pushInputs("a", [inp(p.lastSeq + 1, {})]); w.tick(); };
+  for (let i = 0; i < 30; i++) idle();
+  assert.ok(p.move.y >= CLUB.base - 0.02, `standing on the bed (y ${p.move.y.toFixed(2)})`);
+  w.clubB = w.traffic.clock + 0.05; // (a drop starts now)
+  let top = 0, launched = false, peak = 0;
+  for (let i = 0; i < (CLUB.build + CLUB.hold + CLUB.slam + 2) * 60; i++) {
+    idle();
+    if (w.traffic.clock - w.clubB < CLUB.build + CLUB.hold) top = Math.max(top, p.move.y);
+    peak = Math.max(peak, p.move.y);
+    if (w.takeEvents().some((e) => e.t === "clubDrop" && e.n >= 1)) launched = true;
+  }
+  assert.ok(top > CLUB.top - 0.1, `rode the floor up (y ${top.toFixed(2)})`);
+  assert.ok(launched, "THE DROP launched somebody");
+  assert.ok(peak > CLUB.top + 0.5, `went flying (peak ${peak.toFixed(2)})`);
+  // the floor's collision follows the clock
+  const b = w.arena.boxes[w.arena.pumpBoxes![0]];
+  applyClubFloor(w.arena, 500 + CLUB.build + 0.3, 500);
+  assert.ok(Math.abs(b.y + b.h / 2 - CLUB.top) < 1e-6);
+});
+
+test("C5c.3 Big Crunch: no cover = back on the pavement; $15 cover (into the safe) or a VIP (5 aura / a wristband) gets you in; knocked out = open; stamps end at dawn", () => {
+  const { w, p, c } = compactor();
+  const front = () => { w.debugTeleport("a", c.out.x + 0.8, (c.door.minZ + c.door.maxZ) / 2, -Math.PI / 2); p.move.y = 0.15; settle(w, 0.3); w.takeEvents(); };
+  front();
+  let ev = walkInto(w, "a", -Math.PI / 2, 3);
+  assert.ok(ev.some((e) => e.t === "bounced" && e.reason === "cover"), "no cover, no entry");
+  assert.ok(p.move.x > c.door.minX, `still outside (x ${p.move.x.toFixed(1)})`);
+  const rope = facing(w, "clubrope", 1.0); p.move.y = 0.15; settle(w, 0.3); w.takeEvents();
+  w.action("a", { a: "use", prop: rope.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "coverNo" && e.reason === "broke"));
+  p.cash = 40;
+  w.action("a", { a: "use", prop: rope.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "cover" && e.paid === CLUB.cover && !e.vip));
+  assert.equal(p.cash, 40 - CLUB.cover);
+  assert.equal(w.clubPot, CLUB.cover, "the cover goes in the safe");
+  front();
+  ev = walkInto(w, "a", -Math.PI / 2, 3);
+  assert.ok(!ev.some((e) => e.t === "bounced") && p.move.x < c.door.minX, `stamped, in (x ${p.move.x.toFixed(1)})`);
+  w.resetCity(false);
+  assert.equal(w.clubPass.size, 0, "stamps wash off at dawn");
+  assert.equal(w.clubPot, 0);
+  // VIP: 5 aura
+  p.aura = CLUB.vipAura; front();
+  ev = walkInto(w, "a", -Math.PI / 2, 3);
+  assert.ok(!ev.some((e) => e.t === "bounced") && p.move.x < c.door.minX, "VIP");
+  // a wristband does it too
+  p.aura = 0; front();
+  const band = w.placeItem("vip_wristband", p.move.x, 0.3, p.move.z);
+  w.action("a", { a: "grab", item: band }); settle(w, 0.5);
+  assert.ok(w.clubVip(p), "wristband = VIP");
+  // knocked out: open to all
+  w.dropAll(p); settle(w, 0.3);
+  for (const it of [...w.items.values()]) if (it.type === "vip_wristband") w.items.delete(it.id);
+  const bc = [...w.npc.npcs.values()].find((n) => n.kind === "bouncer")!;
+  assert.ok(bc, "Big Crunch is there");
+  bc.state = "ko"; bc.stateT = 60;
+  front();
+  ev = walkInto(w, "a", -Math.PI / 2, 3);
+  assert.ok(!ev.some((e) => e.t === "bounced") && p.move.x < c.door.minX, "walked past the snoozing bouncer");
+});
+
+test("C5c.3 the trash conveyor: crouch on it at the dock and it carries you under the flap into the sorting room (standing, the flap stops you)", () => {
+  const { w, p, c } = compactor();
+  const b = c.belt, mid = (b.minZ + b.maxZ) / 2;
+  // standing: the belt pushes you against the wall over the flap
+  w.debugTeleport("a", b.minX + 1.0, mid, Math.PI / 2); p.move.y = c.beltY;
+  for (let i = 0; i < 6 * 60; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { yaw: Math.PI / 2 })]); w.tick(); }
+  assert.ok(p.move.x > b.minX + 3, `the belt carried you along (x ${p.move.x.toFixed(2)})`);
+  assert.ok(p.move.x < c.rect.minX, `stopped at the flap standing up (x ${p.move.x.toFixed(2)})`);
+  // crouching: under the flap and inside
+  w.debugTeleport("a", b.minX + 1.0, mid, Math.PI / 2); p.move.y = c.beltY; settle(w, 0.1);
+  for (let i = 0; i < 8 * 60 && p.move.x < c.wing.minX + 1; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { crouch: true, yaw: Math.PI / 2 })]); w.tick(); }
+  assert.ok(inRect(c.wing, p.move.x, p.move.z), `carried into the sorting room (x ${p.move.x.toFixed(2)}, z ${p.move.z.toFixed(2)})`);
+});
+
+test("C5c.3 the climb: dock -> bale -> bale stack -> the back roof; the maintenance door onto the balcony; the staff stairs; the service stair to the roof", () => {
+  const { w, p, c } = compactor();
+  const go = (yaw: number, s: number, top: number) => { for (let i = 0; i < s * 60; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw, jump: i % 20 < 10 })]); w.tick(); if (p.move.grounded && p.move.y > top - 0.05) return; } };
+  const tops = w.arena.boxes.filter((x) => x.deco === "bale" && x.x < c.rect.minX).sort((a, b) => a.h - b.h);
+  assert.equal(tops.length, 2);
+  w.debugTeleport("a", -84.2, -23.0, Math.PI); p.move.y = 0.9; settle(w, 0.2); // (on the dock)
+  go(Math.PI, 3, tops[0].h);
+  assert.ok(p.move.y > tops[0].h - 0.1, `on the first bale (y ${p.move.y.toFixed(2)})`);
+  w.debugTeleport("a", tops[0].x + 0.3, tops[0].z - 0.4, Math.PI / 2 + 0.5); p.move.y = tops[0].h; settle(w, 0.2);
+  go(Math.PI / 2 + 0.5, 3, tops[1].h);
+  assert.ok(p.move.y > tops[1].h - 0.1, `on the bale stack (y ${p.move.y.toFixed(2)})`);
+  w.debugTeleport("a", tops[1].x + 0.2, tops[1].z, Math.PI / 2); p.move.y = tops[1].h; settle(w, 0.2);
+  go(Math.PI / 2, 3, c.wingY);
+  assert.ok(p.move.y > c.wingY - 0.1 && p.move.x > c.rect.minX, `on the back roof (y ${p.move.y.toFixed(2)}, x ${p.move.x.toFixed(1)})`);
+  // across the back roof and through the maintenance door onto the balcony
+  w.debugTeleport("a", -76.5, -11.0, Math.PI / 2); p.move.y = c.wingY; settle(w, 0.2);
+  walkInto(w, "a", Math.PI / 2, 1.5);
+  assert.ok(inRect(c.balcony, p.move.x, p.move.z) && p.move.y > c.balconyY - 0.1, `on the balcony (x ${p.move.x.toFixed(1)}, y ${p.move.y.toFixed(2)})`);
+  // the balcony to the crane cab
+  w.debugTeleport("a", -69.5, -12.0, Math.PI); p.move.y = c.balconyY; settle(w, 0.2);
+  walkInto(w, "a", Math.PI, 0.8);
+  assert.ok(inRect(c.cab, p.move.x, p.move.z) && p.move.y > c.cabY - 0.1, `in the crane cab (z ${p.move.z.toFixed(1)}, y ${p.move.y.toFixed(2)})`);
+  // the public stairs: hall floor -> balcony
+  w.debugTeleport("a", -65.1, -20.6, 0); p.move.y = 0.18; settle(w, 0.2);
+  for (let i = 0; i < 4 * 60 && p.move.y < c.balconyY - 0.1; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw: 0 })]); w.tick(); }
+  assert.ok(p.move.y > c.balconyY - 0.15, `up the stairs to the balcony (y ${p.move.y.toFixed(2)})`);
+  // the staff stairs: stair room -> back roof
+  w.debugTeleport("a", -80.9, -16.0, 0); p.move.y = 0.18; settle(w, 0.2);
+  for (let i = 0; i < 4 * 60 && p.move.y < c.wingY - 0.1; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw: 0 })]); w.tick(); }
+  assert.ok(p.move.y > c.wingY - 0.15, `up the staff stairs (y ${p.move.y.toFixed(2)})`);
+  // the service stair on the back roof: up to the hall's roof
+  w.debugTeleport("a", -75.9, -31.6, 0); p.move.y = c.wingY; settle(w, 0.2);
+  for (let i = 0; i < 4 * 60 && p.move.y < c.roofY - 0.1; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw: 0 })]); w.tick(); }
+  assert.ok(p.move.y > c.roofY - 0.15, `up the service stair (y ${p.move.y.toFixed(2)})`);
+  walkInto(w, "a", Math.PI / 2, 1);
+  assert.ok(p.move.x > -74.8 && p.move.y > c.roofY - 0.1, `onto the hall's roof (x ${p.move.x.toFixed(1)})`);
+});
+
+test("C5c.3 the DJ's decks: +3 aura, a roar, the DROP starts now (then they cool down); the bar, the rider, the lockers, the bins, the VIP booth give things", () => {
+  const { w, p, c } = compactor();
+  settle(w, 1);
+  w.clubB = w.traffic.clock - 30; // (between drops)
+  const decks = facing(w, "djdecks", 1.0, c.cabY); settle(w, 0.3); w.takeEvents();
+  const a0 = p.aura;
+  w.action("a", { a: "use", prop: decks.def.id });
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "djHijack"));
+  assert.ok(ev.some((e) => e.t === "noise" && e.r >= CLUB.djNoise));
+  assert.equal(p.aura - a0, CLUB.djAura);
+  assert.ok(Math.abs(w.clubB - w.traffic.clock) < 0.05, "the drop starts building now");
+  w.action("a", { a: "use", prop: decks.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "empty"), "cooling down");
+  for (const k of ["clubbar", "rider", "lockers", "sortbin", "vipbooth"]) {
+    const ps = cprop(w, k);
+    const y = k === "vipbooth" ? c.balconyY : 0.18;
+    w.debugTeleport("a", ps.def.x + Math.sin(ps.def.yaw) * 1.2, ps.def.z + Math.cos(ps.def.yaw) * 1.2, ps.def.yaw + Math.PI); p.move.y = y; settle(w, 0.3); w.takeEvents();
+    w.action("a", { a: "use", prop: ps.def.id });
+    assert.ok(w.takeEvents().some((e) => e.t === "search" && e.found >= 1), `${k}: found something`);
+  }
+});
+
+test("C5c.3 the safe: hold E 6 s: a fat bag of cash = $40 + every cover charge paid today; the alarm, heat, Big Crunch comes for you", () => {
+  const { w, p } = compactor();
+  w.clubPot = 45;
+  const safe = cprop(w, "clubsafe");
+  w.debugTeleport("a", safe.def.x + 0.9, safe.def.z, -Math.PI / 2); p.move.y = 0.18; settle(w, 0.3); w.takeEvents();
+  w.action("a", { a: "use", prop: safe.def.id });
+  assert.ok(p.rob, "cracking it");
+  const ev: WorldEvent[] = [];
+  for (let i = 0; i < 7 * 60; i++) { w.tick(); ev.push(...w.takeEvents()); }
+  const cracked = ev.find((e) => e.t === "safeCracked") as any;
+  assert.ok(cracked && cracked.value === CLUB_SAFE.base + 45, `cracked: $${cracked?.value}`);
+  assert.ok([...w.items.values()].some((it) => it.type === "cash_bag" && it.value === CLUB_SAFE.base + 45), "the bag holds the takings");
+  assert.equal(w.clubPot, 0);
+  assert.ok(p.notoriety >= CLUB_SAFE.heat - 1, `heat ${p.notoriety}`);
+  assert.ok(ev.some((e) => e.t === "alarm"));
+});
+
+test("C5c.3 PAWN-O-RAMA: in the Yards; fence (40%), pawn (30% now, buy back 40% before dawn), unclaimed = on sale (70%) to anybody; a smashed case spills everything and Big Vinnie comes", () => {
+  const w = new World({ seed: 6, npcs: 0 });
+  const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
+  const ps = w.arena.pawnShop!;
+  assert.ok(ps && tierAt(w.arena.units![ps.unit].rect.minZ) === 0, "The Yards (low)");
+  assert.equal(w.arena.units![ps.unit].name, "PAWN-O-RAMA");
+  assert.ok(w.arena.posts!.some((x) => x.kind === "vinnie"));
+  const counter = cprop(w, "pawncounter"), cs = cprop(w, "pawncase");
+  const hold = (pl: typeof a, type: string, value: number) => {
+    const id = w.placeItem(type, pl.move.x, pl.move.y + 0.3, pl.move.z);
+    w.items.get(id)!.value = value;
+    w.action(pl.id, { a: "grab", item: id }); settle(w, 0.5);
+    const slot = pl.pockets.indexOf(id);
+    if (slot >= 0) w.action(pl.id, { a: "select", slot });
+    assert.equal(w.activeItem(pl)?.item.id, id, `${pl.id} holds the ${type}`);
+  };
+  const stand = (pl: typeof a, prop: typeof counter) => { w.debugTeleport(pl.id, prop.def.x + Math.sin(prop.def.yaw) * 1.3, prop.def.z + Math.cos(prop.def.yaw) * 1.3, prop.def.yaw + Math.PI); pl.move.y = 0.18; settle(w, 0.3); w.takeEvents(); };
+  // fence: empty hands = no; with something = 40% on the spot
+  stand(a, counter);
+  w.action("a", { a: "use", prop: counter.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "pawnNo" && e.reason === "hands"));
+  hold(a, "gold_chain", 100);
+  w.action("a", { a: "use", prop: counter.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 40));
+  assert.equal(a.cash, 40); assert.equal(w.activeItem(a), null);
+  // pawn: 30% now, it's in the case with A's colour
+  stand(a, cs);
+  hold(a, "rolecks_watch", 200);
+  w.action("a", { a: "use", prop: cs.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "pawned" && e.cash === 60));
+  assert.equal(a.cash, 100);
+  let note = JSON.parse(w.props.stateOf(cs.def.id).note);
+  assert.equal(note.length, 1); assert.equal(note[0].t, "rolecks_watch"); assert.equal(note[0].p, 80); assert.equal(note[0].o, "a");
+  // B can't buy it before dawn (it's A's to buy back); A buys it back for 40%
+  stand(b, cs); b.cash = 500;
+  w.action("b", { a: "use", prop: cs.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "pawnNo" && e.reason === "nothing"));
+  stand(a, cs);
+  w.action("a", { a: "use", prop: cs.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "redeemed" && e.cash === 80 && !e.sale));
+  assert.equal(a.cash, 20);
+  assert.ok([...w.items.values()].some((it) => it.type === "rolecks_watch" && it.value === 200), "got it back (same value)");
+  // pawn again; dawn comes; now it's on sale to anybody at 70%
+  for (const it of [...w.items.values()]) if (it.type === "rolecks_watch") w.items.delete(it.id);
+  stand(a, cs); hold(a, "rolecks_watch", 200);
+  w.action("a", { a: "use", prop: cs.def.id }); w.takeEvents();
+  w.resetCity(false);
+  note = JSON.parse(w.props.stateOf(cs.def.id).note);
+  assert.equal(note[0].s, 1, "on sale"); assert.equal(note[0].p, 140);
+  stand(b, cs);
+  w.action("b", { a: "use", prop: cs.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "redeemed" && e.sale && e.cash === 140));
+  assert.equal(b.cash, 360);
+  // smash: fill the case, punch it 3 times: everything spills, heat, Vinnie comes swinging
+  for (const [t, v] of [["laptop", 80], ["guitar", 40]] as [string, number][]) { stand(a, cs); hold(a, t, v); w.action("a", { a: "use", prop: cs.def.id }); }
+  w.takeEvents();
+  const before = w.items.size;
+  stand(b, cs);
+  const vin = [...w.npc.npcs.values()].find((n) => n.kind === "vinnie")!;
+  assert.ok(vin, "Big Vinnie is in");
+  for (let i = 0; i < 3; i++) { w.props.smash(b, cs.def.id); }
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "caseSmashed"));
+  assert.equal(w.items.size - before, 2, "both things spilled out");
+  assert.equal(w.pawn.caseNote(), "", "the case is empty");
+  assert.ok(b.notoriety >= PAWN_SHOP.smashHeat - 1);
+  assert.equal(vin.state, "chase"); assert.equal(vin.target, "b");
+  w.action("a", { a: "use", prop: cs.def.id });
+  assert.ok(w.takeEvents().some((e) => e.t === "empty"), "a broken case: no business till dawn");
 });

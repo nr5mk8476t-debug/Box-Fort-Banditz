@@ -19,6 +19,8 @@ interface Look {
   prop?: "camera" | "briefcase" | "phone" | "none" | "crumbs" | "cane" | "moneybag" | "laptop" | "rod"; bulk?: number; face?: string;
 }
 
+/** C5c.3: "Honest" Sal at PAWN-O-RAMA (he's that shop's cashier) */
+const SAL_LOOK: Look = { body: "#8b5a2b", legs: "#3a3444", skin: "#f0c8a0", hat: "#5a4a3a", hatShape: "none", prop: "none", bulk: 1.3 };
 const LOOKS: Record<string, Look> = {
   tourist: { body: "#ff9a3c", legs: "#e8d7a8", skin: "#f0b98a", hat: "#f3e2b8", hatShape: "sunhat", prop: "camera" },
   businessman: { body: "#5b6170", legs: "#3e4350", skin: "#e8a878", hat: "#2b2433", hatShape: "none", prop: "briefcase" },
@@ -40,6 +42,10 @@ const LOOKS: Record<string, Look> = {
   fan: { body: "#ff6fb5", legs: "#3d6fb5", skin: "#e8b48a", hat: "#ff6fb5", hatShape: "cap", prop: "phone" },
   crypto_bro: { body: "#3d8f5a", legs: "#2b2433", skin: "#f0b98a", hat: "#3d8f5a", hatShape: "none", prop: "laptop" },
   cop: { body: "#1f3a78", legs: "#18203a", skin: "#e0a67c", hat: "#18203a", hatShape: "cap", prop: "none", bulk: 1.12 },
+  // C5c.3: THE COMPACTOR's bouncer (Big Crunch), PAWN-O-RAMA's Big Vinnie; Le Dumpstère's maitre d'
+  bouncer: { body: "#1b1420", legs: "#1b1420", skin: "#8a5a3a", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.6 },
+  vinnie: { body: "#6b3fa0", legs: "#6b3fa0", skin: "#e0a878", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.45 },
+  maitre_d: { body: "#1b1420", legs: "#1b1420", skin: "#f0c8a0", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.0 },
   pigeon_lady: { body: "#6b8f5a", legs: "#5a4d6e", skin: "#e0a67c", hat: "#b5653b", hatShape: "scarf", prop: "crumbs" },
 };
 
@@ -96,9 +102,13 @@ export class NpcRenderer {
     return this.laserM;
   }
 
+  /** C5c.3: where Sal stands behind PAWN-O-RAMA's counter (the cashier there is "Honest" Sal) */
+  salAt: { x: number; z: number } | null = null;
+
   private build(id: string, v: NpcView): Vis {
     const sc = this.scene;
-    const L = LOOKS[v.kind] ?? LOOKS.tourist;
+    const sal = v.kind === "cashier" && !!this.salAt && Math.hypot(v.x - this.salAt.x, v.z - this.salAt.z) < 3;
+    const L = sal ? SAL_LOOK : LOOKS[v.kind] ?? LOOKS.tourist;
     const bulk = L.bulk ?? 1;
     const root = new TransformNode("npc-" + id, sc);
     const pivot = new TransformNode("npcPivot", sc);
@@ -145,6 +155,26 @@ export class NpcRenderer {
       for (const y of [0.95, 1.1, 1.25]) { const b = part(MeshBuilder.CreateBox("btn", { width: 0.05, height: 0.05, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); b.position.set(0, y, 0.26 * bulk); }
       for (const s of [-1, 1]) { const e = part(MeshBuilder.CreateBox("epaulette", { width: 0.14, height: 0.04, depth: 0.14 }, sc), "#ffcf3a", pivot, 0); e.position.set(s * 0.25 * bulk, 1.42, 0); }
     }
+    if (v.kind === "bouncer") {
+      // SECURITY on the tee, shades, an earpiece, a clipboard (the list nobody's on), a bald shiny head
+      const tee = part(MeshBuilder.CreatePlane("tee", { width: 0.5, height: 0.16 }, sc), "#f4f1ea", pivot, 0); tee.position.set(0, 1.25, 0.31 * bulk + 0.03); tee.rotation.y = Math.PI;
+      tee.material = unlitTextured(sc, textTexture(sc, "SECURITY", { w: 256, h: 80, fg: "#f4f1ea" }), "teeSec"); (tee.material as StandardMaterial).backFaceCulling = false;
+      const shades = part(MeshBuilder.CreateBox("shades", { width: 0.3, height: 0.07, depth: 0.03 }, sc), "#1b1420", head, 0); shades.position.set(0, 0.04, 0.19);
+      const ear = part(MeshBuilder.CreateSphere("earpiece", { diameter: 0.05, segments: 4 }, sc), "#e8e2d4", head, 0); ear.position.set(0.2, 0, 0);
+      const shine = part(MeshBuilder.CreateSphere("shine", { diameter: 0.08, segments: 4 }, sc), "#c98a5a", head, 0); shine.position.set(0.05, 0.17, 0.08);
+      const board = part(MeshBuilder.CreateBox("clipboard", { width: 0.25, height: 0.32, depth: 0.02 }, sc), "#a8743f", pivot, 0.01); board.position.set(-0.4 * bulk, 1.0, 0.25); board.rotation.x = -0.4;
+    }
+    if (v.kind === "vinnie") {
+      // a shiny tracksuit with white stripes, a gold chain, slicked-back hair
+      for (const sx of [-1, 1]) { const st = part(MeshBuilder.CreateBox("stripe", { width: 0.04, height: 0.7, depth: 0.03 }, sc), "#f4f1ea", pivot, 0); st.position.set(sx * 0.3 * bulk, 1.05, 0.08); }
+      const chain = part(MeshBuilder.CreateTorus("chain", { diameter: 0.34, thickness: 0.04, tessellation: 12 }, sc), "#ffcf3a", pivot, 0); chain.position.y = 1.4; chain.rotation.x = 0.35;
+      const hair = part(MeshBuilder.CreateSphere("slick", { diameter: 0.42, segments: 8, slice: 0.5 }, sc), "#1b1420", head, 0.01); hair.position.set(0, 0.05, -0.04);
+    }
+    if (v.kind === "maitre_d") {
+      const tash = part(MeshBuilder.CreateBox("tash", { width: 0.22, height: 0.04, depth: 0.03 }, sc), "#1b1420", head, 0); tash.position.set(0, -0.06, 0.19); tash.rotation.z = 0.05;
+      const bow = part(MeshBuilder.CreateBox("bowtie", { width: 0.18, height: 0.07, depth: 0.03 }, sc), "#c41e3a", pivot, 0); bow.position.set(0, 1.42, 0.27);
+      const shirt = part(MeshBuilder.CreateBox("shirtfront", { width: 0.16, height: 0.32, depth: 0.03 }, sc), "#f4f1ea", pivot, 0); shirt.position.set(0, 1.22, 0.265);
+    }
     if (v.kind === "mall_cop") { const badge = part(MeshBuilder.CreateBox("badge", { width: 0.08, height: 0.1, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); badge.position.set(-0.12, 1.22, 0.26 * bulk); }
     if (v.kind === "millionaire") {
       const brim = part(MeshBuilder.CreateCylinder("tophatbrim", { diameter: 0.46, height: 0.03, tessellation: 14 }, sc), "#1b1420", head, 0.012); brim.position.y = 0.17;
@@ -178,7 +208,15 @@ export class NpcRenderer {
       const capBadge = part(MeshBuilder.CreateBox("capbadge", { width: 0.08, height: 0.07, depth: 0.02 }, sc), "#ffcf3a", head, 0); capBadge.position.set(0, 0.14, 0.2);
       const tash = part(MeshBuilder.CreateBox("moustache", { width: 0.16, height: 0.04, depth: 0.03 }, sc), "#4a2f1e", head, 0); tash.position.set(0, -0.06, 0.19);
     }
-    if (v.kind === "cashier") { const apron = part(MeshBuilder.CreateBox("apron", { width: 0.4, height: 0.5, depth: 0.04 }, sc), "#f4f1ea", pivot, 0); apron.position.set(0, 1.0, 0.27); const tag = part(MeshBuilder.CreateBox("nametag", { width: 0.1, height: 0.06, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); tag.position.set(0.1, 1.3, 0.28); }
+    if (sal) {
+      // "Honest" Sal: a cardigan, half-moon glasses, a comb-over, a gold tooth, a jeweller's loupe on a cord
+      for (const y of [0.95, 1.1, 1.25]) { const b = part(MeshBuilder.CreateSphere("btn", { diameter: 0.05, segments: 4 }, sc), "#e8b83a", pivot, 0); b.position.set(0, y, 0.27 * bulk); }
+      for (const sx of [-1, 1]) { const g = part(MeshBuilder.CreateTorus("specs", { diameter: 0.1, thickness: 0.015, tessellation: 10 }, sc), "#1b1420", head, 0); g.rotation.x = Math.PI / 2; g.position.set(sx * 0.07, 0.0, 0.19); }
+      const comb = part(MeshBuilder.CreateBox("combover", { width: 0.3, height: 0.03, depth: 0.08 }, sc), "#5a4a3a", head, 0); comb.position.set(0, 0.17, 0.02); comb.rotation.z = 0.15;
+      const tooth = part(MeshBuilder.CreateBox("goldtooth", { width: 0.04, height: 0.03, depth: 0.02 }, sc), "#ffd54a", head, 0); tooth.position.set(0.04, -0.08, 0.19);
+      const loupe = part(MeshBuilder.CreateCylinder("loupe", { diameter: 0.06, height: 0.05, tessellation: 8 }, sc), "#3a3444", pivot, 0); loupe.rotation.x = Math.PI / 2; loupe.position.set(0.1, 1.05, 0.29 * bulk);
+    }
+    if (v.kind === "cashier" && !sal) { const apron = part(MeshBuilder.CreateBox("apron", { width: 0.4, height: 0.5, depth: 0.04 }, sc), "#f4f1ea", pivot, 0); apron.position.set(0, 1.0, 0.27); const tag = part(MeshBuilder.CreateBox("nametag", { width: 0.1, height: 0.06, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); tag.position.set(0.1, 1.3, 0.28); }
     if (v.kind === "businessman") { const tie = part(MeshBuilder.CreateBox("tie", { width: 0.07, height: 0.32, depth: 0.03 }, sc), "#d62c2c", pivot, 0); tie.position.set(0, 1.18, 0.27); }
     if (v.kind === "mime") for (let i = 0; i < 3; i++) { const st = part(MeshBuilder.CreateTorus("stripe", { diameter: 0.56, thickness: 0.05, tessellation: 12 }, sc), "#1b1420", pivot, 0); st.position.y = 0.88 + i * 0.16; }
     // arms (shoulder pivots)

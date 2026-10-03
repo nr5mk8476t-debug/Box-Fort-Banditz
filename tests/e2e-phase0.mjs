@@ -12,7 +12,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const results = [];
 const ok = (cond, msg) => { results.push({ ok: !!cond, msg }); console.log(cond ? "  ok  " : " FAIL ", msg); };
 // Distance covered from standstill with the Phase 1 acceleration (20 m/s^2) up to top speed vmax
-const rampDist = (t, vmax, a = 20) => { const tr = vmax / a; return t < tr ? 0.5 * a * t * t : 0.5 * a * tr * tr + vmax * (t - tr); };
+const rampDist = (t, vmax, a = 48) => { const tr = vmax / a; return t < tr ? 0.5 * a * t * t : 0.5 * a * tr * tr + vmax * (t - tr); }; // (D1: groundAccel 48)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const browser = await chromium.launch({
@@ -122,7 +122,7 @@ try {
   await A.waitForFunction((n) => window.__bfb.info().stats.moveSteps >= n, st0 + 40, { timeout: 90000, polling: 250 }).catch(() => {});
   i = await info(A);
   await A.evaluate(() => window.__bfb.setAxes(null));
-  const soloSteps = i.stats.moveSteps - st0, soloMoved = i.pos.z - start.z, soloExp = rampDist(soloSteps / 60, 7.8);
+  const soloSteps = i.stats.moveSteps - st0, soloMoved = i.pos.z - start.z, soloExp = rampDist(soloSteps / 60, 9.4);
   console.log(`   [diag] solo fps ${i.fps}, lost to stalls ${i.stats.droppedMs.toFixed(0)}ms total`);
   ok(soloMoved > 0.3 && Math.abs(soloMoved - soloExp) < 0.6, `solo: sprinted ${soloMoved.toFixed(2)}m over ${soloSteps} sim steps (expected ~${soloExp.toFixed(2)}m)`);
   // ---- Phase 1 moves (solo) ----
@@ -262,12 +262,12 @@ try {
   await A.keyboard.press("3");
   ok(await waitInv("v.sel === 2", 5000), "5A.1: key 3 selects pocket 3");
   await A.keyboard.press("4");
-  ok(await waitInv("v.sel === 3", 5000) && await A.waitForFunction(() => document.getElementById("slot-fists").classList.contains("sel"), null, { timeout: 5000 }).then(() => true, () => false), "5A.1: key 4 = fists (HUD shows FISTS)");
+  ok(await waitInv("v.sel === 3", 15000) && await A.waitForFunction(() => document.getElementById("slot-fists").classList.contains("sel"), null, { timeout: 15000 }).then(() => true, () => false), "5A.1: key 4 = fists (HUD shows FISTS)");
   await A.keyboard.press("1");
-  await waitInv("v.sel === 0", 5000);
+  await waitInv("v.sel === 0", 15000); // (C5c.3: 15 s: once on this slow box the key landed after the click, so it punched)
   const pocketId = (await inv()).pockets[0];
   await A.mouse.down(); await sleep(700); await A.mouse.up();
-  ok(await waitInv(`v.pockets[0] === ""`, 5000), "5A.1: left click throws the pocket item you have out");
+  ok(await waitInv(`v.pockets[0] === ""`, 15000), "5A.1: left click throws the pocket item you have out");
   ok(await waitInv("v.sel === 3", 5000), "and you're back to fists");
   void pocketId;
   await A.evaluate(() => window.__bfb.setPitch(0.1));
@@ -300,7 +300,7 @@ try {
   const npcs0 = await A.evaluate((C) => window.__bfb.npcs().filter((n) => C.includes(n.kind)), CROWD);
   ok(npcs0.length === 20, `the streets have ${npcs0.length} pedestrians`);
   const nCash = await A.evaluate(() => window.__bfb.npcs().filter((n) => n.kind === "cashier").length);
-  ok(nCash === 14, `a cashier in each of the 14 shops (the laundromat has the old lady instead) (${nCash})`);
+  ok(nCash === 15, `a cashier in each of the 15 shops (the laundromat has the old lady instead; C5c.3: Sal at PAWN-O-RAMA) (${nCash})`);
   ok(new Set(npcs0.map((n) => n.kind)).size >= 5, `mix of types: ${[...new Set(npcs0.map((n) => n.kind))].join(", ")}`); // (C1.1: 5+ of the 8 kinds: 20 random people can miss one or two by chance)
   // 2.5 s of GAME time (this headless machine sometimes runs the solo world far slower than real time)
   const walkSteps0 = (await info(A)).stats.steps;
@@ -322,6 +322,7 @@ try {
   ok(await A.evaluate(() => window.__bfb.scene().meshes.some((m) => m.name === "sparkle" && m.isEnabled())), "rare loot twinkles with a sparkle");
 
   // punch a tourist placed right in front of us
+  await A.evaluate(() => window.__bfb.clearItems(window.__bfb.T.x - 8, window.__bfb.T.z - 7, 6)); // (C5c.2: a stray giant rubber duck here once took the crosshair)
   const tId = await A.evaluate(() => window.__bfb.placeNpc("tourist", window.__bfb.T.x + (-8), window.__bfb.T.z + (-6.7), Math.PI));
   await A.evaluate(() => window.__bfb.setPitch(0.05));
   const sawTarget = await A.waitForFunction(() => window.__bfb.punchTarget()?.kind === "tourist", null, { timeout: 10000 }).then(() => true, () => false);
@@ -344,6 +345,7 @@ try {
   // a gym bro fights back: stand still and lose the slap fight (2 hits = knocked down)
   await A.evaluate(() => { window.__bfb.teleport(window.__bfb.T.x + (-16), window.__bfb.T.z + (5), 0); });
   await sleep(500);
+  await A.evaluate(() => window.__bfb.clearItems(window.__bfb.T.x - 16, window.__bfb.T.z + 6.5, 5)); // (D1: nothing else lying here to take the crosshair)
   await A.evaluate(() => { window.__bfb.spawnItem("rubber_chicken", window.__bfb.T.x + (-16), window.__bfb.T.z + (6.4)); window.__bfb.setPitch(Math.atan2(1.35, 1.4)); });
   await lookAt("rubber_chicken");
   await A.keyboard.press("e");
@@ -410,14 +412,23 @@ try {
   const robbed = await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "cash_bundle"), null, { timeout: 30000 }).then(() => true, () => false);
   await A.keyboard.up("r");
   ok(robbed, "after 3 s: a bundle of cash");
-  // get hit by a car: wiped out, respawn at the fort after 10 s
+  // get hit by a car (D1): launched through the air, land flat, 10 s stunned where you land, then up again
+  await A.evaluate(() => { window.__bfb.teleport(window.__bfb.landmarks().noShops.x, window.__bfb.landmarks().noShops.z, 0); }); // (out in the open: a hit indoors just bonks you off the ceiling)
+  await sleep(1500);
+  const hitAt = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z }; });
   await A.evaluate(() => window.__bfb.wipeout());
-  ok(await A.waitForFunction(() => !document.getElementById("wipeout").classList.contains("hidden"), null, { timeout: 10000 }).then(() => true, () => false), "wiped out: countdown overlay");
+  // (watch your own view: it catches up with the host's launch a frame or two later)
+  const peak = await A.waitForFunction(() => { const m = window.__bfb.move(); return m.y > 0.8 ? m.y : false; }, null, { timeout: 60000, polling: 50 }).then((h) => h.jsonValue(), () => 0);
+  ok(peak > 0.8, `SPLAT: launched into the air (${Number(peak).toFixed(1)} m up)`);
+  ok(await A.waitForFunction(() => !document.getElementById("wipeout").classList.contains("hidden"), null, { timeout: 10000 }).then(() => true, () => false), "a stun ring counts down the seconds");
+  ok((await A.evaluate(() => window.__bfb.move().knockT)) > 0, "lying flat, stunned");
   await sleep(500); await hide();
   await shot(A, "32-wiped-out.png");
-  ok(await A.waitForFunction(() => window.__bfb.respawnT() === 0 && document.getElementById("wipeout").classList.contains("hidden"), null, { timeout: 150000 }).then(() => true, () => false), "respawned after 10 s"); // (10 s of GAME time: slow on the test box)
-  const home = await A.evaluate(() => { const m = window.__bfb.move(); return Math.hypot(m.x, m.z); });
-  ok(home > 75, `back at the fort (${home.toFixed(0)} m from the centre)`);
+  ok(await A.waitForFunction(() => window.__bfb.respawnT() === 0 && document.getElementById("wipeout").classList.contains("hidden"), null, { timeout: 300000 }).then(() => true, () => false), "up again after 10 s"); // (10 s of GAME time: slow on the test box)
+  await A.waitForFunction(() => window.__bfb.move().knockT === 0, null, { timeout: 30000 }).catch(() => {}); // (your own view catches up a frame later)
+  const upAt = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z, k: m.knockT }; });
+  const flew = Math.hypot(upAt.x - hitAt.x, upAt.z - hitAt.z);
+  ok(flew > 0.5 && flew < 25 && upAt.k === 0, `you get up where you landed (${flew.toFixed(1)} m from where you were hit), able to move`);
   ok(await A.evaluate(() => !!document.querySelector('[data-setting="lowGraphics"]')), "performance mode setting exists");
 
   // ---- City Redesign C1: the new layout, traffic lights, the raid alert ----
@@ -441,7 +452,7 @@ try {
   await shot(A, "51-park-roundabout.png");
   await A.evaluate(() => window.__bfb.fakeRaid());
   await sleep(1500);
-  ok(await A.waitForFunction(() => window.__bfb.raidAlert() && Number(getComputedStyle(document.getElementById("raidEdge")).opacity) > 0.3 && getComputedStyle(document.getElementById("raidArrow")).display === "block", null, { timeout: 15000 }).then(() => true, () => false), "raid alert: red screen edge + arrow home");
+  ok(await A.waitForFunction(() => window.__bfb.raidAlert() && Number(getComputedStyle(document.getElementById("raidEdge")).opacity) > 0.3 && getComputedStyle(document.getElementById("raidArrow")).display === "block", null, { timeout: 45000 }).then(() => true, () => false), "raid alert: red screen edge + arrow home"); // (C5c.2: 45 s below: on this box the first frames after the alert can take a while)
   ok(/RAIDING YOUR FORT/.test(await A.textContent("#bb-title")), `raid banner names the raider: "${await A.textContent("#bb-title")}"`);
   await hide();
   await shot(A, "52-raid-alert.png");
@@ -558,7 +569,7 @@ try {
   {
     const defs = await A.evaluate(() => window.__bfb.propDefs().filter((d) => ["vaultdoor", "nose", "stash", "depositbox"].includes(d.kind)).map((d) => ({ id: d.id, kind: d.kind, x: d.x, y: d.y, z: d.z })));
     const vd = defs.find((d) => d.kind === "vaultdoor"), nose = defs.find((d) => d.kind === "nose");
-    ok(!!vd && !!nose && defs.filter((d) => d.kind === "stash").length === 3 && defs.filter((d) => d.kind === "depositbox").length === 4, "Uptown has the bank's vault door and deposit boxes, the Mayor's nose, 3 golden stashes");
+    ok(!!vd && !!nose && defs.filter((d) => d.kind === "stash").length === 5 && defs.filter((d) => d.kind === "depositbox").length === 4, "Uptown has the bank's vault door and deposit boxes, the Mayor's nose; 5 golden stashes (bank, statue, Le Dumpstere x2, THE COMPACTOR)");
     // walk in through the bank's front door (between the portico's columns)
     await A.evaluate(() => { window.__bfb.setHeat(0); window.__bfb.clearCops(); window.__bfb.clearNpcs(73, 90, 14); window.__bfb.teleport(73, 87.2, 0); window.__bfb.setYaw(0); window.__bfb.setPitch(0.05); });
     await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
@@ -591,10 +602,119 @@ try {
     await A.evaluate(() => { window.__bfb.camFree(); window.__bfb.setHeat(0); window.__bfb.clearCops(); });
   }
 
+  // ---- C5c.2: LE DUMPSTÈRE ----
+  console.log("\n# C5c.2 Le Dumpstere (solo)");
+  {
+    const rs = await A.evaluate(() => window.__bfb.resto());
+    ok(!!rs, "Le Dumpstere is on Mile East");
+    const dz = (rs.door.minZ + rs.door.maxZ) / 2;
+    await A.evaluate(([x, z]) => { window.__bfb.dropAll(); window.__bfb.setHeat(0); window.__bfb.clearCops(); window.__bfb.teleport(x, z, Math.PI / 2); /* (no clearNpcs here: it would clear away the maitre d' too) */ window.__bfb.setYaw(Math.PI / 2); window.__bfb.setPitch(0.05); }, [rs.out.x - 0.5, dz]);
+    await sleep(800);
+    await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+    ok(await A.waitForFunction(() => /reservation/.test(document.getElementById("flash")?.textContent ?? ""), null, { timeout: 45000 }).then(() => true, () => false), "no booking, not dressed for it: the maitre d' turns you away");
+    await A.evaluate(() => window.__bfb.setAxes(null));
+    ok(await A.evaluate((c) => window.__bfb.move().x < c.door.maxX, rs), "...and you're still on the pavement");
+    // round the back: the kitchen door's open
+    await A.evaluate((c) => { window.__bfb.teleport(c.rect.maxX + 1.2, 61.8, -Math.PI / 2); window.__bfb.setYaw(-Math.PI / 2); }, rs);
+    await sleep(800);
+    await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+    ok(await A.waitForFunction((c) => { const m = window.__bfb.move(); return m.x > c.kitchen.minX && m.x < c.kitchen.maxX && m.z > c.kitchen.minZ && m.z < c.kitchen.maxZ; }, rs, { timeout: 45000 }).then(() => true, () => false), "in through the kitchen's back door");
+    await A.evaluate(() => window.__bfb.setAxes(null));
+    await A.evaluate((c) => window.__bfb.camAt(c.hall.minX + 0.6, 2.4, c.hall.maxZ - 0.6, Math.PI / 2 + 0.55, 0.15), rs);
+    await sleep(2500); await hide();
+    await shot(A, "65-c5c2-le-dumpstere-inside.png");
+    await A.evaluate((c) => window.__bfb.camAt(c.out.x - 11, 3.2, (c.door.minZ + c.door.maxZ) / 2 - 3, Math.PI / 2 + 0.2, 0.0), rs); await sleep(2000); await hide();
+    await shot(A, "66-c5c2-le-dumpstere-front.png");
+    await A.evaluate(() => window.__bfb.camFree());
+  }
+
+  // ---- C5c.3: THE COMPACTOR (the club) + PAWN-O-RAMA ----
+  console.log("\n# C5c.3 The Compactor + Pawn-O-Rama (solo)");
+  {
+    const cl = await A.evaluate(() => window.__bfb.club());
+    ok(!!cl, "THE COMPACTOR is on Crooked St");
+    const dz = (cl.door.minZ + cl.door.maxZ) / 2;
+    const front = async () => { await A.evaluate(([x, z]) => { window.__bfb.teleport(x, z, -Math.PI / 2); window.__bfb.setYaw(-Math.PI / 2); window.__bfb.setPitch(0.05); }, [cl.out.x + 0.6, dz]); await sleep(800); };
+    // no cover: Big Crunch puts you back on the pavement
+    await A.evaluate(() => { window.__bfb.dropAll(); window.__bfb.setHeat(0); window.__bfb.clearCops(); window.__bfb.setCash(0); window.__bfb.setAura(0); });
+    await front();
+    await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+    ok(await A.waitForFunction(() => /Fifteen bucks/.test(document.getElementById("flash")?.textContent ?? ""), null, { timeout: 45000 }).then(() => true, () => false), "no cover: Big Crunch puts you back on the pavement");
+    await A.evaluate(() => window.__bfb.setAxes(null));
+    ok(await A.evaluate((c) => window.__bfb.move().x > c.door.minX, cl), "...and you're still outside");
+    // pay the cover at the rope ($15 of your cash)
+    await A.evaluate(() => window.__bfb.setCash(40));
+    await A.waitForFunction(() => window.__bfb.myCash() === 40, null, { timeout: 20000 }).catch(() => {});
+    const rope = await A.evaluate(() => window.__bfb.propDefs().find((d) => d.kind === "clubrope"));
+    await A.evaluate((d) => { window.__bfb.teleport(d.x + 1.0, d.z, -Math.PI / 2); window.__bfb.setYaw(-Math.PI / 2); window.__bfb.setPitch(0.35); }, rope);
+    ok(await A.waitForFunction(() => window.__bfb.useTarget()?.kind === "clubrope", null, { timeout: 30000 }).then(() => true, () => false), "at the rope: E to pay the cover");
+    await A.keyboard.press("e");
+    ok(await A.waitForFunction(() => /STAMPED/.test(document.getElementById("bb-title")?.textContent ?? "") && window.__bfb.myCash() === 25, null, { timeout: 30000 }).then(() => true, () => false), "E: $15 cover paid, stamped till dawn");
+    await front();
+    await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+    ok(await A.waitForFunction((c) => window.__bfb.move().x < c.door.minX - 1.5, cl, { timeout: 45000 }).then(() => true, () => false), "stamped: walk in through the hopper door");
+    await A.evaluate(() => window.__bfb.setAxes(null));
+    // THE DROP: on the crusher bed when the floor builds up and slams: up you go
+    const f = cl.floor;
+    // (between drops: the bed's down at dance height; a drop already building would push you off its side)
+    await A.waitForFunction(() => (window.__bfb.clubFloor() ?? 9) < 0.45, null, { timeout: 180000 }).catch(() => {});
+    await A.evaluate((f) => { window.__bfb.clearNpcs((f.minX + f.maxX) / 2, (f.minZ + f.maxZ) / 2, 6); window.__bfb.teleportY((f.minX + f.maxX) / 2, 0.5, (f.minZ + f.maxZ) / 2, Math.PI); window.__bfb.setPitch(0.1); }, f);
+    await sleep(1500);
+    await A.evaluate(() => window.__bfb.clubDrop());
+    ok(await A.waitForFunction(() => (window.__bfb.clubFloor() ?? 0) > 1.3 && window.__bfb.move().y > 1.2, null, { timeout: 120000 }).then(() => true, () => false), "THE DROP builds: the crusher bed carries you up");
+    await A.evaluate(() => window.__bfb.camAt(-69.5, 5.6, -33.5, 0, 0.32)); await sleep(500); await hide();
+    await shot(A, "67-c5c3-the-build.png");
+    await A.evaluate(() => window.__bfb.camFree());
+    ok(await A.waitForFunction(() => window.__bfb.move().y > 2.0, null, { timeout: 120000 }).then(() => true, () => false), "the slam: the floor drops and launches you into the air (higher than the floor ever goes)");
+    // the trash conveyor: crouch on it at the dock and ride under the flap into the sorting room
+    const b = cl.belt;
+    await A.evaluate(([b, y]) => window.__bfb.teleportY(b.minX + 1.0, y, (b.minZ + b.maxZ) / 2, Math.PI / 2), [b, cl.beltY]);
+    await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 0, crouch: true }));
+    ok(await A.waitForFunction((c) => window.__bfb.move().x > c.wing.minX + 0.4, cl, { timeout: 120000 }).then(() => true, () => false), "crouched on the conveyor: carried under the flap into the sorting room");
+    await A.evaluate(() => window.__bfb.setAxes(null));
+    // the DJ's decks in the crane cab: hijack them
+    const decks = await A.evaluate(() => window.__bfb.propDefs().find((d) => d.kind === "djdecks"));
+    const aura0 = await A.evaluate(() => window.__bfb.aura());
+    await A.evaluate(([d, y]) => { window.__bfb.teleportY(d.x, y, d.z + 1.0, Math.PI); window.__bfb.setYaw(Math.PI); window.__bfb.setPitch(0.3); }, [decks, cl.cabY]);
+    ok(await A.waitForFunction(() => window.__bfb.useTarget()?.kind === "djdecks", null, { timeout: 30000 }).then(() => true, () => false), "in the crane cab: E to hijack the decks");
+    await A.keyboard.press("e");
+    ok(await A.waitForFunction((a0) => window.__bfb.aura() >= a0 + 3, aura0, { timeout: 30000 }).then(() => true, () => false), "E: you're the DJ (+3 aura)");
+    await A.evaluate(() => window.__bfb.camAt(-66, 3.0, -36.5, -0.2, 0.05)); await sleep(1500); await hide();
+    await shot(A, "68-c5c3-compactor-hall.png");
+    await A.evaluate((c) => window.__bfb.camAt(c.out.x + 10, 3.6, c.out.z + 8, -2.21, 0.05), cl); await sleep(1500); await hide();
+    await shot(A, "69-c5c3-compactor-front.png");
+    await A.evaluate(() => window.__bfb.camFree());
+    // PAWN-O-RAMA: sell Sal a gold chain over the counter
+    const ps = await A.evaluate(() => window.__bfb.pawnShop());
+    ok(!!ps, "PAWN-O-RAMA is in the Yards");
+    const counter = await A.evaluate(() => window.__bfb.propDefs().find((d) => d.kind === "pawncounter"));
+    const sx = counter.x + Math.sin(counter.yaw) * 1.3, sz = counter.z + Math.cos(counter.yaw) * 1.3, yawIn = counter.yaw + Math.PI;
+    await A.evaluate(([x, z, yaw]) => { window.__bfb.setHeat(0); window.__bfb.clearCops(); window.__bfb.teleport(x, z, yaw); window.__bfb.setYaw(yaw); window.__bfb.setPitch(1.0); window.__bfb.clearItems(x, z, 2.5); }, [sx, sz, yawIn]);
+    await sleep(800);
+    await A.evaluate(([x, z, yaw]) => window.__bfb.spawnItem("gold_chain", x + Math.sin(yaw) * 0.85, z + Math.cos(yaw) * 0.85), [sx, sz, yawIn]);
+    ok(await A.waitForFunction(() => window.__bfb.lookTarget()?.type === "gold_chain", null, { timeout: 30000 }).then(() => true, () => false), "looking at a gold chain");
+    await A.keyboard.press("e");
+    await A.waitForFunction(() => window.__bfb.serverInventory()?.pockets.some(Boolean) || !!window.__bfb.serverInventory()?.hand, null, { timeout: 30000 }).catch(() => {});
+    { const inv = await A.evaluate(() => window.__bfb.serverInventory()); const slot = inv.pockets.findIndex(Boolean); if (slot >= 0) await A.keyboard.press(String(slot + 1)); }
+    await A.evaluate(() => window.__bfb.setPitch(0.35));
+    const cash0 = await A.evaluate(() => window.__bfb.myCash());
+    ok(await A.waitForFunction(() => window.__bfb.useTarget()?.kind === "pawncounter" && /Sell to Sal/.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `at Sal's counter with the chain out: "Sell to Sal" (${await A.evaluate(() => window.__bfb.promptText())})`);
+    await A.keyboard.press("e");
+    ok(await A.waitForFunction((c0) => window.__bfb.myCash() > c0 && !window.__bfb.serverInventory()?.pockets.some(Boolean), cash0, { timeout: 30000 }).then(() => true, () => false), "E: Sal buys it on the spot (cash up, chain gone)");
+    // the pawn case: Sal's window shows what's in it
+    await A.evaluate(() => { window.__bfb.pawnAdd("rolecks_watch", 200); window.__bfb.pawnAdd("crt_tv", 60, true); });
+    ok(await A.waitForFunction(() => window.__bfb.pawnCase().length === 2, null, { timeout: 30000 }).then(() => true, () => false), "the pawn case shows what's in it (yours to buy back, and one on sale)");
+    const [nx, nz] = ps.out, rx = -nz, rz = nx, P = (u, v) => [ps.doorX + rx * u - nx * v, ps.doorZ + rz * u - nz * v];
+    { const [x, z] = P(6.2, 1.2), [tx, tz] = P(-4, 7.5); await A.evaluate(([x, z, yaw]) => window.__bfb.camAt(x, 2.3, z, yaw, 0.18), [x, z, Math.atan2(tx - x, tz - z)]); }
+    await sleep(2000); await hide();
+    await shot(A, "70-c5c3-pawn-o-rama.png");
+    await A.evaluate(() => { window.__bfb.camFree(); window.__bfb.setPitch(0); });
+  }
+
   // ---- Slice 2A: walk-in shops, interiors drawn only nearby, the pond ----
   console.log("\n# Slice 2A city (solo)");
   const units = await A.evaluate(() => window.__bfb.units());
-  ok(units.length === 20 && units.filter((u) => u.use === "shop").length === 14, `${units.length} buildings along the streets, ${units.filter((u) => u.use === "shop").length} walk-in shops (+ the taco cart)`);
+  ok(units.length === 19 && units.filter((u) => u.use === "shop").length === 15, `${units.length} buildings along the streets, ${units.filter((u) => u.use === "shop").length} walk-in shops (+ the taco cart)`);
   await A.evaluate(() => { window.__bfb.clearCops(); window.__bfb.setHeat(0); window.__bfb.teleport(window.__bfb.landmarks().noShops.x, window.__bfb.landmarks().noShops.z, 0); }); // (C1: out in the build yard, every shop 42 m+ away)
   ok(await A.waitForFunction(() => window.__bfb.interiors() === 0, null, { timeout: 20000 }).then(() => true, () => false), "standing in the plaza: no shop interiors are drawn (performance)");
   const mart = units.find((u) => u.name === "CORNER MART");
@@ -627,7 +747,7 @@ try {
   // 1 star: a cop comes for you
   await A.evaluate(() => { window.__bfb.teleport(window.__bfb.T.x + (-16), window.__bfb.T.z + (-8), 0); window.__bfb.clearNpcs(window.__bfb.T.x + (-16), window.__bfb.T.z + (-8), 12); window.__bfb.setHeat(40); });
   ok(await A.waitForFunction(() => window.__bfb.stars() === 1, null, { timeout: 10000 }).then(() => true, () => false), "40 heat = 1 wanted star on the HUD");
-  ok(await A.waitForFunction(() => window.__bfb.cops().length >= 1, null, { timeout: 45000 }).then(() => true, () => false), "a cop is dispatched"); // (C4b: 45 s: the game clock runs at ~25% on this CPU-only box)
+  ok(await A.waitForFunction(() => window.__bfb.cops().length >= 1, null, { timeout: 150000 }).then(() => true, () => false), "a cop is dispatched"); // (C4b/D1: 150 s: the game clock crawls on this CPU-only box)
   // stand still: busted
   // (C5c: the cop walks over on the game clock, which crawls on this CPU-only box: at 110 ms lag it once took just over 90 s,
   //  and once so long your heat cooled below 1 star first and the cop went home. So keep the heat on while you wait, up to 5 min.)
@@ -773,7 +893,7 @@ try {
   ok(await waitPhase("dusk", 30000), "time's up -> nightfall");
   ok(await waitInv("v.pockets.every((x) => !x)", 5000), "the chicken is gone (lost)");
   ok(/NIGHT FALLS/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
-  ok(await waitPhase("night", 30000), "dusk -> night scavenge");
+  ok(await waitPhase("night", 150000), "dusk -> night scavenge"); // (C5c.2: 5 s of GAME time: up to ~10x slower on this box)
   ok(await A.waitForFunction(() => window.__bfb.night().level > 0.9 && window.__bfb.night().body, null, { timeout: 20000 }).then(() => true, () => false), "the city goes dark (night visuals)");
   ok(/NIGHT 1/.test(await A.textContent("#mh-round")) && /^[01]:\d\d$/.test(await A.textContent("#mh-time")), `night timer: ${await A.textContent("#mh-time")}`);
   const nightItems = await A.evaluate(() => window.__bfb.items().filter((i) => i.mode === "free"));
@@ -814,7 +934,7 @@ try {
   ok(await waitPhase("intro", 15000) && (await M()).round === 2, "READY -> cycle 2");
   ok(await A.waitForFunction(() => window.__bfb.overlay() === "" && !window.__bfb.fortView(), null, { timeout: 5000 }).then(() => true, () => false), "screens close for the next cycle");
   // fast-forward to the end of the match
-  for (let k = 0; k < 40 && (await M()).phase !== "over"; k++) { await A.evaluate(() => window.__bfb.setTimeLeft(0.2)); await sleep(600); }
+  for (let k = 0; k < 300 && (await M()).phase !== "over"; k++) { await A.evaluate(() => window.__bfb.setTimeLeft(0.2)); await sleep(600); } // (D1: up to 3 min: each phase change takes a few frames, and frames are slow on this box)
   ok((await M()).phase === "over", "after 3 cycles: match over");
   ok(/RICHEST BANDIT/.test(await A.textContent("#tally")), `final card: "${(await A.textContent("#tally-title"))}"`);
   await hide();
@@ -834,6 +954,9 @@ try {
   ok(true, "leave from solo returns to title");
 
   console.log("\n# Create room");
+  // (D1: the host window switches to Performance mode for the online part. On this CPU-only box a full-detail host
+  //  drawing the city slows every friend's join (measured 6-13 min vs ~6 min); solo above already checked full detail.)
+  await A.evaluate(() => window.__bfb.setLowGraphics(true));
   await A.fill("#name-input", "Alice");
   await A.click("#btn-create");
   await A.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 90000 });
@@ -892,7 +1015,7 @@ try {
   const bView = (await info(B)).players[aSid];
   // Wall-clock distance depends on this machine's CPU rendering speed, so instead check that
   // the distance matches the number of simulation steps actually run (5.2 m/s walking, minus ~0.1 s ramp-up).
-  const steps = s1.moveSteps - s0.moveSteps, moved = aNow.z - aStart.z, expected = rampDist(steps / 60, 5.0);
+  const steps = s1.moveSteps - s0.moveSteps, moved = aNow.z - aStart.z, expected = rampDist(steps / 60, 5.8);
   ok(moved > 0.3 && Math.abs(moved - expected) < 0.8, `A walked ${moved.toFixed(2)}m over ${steps} sim steps (expected ~${expected.toFixed(2)}m)`);
   ok(Math.abs(bView.z - aNow.z) < 0.05, `B's view of A matches A (diff ${Math.abs(bView.z - aNow.z).toFixed(3)}m)`);
   const aStats = (await info(A)).stats;
@@ -972,7 +1095,7 @@ try {
   await sleep(1200);
   await A.evaluate(() => { window.__bfb.spawnItem("mystery_suitcase", window.__bfb.T.x + (-16), window.__bfb.T.z + (-3)); window.__bfb.setPitch(0.45); });
   await C.evaluate(() => window.__bfb.setPitch(0.45));
-  const bothLook = await Promise.all([A, C].map((P) => P.waitForFunction(() => window.__bfb.lookTarget()?.type === "mystery_suitcase", null, { timeout: 15000 }).then(() => true, () => false)));
+  const bothLook = await Promise.all([A, C].map((P) => P.waitForFunction(() => window.__bfb.lookTarget()?.type === "mystery_suitcase", null, { timeout: 40000 }).then(() => true, () => false)));
   ok(bothLook.every(Boolean), "A and C are both looking at the suitcase");
   await Promise.all([A.keyboard.press("e"), C.keyboard.press("e")]);
   await sleep(2500);
@@ -1130,6 +1253,10 @@ try {
   await hideOverlays(A);
   await shot(A, "04-online-A-lobby.png");
 
+  console.log("\n# C5c.3 THE COMPACTOR (online)");
+  // the host's DROP reaches everyone: the crusher bed rises on the joiners' screens too (it follows the synced club clock)
+  await A.evaluate(() => window.__bfb.clubDrop());
+  ok(await B.waitForFunction(() => (window.__bfb.clubFloor() ?? 0) > 1.0, null, { timeout: 180000 }).then(() => true, () => false), "online: the host starts THE DROP, B's crusher bed rises too");
   console.log("\n# Phase 4 jail (online)");
   // busted online: the server replays your lock-pick presses and lets you out the back
   for (const P of [A, C]) await P.evaluate(() => { window.__bfb.testInput(true); window.__bfb.setAxes(null); });
@@ -1139,7 +1266,7 @@ try {
   const aSeesC = await A.waitForFunction(() => { const cells = window.__bfb.station()?.cells ?? []; return Object.values(window.__bfb.info().players ?? {}).some((p) => cells.some((c) => p.x > c.rect.minX - 1 && p.x < c.rect.maxX + 1 && p.z > c.rect.minZ - 1 && p.z < c.rect.maxZ + 1)); }, null, { timeout: 30000 }).then(() => true, () => false);
   ok(aSeesC, "others see you in the cell");
   await C.evaluate(() => window.__bfb.setJailTime(90));
-  const brokeOnline = await C.evaluate(() => window.__bfb.lockAutoPlay());
+  const brokeOnline = await Promise.race([C.evaluate(() => window.__bfb.lockAutoPlay()), sleep(600000).then(() => false)]); // (D1: never hang the run on it)
   ok(brokeOnline && await C.waitForFunction(() => window.__bfb.jail()?.jailT === 0, null, { timeout: 90000 }).then(() => true, () => false), "online: the server accepted the lock-picking and let you out");
   const stC = await C.evaluate(() => window.__bfb.station());
   await C.waitForFunction((al) => { const m = window.__bfb.move(); return Math.hypot(m.x - al.x, m.z - al.z) < 3; }, stC.alley, { timeout: 5000 }).catch(() => {});
@@ -1172,7 +1299,7 @@ try {
   console.log("\n# Room full + bad code");
   const D = await openPage("D", `?room=${code}&test=1`);
   await D.click("#btn-accept-invite", { timeout: 120000 }); // 4 windows on one CPU: this page is slow
-  await D.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 900000 }); // (C3: 15 min: the 4th CPU-rendered window loads slowest)
+  await D.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 1500000 }); // (C3: the 4th CPU-rendered window loads slowest; C5c.2: 25 min, it took over 15 once)
   const E = await openPage("E", `?room=${code}&test=1`);
   await E.click("#btn-accept-invite", { timeout: 120000 });
   await E.waitForFunction(() => window.__bfb.info().screen === "title" && document.getElementById("title-status").textContent.length > 0, null, { timeout: 15000 });

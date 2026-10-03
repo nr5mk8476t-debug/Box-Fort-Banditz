@@ -233,9 +233,12 @@ h2 { margin: 0; font: 400 28px "Bungee", sans-serif; }
 @media (prefers-reduced-motion: reduce) { .big-banner, .mh-time.danger, .home-arrow.urgent span { animation: none; } }
 
 /* ---- Phase 3.5: wiped out by a car ---- */
-.wipeout { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(27,20,32,0.1) 30%, rgba(27,20,32,0.65) 100%); color: #fff; pointer-events: none; }
-.wipeout .wo-title { font: 400 56px "Bungee", sans-serif; color: #ff5a3c; text-shadow: 3px 3px 0 var(--ink); }
-.wipeout #wipeout-sub { font: 900 20px "Nunito", sans-serif; text-shadow: 2px 2px 0 var(--ink); }
+/* D1: hit by a car: a small stun ring above the hotbar (seconds left), not a full-screen card */
+.wipeout { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; color: #fff; pointer-events: none; }
+.wipeout .wo-ring { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#ffe14a calc(var(--wo-frac, 1) * 360deg), rgba(27,20,32,0.55) 0); box-shadow: 0 0 0 3px var(--ink); }
+.wipeout .wo-ring #wipeout-sub { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); font: 400 24px "Bungee", sans-serif; color: #ffe14a; }
+.wipeout .wo-title { font: 400 26px "Bungee", sans-serif; color: #ff5a3c; text-shadow: 2px 2px 0 var(--ink); }
+.wipeout .wo-hint { font: 800 13px "Nunito", sans-serif; text-shadow: 1px 1px 0 var(--ink); }
 
 /* ---- Phase 4: wanted stars + jail ---- */
 .heat-bar { position: relative; }
