@@ -78,6 +78,8 @@ export interface MatchView {
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
   /** C5b: the dragon parade's progress along Chinatown (-1 = none) */
   paradeD: number;
+  /** R4: Little Italy's festa: progress (-1 = none) and which one */
+  festaD: number; festaV: number;
   /** C1: the traffic-light clock (seconds, wraps every 10 min) */
   lightT: number;
   /** C5c.3: when THE COMPACTOR's last DROP started building (on the same wrapped clock as lightT) */
@@ -122,7 +124,7 @@ export function playerView(w: World, id: string, out: Record<string, any> = {}):
   out.pinBy = pq ? pq.id : "";
   out.pinS = pq && pq.pin ? Math.min(1, Math.round(pq.pin.struggle / ARREST.breakFree * 20) / 20) : 0;
   out.jailT = p.jailT > 0 ? Math.max(0.1, Math.ceil(p.jailT * 10) / 10) : 0;
-  out.lockSeed = p.jailT > 0 ? p.lockSeed : 0;
+  out.lockSeed = p.jailT > 0 && p.lock ? p.lockSeed : 0; // (R6: in the holding cell you start picking at the door)
   out.lockT = p.jailT > 0 ? Math.floor((w.time - p.lockT0) * 20) / 20 : 0;
   out.shop = w.pawn.viewJson(id);
   out.ready = w.match.ready.has(id);
@@ -158,7 +160,7 @@ export function npcView(w: World, id: string, out: Record<string, any> = {}): Np
   return out as NpcView;
 }
 
-const evScratch: EventView = { kind: "", stage: "", x: 0, z: 0, r: 0, timeLeft: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, paradeD: -1 };
+const evScratch: EventView = { kind: "", stage: "", x: 0, z: 0, r: 0, timeLeft: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, paradeD: -1, festaD: -1, festaV: 0 };
 let lastResults: unknown = null, lastResultsJson = "[]";
 
 /** Round loop state (writes only the flat fields, so it can target the synced room state). */
@@ -174,6 +176,7 @@ export function matchView(w: World, out: Record<string, any>): MatchView {
   out.evKind = e.kind; out.evStage = e.stage; out.evX = e.x; out.evZ = e.z; out.evR = e.r; out.evT = Math.ceil(e.timeLeft);
   out.truckOn = e.truckOn; out.truckX = e.truckX; out.truckZ = e.truckZ; out.truckYaw = e.truckYaw;
   out.paradeD = Math.round(e.paradeD * 100) / 100;
+  out.festaD = Math.round(e.festaD * 100) / 100; out.festaV = e.festaV;
   // C5c: whose face is on the giant WANTED screen ("" nobody, "MAYOR" when a lone bandit hacked it), and was it a hack?
   return out as MatchView;
 }
@@ -192,7 +195,7 @@ export function carView(w: World, i: number, out: Record<string, any> = {}): Car
 
 export function copCarView(w: World, id: string, out: Record<string, any> = {}): CopCarView {
   const c = w.police.cars.find((x) => x.id === id)!;
-  out.x = c.x; out.z = c.z; out.yaw = c.yaw; out.siren = c.mode !== "leave";
+  out.x = c.x; out.z = c.z; out.yaw = c.yaw; out.siren = c.mode !== "leave" && c.mode !== "cruise"; // (R7: a cruiser on patrol: lights off)
   return out as CopCarView;
 }
 

@@ -4,6 +4,8 @@ import {
   World, buildTrashington, fortAt, LOCK_TIME, ROUND_TIME, INTRO_TIME, TRUCK_SPEED, CYCLES, NIGHT_TIME, DUSK_TIME, DAWN_TIME, SHOP_TIME, UPGRADE_TIME, ITEM_TARGET_NIGHT,
   lootDef, type WorldEvent, type MoveInput,
 } from "../src/index.js";
+import { setCityMap as useCity } from "../src/index.js";
+useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
   ({ seq, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false, ...p });
@@ -403,7 +405,7 @@ test("C5b the dragon parade: warns, dances up Chinatown, bumps you out of its wa
   const at = w.match.paradeAt(8);
   w.debugTeleport(p.id, at.x, at.z, 0);
   const ev: WorldEvent[] = [];
-  run(w, 5.1, ev);
+  run(w, 10.1, ev); // (R4: the street parades warn for 10 s)
   assert.ok(w.match.paradeD >= 0, "live");
   let bumped = false;
   for (let i = 0; i < 12 * 60 && !bumped; i++) { run(w, 1 / 60, ev); if (Math.abs(p.move.x - at.x) > 0.8) bumped = true; }
@@ -417,4 +419,80 @@ test("C5b the dragon parade: warns, dances up Chinatown, bumps you out of its wa
   assert.ok(env.length >= 12, `${env.length} red envelopes scattered`);
   assert.ok(ev.filter((e) => e.t === "firecracker").length >= 12, "firecrackers");
   assert.ok(env.filter((it) => Math.abs(it.body.x - 72) < 8).length >= env.length * 0.7, `mostly along the street: ${env.map((it) => it.body.x.toFixed(0)).join(",")}`);
+});
+
+// ============================================================================ R4: Little Italy's festa (new city)
+import { FESTA, setCityMap as useMap, buildTrashington as buildCity } from "../src/index.js";
+function newCityWorld(players = 1, seed = 7) {
+  useMap("new"); const arena = buildCity(); useMap("classic");
+  const w = new World({ seed, npcs: 0, spawnLoot: false, arena });
+  const ps = [];
+  for (let i = 0; i < players; i++) ps.push(w.addPlayer("p" + i, "P" + i));
+  return { w, ps };
+}
+const festaRun = (w: World, ev: WorldEvent[], until: () => boolean, max = 90) => { for (let i = 0; i < max * 60 && !until(); i++) run(w, 1 / 60, ev); };
+
+test("R4 festa: all three (meatball, band, gondola) roll up Little Italy, drop money worth the dragon's envelopes, then leave", () => {
+  const env = lootDef("red_envelope");
+  for (const t of FESTA.drop) { const d = lootDef(t); assert.ok(d.money && d.valueMin === env.valueMin && d.valueMax === env.valueMax, `${t} is worth what a red envelope is`); }
+  assert.equal(FESTA.dropEvery, PARADE.envelopeEvery, "dropped as often as the envelopes");
+  for (let v = 0; v < 3; v++) {
+    const { w, ps } = newCityWorld();
+    toScavenge(w);
+    const LI = w.arena.littleItaly!, p = ps[0];
+    assert.ok(LI.route[0].x < 0, "Little Italy is on the west avenue");
+    w.match.trigger("festa"); w.match.festaV = v;
+    const ev: WorldEvent[] = [];
+    // stand in the street ahead of it
+    const at = w.match.paradeAt(12, LI.route);
+    w.debugTeleport(p.id, at.x, at.z, 0);
+    p.move.stamina = 0.2;
+    run(w, 10.1, ev);
+    assert.ok(w.match.festaD >= 0, `${FESTA.names[v]} is live`);
+    let hit = false, knocked = false, maxStam = 0;
+    for (let i = 0; i < 30 * 60 && !hit; i++) { run(w, 1 / 60, ev); if (Math.hypot(p.move.x - at.x, p.move.z - at.z) > 0.8 || p.move.knockT > 0) hit = true; if (p.move.knockT > 0) knocked = true; maxStam = Math.max(maxStam, p.move.stamina); }
+    assert.ok(hit, `${FESTA.names[v]} got the bandit out of its way`);
+    if (v === 0) assert.ok(knocked, "the giant meatball flattens you");
+    if (v === 1) assert.ok(maxStam > 0.9, `the band's dance buff refills stamina (${maxStam.toFixed(2)})`);
+    festaRun(w, ev, () => w.match.ev === null, 120);
+    assert.equal(w.match.ev, null, "it has left"); assert.equal(w.match.festaD, -1);
+    const drops = [...w.items.values()].filter((it) => it.type === FESTA.drop[v]);
+    assert.ok(drops.length >= 12, `${drops.length} ${FESTA.drop[v]}s dropped`);
+    assert.ok(drops.filter((it) => Math.abs(it.body.x - LI.route[0].x) < 8).length >= drops.length * 0.7, "mostly along the street");
+    if (v === 2) assert.ok(ev.some((e) => e.t === "festaSplash"), "the gondolier splashes canal water");
+  }
+});
+
+test("R4 the city's events: the dragon parade and the festa are both on the new map's list (one each side of town)", () => {
+  const { w } = newCityWorld();
+  assert.ok(w.arena.chinatown && w.arena.littleItaly, "both districts");
+  assert.ok(w.arena.chinatown.route[0].x > 0 && Math.abs(w.arena.chinatown.route[0].x + w.arena.littleItaly.route[0].x) < 0.01, "mirror images");
+  const kinds = new Set<string>();
+  for (let s = 0; s < 40; s++) { (w.match as unknown as { planEvents(): void; round: number }).round = 3; (w.match as unknown as { planEvents(): void }).planEvents(); for (const q of (w.match as unknown as { plan: { kind: string }[] }).plan) kinds.add(q.kind); }
+  assert.ok(kinds.has("parade") && kinds.has("festa"), [...kinds].join(","));
+});
+
+test("R4 traffic and the parades: their street closes, and no car drives into the dragon or the festa", () => {
+  for (const [kind, seed] of [["parade", 7], ["parade", 1], ["parade", 3], ["festa", 7], ["festa", 1], ["festa", 3]] as const) {
+    const { w } = newCityWorld(1, seed);
+    toScavenge(w);
+    w.match.trigger(kind);
+    let worst = Infinity, live = 0, engulf = Infinity;
+    for (let i = 0; i < 90 * 30; i++) {
+      run(w, 1 / 30);
+      const bodies = w.match.paradeBodies();
+      if (bodies.length) live++;
+      for (const c of w.traffic.cars) {
+        for (const b of bodies) engulf = Math.min(engulf, Math.hypot(c.x - b.x, c.z - b.z) - b.r);
+        if (c.v < 1) continue; // (a stopped car the float rolls past is fine: it doesn't move into it)
+        for (const b of bodies) {
+          if ((b.x - c.x) * Math.sin(c.yaw) + (b.z - c.z) * Math.cos(c.yaw) <= 0) continue; // (only what's in front of it: the float catching up from behind isn't the car's doing)
+          worst = Math.min(worst, Math.hypot(c.x - b.x, c.z - b.z) - b.r);
+        }
+      }
+    }
+    assert.ok(live > 600, `${kind} was in the street`);
+    assert.ok(worst > 1.5, `${kind} (seed ${seed}): closest a moving car got was ${worst.toFixed(2)} m`);
+    assert.ok(engulf > 1.5, `${kind} (seed ${seed}): its street is closed to traffic, so it never rolls through a waiting car (closest ${engulf.toFixed(2)} m)`);
+  }
 });

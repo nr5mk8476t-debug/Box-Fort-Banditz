@@ -565,3 +565,257 @@ Blake's answers: the club gets a new lot and the restaurant stays; the theme is 
   - The client runs the city clock on between snapshots.
 - **Fixed on the way:** a lobby washing-line mesh flagged double-sided stopped a whole batch of city meshes merging (over 100 extra draw calls). The geometry is still double-sided, but the flag is now normal.
 - **Tested (2026-10-03):** 189 shared + 2 client unit, matchmaking smoke 8/8, server smoke pass (44 NPCs), browser e2e 305/305 normal and 305/305 at 110 ms lag. Next: D2, the multi-level bank with a basement.
+
+## R2: the road-layout test (Blake's drawing), built 2026-10-07
+
+Blake drew a new road layout and wanted to "just build the roads first, then make the game playable" to see how it feels before deciding anything else. So this is a **separate test map**, not a replacement: the classic city is untouched and is still what the server, multiplayer and every existing test use.
+
+- **How to play it:** the published "Trashington Road Test" preview, or `?map=roads` on the dev client (solo / your own browser only). `setCityMap("roads2")` in shared code picks it before the city is built.
+- **The roads (from the drawing; north is up, the forts at the bottom):**
+  - An outer ring: West Rd and East Rd at x ±109, North Parade at z 104, the Service Rd at z -89 (above the highway and Tent Town, which are unchanged).
+  - A double road along the north: Gold St at z 72, with a long thin block between it and North Parade.
+  - Two inner avenues, Crooked St at x -77 and Diamond St at x 77, from the Service Rd up to Gold St. They stop there, so the top strip between Gold St and North Parade is one long block (as drawn).
+  - Uptown Ave (z 45) runs from the west edge to Diamond St; Yards Rd (z -53) runs between the two avenues.
+  - The park roundabout in the middle, with spokes west and east to the edge roads and a south spur (Mayor's Mile) down to Yards Rd. No road north of the park.
+  - **The fork:** two diagonal roads from Uptown Ave (x ±43) to the ring's NW and NE points, making a Y with a triangle block north of the park.
+  - Traffic lights where the avenues cross Uptown Ave, Yards Rd and the spokes; give way elsewhere; cars on the ring go first.
+- **Diagonal roads are new:**
+  - A road that isn't along x or z gets a segment surface (`ArenaLayout.roadSegs`) instead of a rectangle. `onRoadAt` checks them, so pedestrians, loot, junk and cops all treat them as road.
+  - Crossings on a diagonal are turned to match. The stop lines and crossings where a diagonal meets a straight road are worked out from the angle between them.
+  - The roundabout can now have any number of arms (the fork's two make five); the cop-car route along the ring splits each arc about every 30 degrees.
+  - Walls are boxes that can't turn, so the pavement along a diagonal is 0.5 m steps underneath, with a smooth kerb strip drawn on top (looks only). Buildings along a diagonal are squares stepped along the road (a sawtooth frontage).
+  - Pedestrians get walking routes along the diagonal pavements (the street grid's route lines only run along x and z).
+- **The blocks are generated, not hand-made:**
+  - The ground is worked out on a 0.5 m grid: every cell off the road is pavement.
+  - Every road gets a row of plain buildings down each side behind a 4 m pavement (the diagonals first, so they get the corner lots). Shopfronts, parody signs, tier colours and heights work like the classic streets.
+  - Any courtyard nobody could walk into loses its smallest building, so an alley opens.
+  - Loot on the pavements, rooftop and courtyard stashes, bins, phone booths, vending machines, hydrants and street lights go along the rows.
+- **Kept:** the park (fountain, pond, bushes, the taco cart), Tent Town and the 4 forts under the highway, the squat (lobby), and the police station (moved to the south-east block, its front on the Service Rd).
+- **Left out for now:** every other landmark and walk-in shop (the bank, City Hall, the casino, Chinatown, Le Dumpstère, The Compactor, Pawn-O-Rama, the skate park, the rail yard and the canal). The map shows only THE PARK and TENT TOWN.
+- **Not done yet:** the D2 bank work is parked on the `d2-bank-wip` branch (it has 3 failing tests and no client rendering yet). Picking it back up depends on whether the new layout replaces the classic city.
+
+## R3: the new city (Blake's redesign brief + answers, 2026-10-08), steps 1 and 2 built 2026-10-08
+
+Blake's brief: mirror the city left and right, make the four forts fair, clear the top road for big landmark lots, use angled and wedge buildings, put the police station and the pawn shop centrally in the low end, and name every road. His answers:
+- forts on a curve, the map grown south to fit;
+- this replaces the real city;
+- real angled collision;
+- Gahookz Ghetto Lane is the road above the forts;
+- landmarks left out for now (he'll place each one with an in-game placement mode);
+- the Bin Juice stub to Lefty Lane removed;
+- police + pawn shop built now;
+- empty fenced lots up north;
+- I pick the remaining names;
+- green street signs at the corners;
+- a Chinatown and, mirrored opposite it, a Little Italy lane (asked for after the plan; not built yet).
+
+**Step 1: angled walls (engine).**
+- `Box.poly`: an upright prism on any convex footprint. `rotBox` (a turned rectangle) and `polyBox` (any convex shape) make them; x/z/w/d stay the bounding box for the broadphase.
+- Every footprint test goes through `footSd` / `inFoot` / `footFaces`:
+  - player collision (smooth sliding along an angled wall, standing on its roof, mantling);
+  - thrown items (they bounce off the real face);
+  - the cops' line of sight;
+  - walkers and their route checks;
+  - spray tags (a tag on an angled wall takes that wall's own normal);
+  - the minimap.
+- Plain boxes keep their exact old code paths, so nothing about the classic city changed.
+- Rendered as flat-shaded prisms that merge with the city's boxes. Façades (windows, shopfronts, awnings, cornices, signs, tower crowns) work on every face of an angled building.
+
+**Step 2: the new city ("new" map, now the default; `?map=classic` still builds the old one).**
+- **Roads (all named, the whole network a mirror image):**
+  - Lefty Lane and Righty Lane at the edges.
+  - Gahookz Ghetto Lane above the fort bowl.
+  - Snob Row along the top (the very top road is gone).
+  - Leftovers Avenue and Write-Off Avenue, centred between each pair of forts (x ±66.33).
+  - Bin Juice Boulevard (between the avenues only).
+  - Mayor's Mugshot Mile east–west through the roundabout.
+  - Shopping Trolley Terrace.
+  - Dead-Centre Drive from the roundabout north to Snob Row.
+  - Loose Change Lane south to Shopping Trolley Terrace.
+  - Dodgy Cut-Through and Bank Run from the avenue corners straight at the middle of The Spin Cycle (the roundabout), so they meet it square on.
+- **Blocks are generated on the west half and mirrored onto the east half.** Same shapes, heights, alleys, loot spots, bins and walking routes on both sides; only colours and shop names differ.
+  - Buildings line every road. Along a diagonal they turn to face it.
+  - Where a row runs into a diagonal or the roundabout it is cut into a wedge, a trapezoid or a triangle.
+  - About 30 angled buildings.
+  - Courtyards nobody could walk into lose their smallest building (an alley opens).
+- **The fort bowl:**
+  - The four yards are evenly spaced across (66.3 m apart), the outer two 7.5 m from the side walls.
+  - The middle two sit deeper (z -112.3 against -102). The depth was tuned by measuring the real walk, not the straight line. A straight row would give the middle forts a 6 m head start.
+  - A curved viaduct over the yards: looks only (no deck, no ramp, nothing to climb), with solid pillars on the ground.
+  - The map runs further south (to z -128.8). The squat's tenement stands in the south fence between the middle yards.
+- **Fairness, measured** (walking distance from each fort; outer W / outer E / middle W / middle E):
+  - roundabout 134.9 / 135.4 / 134.9 / 134.9 m;
+  - police door 118.0 / 118.5 / 118.0 / 118.0;
+  - the middle landmark lot 229.5 / 230.0 / 230.3 / 230.3;
+  - Bin Juice × Dead-Centre 196.9 / 197.4 / 197.7 / 197.7.
+  - Within 1 m everywhere. (The 0.5 m east bias is the park's pond and the taco cart, which aren't mirrored.)
+- **Police station:** in the middle of the long low-end block, now facing Shopping Trolley Terrace (the town side) with its door in the middle. Facing the forts it was 42 m from the middle forts against 104 m from the outer ones. Its car park behind opens onto Gahookz Ghetto Lane. (Step 3 gives it its own shape and back route.)
+- **The north:** five empty landmark lots (W2, W1, C, E1, E2) behind 2.6 m plywood hoardings ("COMING SOON: SOMETHING EXPENSIVE"), too tall to climb.
+- **Names:**
+  - A green two-blade street sign at a corner of every junction, one blade along each road, readable from both sides.
+  - Every road's name written along it on the map; districts that no longer exist are left off.
+- **Kept:** the park, Tent Town's forts, the squat.
+- **Not on the new map yet:** the bank, the casino, the nightclub, the restaurant, Chinatown, the skate park, Pawn-O-Rama, City Hall, the rail yard and the canal. Their code and tests stay, on the classic city (`?map=classic`); every classic-city unit test and the browser test run there.
+- **Multiplayer:** an invite link now carries the host's `map`, so friends build the same city.
+
+**Next (step 3), with Blake's answers (2026-10-08):**
+- The police station gets its own footprint and back route.
+- **Pawn shop:** at the bottom of Loose Change Lane, facing the police station across Shopping Trolley Terrace (a cops-vs-fence square on the centre line, the same walk from every fort).
+- **Little Italy:** along Leftovers Avenue, and **Chinatown** along Write-Off Avenue (its mirror), each between Gahookz Ghetto Lane and Mayor's Mugshot Mile.
+- The in-game landmark placement mode, for Blake to place the big landmarks on the north lots.
+
+## R3.1 fixes (Blake, 2026-10-08)
+
+- **See-through angled buildings:** the angled-building meshes were wound inside out, so the GPU drew only their inside faces. From the street you saw straight through them; only the window and shopfront planes showed. Re-wound so the outside faces out. A client test checks every triangle faces out of the prism (it fails on the old winding).
+- **Blocky roundabout edge:** the pavement round the outside of The Spin Cycle is now 96 smooth curved pieces from the kerb out to 3.6 m, cut square where the roads leave the ring. The 0.5 m grid pavement starts behind them.
+- **Pavement too wide:** buildings now stand 2.5 m from the kerb (was 4 m). The police station moved up with them, and its back stash sits in its car park.
+- **Landmarks:** none added. Blake will design the big ones (bank, casino, club...) and I put them in.
+- Fairness after the changes (outer W / outer E / middle W / middle E): roundabout 140.9 / 141.4 / 140.1 / 140.1 m; police door 122.4 / 122.9 / 121.6 / 121.6; middle lot 233.6 / 234.1 / 232.8 / 232.8. All within 1.3 m.
+- **Next:** Little Italy (Leftovers Avenue) and Chinatown (Write-Off Avenue). Questions sent to Blake: matching stalls and loot, gates and lights, Little Italy extras, the parade.
+
+## R4: Little Italy and Chinatown (Blake's answers, 2026-10-08)
+
+- **Where:** Little Italy on Leftovers Avenue (west), Chinatown on Write-Off Avenue (east), both between Gahookz Ghetto Lane and Mayor's Mugshot Mile. They are mirror images of each other, shop for shop, so neither side of town is luckier.
+- **Matching stalls, same loot value (answer 1):** the pizza cart and gelato cart match the dumpling steamer, the souvenir stall (mini gondolas, leaning-tower globes, a rare golden accordion) matches the trinket stall, and the deli counter (cheese wheels, salami) matches the seafood tank. A test checks each pair pays the same on average.
+- **Gates and lights (answer 2, "super appealing"):** each end of Leftovers Avenue gets an arch in green, white and red, with bulbs, a LITTLE ITALY board on both faces and potted cypresses. Zig-zag festoon bulbs and laundry lines hang across the street. Chinatown keeps its gates and lantern rows, mirrored.
+- **Extras (answer 3):** terracotta roofs, shutters, geranium flower boxes, iron balconies, wall lamps, striped awnings, café tables under umbrellas, a gelato cart. No fountain (Blake wasn't sure).
+- **Every building its own setback:** buildings now stand 2.5 to 4.5 m back from the kerb, varying building to building (less variety inside the districts). Little Italy cafés stand 6.5 m back for their terrace of tables and umbrellas, with a street stall in front. To keep the varied gaps from opening short cuts that broke fort fairness, a 3 m brick wall runs down the middle of the long low-end block.
+- **The festa (answer 4: options 2, 3 and 5):** a new city event, one of three each time, rolling up Leftovers Avenue the way the dragon parade rolls through Chinatown:
+  - **The Giant Meatball Roll:** a rolling meatball with chefs behind. The ball flattens you; the chefs shove you aside.
+  - **The Accordion Band March:** dance near the band and your stamina comes back fast.
+  - **The Gondola-on-Wheels:** the gondolier splashes canal water every 3 s.
+  - All three drop money every 2.6 m (golden meatballs, tip coins, golden roses), each worth what a red envelope is.
+- Both events are on the new map's event list.
+
+## R4.1: found in the screenshot review (2026-10-09)
+
+- **The LITTLE ITALY board was blank:** the red frame behind it had a dark cartoon outline that poked out in front of the board and covered it. The frame is thinner now, and the boards hang a little further out.
+- **Cars drove through the parades.** Traffic now gives way:
+  - A parade's street closes from its warning onward: Write-Off Avenue for the dragon, Leftovers Avenue for the festa. Cars go round it. Where there is no way round, they enter going the same way as the parade, never against it.
+  - Any car still in the street when the parade starts is towed to a quiet road elsewhere.
+  - Cars stop for any part of a parade in front of them.
+  - If a car going the parade's way is stopped just ahead of it (at a light, say), the parade waits for it.
+- The dragon parade and the festa now warn for 10 s (was 5 s), so the street can empty first.
+- Both routes now start and end just inside their street, not on the cross streets at either end.
+
+## R5: HOT STUFF PAWN & LOAN, the police station's second storey, textures (Blake, 2026-10-09)
+
+- **Chairs:** the café chairs now face their tables.
+- **Where:** the pawn shop is dead centre, where the police car park was, back to back with the station.
+  - Blake first chose to have it face the forts across Gahookz Ghetto Lane. That would have put the middle forts about 44 m away and the outer forts about 105 m away.
+  - So it faces the station instead, across **Lou's Square**. You get into the square down a passage either side of the station from Trolley Street, so every fort walks the same distance (131.7–132.2 m).
+  - The station is 2.2 m shallower to make room.
+  - Its back is on Gahookz with a big neon roof sign facing the forts. The cruisers are gone from the car park.
+- **Twitchy Lou** sits behind a barred window in a booth in the middle of the front. Walk up and press E to sell what you're holding, cash on the spot (40%, like Sal's counter).
+  - **Secret list:** each scavenge he wants 3 things, picked from what's out in the city that day. He mutters the list only to whoever walks up to the window.
+  - Bring him one and he pays **x3** its value. Only the first one of each counts, so the first bandit there wins.
+- **Meat Locker:** enormous, 14 punches to knock out. He comes for you if you:
+  - punch Lou (or hit him with something thrown);
+  - throw stuff at the window;
+  - smash the pawn case;
+  - lift anything from the back room;
+  - hang about at the window without selling (a warning at 16 s, then he comes at 24 s).
+- **His punch:** out cold for 6 s, you drop everything, and you go flying.
+- **Beating him:** knock him out and he's down for 40 s. The back room is unguarded meanwhile (Blake's reward pick); then he's back at his post with full health.
+- **Inside:**
+  - a shop floor wrapped round the booth, with a door each side;
+  - guitars, a stack of tellies showing static, a stuffed bear;
+  - the pawn case (pawn now, buy back before dawn, as at Sal's);
+  - the back room shelves (pawn stock) and a safe.
+- **Outside:** a flickering HOT STUFF neon flame, OPEN / OPE door signs, half-down roller shutters with tags, a sagging awning, barbed wire, a CCTV camera, graffiti, and the roof sign.
+- **The police station (looks only):**
+  - a second storey in stone, with the chief's corner office (blinds, a CHIEF O'NOTHING plaque);
+  - a balcony with two flags, a lit TRASHINGTON PD sign, red and blue roof lights;
+  - blue lamps by the door, planters, and a "HERE TO HELP (EVENTUALLY)" banner.
+- **Textures (the whole city):**
+  - Walls: 8 materials instead of 3: brick (stronger), whitewashed brick, stucco, stone, concrete panels, tile, corrugated metal, clapboard. They're mixed per building by area, with grime (soot at the foot, rain streaks, moss) on every wall.
+  - Windows: 5 new styles (shutters, arched, blinds, curtains, boarded and cracked).
+  - Roofs: tar-and-gravel roofs, vents, hatches, chimneys, antennas.
+  - Ground floors: street ground floors without a shop get a little shop (a funny name, an awning), a roller shutter with tags, boards, or a front door with steps. About 1 in 6 of the other shops is shut, with its shutter down.
+
+## R6: the real police station, the holding cell, the Champ, the pawn shop turned round (Blake, 2026-10-10)
+
+- **Spotty shading removed:** the peel patches, speckles, tie holes, rust, rivets, drips, moss, roof blotches, stain blobs and brick chips are gone from the wall and roof textures. The base materials stay, but they're cleaner.
+- **The station (after Blake's photo):**
+  - Ground floor: brick wings with ribbon windows, a stone centre bay and a glass wall, and a canopy with POLICE letters over the door. No more bland blue.
+  - 3 upper floors in stone, with window bands and a blue fascia, plus a glass entrance tower with a gold star. The upper floors are looks only (Blake's pick).
+  - Red and blue lights, lamps, grass planters and a flagpole.
+- **The helicopter:**
+  - parked on a helipad on the roof, with POLICE on the side and its rotors turning (Blake's pick);
+  - its searchlight sweeps the streets at night;
+  - looks only.
+- **Inside (walkable ground floor):**
+  - a reception with a desk, a bell, wanted posters and a water cooler;
+  - the breakroom, with coffee, donuts, a fridge, a vending machine, a sofa and a TV showing static;
+  - one holding cell for everyone.
+- **The holding cell:**
+  - When you're busted you land in the cell and can walk about. The lockpick opens only when you press E at the cell door (Blake's pick); S or Esc steps away.
+  - The toilet flushes back: the screen is covered in dirty water and everyone in the cell gets knocked back. There's a 6 s cooldown.
+  - The shower has white subway tiles.
+- **Daddy Jaquise:** not built. As described (a big Black prisoner, a bar of soap, dragged into the shower) it combines a racial stereotype with a prison-rape joke. Blake picked a replacement instead:
+  - **The Champ:** an old prison arm-wrestling champion in an orange jumpsuit, with a gold belt and his golden spoon.
+  - He takes about 25 punches, and one hit from him knocks you down for at least 6 s.
+  - If he knocks you down he sits on you and does his crossword until you get up.
+  - Knock him out and he drops **The Spoon of Destiny**: legendary, worth $2,500–4,000. Only the black market will buy it (not built yet). Lou and the fence refuse it.
+- **Hot Stuff Pawn & Loan:**
+  - It's turned round to face Gahookz Lane (Blake: he knows this is easier for the middle two forts and doesn't mind). The Lou-window fairness rule is dropped; all the other walks are still fair.
+  - The brick no longer covers the entrances: the walls are built in pieces round the doors and the window.
+  - Meat Locker: 30 HP (about 40 punches), chases at 7 m/s, 0.18 s windup, 0.45 s between hits, and he throws you harder.
+
+## R7: two walk-in pawn shops, the grand station, police presence (Blake, 2026-10-10)
+
+- **Two pawn shops:** one for the two forts on each side (Blake). Nothing in them can be robbed; they're only for selling.
+  - Left: **HOT STUFF PAWN & LOAN**, run by Twitchy Lou, with Meat Locker on the door. It's where Hat Hut was.
+  - Right, its mirror image: **FINDERS KEEPERS PAWN**, run by Sticky Fran, with **Cold Cuts** (Meat Locker's twin, the same in every way but the name) on the door.
+  - Each owner has their own 3 wanted things (x3, first of each), and the two lists never overlap. They tell you the list when you walk up to the till.
+  - Inside (from Blake's photo): glass counters you can see into (rings, watches, chains, old phones, coins) between you and the owner. Behind them, a slatwall crammed with junk (boomboxes, hats, pictures, keyboards, cameras, handbags), guitars, a moose head and a disco ball.
+  - The window display: an arcade machine, a mannequin in a leather jacket, a stuffed bear, a drum kit and tellies showing static. Also a rug, a lamp, a ceiling fan and a bike on the wall.
+  - Outside: a **suit of armour** on a plinth by the door, the three gold pawnbroker's balls, a neon sign, an awning, a lit roof sign.
+  - The bouncer only comes if you punch the owner, throw stuff at them, or smash a glass counter (2 hits; it's mended at dawn). Hanging about or picking things up is fine. The old loitering rule and the back room are gone.
+  - **Fairness (Blake picked "shift to balance"):** the only spot where both forts on a side walk exactly the same distance is in the middle of Leftovers Avenue. Moving the shop a block west just reversed the gap. So it stays on the Hat Hut plot, with its door round the corner on the avenue side, which is as close to even as that plot gets: 53.6 m from the outer fort, 46.9 m from the middle one.
+- **The station** now runs right through the block, from Shopping Trolley Terrace to Gahookz Ghetto Lane (it took the old pawn shop's plot).
+  - **Ground floor:**
+    - the lobby: Officer Pam at the front desk (punch her and it's heat), posters, a crest, the stairs;
+    - a hallway down the middle;
+    - two interrogation rooms with one-way mirrors onto the hallway, hanging lamps and cameras;
+    - the breakroom;
+    - booking: a height chart, a camera, a fingerprint desk;
+    - the holding cell tucked away at the back, its bars along the hallway, with subway tiles, the toilet, the shower and the Champ.
+  - **First floor, walkable (up the stairs):**
+    - cubicles with low partitions;
+    - three offices (DETECTIVES (ASLEEP), RECORDS (MISPLACED), INTERNAL AFFAIRS);
+    - the squad room (lockers, a whiteboard of suspects);
+    - the chief's corner office (wood panelling, desk, nameplate, trophy fish, bookcase, rug);
+    - the **evidence room**.
+  - The floors above that, the roof and the helicopter stay looks only.
+  - Picking the lock now lets you out the back door onto the Gahookz pavement.
+- **The evidence room:** when you're busted, what you carry goes onto its shelves; the oldest bags go when it's full.
+  - Anybody can lift it back (Blake's pick), but that's stealing from the police: +35 heat (just over 1 star), and any cop who sees, including the one guarding the room, comes for you.
+  - Bags stay through the night and are cleared at dawn.
+- **Police presence:**
+  - 6 foot patrols (8 at night) walk the town's routes;
+  - 2 cruisers drive round with their lights off (Blake's pick: foot and cars);
+  - one cop walks the station's ground floor and one guards the evidence room.
+  - They ignore anyone who isn't wanted. If they see you wanted (or see a crime), they chase like ordinary cops, then go back on patrol rather than going home.
+  - Missing patrols walk in from somewhere nobody's looking. The patrols are on in the new city only.
+- **The Champ:** punches 1 and 2 just nudge him back, and he turns on you. The 3rd inside 4 seconds makes him dizzy for 2.2 s and he spins. Knocking him out still takes about 40 punches.
+
+## R8: glass doors, real windows, the chief's key, visual fixes (Blake, 2026-10-10)
+
+- **Fixes:**
+  - **Pavement turning into road (from far away):** the "draw the insides only when near" rule also caught pavement pieces whose middle fell inside the station or shops. Pavement, kerbs and plazas are never grouped now.
+  - **Stairs "floored over":** the first-floor carpet ran across the stairwell. It goes round it now.
+  - **Bouncers' "square and ring":** the apron logo and strap are gone (Meat Locker and Cold Cuts).
+  - **The stairs:** moved 0.6 m in from the wall, with a stringer that rises with the steps, railings on both sides upstairs and a handrail.
+  - **The lobby flag:** removed, and the chief's flag with it.
+  - **Windows too black city-wide:** unlit panes are dusky blue-greys with a pale streak of sky, and the frames are lighter.
+- **Real glass on the station:** see-through ribbon windows on the ground floor's front wings and right round the first floor. The chief's corner office has glass from 5 m to 8.6 m, to the corner on both sides. The walls are built round the windows and the outside skins are cut round them. Dark frames, mullions every ~1.6 m, stone sills. The two floors above are still painted windows.
+- **Glass doors (Blake's pick: E opens and closes, NPCs open them):** the station's double front doors and each pawn shop's door.
+  - A shut door blocks you; an open one swings aside. They stay how they're left and all shut at dawn.
+  - Cops, bouncers and walkers open a shut door when they reach it; posted or idle people don't.
+- **Four cops guard the station (Blake's pick):** one by the front doors, one walking the hallway, one outside the holding cell, one at the evidence room.
+- **The chief's key (Blake's picks: "door opens 20 s, all walk out"; "once a day, heat to lift"):**
+  - One key on the chief's desk each morning. Lifting it is +35 heat, like the evidence room.
+  - E at the holding cell door with it: the cell door (its own section of bars now) swings open for 20 s, with a CLANK the cops can hear. The key is used up.
+  - Anyone jailed who walks out while it's open is free where they stand, with 1 star (the jailbreak heat). Then the door shuts again.
+  - The key stays wherever it is through the night. Pawn shops won't touch it ("A POLICE key?").

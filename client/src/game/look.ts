@@ -154,8 +154,13 @@ const POI: [string, (a: ArenaLayout) => { x: number; z: number } | null][] = [
   ["Mayor Statue", (a) => a.statue ? { x: a.statue.x, z: a.statue.z } : null],
   ["Le Dumpstere", (a) => a.resto ? { x: (a.resto.rect.minX + a.resto.rect.maxX) / 2, z: (a.resto.rect.minZ + a.resto.rect.maxZ) / 2 } : null],
   ["The Compactor", (a) => a.club ? { x: (a.club.rect.minX + a.club.rect.maxX) / 2, z: (a.club.rect.minZ + a.club.rect.maxZ) / 2 } : null],
-  ["Pawn-O-Rama", (a) => a.pawnShop && a.units ? { x: a.units[a.pawnShop.unit].x, z: a.units[a.pawnShop.unit].z } : null],
+  ["Pawn-O-Rama", (a) => a.pawnShop && a.units?.[a.pawnShop.unit] ? { x: a.units[a.pawnShop.unit].x, z: a.units[a.pawnShop.unit].z } : null],
 ];
+
+/** R3: where the roundabout's name goes on the map (just inside its south edge) */
+const RING_LABEL = 25.7;
+/** the POIs at fixed spots (classic city only) */
+const FIXED_POI = new Set(["City Hall", "Casino", "Market Hall", "Skyscraper"]);
 
 /**
  * Draw the city onto a 2D canvas: north (+z) up. `size` px square, the city fills it with a margin.
@@ -188,10 +193,12 @@ export function drawCityMap(c: CanvasRenderingContext2D, arena: ArenaLayout, siz
   for (const r of arena.roads ?? []) c.fillRect(...rect(r));
   c.strokeStyle = c.fillStyle;
   for (const g of arena.roadRings ?? []) { c.lineWidth = (g.r1 - g.r0) * k; c.beginPath(); c.arc(X(g.x), Z(g.z), ((g.r0 + g.r1) / 2) * k, 0, Math.PI * 2); c.stroke(); }
+  for (const g of arena.roadSegs ?? []) { c.lineWidth = g.hw * 2 * k; c.beginPath(); c.moveTo(X(g.ax), Z(g.az)); c.lineTo(X(g.bx), Z(g.bz)); c.stroke(); } // (R2: diagonals)
   // buildings
   for (const b of arena.boxes) {
     if ((b.kind !== "building" && b.kind !== "tower") || b.y - b.h / 2 > 1 || Math.abs(b.z) > H || Math.abs(b.x) > H) continue;
     c.fillStyle = b.kind === "tower" ? "#5b5566" : TIER_BLDG[tierAt(b.z)];
+    if (b.poly) { c.beginPath(); b.poly.forEach(([x, z], i) => (i ? c.lineTo(X(x), Z(z)) : c.moveTo(X(x), Z(z)))); c.closePath(); c.fill(); continue; } // (R3: angled)
     c.fillRect(X(b.x - b.w / 2), Z(b.z + b.d / 2), b.w * k, b.d * k);
   }
   // forts
@@ -201,9 +208,55 @@ export function drawCityMap(c: CanvasRenderingContext2D, arena: ArenaLayout, siz
   });
   // labels
   const font = (px: number) => `bold ${Math.round(px)}px "Bungee", "Arial Black", sans-serif`;
+  // R4: the two themed streets
+  if (arena.variant) for (const [name, d, col] of [["LITTLE ITALY", arena.littleItaly, "#7fe0a0"], ["CHINATOWN", arena.chinatown, "#ff9a8a"]] as const) {
+    if (!d) continue;
+    const S = d.street, cx = (S.minX + S.maxX) / 2, cz = (S.minZ + S.maxZ) / 2;
+    c.save(); c.translate(X(cx), Z(cz)); c.rotate(-Math.PI / 2);
+    c.font = `bold ${Math.round(size * 0.022)}px "Bungee", "Arial Black", sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+    c.lineWidth = size * 0.006; c.strokeStyle = "#1b1420"; c.strokeText(name, 0, -size * 0.022); c.fillStyle = col; c.fillText(name, 0, -size * 0.022);
+    c.restore();
+  }
+  // R7: the two pawn shops and the police station
+  if (arena.variant && arena.hotShops?.length) {
+    c.font = `bold ${Math.round(size * 0.014)}px "Bungee", "Arial Black", sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineWidth = size * 0.005; c.strokeStyle = "#1b1420";
+    for (const h of arena.hotShops) { const r = h.rect, cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2, t = h.idx ? "FINDERS $" : "HOT STUFF $"; c.strokeText(t, X(cx), Z(cz)); c.fillStyle = h.idx ? "#7aff6b" : "#ff7a3c"; c.fillText(t, X(cx), Z(cz)); }
+    if (arena.station) { const s2 = arena.station.rect; c.strokeText("PD", X((s2.minX + s2.maxX) / 2), Z((s2.minZ + s2.maxZ) / 2)); c.fillStyle = "#8fb4ff"; c.fillText("PD", X((s2.minX + s2.maxX) / 2), Z((s2.minZ + s2.maxZ) / 2)); }
+  }
+  // R3: every road's name, written along it once (on its longest straight stretch)
+  if (arena.variant && arena.roadNet) {
+    const net = arena.roadNet, best = new Map<string, { ax: number; az: number; bx: number; bz: number; l: number }>();
+    for (const e of net.edges) {
+      if (!e.name) continue;
+      const A = net.nodes[e.a], B = net.nodes[e.b];
+      const l = e.arc ? 0 : Math.hypot(B.x - A.x, B.z - A.z);
+      const cur = best.get(e.name);
+      if (!cur || l > cur.l) best.set(e.name, { ax: A.x, az: A.z, bx: B.x, bz: B.z, l });
+    }
+    c.save();
+    c.textAlign = "center"; c.textBaseline = "middle";
+    for (const [name, g] of best) {
+      if (g.l === 0) { // (the roundabout)
+        c.font = font(size * 0.016); c.lineWidth = size * 0.004; c.strokeStyle = "#1b1420"; c.fillStyle = "#c9f7d8";
+        c.strokeText(name.toUpperCase(), X(0), Z(-RING_LABEL)); c.fillText(name.toUpperCase(), X(0), Z(-RING_LABEL));
+        continue;
+      }
+      let ang = Math.atan2(Z(g.bz) - Z(g.az), X(g.bx) - X(g.ax));
+      if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI; // (never upside down)
+      c.save(); c.translate(X((g.ax + g.bx) / 2), Z((g.az + g.bz) / 2)); c.rotate(ang);
+      let px = size * 0.017;
+      c.font = font(px);
+      while (px > 6 && c.measureText(name.toUpperCase()).width > g.l * k * 0.9) { px -= 1; c.font = font(px); }
+      c.lineWidth = size * 0.004; c.strokeStyle = "#1b1420"; c.strokeText(name.toUpperCase(), 0, 0);
+      c.fillStyle = "#c9f7d8"; c.fillText(name.toUpperCase(), 0, 0);
+      c.restore();
+    }
+    c.restore();
+  }
   c.textAlign = "center"; c.textBaseline = "middle";
   c.lineJoin = "round";
-  for (const [name, x, z] of DISTRICTS) {
+  // (R2: the road test has none of the classic city's districts or hand-placed landmarks)
+  for (const [name, x, z] of arena.variant ? DISTRICTS.filter(([n]) => n === "TENT TOWN" || n === "THE PARK") : DISTRICTS) {
     c.save(); c.translate(X(x), Z(z));
     if (Math.abs(x) > 100) c.rotate(x < 0 ? -Math.PI / 2 : Math.PI / 2); // (the rail yard and the canal: written along them)
     c.font = font(size * 0.034);
@@ -212,6 +265,7 @@ export function drawCityMap(c: CanvasRenderingContext2D, arena: ArenaLayout, siz
     c.restore();
   }
   for (const [name, at] of POI) {
+    if (arena.variant && FIXED_POI.has(name)) continue;
     const p = at(arena);
     if (!p) continue;
     c.fillStyle = "#ff5a3c";

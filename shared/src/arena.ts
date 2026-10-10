@@ -41,6 +41,14 @@ export interface Box {
   deco?: string;
   /** C5c.3: a conveyor belt: what's standing on it gets carried along at this velocity (m/s on x, z) */
   belt?: [number, number];
+  /** R4: a Little Italy building (shutters, flower boxes, a terracotta roof, striped awnings) */
+  italy?: boolean;
+  /**
+   * R3: an angled footprint: a convex polygon on x/z (counter-clockwise, see polyBox). x/z/w/d are then
+   * its bounding box (the broadphase uses that); every collision test uses the real shape. Turned
+   * buildings, wedges and triangles are made with rotBox / polyBox.
+   */
+  poly?: [number, number][];
 }
 
 export type BoxKind =
@@ -57,6 +65,8 @@ export type BoxKind =
   | "hydrant" | "mailbox" | "bikerack" | "board" | "pot" | "bags" | "pallet" | "portaloo" | "mixer" | "trolley"
   // C5b: Chinatown's street stalls
   | "steamer" | "fishtank" | "trinkets"
+  // R4: Little Italy's (Chinatown's mirror: the same loot value spot for spot)
+  | "pizzacart" | "ricordi" | "deli" | "gelato"
   // C5c: the bank's vault door (it swings open: the box stops blocking), deposit boxes, the WANTED screen's control box
   | "vaultdoor" | "depositbox";
 
@@ -83,6 +93,8 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   | "dummy" | "throwgame" | "racegame"
   // C5b: Chinatown: a dumpling steamer cart (E: grab a bite), a souvenir stall (E), a live-seafood tank (punch: SPLASH)
   | "steamer" | "trinkets" | "fishtank"
+  // R4: Little Italy: a pizza cart and a gelato cart (E: grab one), a souvenir stall (E), a deli counter (punch: SMASH)
+  | "pizzacart" | "ricordi" | "gelato" | "deli"
   // C5c: the bank (its vault door, safety deposit boxes), the Mayor's statue's gold nose, the WANTED screen's
   // control box, and the golden stashes hidden at every landmark
   | "vaultdoor" | "depositbox" | "nose" | "stash"
@@ -90,7 +102,13 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   // C5c.3: THE COMPACTOR (the bouncer's rope, the DJ's decks in the crane cab, the conveyor bar, the cash safe, the
   // DJ's rider, the staff lockers, the sorting bin, a VIP booth) and PAWN-O-RAMA (Sal's counter, the pawn case)
   | "clubrope" | "djdecks" | "clubbar" | "clubsafe" | "rider" | "lockers" | "sortbin" | "vipbooth"
-  | "pawncounter" | "pawncase";
+  | "pawncounter" | "pawncase"
+  // R6: the new station's holding cell
+  | "toilet" | "celldoor"
+  // R7: the walk-in pawn shops' glass counters (smash one: the bouncer comes; nothing to steal in them)
+  | "glasscounter"
+  // R8: glass doors (E: open / close; NPCs open them)
+  | "door";
 export interface PropDef {
   id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
   /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
@@ -150,6 +168,41 @@ export interface StationDef {
   alley: { x: number; z: number; yaw: number };
   /** one cell per player: stand here while locked up (facing the bars) */
   cells: { x: number; z: number; yaw: number; rect: Rect }[];
+  /** R6 (the new city): one big holding cell everybody shares: where you land in it, its locked door (E: pick the
+   *  lock), the toilet you can flush, the shower corner (white subway tiles), the reception and the breakroom */
+  holding?: { cell: Rect; spots: { x: number; z: number }[]; door: { x: number; z: number }; toilet: { x: number; z: number };
+    shower: Rect; reception: Rect; breakroom: Rect; champ: { x: number; z: number; yaw: number } };
+  /** R7 (the new city): the grand station: the lobby, the hallway, the interrogation rooms, booking; the walkable first
+   *  floor (offices, the chief's corner office, the evidence room where confiscated loot ends up: lift it = heat) */
+  grand?: {
+    lobby: Rect; hall: Rect; interrogation: Rect[]; booking: Rect; stairs: Rect;
+    upY: number; upstairs: Rect; chief: Rect; offices: Rect[];
+    evidence: Rect; evidenceSpots: { x: number; y: number; z: number }[]; evidenceDoor: { x: number; z: number };
+    /** where the station's own cops walk (ground floor beat, the evidence guard's spot upstairs) */
+    beats: { pts: { x: number; z: number }[]; y: number }[];
+    /** R8: the real glass windows in the outside walls (u: x on the front N / back S, metres in from the front on
+     *  the sides E / W; y0..y1 above the ground) */
+    windows: { face: "N" | "S" | "E" | "W"; u0: number; u1: number; y0: number; y1: number }[];
+    /** R8: where the holding cell's key sits each morning (on the chief's desk) */
+    keySpot: { x: number; y: number; z: number };
+  };
+}
+
+/** R7: one of the two walk-in pawn shops (left: Twitchy Lou's HOT STUFF; right: its mirror). You sell over the till
+ *  counter; the glass counters keep you off the owner's side; the bouncer only comes if you start trouble. */
+export interface HotShop {
+  idx: number; name: string; owner: "lou" | "fran"; bouncer: "meat_locker" | "cold_cuts";
+  /** the whole building; its front faces -z (Gahookz Ghetto Lane) */
+  rect: Rect;
+  /** the customers' side and the owner's side of the glass counters */
+  floor: Rect; back: Rect;
+  /** the door (R7: round the side, on the avenue), just inside it, and where you stand at the till */
+  door: { x: number; z: number }; doorIn: { x: number; z: number }; stand: { x: number; z: number };
+  boss: { x: number; z: number; yaw: number }; guard: { x: number; z: number; yaw: number };
+  /** just outside the door (where the bouncer throws you) */
+  out: { x: number; z: number };
+  counters: Rect[];
+  armour: { x: number; z: number; yaw: number };
 }
 
 /** Road centre-line network (cop cars drive it): points + straight links between them. */
@@ -235,6 +288,14 @@ export interface ArenaLayout {
   roads?: Rect[];
   /** C1: round road surfaces (the roundabout): r0..r1 from the centre */
   roadRings?: { x: number; z: number; r0: number; r1: number }[];
+  /** R2 (road test): diagonal road surfaces, as segments with a half-width */
+  roadSegs?: { ax: number; az: number; bx: number; bz: number; hw: number }[];
+  /** which city this is ("new" = the R3 city; undefined = the classic city) */
+  variant?: string;
+  /** R3: the south edge, when the map runs further south than -halfSize (the fort bowl) */
+  southZ?: number;
+  /** R3: the empty landmark lots (north of Snob Row) for Blake to place the big landmarks on */
+  lots?: { name: string; rect: Rect }[];
   crosswalks?: Rect[];
   /** grid lines pedestrians walk along (x and z) */
   navLines?: number[];
@@ -250,7 +311,9 @@ export interface ArenaLayout {
   station?: StationDef;
   roadGraph?: RoadGraph;
   /** purely visual extras (streetlights, lane paint, parked police cars...) */
-  decor?: { kind: "streetlight" | "hydrant" | "dash" | "zebra" | "grass" | "copcar" | "cone" | "wetfloor" | "scaffold" | "umbrella"; x: number; z: number; w?: number; d?: number; h?: number; yaw?: number; text?: string }[];
+  decor?: { kind: "streetlight" | "hydrant" | "dash" | "zebra" | "grass" | "copcar" | "cone" | "wetfloor" | "scaffold" | "umbrella" | "streetsign"; x: number; z: number; w?: number; d?: number; h?: number; yaw?: number; text?: string;
+    /** R3: a street sign's second blade (its yaw; text is "FIRST|SECOND") */
+    yaw2?: number }[];
   // Slice 2A
   /** shallow water (the pond): you wade slowly, pedestrians walk around it */
   water?: Rect[];
@@ -259,7 +322,7 @@ export interface ArenaLayout {
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
   /** C1.1: people who stand at a spot (the apartment tower's doorman) */
-  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie"; x: number; z: number; yaw: number;
+  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist"; x: number; z: number; yaw: number;
     /** C5a: standing height (Uncle Dumpster lives on a rooftop) */
     y?: number;
     /** C4b: where she leans out of her window (the old lady) */
@@ -276,7 +339,7 @@ export interface ArenaLayout {
   roadNet?: RoadNet;
   blocks?: BlockDef[];
   /** C1: purely visual scenery the renderer draws (highway deck, rails, canal...) */
-  scenery?: { kind: "highway" | "rail" | "canal" | "light" | "grassdisc" | "pillar" | "clock" | "ladder" | "lamp"; x: number; z: number; w?: number; d?: number; h?: number; r?: number; yaw?: number; node?: number; approach?: number }[];
+  scenery?: { kind: "highway" | "rail" | "canal" | "light" | "grassdisc" | "pillar" | "clock" | "ladder" | "lamp" | "walk" | "viaduct"; x: number; z: number; w?: number; d?: number; h?: number; r?: number; yaw?: number; node?: number; approach?: number }[];
   /** C5a: the lobby: a rooftop squat just past the south edge of town where you wait for the match */
   lobby?: LobbyDef;
   /** C5c: the Trashington Bank (the renderer dresses it; the rules put the vault's gold in each morning) */
@@ -289,6 +352,11 @@ export interface ArenaLayout {
     office: Rect; belt: Rect; beltY: number; balcony: Rect; balconyY: number; wingY: number; roofY: number; stack: { x: number; z: number; r: number; h: number } };
   /** C5c.3: PAWN-O-RAMA ("Honest" Sal's shop in the Yards): its unit and the pawn case (where pawned things sit) */
   pawnShop?: { unit: number; shop: number; caseX: number; caseY: number; caseZ: number; yaw: number };
+  /** R5: the police station's upper storeys (R7: from y0 the outside is dressed; you can walk about inside it up to
+   *  walkTop, above that a hidden box keeps you out) */
+  stationUpper?: { rect: Rect; y0: number; y1: number; face: [number, number]; walkTop?: number };
+  /** R7: the two walk-in pawn shops (the new city) */
+  hotShops?: HotShop[];
   /** C5c.3: indexes of the boxes that pump (the dance floor) */
   pumpBoxes?: number[];
   resto?: { rect: Rect; door: Rect; out: { x: number; z: number; yaw: number }; hall: Rect; kitchen: Rect; stairs: Rect; roofY: number };
@@ -296,6 +364,8 @@ export interface ArenaLayout {
   statue?: { x: number; z: number; plinthH: number; yaw: number };
   /** C5b: Chinatown: the street (for the renderer's lanterns and the dragon parade's route), its two gates */
   chinatown?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
+  /** R4: Little Italy (Chinatown's mirror on the new map): the street, its two arches, the rows of café lights over it */
+  littleItaly?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
   /** named places, used by tests and tutorials */
   landmarks?: Record<string, { x: number; z: number; yaw: number; [extra: string]: number }>;
 }
@@ -339,7 +409,16 @@ export function onRoadAt(arena: ArenaLayout, x: number, z: number, pad = 0): boo
   if (roads) for (let i = 0; i < roads.length; i++) { const r = roads[i]; if (x >= r.minX - pad && x <= r.maxX + pad && z >= r.minZ - pad && z <= r.maxZ + pad) return true; }
   const rings = arena.roadRings;
   if (rings) for (const g of rings) { const d = Math.hypot(x - g.x, z - g.z); if (d >= g.r0 - pad && d <= g.r1 + pad) return true; }
+  const segs = arena.roadSegs;
+  if (segs) for (const s of segs) if (segDist(x, z, s.ax, s.az, s.bx, s.bz) <= s.hw + pad) return true;
   return false;
+}
+
+/** Distance from (x, z) to the segment a-b. */
+export function segDist(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / l2)) : 0;
+  return Math.hypot(x - (ax + vx * t), z - (az + vz * t));
 }
 
 /** C1.1: in the deep water (the canal)? (feet at the water level: standing on a dock or a bridge doesn't count) */
@@ -365,6 +444,77 @@ export function inWater(arena: ArenaLayout, x: number, z: number): boolean {
 
 export function box(x: number, z: number, w: number, d: number, h: number, kind: Box["kind"], baseY = 0): Box {
   return { x, y: baseY + h / 2, z, w, h, d, kind };
+}
+
+// ---------------------------------------------------------------------------------------
+// R3: angled footprints. A box with `poly` is an upright prism on a convex polygon; the rest of
+// the game asks the helpers below instead of assuming an x/z rectangle.
+
+/** An upright prism on a convex polygon (x/z points in either winding; stored counter-clockwise). */
+export function polyBox(pts: [number, number][], h: number, kind: Box["kind"], baseY = 0): Box {
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) { const [ax, az] = pts[i], [bx, bz] = pts[(i + 1) % pts.length]; area += ax * bz - bx * az; }
+  const poly = (area < 0 ? [...pts].reverse() : [...pts]).map(([x, z]) => [x, z] as [number, number]);
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const [x, z] of poly) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
+  return { ...box((minX + maxX) / 2, (minZ + maxZ) / 2, maxX - minX, maxZ - minZ, h, kind, baseY), poly };
+}
+
+/** A w x d rectangle turned by `yaw` (the same yaw as everything else: 0 = facing +z) round (cx, cz). */
+export function rotBox(cx: number, cz: number, w: number, d: number, yaw: number, h: number, kind: Box["kind"], baseY = 0): Box {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const at = (lx: number, lz: number): [number, number] => [cx + lx * c + lz * s, cz - lx * s + lz * c];
+  return polyBox([at(-w / 2, -d / 2), at(w / 2, -d / 2), at(w / 2, d / 2), at(-w / 2, d / 2)], h, kind, baseY);
+}
+
+/**
+ * Signed distance from (x, z) to a box's footprint (negative inside), and the direction out of it
+ * (the outward normal of the nearest face when inside; toward the point when outside).
+ */
+export function footSd(b: Box, x: number, z: number): { d: number; nx: number; nz: number } {
+  if (!b.poly) {
+    const minX = b.x - b.w / 2, maxX = b.x + b.w / 2, minZ = b.z - b.d / 2, maxZ = b.z + b.d / 2;
+    const cx = x < minX ? minX : x > maxX ? maxX : x, cz = z < minZ ? minZ : z > maxZ ? maxZ : z;
+    const dx = x - cx, dz = z - cz, d2 = dx * dx + dz * dz;
+    if (d2 > 1e-20) { const d = Math.sqrt(d2); return { d, nx: dx / d, nz: dz / d }; }
+    const left = x - minX, right = maxX - x, back = z - minZ, front = maxZ - z, m = Math.min(left, right, back, front);
+    if (m === left) return { d: -left, nx: -1, nz: 0 };
+    if (m === right) return { d: -right, nx: 1, nz: 0 };
+    if (m === back) return { d: -back, nx: 0, nz: -1 };
+    return { d: -front, nx: 0, nz: 1 };
+  }
+  const P = b.poly, n = P.length;
+  let inside = true, maxDot = -Infinity, mnx = 0, mnz = 0;
+  let best = Infinity, bx = 0, bz = 0;
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = P[i], [cx, cz] = P[(i + 1) % n];
+    const ex = cx - ax, ez = cz - az, len = Math.hypot(ex, ez) || 1;
+    const onx = ez / len, onz = -ex / len; // outward (counter-clockwise winding)
+    const dot = (x - ax) * onx + (z - az) * onz;
+    if (dot > 0) inside = false;
+    if (dot > maxDot) { maxDot = dot; mnx = onx; mnz = onz; }
+    const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (len * len)));
+    const px = ax + ex * t, pz = az + ez * t, d2 = (x - px) * (x - px) + (z - pz) * (z - pz);
+    if (d2 < best) { best = d2; bx = px; bz = pz; }
+  }
+  if (inside) return { d: maxDot, nx: mnx, nz: mnz };
+  const d = Math.sqrt(best) || 1e-9;
+  return { d, nx: (x - bx) / d, nz: (z - bz) / d };
+}
+
+/** Is (x, z) within `pad` of the footprint? (Plain boxes: the old square test, so nothing changes for them.) */
+export function inFoot(b: Box, x: number, z: number, pad = 0): boolean {
+  if (!b.poly) return Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad;
+  return footSd(b, x, z).d < pad;
+}
+
+/** A box's side faces: each edge of the footprint with its outward normal, length and middle. */
+export function footFaces(b: Box): { ax: number; az: number; bx: number; bz: number; nx: number; nz: number; len: number; mx: number; mz: number }[] {
+  const P: [number, number][] = b.poly ?? [[b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z + b.d / 2], [b.x - b.w / 2, b.z + b.d / 2]];
+  return P.map(([ax, az], i) => {
+    const [bx, bz] = P[(i + 1) % P.length], len = Math.hypot(bx - ax, bz - az) || 1;
+    return { ax, az, bx, bz, nx: (bz - az) / len, nz: -(bx - ax) / len, len, mx: (ax + bx) / 2, mz: (az + bz) / 2 };
+  });
 }
 
 export function buildTestArena(): ArenaLayout {

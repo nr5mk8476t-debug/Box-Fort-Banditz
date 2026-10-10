@@ -4,6 +4,8 @@ import {
   World, buildTrashington, inDeepWater, LOOT, lootDef, PLAYER, GIANT_DRAG_MUL, TUG_MAX_TIME, FISTS, ITEM_MAX,
   type MoveInput, type ArenaLayout, type Box, type WorldEvent,
 } from "../src/index.js";
+import { setCityMap as useCity } from "../src/index.js";
+useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
   ({ seq, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false, ...p });
@@ -1505,4 +1507,370 @@ test("C5c.3 PAWN-O-RAMA: in the Yards; fence (40%), pawn (30% now, buy back 40% 
   assert.equal(vin.state, "chase"); assert.equal(vin.target, "b");
   w.action("a", { a: "use", prop: cs.def.id });
   assert.ok(w.takeEvents().some((e) => e.t === "empty"), "a broken case: no business till dawn");
+});
+
+// ---------------------------------------------------------------- R3: angled walls in the world (cops, walkers, spray tags)
+import { rotBox as rotBoxW, footSd as footSdW } from "../src/index.js";
+test("R3 angled walls: cops can't see through one, walkers can't walk through one, and you can tag its angled face", () => {
+  const { w, p } = c4World();
+  const T = w.arena.landmarks!.testYard;
+  // a wall turned 45 degrees in the build yard: its face toward (T.x + 2, T.z - 2) looks south-east
+  const wall = rotBoxW(T.x, T.z, 8, 1.2, -Math.PI / 4, 4, "wall"); // (yaw -45: it runs south-west to north-east)
+  w.arena.boxes = [...w.arena.boxes, wall];
+  const n = 0.7071;
+  // the cops' line of sight: through the wall (blocked) and past its end (clear)
+  assert.equal(w.police.los(T.x + 2, 1.6, T.z - 2, T.x - 2, 1.6, T.z + 2), false, "seen through the angled wall");
+  assert.equal(w.police.los(T.x + 6, 1.6, T.z - 2, T.x + 6, 1.6, T.z + 6), true, "clear past its end");
+  // pedestrians' straight-line check
+  assert.equal(w.npc.lineClear(T.x + 2, T.z - 2, T.x - 2, T.z + 2, 0), false, "walkers can't cut through it");
+  // spray a tag on the angled face, standing in front of it
+  giveCan(w);
+  w.debugTeleport("a", T.x + 1.1, T.z - 1.1, -Math.PI * 3 / 4);
+  settle(w, 0.3);
+  const fx = T.x + 0.6 * n, fz = T.z - 0.6 * n; // (the face is 0.6 m out from the middle line; the cops look every 0.7 m, so walls this thick)
+  assert.ok(Math.abs(footSdW(wall, fx, fz).d) < 0.02, "the point is on the face");
+  w.action("a", { a: "tagStart" });
+  settle(w, TAG.hold + 0.1);
+  w.action("a", { a: "tag", x: fx, y: 1.4, z: fz, nx: n, nz: -n } as never);
+  const tag = [...w.tags.values()].find((t) => t.by === "a");
+  assert.ok(tag, "tagged the angled wall");
+  assert.ok(Math.abs(tag!.nx - n) < 0.01 && Math.abs(tag!.nz + n) < 0.01, `the tag lies flat on the face (normal ${tag!.nx.toFixed(2)}, ${tag!.nz.toFixed(2)})`);
+  void p;
+});
+
+// ---------------------------------------------------------------- R5: HOT STUFF PAWN & LOAN (the new city)
+function hotWorld(players = 2, seed = 5) {
+  useCity("new"); const arena = buildTrashington(); useCity("classic");
+  const w = new World({ seed, npcs: 0, spawnLoot: false, arena });
+  const ps = [];
+  for (let i = 0; i < players; i++) ps.push(w.addPlayer("p" + i, "P" + i));
+  w.resetCity(false);
+  w.takeEvents();
+  return { w, ps, hs: arena.hotShops![0], shops: arena.hotShops! };
+}
+function holdNew(w: World, pl: { id: string; move: { x: number; y: number; z: number }; pockets: string[] }, type: string, value: number) {
+  const id = w.placeItem(type, pl.move.x, pl.move.y + 0.3, pl.move.z);
+  w.items.get(id)!.value = value;
+  w.action(pl.id, { a: "grab", item: id }); settle(w, 0.4);
+  const slot = pl.pockets.indexOf(id);
+  if (slot >= 0) w.action(pl.id, { a: "select", slot });
+  assert.equal(w.activeItem(pl as never)?.item.id, id, `holds the ${type}`);
+  return id;
+}
+const inR = (r: { minX: number; maxX: number; minZ: number; maxZ: number }, x: number, z: number, m = 0) => x >= r.minX - m && x <= r.maxX + m && z >= r.minZ - m && z <= r.maxZ + m;
+const meat = (w: World, kind = "meat_locker") => [...w.npc.npcs.values()].find((n) => n.kind === kind)!;
+const louN = (w: World, kind = "lou") => [...w.npc.npcs.values()].find((n) => n.kind === kind)!;
+const shopProp = (w: World, kind: string, shop: number) => [...w.props.props.values()].find((p) => p.def.kind === kind && p.def.shop === shop)!;
+
+test("R7 the two pawn shops: each owner buys over the till (40%), each has their own 3 wanted things (x3, the first of each), and mutters them only to whoever walks up", () => {
+  const { w, ps: [a, b], shops } = hotWorld();
+  assert.equal(shops.length, 2);
+  assert.ok(louN(w, "lou") && louN(w, "fran") && meat(w, "meat_locker") && meat(w, "cold_cuts"), "Lou, Fran, Meat Locker and Cold Cuts are in");
+  assert.equal(w.pawn.lists.length, 2);
+  assert.ok(w.pawn.lists.every((l) => l.hot.length === 3), "3 wanted each");
+  assert.ok(!w.pawn.lists[0].hot.some((t) => w.pawn.lists[1].hot.includes(t)), "different lists");
+  for (const hs of shops) {
+    const i = hs.idx, till = shopProp(w, "pawncounter", i);
+    assert.ok(Math.hypot(till.def.x - hs.stand.x, till.def.z - hs.stand.z) < 1, "the till is by the stand");
+    a.cash = 0;
+    w.debugTeleport(b.id, 40, -95, 0);
+    w.debugTeleport(a.id, hs.stand.x, hs.stand.z, 0); a.move.y = 0.18;
+    settle(w, 0.3);
+    const told = w.takeEvents().filter((e) => e.t === "louList") as Extract<WorldEvent, { t: "louList" }>[];
+    assert.equal(told.length, 1, `shop ${i}: told once`); assert.equal(told[0].p, a.id, "only to A"); assert.equal(told[0].shop, i);
+    assert.deepEqual(told[0].types, w.pawn.wanted(i));
+    holdNew(w, a, "gold_chain", 100);
+    w.action(a.id, { a: "use", prop: till.def.id });
+    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 40 && !e.hot), "40% on the spot"); assert.equal(a.cash, 40);
+    const want = w.pawn.lists[i].hot[0];
+    holdNew(w, a, want, 50);
+    w.action(a.id, { a: "use", prop: till.def.id });
+    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 150 && e.hot), "x3"); assert.equal(a.cash, 190);
+    holdNew(w, a, want, 50);
+    w.action(a.id, { a: "use", prop: till.def.id });
+    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 20 && !e.hot), "already got one");
+    assert.ok(!w.pawn.wanted(i).includes(want), "crossed off");
+  }
+  // a new scavenge: new lists, everybody's told again
+  const old = w.pawn.lists.map((l) => l.hot.join()).join("|");
+  let changed = false;
+  for (let i = 0; i < 4 && !changed; i++) { w.resetCity(true); changed = w.pawn.lists.map((l) => l.hot.join()).join("|") !== old; }
+  assert.ok(changed, "new lists");
+  w.takeEvents(); w.debugTeleport(a.id, shops[1].stand.x, shops[1].stand.z, 0); a.move.y = 0.18; settle(w, 0.3);
+  assert.ok(w.takeEvents().some((e) => e.t === "louList" && e.p === a.id && e.shop === 1));
+});
+
+test("R7 the bouncers: nothing to rob, so walking about, lingering and picking things up is fine; punch the owner, throw stuff at them or smash a glass counter and he comes; one hit = out cold 6 s, everything dropped, thrown out", () => {
+  for (const shop of [0, 1]) for (const why of ["fine", "punch", "smash", "throw"] as const) {
+    const { w, ps: [a], shops } = hotWorld(1);
+    const hs = shops[shop], g = meat(w, hs.bouncer), boss = louN(w, hs.owner);
+    w.takeEvents();
+    if (why === "fine") {
+      w.debugTeleport(a.id, hs.stand.x, hs.stand.z, 0); a.move.y = 0.18; settle(w, 30);
+      const id = w.placeItem("gold_chain", hs.stand.x + 0.6, 0.5, hs.stand.z); settle(w, 0.6);
+      w.action(a.id, { a: "grab", item: id }); settle(w, 0.5);
+      assert.equal(g.state, "work", `shop ${shop}: hanging about and picking things up is fine (${g.state})`);
+      continue;
+    }
+    if (why === "punch") {
+      w.debugTeleport(a.id, hs.stand.x, hs.stand.z, 0); a.move.y = 0.18; settle(w, 0.2);
+      w.npc.hit(boss.id, a.id, a.move.x, a.move.z); settle(w, 0.2);
+    } else if (why === "smash") {
+      const c = hs.counters[2] ?? hs.counters[0];
+      const cs = [...w.props.props.values()].find((p) => p.def.kind === "glasscounter" && Math.hypot(p.def.x - (c.minX + c.maxX) / 2, p.def.z - (c.minZ + c.maxZ) / 2) < 0.1)!;
+      const side = Math.sign(hs.door.x) || 1; // (stand on the shop-floor side of the side case)
+      const x = side < 0 ? c.minX - 0.6 : c.maxX + 0.6;
+      w.debugTeleport(a.id, x, (c.minZ + c.maxZ) / 2, side < 0 ? Math.PI / 2 : -Math.PI / 2); a.move.y = 0.18; settle(w, 0.2);
+      for (let i = 0; i < 3; i++) { w.props.smash(a, cs.def.id); settle(w, 0.4); }
+    } else {
+      w.debugTeleport(a.id, hs.stand.x, hs.stand.z, 0); a.move.y = 0.18; settle(w, 0.2);
+      holdNew(w, a, "brick", 1);
+      a.move.yaw = 0;
+      w.action(a.id, { a: "throw", charge: 0.35, yaw: 0, pitch: -0.05 }); settle(w, 1.2);
+    }
+    const ev = w.takeEvents();
+    assert.ok((g.state === "chase" && g.target === a.id) || a.move.knockT > 0, `shop ${shop}, ${why}: ${hs.bouncer} comes (${g.state}; ${ev.filter((e) => e.t === "pawnTrouble" || e.t === "smash").map((e) => JSON.stringify(e)).join(" ")})`);
+  }
+  // his punch: out cold for 6 s, everything you carry flies, you sail backwards
+  const { w, ps: [a], hs } = hotWorld(1);
+  const g = meat(w);
+  w.debugTeleport(a.id, hs.stand.x - 1, hs.stand.z - 1, 0); a.move.y = 0.18;
+  holdNew(w, a, "gold_chain", 100); const pocket = w.placeItem("mixtape", a.move.x, 0.5, a.move.z); w.action(a.id, { a: "grab", item: pocket }); settle(w, 0.3);
+  w.pawn.trouble(a, "punch", 0);
+  let hit = false, t = 0;
+  for (; t < 20 && !hit; t += 1 / 60) { w.tick(); if (a.move.knockT > 0) hit = true; }
+  assert.ok(hit, `he got to you (${g.state}, ${g.move.x.toFixed(1)},${g.move.z.toFixed(1)})`);
+  assert.ok(a.move.knockT >= 5.9, `out cold ${a.move.knockT.toFixed(1)} s`);
+  assert.ok(!a.hand && a.pockets.every((s) => !s), "dropped everything");
+  assert.ok(Math.hypot(a.move.vx, a.move.vz) > 5, "sent flying");
+  // and he follows you out of the shop (through the door, not the wall)
+  const { w: w2, ps: [c], hs: h2 } = hotWorld(1);
+  const g2 = meat(w2);
+  w2.debugTeleport(c.id, h2.out.x - 6, h2.out.z - 2, 0); c.move.y = 0.18; settle(w2, 0.2);
+  w2.pawn.trouble(c, "throw", 0);
+  let caught = false;
+  for (let i = 0; i < 20 * 60 && !caught; i++) { w2.tick(); c.move.vx = c.move.vz = 0; if (c.move.knockT > 0) caught = true; }
+  assert.ok(caught, `out of the shop after you (${g2.state} at ${g2.move.x.toFixed(1)},${g2.move.z.toFixed(1)})`);
+});
+
+test("R5/R7 the bouncer can be beaten: heaps of punches, out cold 40 s, then he's back at his post", () => {
+  const { w, ps: [a], hs } = hotWorld(1);
+  const g = meat(w);
+  let n = 0;
+  a.move.immuneT = 1e9; // (so his swings can't stop the test)
+  while (g.state !== "ko" && n < 60) { g.state = "work"; w.npc.hit(g.id, a.id, g.move.x, g.move.z - 1); n++; settle(w, 0.25); }
+  assert.equal(g.state, "ko"); assert.ok(n >= 28, `${n} punches (R6: heaps stronger)`);
+  settle(w, 30); assert.equal(g.state, "ko", "still out at 30 s");
+  settle(w, 12);
+  assert.notEqual(g.state, "ko"); assert.equal(g.hp, 30, "back to full health");
+  settle(w, 8);
+  assert.ok(Math.hypot(g.move.x - hs.guard.x, g.move.z - hs.guard.z) < 1, "back at his post");
+});
+
+// ---------------------------------------------------------------- R6: the new station's holding cell
+test("R6 holding cell: busted = in the one shared cell, free to walk about; E at the door starts picking (and you can step away); the toilet erupts and knocks everyone in the cell back", () => {
+  const { w, ps: [a, b] } = hotWorld(2);
+  const h = w.arena.station!.holding!;
+  for (const p of [a, b]) { p.notoriety = 60; w.police.bust(p, "test", false); }
+  for (const p of [a, b]) { assert.ok(p.jailT > 0 && inR(h.cell, p.move.x, p.move.z), `${p.id} in the cell`); assert.equal(p.lock, null, "not picking yet"); }
+  // walk about
+  const x0 = a.move.x;
+  for (let i = 0; i < 40; i++) { w.pushInputs(a.id, [{ seq: a.lastSeq + 1, mx: 0, mz: 1, yaw: Math.PI / 2, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false }]); w.tick(); }
+  assert.ok(Math.abs(a.move.x - x0) > 1, "walks about the cell");
+  assert.ok(inR(h.cell, a.move.x, a.move.z, 0.5), "still inside");
+  // the door: start picking, step away
+  const door = cprop(w, "celldoor");
+  w.debugTeleport(a.id, h.door.x + 1.0, h.door.z, -Math.PI / 2); a.move.y = 0.18; settle(w, 0.2); w.takeEvents(); // (R7: the bars run along the hallway)
+  w.action(a.id, { a: "use", prop: door.def.id });
+  assert.ok(a.lock && w.takeEvents().some((e) => e.t === "lockStart" && e.p === a.id), "picking");
+  w.action(a.id, { a: "pickStop" } as never);
+  assert.equal(a.lock, null, "stepped away");
+  // the toilet
+  const toilet = cprop(w, "toilet");
+  w.debugTeleport(a.id, h.toilet.x - 0.9, h.toilet.z, Math.PI / 2); a.move.y = 0.18; w.debugTeleport(b.id, h.toilet.x - 3, h.toilet.z - 1.5, 0); b.move.y = 0.18;
+  settle(w, 0.3); w.takeEvents();
+  w.action(a.id, { a: "use", prop: toilet.def.id });
+  const ev = w.takeEvents().find((e) => e.t === "flush") as Extract<WorldEvent, { t: "flush" }> | undefined;
+  assert.ok(ev && ev.hit.includes(a.id) && ev.hit.includes(b.id), "both soaked");
+  assert.ok(Math.hypot(b.move.vx, b.move.vz) > 3 && b.move.vy > 2, "knocked back");
+  w.action(a.id, { a: "use", prop: toilet.def.id });
+  assert.ok(!w.takeEvents().some((e) => e.t === "flush"), "it has to refill first");
+});
+
+test("R6 the Champ: nearly unbeatable (40 punches); his one hit knocks you down and he sits on you till you're up; knock him out and he drops the Spoon of Destiny, which Lou won't buy", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const h = w.arena.station!.holding!;
+  const champ = [...w.npc.npcs.values()].find((n) => n.kind === "champ")!;
+  assert.ok(champ && inR(h.cell, champ.move.x, champ.move.z), "the Champ is in the cell");
+  a.notoriety = 60; w.police.bust(a, "test", false);
+  w.debugTeleport(a.id, champ.move.x, champ.move.z + 1.1, Math.PI); a.move.y = 0.18; settle(w, 0.2);
+  w.action(a.id, { a: "punch", yaw: Math.PI, pitch: 0 } as never);
+  let down = false;
+  for (let i = 0; i < 6 * 60 && !down; i++) { w.tick(); if (a.move.knockT > 0) down = true; }
+  assert.ok(down, `he knocked you down (${champ.state})`);
+  assert.ok(a.move.knockT >= 5.5, "for a while");
+  settle(w, 0.5);
+  assert.equal(champ.state, "sit", "he's sitting on you");
+  assert.ok(Math.hypot(champ.move.x - a.move.x, champ.move.z - a.move.z) < 0.6, "right on top of you");
+  for (let i = 0; i < 9 * 60 && a.move.knockT > 0; i++) { w.pushInputs(a.id, [{ seq: a.lastSeq + 1, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false }]); w.tick(); } // (time passes for you as your inputs arrive)
+  settle(w, 0.3);
+  assert.notEqual(champ.state, "sit", `up you get, off he gets (knockT ${a.move.knockT.toFixed(1)}, ${champ.state})`);
+  // knock him out (it takes a gang)
+  let n = 0; a.move.immuneT = 1e9;
+  while ((champ.state as string) !== "ko" && n < 80) { champ.state = "work"; w.npc.hit(champ.id, a.id, champ.move.x, champ.move.z + 1); n++; settle(w, 0.1); }
+  assert.equal(champ.state, "ko"); assert.ok(n >= 38, `${n} punches`);
+  settle(w, 0.8);
+  const spoon = [...w.items.values()].find((it) => it.type === "golden_spoon");
+  assert.ok(spoon, "the Spoon of Destiny");
+  assert.ok(lootDef("golden_spoon").blackMarket && lootDef("golden_spoon").valueMin >= 2000, "black market only, worth a fortune");
+  // Lou won't touch it
+  const { w: w2, ps: [c], hs } = hotWorld(1);
+  w2.debugTeleport(c.id, hs.stand.x, hs.stand.z, 0); c.move.y = 0.18; settle(w2, 0.2);
+  holdNew(w2, c, "golden_spoon", 3000); w2.takeEvents();
+  w2.action(c.id, { a: "use", prop: cprop(w2, "pawncounter").def.id });
+  assert.ok(w2.takeEvents().some((e) => e.t === "pawnNo" && e.reason === "black"), "Lou won't touch it");
+  assert.equal(c.cash, 0);
+});
+
+// ---------------------------------------------------------------- R7: the grand station, the city's police presence
+import { CHAMP as CHAMP7, PATROL, EVIDENCE_HEAT } from "../src/index.js";
+function onDuty(w: World) { const m = w.match as unknown as { phase: string; timeLeft: number }; m.phase = "scavenge"; m.timeLeft = 9999; }
+
+test("R7 the Champ: punches 1 and 2 just nudge him back; the 3rd (inside a few seconds) makes him dizzy, spinning; spaced out, they never add up", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const champ = [...w.npc.npcs.values()].find((n) => n.kind === "champ")!;
+  a.notoriety = 60; w.police.bust(a, "test", false); // (in the cell with him)
+  w.debugTeleport(a.id, champ.move.x, champ.move.z + 1.2, Math.PI); a.move.y = 0.18;
+  a.move.immuneT = 1e9;
+  const punch = () => { w.npc.hit(champ.id, a.id, champ.move.x, champ.move.z + 1); settle(w, 0.3); };
+  punch(); assert.notEqual(champ.state, "stunned", "1: a nudge"); assert.equal(champ.state, "chase", "and he turns on you");
+  punch(); assert.notEqual(champ.state, "stunned", "2: a nudge");
+  punch(); assert.equal(champ.state, "stunned", "3: dizzy"); assert.ok(champ.stateT > 1.5, `for ${champ.stateT.toFixed(1)} s`);
+  settle(w, CHAMP7.dizzy + 0.5);
+  assert.notEqual(champ.state, "stunned", "he shakes it off");
+  for (let i = 0; i < 4; i++) { champ.state = "work"; punch(); settle(w, CHAMP7.stunWindow + 0.2); assert.notEqual(champ.state, "stunned", `spaced-out punch ${i + 1}: no stun`); }
+});
+
+test("R7 the evidence room: busted, your loot goes up onto its shelves; anybody can lift it back, but that's stealing from the police (heat, and the guard comes)", () => {
+  const { w, ps: [a, b] } = hotWorld(2);
+  const g = w.arena.station!.grand!;
+  holdNew(w, a, "gold_chain", 120);
+  const pk = w.placeItem("mixtape", a.move.x, 0.5, a.move.z); w.action(a.id, { a: "grab", item: pk }); settle(w, 0.3);
+  a.notoriety = 60; w.police.bust(a, "test", false);
+  settle(w, 1.0);
+  const bagged = [...w.items.values()].filter((it) => it.evidence);
+  assert.equal(bagged.length, 2, "both things went to evidence");
+  for (const it of bagged) assert.ok(inR(g.evidence, it.body.x, it.body.z) && it.body.y > g.upY, `${it.type} on the shelves upstairs (${it.body.x.toFixed(1)},${it.body.y.toFixed(1)},${it.body.z.toFixed(1)})`);
+  assert.equal(bagged.find((it) => it.type === "gold_chain")!.value, 120, "still worth the same");
+  // the station's cops come on duty: one walks the ground floor, one guards the evidence room
+  onDuty(w); settle(w, 2);
+  const guard = [...w.npc.npcs.values()].find((n) => n.kind === "cop" && n.beat === 1);
+  assert.ok(guard && guard.move.y > 4, "the evidence guard stands upstairs");
+  // B sneaks in and lifts the chain
+  const chain = bagged.find((it) => it.type === "gold_chain")!;
+  w.debugTeleport(b.id, chain.body.x + 0.8, chain.body.z, -Math.PI / 2); b.move.y = g.upY + 0.05; settle(w, 0.3); w.takeEvents();
+  w.action(b.id, { a: "grab", item: chain.id }); settle(w, 0.3);
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "evidenceLift" && e.p === b.id), "lifted from evidence");
+  assert.ok(b.notoriety >= EVIDENCE_HEAT * 0.9, `heat ${b.notoriety}`);
+  assert.ok(guard!.state === "chase" && guard!.target === b.id, `the guard comes for you (${guard!.state})`);
+});
+
+test("R7 police presence: foot patrols walk the town and cruisers drive round all day; they leave you alone till you're wanted, then chase; afterwards they go back on patrol", () => {
+  useCity("new"); const arena = buildTrashington(); useCity("classic");
+  const w = new World({ seed: 9, npcs: 4, spawnLoot: false, arena });
+  const a = w.addPlayer("a", "A");
+  w.resetCity(false); onDuty(w);
+  w.debugTeleport(a.id, 0, -95, 0);
+  settle(w, 20);
+  const cops = () => [...w.npc.npcs.values()].filter((n) => n.kind === "cop");
+  assert.equal(cops().filter((c) => c.patrol).length, PATROL.foot, "foot patrols");
+  assert.equal(w.police.cars.filter((c) => c.patrol).length, PATROL.cars, "cruisers");
+  assert.ok(w.police.cars.every((c) => c.mode === "cruise"), "cruising (no sirens)");
+  assert.equal(cops().filter((c) => c.beat !== undefined).length, 4, "the station's own four (R8)");
+  const p0 = cops().find((c) => c.patrol)!;
+  const x0 = p0.move.x, z0 = p0.move.z;
+  settle(w, 6);
+  assert.ok(Math.hypot(p0.move.x - x0, p0.move.z - z0) > 3, "they walk their beat");
+  // stand right in front of one, clean: nothing
+  w.debugTeleport(a.id, p0.move.x + 2, p0.move.z, 0); settle(w, 2);
+  assert.equal(p0.state, "beat", "a clean bandit is left alone");
+  // wanted, in plain sight: they're on you
+  w.debugTeleport(a.id, p0.move.x + 3, p0.move.z, 0); a.notoriety = 40; a.seenT = w.time; settle(w, 0.6);
+  assert.ok(((p0.state as string) === "chase" || (p0.state as string) === "windup") && p0.target === a.id, `chased (${p0.state})`);
+  // heat gone: back on patrol, not sent home
+  a.notoriety = 0; settle(w, 3);
+  assert.equal(p0.state, "beat", "back on patrol"); assert.ok(w.npc.npcs.has(p0.id));
+  // a cruiser that sees you wanted turns its siren on
+  const car = w.police.cars.find((c) => c.patrol)!;
+  a.jailT = 0; a.lock = null; a.move.knockT = 0; // (in case that cop already got you)
+  w.debugTeleport(a.id, car.x + Math.sin(car.yaw) * 5, car.z + Math.cos(car.yaw) * 5, 0); a.notoriety = 65; settle(w, 1.2);
+  assert.ok(car.mode !== "cruise" && car.target === a.id, `the cruiser's after you (${car.mode})`);
+});
+
+test("R7 the receptionist: punch the front desk (in a police station) and it's heat", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const pam = [...w.npc.npcs.values()].find((n) => n.kind === "receptionist")!;
+  assert.ok(pam, "Officer Pam at the front desk");
+  w.npc.hit(pam.id, a.id, pam.move.x, pam.move.z + 1);
+  assert.ok(a.notoriety >= 25, `heat ${a.notoriety}`);
+  assert.equal(pam.state, "cower");
+});
+
+// ---------------------------------------------------------------- R8: doors, the chief's key, the station's guards
+import { CELL_KEY, nearBoxes as nearB } from "../src/index.js";
+test("R8 glass doors: E opens and shuts them (shut, you can't walk through); a cop on the way opens a shut door himself", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const door = cprop(w, "door");
+  const d = door.def, b = w.arena.boxes[d.box!];
+  assert.ok(door.ready, "shut to start with");
+  assert.ok(nearB(w.arena, d.x, d.z, 0.1).includes(b), "a shut door blocks");
+  w.debugTeleport(a.id, d.x, d.z + 1.2, Math.PI); a.move.y = 0.18; settle(w, 0.2); w.takeEvents();
+  w.action(a.id, { a: "use", prop: d.id });
+  assert.ok(!door.ready && w.takeEvents().some((e) => e.t === "door" && e.open), "opened");
+  assert.ok(!nearB(w.arena, d.x, d.z, 0.1).includes(b), "open: walk right through");
+  w.action(a.id, { a: "use", prop: d.id });
+  assert.ok(door.ready, "shut again");
+  // a cop jogging up to it opens it
+  const cop = w.police.spawnCop(a, { x: d.x, z: d.z - 1.0 }, true)!;
+  cop.move.vx = 0; cop.move.vz = 2;
+  a.notoriety = 60; w.debugTeleport(a.id, d.x, d.z + 4, Math.PI); a.move.y = 0.18;
+  let opened = false;
+  for (let i = 0; i < 4 * 60 && !opened; i++) { w.tick(); if (!door.ready) opened = true; }
+  assert.ok(opened, "the cop opened it");
+});
+
+test("R8 the chief's key: on the chief's desk each day; lifting it is heat; E at the cell door: it opens for 20 s and whoever walks out is free (wanted); then it shuts", () => {
+  const { w, ps: [a, b] } = hotWorld(2);
+  const g = w.arena.station!.grand!, h = w.arena.station!.holding!;
+  const key = [...w.items.values()].find((it) => it.type === "cell_key")!;
+  assert.ok(key && Math.hypot(key.body.x - g.keySpot.x, key.body.z - g.keySpot.z) < 0.5, "on the desk");
+  // B gets busted; A lifts the key upstairs
+  b.notoriety = 60; w.police.bust(b, "test", false);
+  w.debugTeleport(a.id, key.body.x - 0.6, key.body.z, Math.PI / 2); a.move.y = g.upY + 0.05; settle(w, 0.4); w.takeEvents();
+  w.action(a.id, { a: "grab", item: key.id }); settle(w, 0.2);
+  assert.ok(w.takeEvents().some((e) => e.t === "keyLift" && e.p === a.id), "lifted"); assert.ok(a.notoriety >= 30, `heat ${a.notoriety}`);
+  a.notoriety = 0;
+  // A at the cell door, from the hallway
+  const cd = cprop(w, "celldoor");
+  w.debugTeleport(a.id, h.door.x - 0.8, h.door.z, Math.PI / 2); a.move.y = 0.18; settle(w, 0.2); w.takeEvents();
+  w.action(a.id, { a: "use", prop: cd.def.id });
+  assert.ok(!cd.ready && w.takeEvents().some((e) => e.t === "cellOpen"), "the cell's open");
+  assert.ok(!w.items.has(key.id), "the key's used up");
+  assert.ok(b.jailT > 0, "B's still inside");
+  // B walks out through the door
+  w.debugTeleport(b.id, h.door.x + 0.6, h.door.z, -Math.PI / 2); b.move.y = 0.18;
+  for (let i = 0; i < 2 * 60 && b.jailT > 0; i++) { w.pushInputs(b.id, [{ seq: b.lastSeq + 1, mx: 0, mz: 1, yaw: -Math.PI / 2, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false }]); w.tick(); }
+  assert.equal(b.jailT, 0, `walked out (${b.move.x.toFixed(1)},${b.move.z.toFixed(1)})`);
+  assert.ok(b.notoriety >= 30, "free, but wanted");
+  settle(w, CELL_KEY.open + 0.5);
+  assert.ok(cd.ready, "it shuts again");
+});
+
+test("R8 four cops guard the station (front doors, the hallway, outside the cell, the evidence room)", () => {
+  const { w } = hotWorld(1);
+  onDuty(w); settle(w, 3);
+  const st = [...w.npc.npcs.values()].filter((n) => n.kind === "cop" && n.beat !== undefined);
+  assert.equal(st.length, 4, `${st.length} station cops`);
+  assert.ok(st.every((c) => inR(w.arena.station!.rect, c.move.x, c.move.z)), "all inside");
 });

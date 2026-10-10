@@ -272,8 +272,53 @@ export class TrafficSystem {
   private rnd() { this.seed = (this.seed * 16807) % 2147483647; return this.seed / 2147483647; }
 
   /** Random way on from the end of a road lane (straight on a bit more likely). */
+  /** R4: the street a parade has closed (from its warning on): Chinatown's for the dragon, Little Italy's for the festa */
+  private closedStreet(): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
+    const k = this.w.match.ev?.kind, a = this.w.arena;
+    return k === "parade" ? a.chinatown?.street ?? null : k === "festa" ? a.littleItaly?.street ?? null : null;
+  }
+  /** does this connector lead into the closed street? */
+  private intoClosed(o: number, R = this.closedStreet()): boolean {
+    if (!R) return false;
+    const out = this.lanes[this.lanes[o].outLane], m = out?.pts[out.pts.length >> 1];
+    return !!m && m.x > R.minX && m.x < R.maxX && m.z > R.minZ && m.z < R.maxZ;
+  }
+
+  /** R4: as a parade goes live, any car still caught in its closed street is towed to a quiet road elsewhere
+   *  (the float fills the street: it would otherwise roll straight through a car waiting in it) */
+  towFromClosed() {
+    const R = this.closedStreet();
+    if (!R) return;
+    const inR = (x: number, z: number, m = 0) => x > R.minX - m && x < R.maxX + m && z > R.minZ - m && z < R.maxZ + m;
+    const road = this.lanes.filter((l) => !l.conn && l.len > 14);
+    for (const car of this.cars) {
+      if (!inR(car.x, car.z)) continue;
+      const pick = road.find((l, i) => {
+        const p = laneAt(l, l.len * 0.5);
+        return !inR(p.x, p.z, 10) && (i + this.cars.indexOf(car)) % 3 === 0 && this.cars.every((o) => Math.hypot(o.x - p.x, o.z - p.z) > 14);
+      }) ?? road.find((l) => { const p = laneAt(l, l.len * 0.5); return !inR(p.x, p.z, 10) && this.cars.every((o) => Math.hypot(o.x - p.x, o.z - p.z) > 14); });
+      if (!pick) continue;
+      const p = laneAt(pick, pick.len * 0.5);
+      Object.assign(car, { lane: pick.id, s: pick.len * 0.5, v: 0, x: p.x, z: p.z, yaw: p.yaw, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0 });
+      car.next = this.pickNext(pick, -1);
+    }
+  }
+
+  /** does this connector lead the same way the parade is walking? */
+  private withParade(o: number): boolean {
+    const k = this.w.match.ev?.kind, a = this.w.arena;
+    const rt = k === "parade" ? a.chinatown?.route : k === "festa" ? a.littleItaly?.route : undefined;
+    const out = this.lanes[this.lanes[o].outLane];
+    if (!rt || rt.length < 2 || !out || out.pts.length < 2) return false;
+    const A = out.pts[0], B = out.pts[out.pts.length - 1];
+    return (B.x - A.x) * (rt[1].x - rt[0].x) + (B.z - A.z) * (rt[1].z - rt[0].z) > 0;
+  }
+
   private pickNext(l: Lane, avoid: number): number {
-    const opts = l.outs.filter((o) => o !== avoid);
+    const all = l.outs.filter((o) => o !== avoid), open = all.filter((o) => !this.intoClosed(o));
+    // (R4: no way round the parade's street: go into it the way the parade is going, never against it)
+    const along = open.length ? [] : all.filter((o) => this.withParade(o));
+    const opts = open.length ? open : along.length ? along : all;
     if (!opts.length) return l.outs[0] ?? -1;
     let total = 0;
     // (a nudge toward roads that have seen few cars, so traffic spreads over the whole network)
@@ -352,7 +397,7 @@ export class TrafficSystem {
       if (p.respawnT <= 0) this.getUp(p);
     }
     if (!this.lanes.length) return;
-    const truck = w.match.truck;
+    const truck = w.match.truck, bodies = w.match.paradeBodies();
     for (const car of this.cars) {
       let lane = this.lanes[car.lane];
       const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
@@ -365,6 +410,7 @@ export class TrafficSystem {
       const nextConn = !lane.conn && car.next >= 0 ? this.lanes[car.next] : null;
       const toEnd = lane.len - car.s;
       // stop line: road lanes end at a junction
+      if (!lane.conn && nextConn && !car.go && (toEnd > 3 || car.v < 0.5) && this.intoClosed(car.next) && (lane.outs.some((o) => !this.intoClosed(o)) || (!this.withParade(car.next) && lane.outs.some((o) => this.withParade(o))))) car.next = this.pickNext(lane, car.next); // (R4: the parade's street is closed: go round)
       if (!lane.conn && nextConn) {
         if (toEnd < 12 && car.waitSince < 0) car.waitSince = this.clock;
         const ok = toEnd > 12 || car.go || this.mayEnter(car, nextConn);
@@ -430,6 +476,7 @@ export class TrafficSystem {
       if (blocker && car.stillT > CAR_CREEP_AFTER + 3) target = Math.max(target, Math.min(1.2, gap < Infinity ? (gap > GAP ? 1.2 : 0) : 1.2, lane.speed));
       if (truck.on && blocked(truck.x, truck.z, 2.6)) target = 0;
       for (const c of w.police.cars) if (blocked(c.x, c.z, 2.6)) { target = 0; break; } // siren = right of way
+      for (const b of bodies) if (blocked(b.x, b.z, b.r + 1.8)) { target = 0; break; } // (R4: the dragon parade and the festa have the street)
       // honk at bandits in the lane (they won't stop for you!)
       car.honkCd = Math.max(0, car.honkCd - dt);
       for (const p of w.players.values()) {

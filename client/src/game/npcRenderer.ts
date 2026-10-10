@@ -45,6 +45,15 @@ const LOOKS: Record<string, Look> = {
   // C5c.3: THE COMPACTOR's bouncer (Big Crunch), PAWN-O-RAMA's Big Vinnie; Le Dumpstère's maitre d'
   bouncer: { body: "#1b1420", legs: "#1b1420", skin: "#8a5a3a", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.6 },
   vinnie: { body: "#6b3fa0", legs: "#6b3fa0", skin: "#e0a878", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.45 },
+  // R5: HOT STUFF PAWN & LOAN: Twitchy Lou (skinny, shifty) and Meat Locker (enormous)
+  lou: { body: "#d8c9a0", legs: "#4a3a2a", skin: "#e8c09a", hat: "#2f8f4e", hatShape: "none", prop: "none", bulk: 0.85 },
+  meat_locker: { body: "#f4f1ea", legs: "#2b2433", skin: "#c98a5c", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 2.0 },
+  // R6: the Champ: an old prison arm-wrestling champion (orange jumpsuit, grey beard, a champion's belt, a golden spoon)
+  // R7: Sticky Fran (FINDERS KEEPERS PAWN), Cold Cuts (Meat Locker's twin), Officer Pam on the station's front desk
+  fran: { body: "#c84a8a", legs: "#2b2433", skin: "#f0c09a", hat: "#ff8fd0", hatShape: "none", prop: "none", bulk: 1.05 },
+  cold_cuts: { body: "#3a4a3a", legs: "#2b2433", skin: "#c98a5c", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 2.0 },
+  receptionist: { body: "#8fb4e0", legs: "#1f3a78", skin: "#e8b48a", hat: "#5a3a24", hatShape: "none", prop: "none", bulk: 1.0 },
+  champ: { body: "#ff7a1a", legs: "#ff7a1a", skin: "#d9a07a", hat: "#f4f1ea", hatShape: "band", prop: "none", bulk: 2.0 },
   maitre_d: { body: "#1b1420", legs: "#1b1420", skin: "#f0c8a0", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.0 },
   pigeon_lady: { body: "#6b8f5a", legs: "#5a4d6e", skin: "#e0a67c", hat: "#b5653b", hatShape: "scarf", prop: "crumbs" },
 };
@@ -169,6 +178,47 @@ export class NpcRenderer {
       for (const sx of [-1, 1]) { const st = part(MeshBuilder.CreateBox("stripe", { width: 0.04, height: 0.7, depth: 0.03 }, sc), "#f4f1ea", pivot, 0); st.position.set(sx * 0.3 * bulk, 1.05, 0.08); }
       const chain = part(MeshBuilder.CreateTorus("chain", { diameter: 0.34, thickness: 0.04, tessellation: 12 }, sc), "#ffcf3a", pivot, 0); chain.position.y = 1.4; chain.rotation.x = 0.35;
       const hair = part(MeshBuilder.CreateSphere("slick", { diameter: 0.42, segments: 8, slice: 0.5 }, sc), "#1b1420", head, 0.01); hair.position.set(0, 0.05, -0.04);
+    }
+    if (v.kind === "lou") {
+      // a green gambler's visor, suspenders, a toothpick, mismatched eyes (one twitches), a pencil behind his ear
+      const vis = part(MeshBuilder.CreateBox("visor", { width: 0.36, height: 0.03, depth: 0.2 }, sc), "#2f8f4e", head, 0.01); vis.position.set(0, 0.12, 0.13); vis.rotation.x = -0.25;
+      const band = part(MeshBuilder.CreateTorus("visorband", { diameter: 0.4, thickness: 0.035, tessellation: 12 }, sc), "#2f8f4e", head, 0); band.position.y = 0.1;
+      for (const sx of [-1, 1]) { const su = part(MeshBuilder.CreateBox("suspender", { width: 0.05, height: 0.6, depth: 0.03 }, sc), "#8e1f2e", pivot, 0); su.position.set(sx * 0.1, 1.1, 0.24); }
+      const pick = part(MeshBuilder.CreateCylinder("toothpick", { diameter: 0.012, height: 0.14, tessellation: 3 }, sc), "#e8d7a8", head, 0); pick.rotation.z = 1.2; pick.position.set(0.08, -0.08, 0.19);
+      const pencil = part(MeshBuilder.CreateCylinder("pencil", { diameter: 0.02, height: 0.16, tessellation: 4 }, sc), "#ffd54a", head, 0); pencil.rotation.x = 1.3; pencil.position.set(0.19, 0.05, 0.02);
+      const bag = part(MeshBuilder.CreateSphere("eyebag", { diameter: 0.07, segments: 4 }, sc), "#b08a6a", head, 0); bag.position.set(0.07, -0.01, 0.17); bag.scaling.set(1, 0.4, 0.5);
+      const stub = part(MeshBuilder.CreateSphere("stubble", { diameter: 0.3, segments: 6, slice: 0.4 }, sc), "#9a8a7a", head, 0); stub.position.set(0, -0.06, 0.06); stub.rotation.x = Math.PI;
+    }
+    if (v.kind === "fran") {
+      // big pink hair, cat-eye glasses, hoop earrings, a pink bubble of gum
+      const hair = part(MeshBuilder.CreateSphere("franHair", { diameter: 0.6, segments: 8 }, sc), "#ff8fd0", head, 0.012); hair.position.set(0, 0.16, -0.05); hair.scaling.set(1.1, 0.9, 1);
+      const specs = part(MeshBuilder.CreateBox("catEyes", { width: 0.26, height: 0.06, depth: 0.03 }, sc), "#c41e3a", head, 0); specs.position.set(0, 0.03, 0.19);
+      for (const sx of [-1, 1]) { const hoop = part(MeshBuilder.CreateTorus("hoop", { diameter: 0.09, thickness: 0.012, tessellation: 10 }, sc), "#ffd54a", head, 0); hoop.position.set(sx * 0.19, -0.06, 0.02); hoop.rotation.z = Math.PI / 2; }
+      const gum = part(MeshBuilder.CreateSphere("gum", { diameter: 0.12, segments: 6 }, sc), "#ff8fb5", head, 0); gum.position.set(0, -0.09, 0.24);
+    }
+    if (v.kind === "receptionist") {
+      // a hair bun, reading glasses on a chain, a badge, a headset
+      const bun = part(MeshBuilder.CreateSphere("bun", { diameter: 0.2, segments: 6 }, sc), "#5a3a24", head, 0.01); bun.position.set(0, 0.2, -0.12);
+      const hair = part(MeshBuilder.CreateSphere("pamHair", { diameter: 0.42, segments: 8, slice: 0.5 }, sc), "#5a3a24", head, 0.01); hair.position.set(0, 0.05, -0.04);
+      const specs = part(MeshBuilder.CreateBox("specs", { width: 0.24, height: 0.05, depth: 0.03 }, sc), "#1b1420", head, 0); specs.position.set(0, 0.02, 0.19);
+      const badge = part(MeshBuilder.CreateBox("badge", { width: 0.1, height: 0.12, depth: 0.02 }, sc), "#d9a632", pivot, 0); badge.position.set(0.14, 1.3, 0.26);
+      const mic = part(MeshBuilder.CreateBox("headset", { width: 0.02, height: 0.02, depth: 0.16 }, sc), "#1b1420", head, 0); mic.position.set(0.18, -0.05, 0.1);
+    }
+    if (v.kind === "meat_locker" || v.kind === "cold_cuts") {
+      // a butcher's apron over a vest, a bald shiny head, tiny shades, a gold tooth, forearms like hams, a tattoo
+      const apron = part(MeshBuilder.CreateBox("apron", { width: 0.62, height: 0.75, depth: 0.04 }, sc), "#e8e2d4", pivot, 0.01); apron.position.set(0, 0.95, 0.5);
+      const shades = part(MeshBuilder.CreateBox("shades", { width: 0.2, height: 0.05, depth: 0.03 }, sc), "#1b1420", head, 0); shades.position.set(0, 0.04, 0.19);
+      const shine = part(MeshBuilder.CreateSphere("shine", { diameter: 0.08, segments: 4 }, sc), "#e0a878", head, 0); shine.position.set(0.05, 0.17, 0.08);
+      const tooth = part(MeshBuilder.CreateBox("goldtooth", { width: 0.05, height: 0.03, depth: 0.02 }, sc), "#ffd54a", head, 0); tooth.position.set(-0.04, -0.09, 0.19);
+      const neck = part(MeshBuilder.CreateCylinder("neck", { diameter: 0.34, height: 0.2, tessellation: 8 }, sc), L.skin, pivot, 0.01); neck.position.y = 1.5;
+    }
+    if (v.kind === "champ") {
+      const beard = part(MeshBuilder.CreateCylinder("beard", { diameterTop: 0.32, diameterBottom: 0.12, height: 0.34, tessellation: 8 }, sc), "#c8c4cc", head, 0.012); beard.position.set(0, -0.2, 0.1);
+      const tache = part(MeshBuilder.CreateBox("tache", { width: 0.24, height: 0.05, depth: 0.04 }, sc), "#c8c4cc", head, 0); tache.position.set(0, -0.06, 0.19);
+      const belt = part(MeshBuilder.CreateTorus("champbelt", { diameter: 0.58 * 2.0 * 0.85, thickness: 0.09, tessellation: 14 }, sc), "#d9a632", pivot, 0.01); belt.position.y = 0.82;
+      const plate = part(MeshBuilder.CreateCylinder("beltplate", { diameter: 0.3, height: 0.05, tessellation: 12 }, sc), "#ffe14a", pivot, 0.01); plate.rotation.x = Math.PI / 2; plate.position.set(0, 0.82, 0.5);
+      const num = part(MeshBuilder.CreatePlane("inmatenum", { width: 0.34, height: 0.12 }, sc), "#f4f1ea", pivot, 0); num.position.set(0.18, 1.3, 0.55); num.rotation.y = Math.PI;
+      num.material = unlitTextured(sc, textTexture(sc, "No. 1", { w: 192, h: 64, bg: "#f4f1ea", fg: "#1b1420" }), "champNum"); (num.material as StandardMaterial).backFaceCulling = false;
     }
     if (v.kind === "maitre_d") {
       const tash = part(MeshBuilder.CreateBox("tash", { width: 0.22, height: 0.04, depth: 0.03 }, sc), "#1b1420", head, 0); tash.position.set(0, -0.06, 0.19); tash.rotation.z = 0.05;
@@ -299,6 +349,14 @@ export class NpcRenderer {
       }
       root.scaling.setAll(0.55);
     }
+    if (v.kind === "meat_locker" || v.kind === "cold_cuts") root.scaling.setAll(1.32); // (R5: enormous; R7: his twin too)
+    if (v.kind === "champ") {
+      root.scaling.setAll(1.38); // (R6: bigger still)
+      const sp = new TransformNode("spoon", sc); sp.parent = armR; sp.position.set(0, -0.62, 0.06);
+      const bowl = part(MeshBuilder.CreateSphere("spoonbowl", { diameter: 0.12, segments: 6 }, sc), "#ffd54a", sp, 0.008); bowl.scaling.set(0.8, 0.3, 1.2); bowl.position.y = 0.18;
+      const handle = part(MeshBuilder.CreateBox("spoonhandle", { width: 0.03, height: 0.22, depth: 0.02 }, sc), "#ffd54a", sp, 0.006); handle.position.y = 0.03;
+      const paper = part(MeshBuilder.CreateBox("crossword", { width: 0.3, height: 0.02, depth: 0.22 }, sc), "#f4f1ea", armL, 0.006); paper.position.set(0, -0.62, 0.12);
+    }
     // merge each moving body part into one mesh (big draw-call saving with a crowd on screen)
     for (const g of [pivot, head, legL, legR, armL, armR, prop, stars]) if (g) bakeGroup(sc, g, g === stars ? 0 : 0.022);
     return {
@@ -386,7 +444,7 @@ export class NpcRenderer {
       while (dy < -Math.PI) dy += Math.PI * 2;
       const yaw = a.yaw + dy * k;
       // distance culling (keeps the crowd affordable)
-      const far = Math.hypot(x - cam.x, z - cam.z) > (n.big ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" ? COP_DRAW_DISTANCE : DRAW_DISTANCE)
+      const far = Math.hypot(x - cam.x, z - cam.z) > (n.big ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" && n.view.state !== "beat" ? COP_DRAW_DISTANCE : DRAW_DISTANCE)
         || n.view.state === "sleep"; // (C4b: the old lady asleep upstairs isn't drawn)
       if (far === n.enabled) { n.enabled = !far; n.root.setEnabled(!far); }
       const speed = dt > 0 ? Math.hypot(x - n.lastX, z - n.lastZ) / dt : 0;
@@ -443,6 +501,12 @@ export class NpcRenderer {
         const q = Math.sin((n.hitT / 0.3) * Math.PI) * 0.25;
         n.pivot.scaling.set(1 + q, 1 - q, 1 + q);
       } else if (n.pivot.scaling.y !== 1) n.pivot.scaling.setAll(1);
+      if (st === "sit") {
+        // R6: the Champ sitting on whoever he beat: legs out in front, bouncing a little, the crossword up
+        n.pivot.position.y = 0.32 + Math.abs(Math.sin(this.time * 3)) * 0.04;
+        n.legL.rotation.x = n.legR.rotation.x = -1.5;
+        n.armL.rotation.x = n.armR.rotation.x = -1.1;
+      }
       n.armL.rotation.z = st === "flee" ? Math.sin(this.time * 18) * 0.3 : 0;
       n.head.rotation.z = st === "huff" ? Math.sin(this.time * 10) * 0.08 : 0;
       // stars when dazed / KO, "!" when coming for you

@@ -4,6 +4,8 @@ import {
   World, buildTrashington, inRect, onRoadAt, CAR_COUNT, fortAt, nearBoxes, PROP_RADIUS, ROB_TIME, WIPEOUT_TIME, CAR_HALF_LEN, UNIT, makeMoveState, stepMovement,
   type WorldEvent, type MoveInput, type PropDef, type UnitDef,
 } from "../src/index.js";
+import { setCityMap as useCity } from "../src/index.js";
+useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
   ({ seq, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false, ...p });

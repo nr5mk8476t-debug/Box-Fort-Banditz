@@ -27,25 +27,30 @@ const REFILL: Record<PropKind, number> = {
   washer: 1e9, dryer: 1e9, // (C4b: one search per machine per day)
   dummy: 0, throwgame: 0, racegame: 0, // (C5a: the lobby's practice dummy and mini-game machines never run out)
   steamer: 60, trinkets: 90, fishtank: 1e9, // (C5b: the seafood tank's glass gets fixed at dawn)
+  pizzacart: 60, gelato: 60, ricordi: 90, deli: 1e9, // (R4: Little Italy's, the same as Chinatown's)
   vaultdoor: 1e9, depositbox: 1e9, nose: 1e9, stash: 1e9, // (C5c: once a day)
   podium: 0, cloakroom: 1e9, dessertcart: 1e9, piano: 1e9, chefstable: 1e9, kitchen: 1e9, // (C5c.2: once a day; the podium never runs out)
   // C5c.3: the rope and the counter never run out; the bar restocks; the decks cool down; the rest once a day
   clubrope: 0, djdecks: 40, clubbar: 45, clubsafe: 1e9, rider: 1e9, lockers: 1e9, sortbin: 1e9, vipbooth: 1e9, pawncounter: 0, pawncase: 1e9,
+  toilet: 0, celldoor: 0, // (R6: the holding cell)
+  glasscounter: 1e9, // (R7: fixed at dawn)
+  door: 1e9, // (R8: a door stays how it's left; all shut at dawn)
 };
 /** How far a prop's surface is from its centre (for punch / use reach). Breakables use their box (hw/hd) instead. */
 export const PROP_RADIUS: Record<PropKind, number> = {
   dumpster: 1.0, bin: 0.35, phone: 0.55, vending: 0.6, meter: 0.15, newsbox: 0.3, car: 1.4, till: 0.3,
   shopglass: 0, busstop: 0, hydrant: 0, mailbox: 0, bench: 0, planter: 0, table: 0, pallet: 0, washer: 0, dryer: 0,
-  dummy: 0.35, throwgame: 0.6, racegame: 0.3, steamer: 0.75, trinkets: 0.85, fishtank: 0.7,
+  dummy: 0.35, throwgame: 0.6, racegame: 0.3, steamer: 0.75, trinkets: 0.85, fishtank: 0.7, pizzacart: 0.75, gelato: 0.75, ricordi: 0.85, deli: 0.7,
   vaultdoor: 1.1, depositbox: 0.3, nose: 0.5, stash: 0.3,
   podium: 0.4, cloakroom: 0.6, dessertcart: 0.6, piano: 0.9, chefstable: 0.6, kitchen: 0.8,
   clubrope: 0.4, djdecks: 0.9, clubbar: 1.2, clubsafe: 0.45, rider: 0.6, lockers: 0.9, sortbin: 0.9, vipbooth: 0.8, pawncounter: 0.9, pawncase: 0,
+  toilet: 0.45, celldoor: 0.9, glasscounter: 0, door: 0,
 };
-export const SMASHABLE = new Set<PropKind>(["phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank", "pawncase"]);
+export const SMASHABLE = new Set<PropKind>(["phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank", "deli", "pawncase", "glasscounter"]);
 /** C5a: the lobby's mini-game machines (E to play) */
 export const LOBBY_GAMES = new Set<PropKind>(["throwgame", "racegame"]);
 /** C4a: things that break (and stop blocking) after this many hits, by size */
-export const BREAK_HP: Partial<Record<PropKind, number>> = { pawncase: 3, shopglass: 2, busstop: 1, hydrant: 2, mailbox: 2, bench: 2, planter: 2, table: 1, pallet: 1 };
+export const BREAK_HP: Partial<Record<PropKind, number>> = { pawncase: 3, glasscounter: 2, shopglass: 2, busstop: 1, hydrant: 2, mailbox: 2, bench: 2, planter: 2, table: 1, pallet: 1 };
 export const BREAKABLE = new Set(Object.keys(BREAK_HP) as PropKind[]);
 /** C4a: how far away a noise is heard (m) */
 export const NOISE = { smash: 12, alarm: 25, machine: 10 };
@@ -62,10 +67,14 @@ export function propNearest(d: PropDef, x: number, z: number): { x: number; z: n
   if (d.hw === undefined || d.hd === undefined) return { x: d.x, z: d.z };
   return { x: Math.max(d.x - d.hw, Math.min(d.x + d.hw, x)), z: Math.max(d.z - d.hd, Math.min(d.z + d.hd, z)) };
 }
-export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "depositbox", "stash", "cloakroom", "dessertcart", "chefstable", "kitchen",
+export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "pizzacart", "gelato", "ricordi", "depositbox", "stash", "cloakroom", "dessertcart", "chefstable", "kitchen",
   "clubbar", "rider", "lockers", "sortbin", "vipbooth"]);
 /** C5c.3: E on these does something of its own: pay Big Crunch's cover, hijack the DJ's decks, sell to Sal, the pawn case */
-export const CLUB_USE = new Set<PropKind>(["clubrope", "djdecks", "pawncounter", "pawncase"]);
+export const CLUB_USE = new Set<PropKind>(["clubrope", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door"]);
+/** R8: NPCs doing these don't open doors (standing at a post, down, sitting on someone) */
+const STAY_PUT = new Set(["work", "idle", "cower", "sit", "sleep", "ko", "stunned", "gloat", "huff", "beat"]);
+/** R8: the holding cell stays open this long after the chief's key is used */
+export const CELL_KEY = { open: 20, heat: 35 };
 /** C5c.2: E on these does something other than a search: book a table at the podium, play the grand piano */
 export const RESTO_USE = new Set<PropKind>(["podium", "piano"]);
 /**
@@ -78,7 +87,7 @@ export const KEYCARD_TIME = 3;
 export const BANK = { drillHeat: 92, keycardSeenHeat: 30, noseHeat: 25, noiseEvery: 2 };
 const DEPOSIT_LOOT: [string, number][] = [["pearl_necklace", 3], ["rolecks_watch", 2], ["bearer_bond", 1.5], ["family_photo", 3], ["cash_bag", 2], ["gold_bar", 0.8]];
 /** C5c: things that reset once a day, at dawn (not at night) */
-const DAILY = new Set<PropKind>(["washer", "dryer", "fishtank", "vaultdoor", "depositbox", "nose", "stash", "cloakroom", "dessertcart", "piano", "chefstable", "kitchen", "clubsafe", "rider", "lockers", "sortbin", "vipbooth", "pawncase"]);
+const DAILY = new Set<PropKind>(["washer", "dryer", "fishtank", "deli", "vaultdoor", "depositbox", "nose", "stash", "cloakroom", "dessertcart", "piano", "chefstable", "kitchen", "clubsafe", "rider", "lockers", "sortbin", "vipbooth", "pawncase"]);
 /** C5c.2: LE DUMPSTÈRE: the table fee, what counts as dressed up, the piano's aura (and noise), the chef's yell,
  *  what the cloakroom, the dessert trolley, the chef's table and the kitchen hold */
 export const RESTO = { fee: 20, pianoAura: 3, pianoNoise: 12, chefHeat: 3, dressy: ["designer_hoodie", "designer_scarf", "sunglasses", "gold_chain", "rolecks_watch", "pearl_necklace"] };
@@ -102,8 +111,14 @@ export const CLUB_SAFE = { base: 40, heat: 30 };
 export const STALL_LOOT: Partial<Record<PropKind, [string, number][]>> = {
   steamer: [["dumpling_box", 4], ["bao_bun", 5], ["fortune_cookie", 3], ["mooncake", 1.5]],
   trinkets: [["paper_fan", 5], ["fortune_cookie", 2], ["lucky_cat", 1.2], ["jade_dragon", 0.25]],
+  // R4: Little Italy's, item for item the same values and odds as Chinatown's (so neither side of town is richer)
+  pizzacart: [["pizza_slice", 4], ["garlic_knot", 5], ["breadstick", 3], ["tiramisu", 1.5]],
+  gelato: [["pizza_slice", 4], ["gelato_cup", 5], ["breadstick", 3], ["tiramisu", 1.5]],
+  ricordi: [["mini_gondola", 5], ["breadstick", 2], ["tower_globe", 1.2], ["golden_accordion", 0.25]],
 };
 const FISHTANK_LOOT: [string, number][] = [["live_crab", 3], ["smelly_fish", 4]];
+/** R4: the deli counter (Little Italy's seafood tank) */
+export const DELI_LOOT: [string, number][] = [["cheese_wheel", 3], ["salami", 4]];
 /** C4b: laundromat machines: open quietly (E, takes OPEN_TIME) or force with a punch (instant, loud, heat if seen) */
 export const MACHINES = new Set<PropKind>(["washer", "dryer"]);
 export const OPEN_TIME = 2.2;
@@ -156,6 +171,7 @@ export class PropSystem {
     for (const ps of this.props.values()) {
       if (DAILY.has(ps.def.kind) && !repair) continue; // (C4b: one search per machine per day; C5b/C5c: the seafood tank, the bank's vault, the stashes: once a day)
       if (ps.def.kind === "vaultdoor" && ps.def.box !== undefined) setBoxOff(this.w.arena, ps.def.box, false); // (C5c: the vault shuts again at dawn)
+      if ((ps.def.kind === "door" || ps.def.kind === "celldoor") && ps.def.box !== undefined) { if (!repair && !ps.ready) continue; setBoxOff(this.w.arena, ps.def.box, false); } // (R8: shut at dawn)
       if (BREAKABLE.has(ps.def.kind)) {
         if (!repair) continue;
         ps.hp = BREAK_HP[ps.def.kind]!; ps.brokeAt = -99;
@@ -173,8 +189,16 @@ export class PropSystem {
   }
 
   tick(dt: number) {
+    this.doorT -= dt;
+    if (this.doorT <= 0) { this.doorT = 0.2; this.npcsOpenDoors(); }
     for (const ps of this.props.values()) {
-      if (!ps.ready) { ps.t -= dt; if (ps.t <= 0) ps.ready = true; }
+      if (!ps.ready) {
+        ps.t -= dt;
+        if (ps.t <= 0) {
+          ps.ready = true;
+          if (ps.def.kind === "celldoor" && ps.def.box !== undefined) { setBoxOff(this.w.arena, ps.def.box, false); this.w.emit({ t: "cellShut", prop: ps.def.id }); } // (R8: the cell swings shut again)
+        }
+      }
       if (ps.alarmT > 0) ps.alarmT = Math.max(0, ps.alarmT - dt);
       // C4a: a burst hydrant's jet knocks back anyone standing in it
       if (ps.def.kind === "hydrant" && !ps.ready && this.w.time - ps.brokeAt < HYDRANT_SPRAY.time) {
@@ -263,7 +287,17 @@ export class PropSystem {
     if (d.kind === "podium") { this.w.bookTable(p); return; }
     // C5c.3: THE COMPACTOR's rope and decks, PAWN-O-RAMA's counter and case
     if (d.kind === "clubrope") { this.w.payCover(p); return; }
-    if (d.kind === "pawncounter") { this.w.pawn.fence(p); return; }
+    if (d.kind === "pawncounter") { this.w.pawn.fence(p, d.shop ?? -1); return; } // (R7: which pawn shop's till)
+    if (d.kind === "toilet") { this.w.flush(p); return; } // (R6)
+    if (d.kind === "door") { this.toggleDoor(ps, p.id); return; }
+    if (d.kind === "celldoor") {
+      // R8: the chief's key: the cell swings open for a while, everyone inside can walk out
+      const key = this.w.carriedItems(p).find((it) => it.type === "cell_key");
+      if (key && ps.ready) { this.w.consumeItem(p, key.id); this.openCell(ps, p); return; }
+      if (!ps.ready) { this.w.emit({ t: "empty", p: p.id, prop: d.id }); return; } // (it's open: just walk out)
+      if (p.jailT > 0) this.w.police.startPick(p); else this.w.emit({ t: "empty", p: p.id, prop: d.id });
+      return;
+    }
     if (d.kind === "pawncase") { if (ps.ready) this.w.pawn.caseUse(p); else this.w.emit({ t: "empty", p: p.id, prop: d.id }); return; }
     if (d.kind === "djdecks") {
       if (!ps.ready) { this.w.emit({ t: "empty", p: p.id, prop: d.id }); return; }
@@ -445,6 +479,7 @@ export class PropSystem {
       case "newsbox": pop("newspaper", 1.0); if (rnd() < 0.25) pop("expired_coupon", 1.0); break;
       case "car": pop(pickWeighted(CAR_LOOT, rnd), 1.3); this.alarm(ps, "car"); this.w.addHeat(p, 8); break;
       case "fishtank": pop(pickWeighted(FISHTANK_LOOT, rnd), 1.1); if (rnd() < 0.5) pop(pickWeighted(FISHTANK_LOOT, rnd), 1.1); break; // (C5b: SPLASH)
+      case "deli": pop(pickWeighted(DELI_LOOT, rnd), 1.1); if (rnd() < 0.5) pop(pickWeighted(DELI_LOOT, rnd), 1.1); break; // (R4: CRASH, salami everywhere)
     }
     this.w.noise(p, d.x, d.z, NOISE.smash);
     if (d.kind === "car") this.w.noise(p, d.x, d.z, NOISE.alarm);
@@ -477,6 +512,7 @@ export class PropSystem {
     const ax = p.move.x - at.x, az = p.move.z - at.z;
     const rnd = () => this.w.random();
     if (d.kind === "pawncase") { this.w.pawn.smash(p, at.x, at.z); return true; } // (C5c.3: everything in it spills; Vinnie comes swinging)
+    if (d.kind === "glasscounter") { if (seen) this.w.addHeat(p, 4); this.w.pawn.trouble(p, "smash", d.shop ?? 0); return true; } // (R7: nothing in it worth having; the bouncer comes)
     if (d.kind === "mailbox") { this.w.popLoot(pickWeighted([["newspaper", 3], ["expired_coupon", 3], ["coin_pile", 1], ["mystery_wallet", 0.4]], rnd), at.x, 1.0, at.z, ax, az); }
     if (d.kind === "shopglass") {
       // a smashed shop window: the alarm goes off, the cashier yells
@@ -488,6 +524,37 @@ export class PropSystem {
     } else if (seen) this.w.addHeat(p, 3);
     return true;
   }
+
+  /** R8: open or shut a glass door (by a player, or an NPC walking up to it) */
+  toggleDoor(ps: PropSim, by: string) {
+    const d = ps.def;
+    ps.ready = !ps.ready; ps.t = REFILL.door;
+    if (d.box !== undefined) setBoxOff(this.w.arena, d.box, !ps.ready);
+    this.w.emit({ t: "door", prop: d.id, open: !ps.ready, by });
+  }
+  private doorT = 0;
+  /** R8: cops, bouncers and walkers open a shut door when they reach it */
+  private npcsOpenDoors() {
+    for (const ps of this.props.values()) {
+      if (ps.def.kind !== "door" || !ps.ready) continue;
+      const d = ps.def;
+      for (const n of this.w.npc.npcs.values()) {
+        if (STAY_PUT.has(n.state) || Math.abs(n.move.y - (d.y - 1.3)) > 1.5) continue; // (only someone on the move)
+        if (propSurfaceDist(d, n.move.x, n.move.z) > 0.8) continue;
+        this.toggleDoor(ps, n.id); break;
+      }
+    }
+  }
+  /** R8: the chief's key in the holding cell's door */
+  private openCell(ps: PropSim, p: PlayerSim) {
+    const d = ps.def;
+    ps.ready = false; ps.t = CELL_KEY.open;
+    if (d.box !== undefined) setBoxOff(this.w.arena, d.box, true);
+    this.w.noise(p, d.x, d.z, NOISE.smash); // (CLANK)
+    this.w.emit({ t: "cellOpen", p: p.id, prop: d.id, time: CELL_KEY.open });
+  }
+  /** R8: is the holding cell standing open (the chief's key)? */
+  cellOpen(): boolean { for (const ps of this.props.values()) if (ps.def.kind === "celldoor" && !ps.ready) return true; return false; }
 
   private alarm(ps: PropSim, kind: "shop" | "car" | "bank") {
     ps.alarmT = kind === "car" ? 8 : kind === "bank" ? 25 : 6;

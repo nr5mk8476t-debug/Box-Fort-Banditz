@@ -7,7 +7,7 @@ import {
   type ShadowGenerator,
 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
-import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, type ArenaLayout, type Box } from "@bfb/shared";
+import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, footFaces, HOT_PLOT, type ArenaLayout, type Box } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
 
@@ -56,13 +56,36 @@ function drawMayorFace(c: CanvasRenderingContext2D, x: number, y: number, r: num
 /** Slice 2A: interiors are drawn only when the camera is this close to the building. */
 export const INTERIOR_DRAW_DIST = 42;
 /** Props are drawn by buildProps (static body here, changing parts in PropRenderer). */
-const PROP_BOX_KINDS = new Set<Box["kind"]>(["bin", "phone", "vending", "meter", "newsbox", "car", "statue", "steamer", "fishtank", "trinkets", "vaultdoor", "depositbox"]);
+const PROP_BOX_KINDS = new Set<Box["kind"]>(["bin", "phone", "vending", "meter", "newsbox", "car", "statue", "steamer", "fishtank", "trinkets", "pizzacart", "gelato", "ricordi", "deli", "vaultdoor", "depositbox"]);
 
 // ---- C2: each tier has its own materials ----
 // low (south): grimy brick; medium: painted render; high (Uptown): stone walls + glass towers
 /** trim (cornices, sills, lintels) per tier */
 const TIER_TRIM = ["#5a3a2e", "#f4ecd8", "#f2eee4"];
 const AWNING_COLORS = [["#d6264a", "#f4f1ea"], ["#2f8f5a", "#f4f1ea"], ["#3d6fb5", "#f4f1ea"], ["#e8a13a", "#6b3a1e"], ["#6b4c9a", "#ffe14a"], ["#1b1420", "#ff8fa3"]];
+
+/** R5: wall-material plane lists (drawn first, under the windows) */
+const WALL_KINDS = new Set<string>(["brick", "render", "stone", "paint", "concrete", "tile", "corrugated", "clapboard", "roof", "roofLight", "wallpaper", "subway"]);
+type WallKind = "brick" | "render" | "stone" | "paint" | "concrete" | "tile" | "corrugated" | "clapboard";
+/** each material's tile size (m) */
+const WALL_TILE: Record<WallKind, number> = { brick: 2, render: 4, stone: 3, paint: 2, concrete: 4, tile: 2, corrugated: 2, clapboard: 2 };
+/** R5: which walls each tier gets (weights) */
+const TIER_WALL_MIX: [WallKind, number][][] = [
+  [["brick", 0.36], ["paint", 0.16], ["corrugated", 0.12], ["concrete", 0.16], ["clapboard", 0.2]],
+  [["render", 0.3], ["brick", 0.2], ["clapboard", 0.14], ["tile", 0.16], ["paint", 0.2]],
+  [["stone", 0.42], ["concrete", 0.3], ["tile", 0.28]],
+];
+const TIER_WIN_MIX: [string, number][][] = [
+  [["windows", 0.3], ["winBoarded", 0.22], ["winBlinds", 0.2], ["winCurtain", 0.28]],
+  [["winShutter", 0.3], ["winArched", 0.22], ["winCurtain", 0.26], ["windows", 0.22]],
+  [["winBlinds", 0.5], ["winArched", 0.2], ["windows", 0.3]],
+];
+const pickMix = <T,>(mix: [T, number][], v: number): T => { let t = 0; const tot = mix.reduce((a, [, w]) => a + w, 0); for (const [k, w] of mix) { t += w / tot; if (v < t) return k; } return mix[mix.length - 1][0]; };
+/** R5: funny names for the little shops on ground floors that weren't given one (cartoon parody only) */
+const FAKE_SHOPS = ["BAGELS & BEAGLES", "KNOCK-OFF WATCHES", "SOCKS N STUFF", "DISCOUNT SOUP", "NAIL IT", "PHONE BONES", "WIGS WIGS WIGS", "TOTALLY LEGIT CASH",
+  "PIZZA BY THE INCH", "USED MATTRESS WORLD", "DOLLAR DOLLAR", "CRUMBS BAKERY", "LAUNDRO-MAAAT", "VAPE ABOVE IT", "PET ROCKS", "GOLD 4 CASH 4 GOLD", "TAXIDERMY TIM",
+  "NOODLE ME THIS", "SPEEDY KEYS", "THRIFTY THREADS", "BEEF JERKY HUT", "SHOE GOO", "MANNEQUIN MADNESS", "CHEAP ANTIQUES", "PRETZEL LOGIC", "VIDEO RENTALS (STILL)",
+  "BAIT & TACKLE & CAKE", "FAKE PLANTS", "LOST & FOUND & SOLD", "DENTIST?", "TUXEDO RENTALS", "MYSTERY MEAT DELI", "CELL PHONE CASES", "DONUT WORRY", "RAT TRAP DEPOT"];
 
 const inRectXZ = (r: { minX: number; maxX: number; minZ: number; maxZ: number }, x: number, z: number) => x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
 
@@ -93,12 +116,13 @@ function brickTexture(scene: Scene) {
       const off = (y / rowH) % 2 ? brickW / 2 : 0;
       for (let x = -brickW; x < 256 + brickW; x += brickW) {
         const v = r();
-        if (v < 0.22) { c.fillStyle = "rgba(0,0,0,0.16)"; c.fillRect(x + off + 2, y + 2, brickW - 3, rowH - 3); }
-        else if (v > 0.9) { c.fillStyle = "rgba(255,230,200,0.12)"; c.fillRect(x + off + 2, y + 2, brickW - 3, rowH - 3); }
-        c.fillStyle = "rgba(30,20,30,0.32)";
+        // (R5: stronger: every brick a touch lighter or darker, a few chipped)
+        if (v < 0.3) { c.fillStyle = `rgba(0,0,0,${0.12 + r() * 0.14})`; c.fillRect(x + off + 2, y + 2, brickW - 3, rowH - 3); }
+        else if (v > 0.78) { c.fillStyle = `rgba(255,230,200,${0.08 + r() * 0.12})`; c.fillRect(x + off + 2, y + 2, brickW - 3, rowH - 3); }
+        c.fillStyle = "rgba(30,20,30,0.42)";
         c.fillRect(x + off, y, 2, rowH);
       }
-      c.fillStyle = "rgba(30,20,30,0.32)";
+      c.fillStyle = "rgba(30,20,30,0.42)";
       c.fillRect(0, y, 256, 2);
     }
     // soot streaks running down
@@ -106,15 +130,126 @@ function brickTexture(scene: Scene) {
   });
 }
 
+// ---- R5: more wall materials, so no two neighbours look alike (all are see-through overlays on the wall's colour) ----
+/** whitewashed brick, the paint peeling off in patches (1 tile = 2 x 2 m) */
+function paintedBrickTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    c.fillStyle = "rgba(255,250,240,0.42)"; c.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 16) { c.fillStyle = "rgba(60,50,60,0.18)"; c.fillRect(0, y, 256, 2); const off = (y / 16) % 2 ? 21 : 0; for (let x = off; x < 256; x += 42) c.fillRect(x, y, 2, 16); }
+  });
+}
+/** big cast concrete panels with tie holes and rust stains (1 tile = 4 x 4 m) */
+function concreteTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    c.fillStyle = "rgba(40,36,44,0.4)"; c.fillRect(0, 0, 256, 3); c.fillRect(0, 128, 256, 3); c.fillRect(0, 0, 3, 256); c.fillRect(128, 0, 3, 256);
+  });
+}
+/** small glazed tiles with dark grout and a shine (1 tile = 2 x 2 m) */
+function tileTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let y = 0; y < 256; y += 32) for (let x = 0; x < 256; x += 32) {
+      const v = r(); c.fillStyle = v < 0.2 ? "rgba(0,0,0,0.12)" : v > 0.85 ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0)"; c.fillRect(x + 2, y + 2, 28, 28);
+      c.fillStyle = "rgba(255,255,255,0.22)"; c.fillRect(x + 5, y + 5, 10, 3);
+    }
+    c.fillStyle = "rgba(30,26,34,0.45)"; for (let k = 0; k < 256; k += 32) { c.fillRect(k, 0, 2, 256); c.fillRect(0, k, 256, 2); }
+  });
+}
+/** corrugated metal, rusting at the seams (1 tile = 2 x 2 m) */
+function corrugatedTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let x = 0; x < 256; x += 16) { const g = c.createLinearGradient(x, 0, x + 16, 0); g.addColorStop(0, "rgba(0,0,0,0.28)"); g.addColorStop(0.5, "rgba(255,255,255,0.18)"); g.addColorStop(1, "rgba(0,0,0,0.28)"); c.fillStyle = g; c.fillRect(x, 0, 16, 256); }
+    c.fillStyle = "rgba(30,26,34,0.4)"; c.fillRect(0, 126, 256, 4);
+  });
+}
+/** painted wooden clapboard, the shadow under each board, a few bare planks (1 tile = 2 x 2 m) */
+function clapboardTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let y = 0; y < 256; y += 21) {
+      const g = c.createLinearGradient(0, y, 0, y + 21); g.addColorStop(0, "rgba(255,255,255,0.12)"); g.addColorStop(0.8, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.35)"); c.fillStyle = g; c.fillRect(0, y, 256, 21);
+    }
+  });
+}
+/** soot and rain: dark at the foot of the wall, streaks running down from the roof (stretched over the whole wall) */
+function grimeTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    const g = c.createLinearGradient(0, 256, 0, 196); g.addColorStop(0, "rgba(25,20,28,0.45)"); g.addColorStop(1, "rgba(25,20,28,0)"); c.fillStyle = g; c.fillRect(0, 196, 256, 60);
+    const t = c.createLinearGradient(0, 0, 0, 26); t.addColorStop(0, "rgba(25,20,28,0.35)"); t.addColorStop(1, "rgba(25,20,28,0)"); c.fillStyle = t; c.fillRect(0, 0, 256, 26);
+  });
+}
+/** a tar-and-gravel roof (opaque; 1 tile = 3 x 3 m); light = pale gravel */
+function roofTexture(scene: Scene, light = false) {
+  return canvasTexture(scene, 128, (c, r) => {
+    c.fillStyle = light ? "#b4aca0" : "#86808c"; c.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 600; i++) { const v = r(); c.fillStyle = light ? (v > 0.66 ? "#bab2a4" : v > 0.33 ? "#aea698" : "#b0a89a") : v > 0.66 ? "#8c8692" : v > 0.33 ? "#7e7884" : "#88828e"; c.fillRect(r() * 128, r() * 128, 1 + r() * 2, 1 + r() * 2); } // (R6: subtle: no spotty look)
+    c.fillStyle = "rgba(20,18,24,0.35)"; c.fillRect(0, 62, 128, 3); c.fillRect(62, 0, 3, 128);
+  });
+}
+/** a roller shutter, pulled down over a shut shop, sprayed with tags (opaque; 1 tile = 4 x 2.8 m) */
+function shutterTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    c.fillStyle = "#8e96a8"; c.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 10) { c.fillStyle = "rgba(255,255,255,0.18)"; c.fillRect(0, y, 256, 3); c.fillStyle = "rgba(0,0,0,0.25)"; c.fillRect(0, y + 7, 256, 3); }
+    const tags = ["#ff6fb5", "#7aff6b", "#ffd54a", "#43c7a6", "#ff5a3c", "#9f5fd6"];
+    for (let i = 0; i < 5; i++) {
+      c.save(); c.translate(20 + r() * 200, 60 + r() * 150); c.rotate((r() - 0.5) * 0.5);
+      c.strokeStyle = "#1b1420"; c.lineWidth = 9; c.lineCap = "round"; c.fillStyle = tags[Math.floor(r() * tags.length)];
+      c.font = `bold ${26 + Math.floor(r() * 20)}px 'Luckiest Guy', Impact, sans-serif`;
+      const word = ["BOX", "TRASH", "LOU", "OI", "BANDITZ", "NOPE", "MEAT", "RAT", "YO"][Math.floor(r() * 9)];
+      c.strokeText(word, 0, 0); c.fillText(word, 0, 0); c.restore();
+    }
+    c.fillStyle = "#3a3444"; c.fillRect(0, 244, 256, 12); c.fillStyle = "#c8c4cc"; c.fillRect(118, 236, 20, 10); // (the handle and the lock)
+  });
+}
+/** R5: faded striped wallpaper with damp stains (opaque; inside the pawn shop; 1 tile = 2 x 2 m) */
+function wallpaperTexture(scene: Scene) {
+  return canvasTexture(scene, 128, (c, r) => {
+    c.fillStyle = "#6f7f5a"; c.fillRect(0, 0, 128, 128);
+    for (let x = 0; x < 128; x += 16) { c.fillStyle = "#7f8f68"; c.fillRect(x, 0, 6, 128); c.fillStyle = "#c9a84a"; c.fillRect(x + 10, 0, 1.5, 128); }
+    c.fillStyle = "#4a3a2a"; c.fillRect(0, 118, 128, 10); // (a skirting board)
+  });
+}
+/** R6: white subway tiles with grey grout (opaque; 1 tile = 1.2 x 1.2 m: 8 rows of 4) */
+function subwayTexture(scene: Scene) {
+  return canvasTexture(scene, 128, (c) => {
+    c.fillStyle = "#b8bcc4"; c.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 8; y++) for (let x = -1; x < 4; x++) {
+      const ox = x * 32 + (y % 2 ? 16 : 0);
+      const g = c.createLinearGradient(0, y * 16, 0, y * 16 + 16); g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#e8ecf0");
+      c.fillStyle = g; c.fillRect(ox + 1.5, y * 16 + 1.5, 29, 13);
+    }
+  });
+}
+/** R5: window styles (same 4 x 4 grid of cells as windowTexture, so any facade can swap one for another) */
+/** R8: unlit window panes: dusky blue-greys (they read as glass reflecting the sky, not black holes) */
+const DARK_PANES = ["#667a94", "#5c7088", "#70849c", "#62768e"];
+/** a pale diagonal streak of sky across a dark pane */
+function skyGlint(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const g = c.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, "rgba(190,220,240,0.35)"); g.addColorStop(1, "rgba(190,220,240,0)");
+  c.fillStyle = g; c.fillRect(x, y, w, h);
+  c.fillStyle = "rgba(230,245,255,0.3)"; c.beginPath(); c.moveTo(x + 4, y + h - 4); c.lineTo(x + 12, y + h - 4); c.lineTo(x + w - 4, y + 10); c.lineTo(x + w - 12, y + 10); c.fill();
+}
+function windowStyleTexture(scene: Scene, style: "shutter" | "arched" | "blinds" | "curtain" | "boarded"): Texture {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const x = i * 64 + 14, y = j * 64 + 12, w = 36, h = 42, lit = r() > 0.5;
+      const glass = lit ? (r() > 0.3 ? "#ffd98a" : "#9fe3ff") : DARK_PANES[Math.floor(r() * DARK_PANES.length)]; // (R8: unlit panes a dusky blue-grey, not black)
+      c.fillStyle = glass;
+      if (style === "arched") { c.beginPath(); c.moveTo(x, y + h); c.lineTo(x, y + 14); c.arc(x + w / 2, y + 14, w / 2, Math.PI, 0); c.lineTo(x + w, y + h); c.closePath(); c.fill(); if (!lit) { c.save(); c.clip(); skyGlint(c, x, y, w, h); c.restore(); } c.strokeStyle = "#3a3444"; c.lineWidth = 4; c.stroke(); c.fillStyle = "#3a3444"; c.fillRect(x + w / 2 - 1.5, y, 3, h); continue; }
+      c.fillRect(x, y, w, h);
+      if (style === "blinds") { c.fillStyle = lit ? "rgba(255,255,255,0.55)" : "rgba(200,196,204,0.4)"; const down = 10 + r() * 30; for (let k = 0; k < down; k += 4) c.fillRect(x, y + k, w, 2.5); }
+      if (style === "curtain") { const cols = ["#d6264a", "#2f8f4e", "#ffcf3a", "#3d6fb5", "#ff8fa3", "#9f5fd6"]; c.fillStyle = cols[Math.floor(r() * cols.length)]; const o = 4 + r() * 10; c.fillRect(x, y, o, h); c.fillRect(x + w - o, y, o, h); c.fillRect(x, y, w, 5); }
+      if (style === "boarded" && r() < 0.35) { c.fillStyle = "#a8743f"; for (let k = 0; k < 3; k++) { c.save(); c.translate(x + w / 2, y + 8 + k * 13); c.rotate((r() - 0.5) * 0.5); c.fillRect(-w / 2 - 3, -4, w + 6, 8); c.restore(); } }
+      else if (style === "boarded" && r() < 0.25) { c.strokeStyle = "#f4f1ea"; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x + 8, y + 6); c.lineTo(x + 18, y + 20); c.lineTo(x + 12, y + 34); c.moveTo(x + 18, y + 20); c.lineTo(x + 30, y + 16); c.stroke(); } // (a cracked pane)
+      if (!lit) skyGlint(c, x, y, w, h);
+      c.strokeStyle = "#3a3444"; c.lineWidth = 4; c.strokeRect(x, y, w, h);
+      if (style === "shutter") { const cols = ["#2f6f4f", "#3d6fb5", "#8e1f2e", "#6b4c9a"]; c.fillStyle = cols[(i + j * 3) % 4]; for (const sx of [-1, 1]) { const px = sx < 0 ? x - 12 : x + w + 2; c.fillRect(px, y, 10, h); c.fillStyle = "rgba(0,0,0,0.3)"; for (let k = 4; k < h; k += 5) c.fillRect(px + 1, y + k, 8, 1.5); c.fillStyle = cols[(i + j * 3) % 4]; } }
+    }
+  });
+}
+
 /** Medium tier: painted render with damp stains and hairline cracks (1 tile = 4 x 4 m). */
 function renderTexture(scene: Scene) {
   return canvasTexture(scene, 256, (c, r) => {
-    for (let i = 0; i < 26; i++) {
-      const x = r() * 256, y = r() * 256, rad = 6 + r() * 26;
-      const g = c.createRadialGradient(x, y, 0, x, y, rad);
-      g.addColorStop(0, `rgba(60,40,40,${0.05 + r() * 0.07})`); g.addColorStop(1, "rgba(60,40,40,0)");
-      c.fillStyle = g; c.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-    }
     c.strokeStyle = "rgba(40,30,40,0.35)"; c.lineWidth = 1.5;
     for (let i = 0; i < 4; i++) { let x = r() * 256, y = r() * 256; c.beginPath(); c.moveTo(x, y); for (let j = 0; j < 5; j++) { x += (r() - 0.5) * 22; y += 6 + r() * 10; c.lineTo(x, y); } c.stroke(); }
   });
@@ -185,10 +320,11 @@ function windowTexture(scene: Scene): Texture {
   const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
     const lit = r() > 0.5;
-    c.fillStyle = lit ? (r() > 0.3 ? "#ffd98a" : "#9fe3ff") : "#2b2433";
+    c.fillStyle = lit ? (r() > 0.3 ? "#ffd98a" : "#9fe3ff") : DARK_PANES[Math.floor(r() * DARK_PANES.length)];
     c.fillRect(i * 64 + 14, j * 64 + 12, 36, 42);
-    c.strokeStyle = "#1b1420";
-    c.lineWidth = 5;
+    if (!lit) skyGlint(c, i * 64 + 14, j * 64 + 12, 36, 42);
+    c.strokeStyle = "#3a3444";
+    c.lineWidth = 4;
     c.strokeRect(i * 64 + 14, j * 64 + 12, 36, 42);
   }
   const t = new Texture(cv.toDataURL(), scene);
@@ -216,18 +352,33 @@ export class CityRenderer {
   /** Slice 2A: which unit (building interior) new meshes belong to (-1 = always drawn) */
   private group = -1;
   private unitMeshes = new Map<number, Mesh[]>();
+  /** R7: interiors that aren't units (the station's two floors, the pawn shops): drawn only near the camera too */
+  private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number }[] = [];
+  private groupOfBox(b: Box): number {
+    if (b.unit !== undefined) return b.unit;
+    for (const g of this.extraGroups) {
+      const r = g.rect;
+      if (b.x > r.minX && b.x < r.maxX && b.z > r.minZ && b.z < r.maxZ && b.y > g.y0 && b.y < g.y1 && b.kind !== "roof" && b.kind !== "glass" && b.kind !== "sidewalk" && b.kind !== "curb" && b.kind !== "plaza") return g.id; // (R8: never the pavement);
+    }
+    return -1;
+  }
   private unitOn = new Map<number, boolean>();
   /** textured interior planes (posters): toggled with their building */
   private unitPlanes = new Map<number, Mesh[]>();
 
   /** C2: façade planes, one merged mesh per material */
-  private planes = { windows: [] as Mesh[], curtain: [] as Mesh[], brick: [] as Mesh[], render: [] as Mesh[], stone: [] as Mesh[], front: [] as Mesh[] };
+  private planes = { windows: [] as Mesh[], curtain: [] as Mesh[], brick: [] as Mesh[], render: [] as Mesh[], stone: [] as Mesh[], front: [] as Mesh[],
+    // R5: more walls, grime, roofs, shutters, window styles
+    paint: [] as Mesh[], concrete: [] as Mesh[], tile: [] as Mesh[], corrugated: [] as Mesh[], clapboard: [] as Mesh[], grime: [] as Mesh[], roof: [] as Mesh[], roofLight: [] as Mesh[], wallpaper: [] as Mesh[], subway: [] as Mesh[], shutter: [] as Mesh[],
+    winShutter: [] as Mesh[], winArched: [] as Mesh[], winBlinds: [] as Mesh[], winCurtain: [] as Mesh[], winBoarded: [] as Mesh[] };
   /** C2: shop signs share a few big textures (one draw call per sheet instead of one per sign) */
-  private atlasSigns: { mesh: Mesh; text: string; bg: string }[] = [];
+  private atlasSigns: { mesh: Mesh; text: string; bg: string; fg?: string }[] = [];
   /** C2: small modelled façade detail (sills, fire escapes, awning stripes...); off in Performance mode */
   readonly detail: boolean;
   /** C2: how many façade detail pieces were built (perf tests) */
   detailPieces = 0;
+  /** R4: gate arches drawn in Little Italy / Chinatown (for the e2e) */
+  districtGates = { italy: 0, china: 0 };
 
   constructor(private scene: Scene, private arena: ArenaLayout, private shadows: ShadowGenerator | null, opts: { detail?: boolean } = {}) {
     this.detail = opts.detail ?? true;
@@ -247,6 +398,15 @@ export class CityRenderer {
     // C4a: which boxes are breakable props (their pieces are tagged so they can vanish when smashed)
     const brkOfBox = new Map<number, string>();
     for (const pd of arena.props ?? []) if (pd.box !== undefined) brkOfBox.set(pd.box, pd.id);
+    // (R7: the station's ground floor and first floor, the two pawn shops: their insides drawn only when you're near)
+    {
+      const st = arena.station, g = st?.grand, ins = (r: { minX: number; maxX: number; minZ: number; maxZ: number }, m: number) => ({ minX: r.minX + m, maxX: r.maxX - m, minZ: r.minZ + m, maxZ: r.maxZ - m });
+      if (st && g) {
+        const r = ins(st.rect, 0.65), cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
+        this.extraGroups.push({ id: 9001, x: cx, z: cz, rect: r, y0: 0, y1: g.upY }, { id: 9002, x: cx, z: cz, rect: r, y0: g.upY, y1: 9.2 });
+      }
+      for (const h of arena.hotShops ?? []) this.extraGroups.push({ id: 9101 + h.idx, x: (h.rect.minX + h.rect.maxX) / 2, z: (h.rect.minZ + h.rect.maxZ) / 2, rect: ins(h.rect, 0.35), y0: 0, y1: 4.3 });
+    }
     for (let bi = 0; bi < arena.boxes.length; bi++) {
       const b = arena.boxes[bi];
       this.brk = brkOfBox.get(bi) ?? "";
@@ -255,7 +415,7 @@ export class CityRenderer {
       if (b.hide) continue; // (C5a: collision only; drawn by buildLobby)
       if (b.pump) continue; // (C5c.3: THE COMPACTOR's crusher bed moves: buildClub draws it)
       if (b.chain) { this.chainFences.push(b); continue; }
-      this.group = b.unit ?? -1;
+      this.group = this.groupOfBox(b);
       if (b.kind === "glass") {
         // Slice 2A: big see-through shop windows (they still block you)
         const g = MeshBuilder.CreateBox("glass", { width: b.w, height: b.h, depth: b.d }, scene);
@@ -272,12 +432,13 @@ export class CityRenderer {
         : b.kind === "tower" ? TIER_TOWERS[tier][Math.floor(hash(b.z, b.x) * TIER_TOWERS[tier].length)] : KIND_COLOR[b.kind] ?? PALETTE.greyA);
       if (b.kind === "tree") { this.tree(b); continue; }
       if (b.kind === "bars") { this.bars(b, color); continue; }
-      const m = MeshBuilder.CreateBox("b", { width: b.w, height: b.h, depth: b.d }, scene);
-      m.position.set(b.x, b.y, b.z);
+      const m = b.poly ? footPrism(scene, b.poly, b.y - b.h / 2, b.y + b.h / 2) : MeshBuilder.CreateBox("b", { width: b.w, height: b.h, depth: b.d }, scene);
+      if (!b.poly) m.position.set(b.x, b.y, b.z);
       const flat = b.kind === "sidewalk" || b.kind === "curb" || b.kind === "plaza" || b.kind === "shopfloor";
       this.add(m, color, flat ? (b.kind === "shopfloor" ? 0 : 0.02) : b.kind === "tower" ? 0.08 : 0.05, !flat);
       if ((b.kind === "building" || b.kind === "tower") && b.windows) this.facade(b, color, tier);
       if (b.china) this.chinaDress(b);
+      if (b.italy) this.italyDress(b);
       if (b.sign) this.sign(b);
       this.details(b);
     }
@@ -303,11 +464,13 @@ export class CityRenderer {
     this.buildPit();
     this.buildLobby();
     this.buildChinatown();
+    this.buildLittleItaly();
     this.buildBank();
     this.buildStatue();
     this.buildResto();
     this.buildClub();
     this.buildPawnShop();
+    if (arena.hotShops?.length) { this.buildPawnShops(); this.buildStationUpper(); } // (R7: the new city's two pawn shops, the grand station)
     this.planes.windows.push(...windowPlanes);
     const planeMat = (name: string, tex: Texture, zo: number) => {
       const m = new StandardMaterial(name, scene);
@@ -316,9 +479,19 @@ export class CityRenderer {
       m.zOffset = zo; m.zOffsetUnits = zo * 2;
       return m;
     };
+    const winStyleMat = (style: Parameters<typeof windowStyleTexture>[1]) => {
+      const m = new StandardMaterial("win-" + style, scene);
+      m.diffuseTexture = windowStyleTexture(scene, style); m.emissiveTexture = m.diffuseTexture; m.disableLighting = true; m.useAlphaFromDiffuseTexture = true;
+      m.zOffset = -2; m.zOffsetUnits = -4; m.backFaceCulling = false;
+      return m;
+    };
     const mats: Record<keyof CityRenderer["planes"], StandardMaterial> = {
       windows: winMat, curtain: planeMat("curtainWall", curtainTexture(scene), -2), front: planeMat("shopfront", shopfrontTexture(scene), -2),
       brick: planeMat("brickWall", brickTexture(scene), -1), render: planeMat("renderWall", renderTexture(scene), -1), stone: planeMat("stoneWall", stoneTexture(scene), -1),
+      paint: planeMat("paintWall", paintedBrickTexture(scene), -1), concrete: planeMat("concreteWall", concreteTexture(scene), -1), tile: planeMat("tileWall", tileTexture(scene), -1),
+      corrugated: planeMat("corrWall", corrugatedTexture(scene), -1), clapboard: planeMat("clapWall", clapboardTexture(scene), -1), grime: planeMat("grime", grimeTexture(scene), -1.5),
+      roof: planeMat("roofTar", roofTexture(scene), -4), roofLight: planeMat("roofGravel", roofTexture(scene, true), -4), wallpaper: planeMat("wallpaper", wallpaperTexture(scene), -1), subway: planeMat("subway", subwayTexture(scene), -1), shutter: planeMat("shutter", shutterTexture(scene), -2),
+      winShutter: winStyleMat("shutter"), winArched: winStyleMat("arched"), winBlinds: winStyleMat("blinds"), winCurtain: winStyleMat("curtain"), winBoarded: winStyleMat("boarded"),
     };
     for (const k of Object.keys(this.planes) as (keyof CityRenderer["planes"])[]) {
       const list = this.planes[k];
@@ -327,7 +500,7 @@ export class CityRenderer {
         if (merged) {
           merged.material = mats[k]; merged.parent = this.root; merged.isPickable = false; merged.freezeWorldMatrix();
           // (see-through layers are drawn in this order, so the wall texture never paints over glass or windows)
-          merged.alphaIndex = k === "brick" || k === "render" || k === "stone" ? 1 : 2;
+          merged.alphaIndex = WALL_KINDS.has(k) ? 1 : k === "grime" ? 1.5 : 2;
         }
       }
     }
@@ -376,9 +549,13 @@ export class CityRenderer {
   }
 
   /** C4a: hide (smashed) or show (repaired at dawn) a breakable's pieces. */
+  /** R7: the pawn shops' counter glass (own meshes: see-through) */
+  private glassOf = new Map<string, Mesh>();
+  private counterGlassMat: StandardMaterial | null = null;
   setBroken(propId: string, broken: boolean) {
     if (this.brkBroken.has(propId) === broken) return;
     if (broken) this.brkBroken.add(propId); else this.brkBroken.delete(propId);
+    this.glassOf.get(propId)?.setEnabled(!broken);
     const touched = new Set<Mesh>();
     for (const r of this.brkRanges.get(propId) ?? []) {
       const st = this.brkPos.get(r.mesh);
@@ -438,7 +615,9 @@ export class CityRenderer {
 
   /** Slice 2A: draw building interiors only near the camera. Call every frame. */
   update(camX: number, camZ: number) {
-    for (const u of this.arena.units ?? []) {
+    if (this.neon.length || this.stationLights) this.updateNeon();
+    this.updateHeli(Math.min(0.1, (performance.now() - this.lastUpd) / 1000)); this.lastUpd = performance.now();
+    for (const u of [...(this.arena.units ?? []), ...this.extraGroups]) {
       const on = Math.hypot(u.x - camX, u.z - camZ) < INTERIOR_DRAW_DIST;
       if (this.unitOn.get(u.id) === on) continue;
       this.unitOn.set(u.id, on);
@@ -531,33 +710,46 @@ export class CityRenderer {
     const trim = tier === 0 ? shade(color, -0.35) : TIER_TRIM[tier];
     const detail = this.detail && b.unit === undefined && !thin;
     const piece = (m: Mesh, col: string, outline = 0.02, cast = false) => { this.add(m, col, outline, cast); this.detailPieces++; return m; };
-    const faces: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-    for (const [nx, nz] of faces) {
-      const fw = nx ? b.d : b.w;
+    // (R3: an angled footprint has one face per edge; a plain box its four sides, in the old order)
+    const faces = b.poly ? footFaces(b).map((f) => ({ nx: f.nx, nz: f.nz, fw: f.len, wx: f.mx, wz: f.mz }))
+      : ([[0, -1], [0, 1], [-1, 0], [1, 0]] as const).map(([nx, nz]) => ({ nx, nz, fw: nx ? b.d : b.w, wx: b.x + nx * (b.w / 2), wz: b.z + nz * (b.d / 2) }));
+    const bf = b.face ? Math.hypot(b.face[0], b.face[1]) || 1 : 1, ffx = b.face ? b.face[0] / bf : 0, ffz = b.face ? b.face[1] / bf : 0;
+    // R5: each building its own wall material and window style
+    const wk: WallKind = b.italy ? "render" : b.china ? (H(70) < 0.5 ? "brick" : "paint") : tower ? (tier === 2 ? (H(70) < 0.6 ? "concrete" : "stone") : H(70) < 0.5 ? "brick" : "concrete") : pickMix(TIER_WALL_MIX[tier], H(70));
+    const winKey = (glass ? "curtain" : b.italy ? "windows" : b.china ? "winCurtain" : pickMix(TIER_WIN_MIX[tier], H(71))) as keyof CityRenderer["planes"];
+    let faceN = 0;
+    for (const { nx, nz, fw, wx, wz } of faces) {
       if (fw < 1.5) continue;
-      const street = nx === fx && nz === fz && (fx !== 0 || fz !== 0);
+      faceN++;
+      const street = (fx !== 0 || fz !== 0) && (b.poly ? nx * ffx + nz * ffz > 0.9 : nx === fx && nz === fz);
       const ry = Math.atan2(-nx, -nz);
       const ax = Math.cos(ry), az = -Math.sin(ry);            // along the face (the plane's local x)
-      const wx = b.x + nx * (b.w / 2), wz = b.z + nz * (b.d / 2); // centre of the wall surface
       const at = (m: Mesh, along: number, y: number, out: number) => { m.position.set(wx + ax * along + nx * out, y, wz + az * along + nz * out); m.rotation.y = ry; return m; };
       const shop = street && grounded && b.front === "shop";
       const lobby = street && grounded && b.front === "lobby";
       // a landmark's main entrance (glass doors in the middle of its signed face)
       const entrance = street && grounded && !b.front && !!b.sign && b.h >= 6 && fw >= 6;
+      // R5: every other ground floor on a street gets something: a little shop, a roller shutter, boards, a front door
+      const gf = street && grounded && !shop && !lobby && !entrance && !tower && !thin && fw >= 4 && b.h >= 3.5 && !b.china
+        ? pickMix<"shop" | "shutter" | "boarded" | "door">([["shop", 0.45], ["shutter", 0.28], ["boarded", 0.1], ["door", 0.17]], H(72 + faceN)) : null;
+      const gShop = gf === "shop" || gf === "shutter" || gf === "boarded";
       // ---- wall material ----
       if (!thin && !glass) {
-        const tile = tier === 0 ? 2 : tier === 1 ? 4 : 3;
+        const tile = WALL_TILE[wk];
         // (the wall texture stops above a shopfront / entrance / lobby: it never covers the glass)
-        const base = shop || entrance || lobby ? Math.min(bottom + (lobby ? 4.2 : 3.3), top) : bottom;
+        const base = shop || entrance || lobby || gShop ? Math.min(bottom + (lobby ? 4.2 : 3.3), top) : bottom;
         const wh = top - base;
         if (wh > 0.2) {
           const p = at(MeshBuilder.CreatePlane("wallmat", { width: fw, height: wh }, sc), 0, base + wh / 2, 0.12);
           scaleUVs(p, fw / tile, wh / tile);
-          (tier === 0 ? this.planes.brick : tier === 1 ? this.planes.render : this.planes.stone).push(p);
+          this.planes[wk].push(p);
+          const gr = at(MeshBuilder.CreatePlane("grime", { width: fw, height: wh }, sc), 0, base + wh / 2, 0.13);
+          scaleUVs(gr, Math.max(1, Math.round(fw / 4)), 1);
+          this.planes.grime.push(gr);
         }
       }
       // ---- windows ----
-      const winBottom = shop || entrance ? bottom + 4.8 : tower && grounded ? bottom + 4.7 : bottom + 0.7;
+      const winBottom = shop || entrance || gShop ? bottom + 4.8 : gf === "door" ? bottom + 3.4 : tower && grounded ? bottom + 4.7 : bottom + 0.7;
       const winTop = top - 0.5;
       const ph = winTop - winBottom, pw = fw - 1;
       let rows = 0, rowH = 0, cols = 0, cellW = 0;
@@ -566,7 +758,7 @@ export class CityRenderer {
         cols = Math.max(1, Math.round(pw / 1.6)); cellW = pw / cols;
         const p = at(MeshBuilder.CreatePlane("win", { width: pw, height: ph }, sc), 0, (winTop + winBottom) / 2, WIN_OFF);
         scaleUVs(p, cols / 4, rows / 4);
-        (glass ? this.planes.curtain : this.planes.windows).push(p);
+        this.planes[winKey].push(p);
       }
       // ---- shopfront / lobby glazing ----
       if (entrance) {
@@ -575,16 +767,55 @@ export class CityRenderer {
         scaleUVs(p, Math.max(1, Math.round(ew / 4)), 0.75);
         this.planes.front.push(p);
       }
-      if ((shop || lobby) && fw >= 3) {
+      const shutShop = shop && b.unit === undefined && fw >= 3 && H(73 + faceN) < 0.18; // (R5: some shops are shut: the shutter's down, tagged)
+      if (shutShop) { const p = at(MeshBuilder.CreatePlane("shutter", { width: fw - 0.8, height: 2.9 }, sc), 0, 1.6, 0.22); scaleUVs(p, Math.max(1, Math.round((fw - 0.8) / 4)), 1); this.planes.shutter.push(p); }
+      if ((shop || lobby) && fw >= 3 && !shutShop) {
         const bays = Math.max(1, Math.round((fw - 0.8) / 4));
         const p = at(MeshBuilder.CreatePlane("front", { width: fw - 0.8, height: 3 }, sc), 0, 1.75, lobby ? 0.27 : 0.2);
         scaleUVs(p, bays, 0.75);
         this.planes.front.push(p);
       }
+      if (gf === "shop" || gf === "boarded") {
+        const bays = Math.max(1, Math.round((fw - 0.8) / 4));
+        const p = at(MeshBuilder.CreatePlane("front", { width: fw - 0.8, height: 3 }, sc), 0, 1.75, 0.2);
+        scaleUVs(p, bays, 0.75);
+        this.planes.front.push(p);
+      }
+      if (gf === "shutter") {
+        const p = at(MeshBuilder.CreatePlane("shutter", { width: fw - 0.8, height: 2.9 }, sc), 0, 1.6, 0.22);
+        scaleUVs(p, Math.max(1, Math.round((fw - 0.8) / 4)), 1);
+        this.planes.shutter.push(p);
+      }
+      if (gf === "shop" || gf === "shutter") {
+        // a fascia board with a name (on the shared sign sheet)
+        const sw = Math.min(fw - 0.8, 5.2), sp = at(MeshBuilder.CreatePlane("sign", { width: sw, height: sw * 0.22 }, sc), 0, 3.6, 0.36);
+        sp.isPickable = false;
+        this.atlasSigns.push({ mesh: sp, text: FAKE_SHOPS[Math.floor(H(80 + faceN) * FAKE_SHOPS.length)], bg: ["#f3e2b8", "#ffe14a", "#43c7a6", "#ff8fa3", "#9fe3ff", "#f4f1ea"][Math.floor(H(81 + faceN) * 6)] });
+      }
       if (!detail) continue;
+      // ---- R5: ground floors: awnings on the little shops, boards over the shut ones, front doors with steps ----
+      if (gf === "shop") {
+        const aw = Math.min(fw - 0.6, 7), [c1, c2] = AWNING_COLORS[Math.floor(H(82 + faceN) * AWNING_COLORS.length)], depth = 1.2, slope = 0.4;
+        const base = at(MeshBuilder.CreateBox("awning", { width: aw, height: 0.08, depth }, sc), 0, 3.2 - Math.sin(slope) * depth / 2, depth / 2 + 0.05);
+        base.rotation.x = slope; piece(base, c1, 0.025);
+        const n = Math.floor(aw / 0.7);
+        for (let i = 1; i < n; i += 2) { const st = at(MeshBuilder.CreateBox("stripe", { width: aw / n, height: 0.02, depth: depth - 0.02 }, sc), -aw / 2 + (i + 0.5) * aw / n, 3.2 - Math.sin(slope) * depth / 2 + 0.05, depth / 2 + 0.05); st.rotation.x = slope; piece(st, c2, 0); }
+      }
+      if (gf === "boarded") {
+        for (let k = 0; k < 4; k++) { const pl = at(MeshBuilder.CreateBox("board", { width: fw - 1.2, height: 0.42, depth: 0.06 }, sc), (H(90 + k) - 0.5) * 0.4, 0.7 + k * 0.62, 0.32); pl.rotation.z = (H(95 + k) - 0.5) * 0.12; piece(pl, k % 2 ? "#a8743f" : "#b98a52", 0.012); }
+      }
+      if (gf === "door") {
+        const dxA = (H(85) - 0.5) * (fw - 2.4);
+        piece(at(MeshBuilder.CreateBox("door", { width: 1.2, height: 2.3, depth: 0.12 }, sc), dxA, 1.15, 0.14), ["#6b3a1e", "#2f4a5a", "#8e1f2e", "#2f6f4f"][Math.floor(H(86) * 4)], 0.015);
+        piece(at(MeshBuilder.CreateBox("doorframe", { width: 1.5, height: 0.18, depth: 0.2 }, sc), dxA, 2.4, 0.16), trim, 0.012);
+        piece(at(MeshBuilder.CreateBox("step", { width: 1.8, height: 0.18, depth: 0.6 }, sc), dxA, 0.09, 0.42), "#9a96a0", 0.012);
+        piece(at(MeshBuilder.CreateBox("intercom", { width: 0.22, height: 0.4, depth: 0.05 }, sc), dxA + 0.9, 1.35, 0.15), "#c8c4cc", 0.008);
+        piece(at(MeshBuilder.CreateBox("housenum", { width: 0.4, height: 0.25, depth: 0.03 }, sc), dxA, 2.75, 0.15), "#f4f1ea", 0.008);
+        const lamp = MeshBuilder.CreateSphere("doorlamp", { diameter: 0.22, segments: 5 }, sc); at(lamp, dxA - 0.95, 2.15, 0.3); lamp.material = this.glowMat("#ffe9a8"); lamp.parent = this.root; lamp.isPickable = false;
+      }
       // ---- awning over a shop (striped) / canopy over a tower lobby ----
       if (shop && fw >= 3) {
-        const aw = Math.min(fw - 0.6, 8), [c1, c2] = AWNING_COLORS[Math.floor(H(1) * AWNING_COLORS.length)];
+        const aw = Math.min(fw - 0.6, 8), [c1, c2] = b.italy ? (H(1) < 0.5 ? ["#2f8f4e", "#f4f1ea"] : ["#c8322c", "#f4f1ea"]) : AWNING_COLORS[Math.floor(H(1) * AWNING_COLORS.length)];
         const slope = 0.36, depth = 1.35;
         const base = at(MeshBuilder.CreateBox("awning", { width: aw, height: 0.08, depth }, sc), 0, 3.45 - Math.sin(slope) * depth / 2, depth / 2 + 0.05);
         base.rotation.x = slope; piece(base, c1, 0.025);
@@ -602,7 +833,7 @@ export class CityRenderer {
         for (const sx of [-1, 1]) piece(at(MeshBuilder.CreateCylinder("canopypost", { diameter: 0.14, height: 4.2, tessellation: 6 }, sc), sx * (cw / 2 - 0.3), 2.1, 2.3), "#3a3444", 0.015);
       }
       // ---- per-window trim on the street face (and the back of low-tier buildings) ----
-      const trimFace = street || (tier === 0 && !tower && nx === -fx && nz === -fz);
+      const trimFace = street || (tier === 0 && !tower && (b.poly ? nx * ffx + nz * ffz < -0.9 : nx === -fx && nz === -fz));
       if (rows && trimFace && !tower) {
         for (let i = 0; i < rows; i++) {
           const cellTop = winTop - i * rowH;
@@ -661,28 +892,48 @@ export class CityRenderer {
         }
       }
     }
-    if (b.sign) this.landmark(b, color);
+    if (b.sign && !b.poly) this.landmark(b, color);
+    // ---- R5: a tar-and-gravel roof on top (not on the glass towers or Chinatown's tiles) ----
+    if (!glass && !b.china && !b.italy && !b.poly && b.w > 1.5 && b.d > 1.5) {
+      const rp = MeshBuilder.CreateGround("roofmat", { width: b.w - 0.1, height: b.d - 0.1 }, sc); rp.position.set(b.x, top + 0.07, b.z); // (clear of the outline shell, which writes depth ~0.05 above the roof)
+      scaleUVs(rp, (b.w - 0.1) / 3, (b.d - 0.1) / 3); rp.isPickable = false; (H(55) < 0.4 ? this.planes.roofLight : this.planes.roof).push(rp);
+    }
     if (!detail) return;
     // ---- cornice round the top (not on towers: they have a parapet) ----
-    if (!tower && b.h > 3) piece((() => { const m = MeshBuilder.CreateBox("cornice", { width: b.w + 0.5, height: 0.45, depth: b.d + 0.5 }, sc); m.position.set(b.x, top - 0.28, b.z); return m; })(), trim, 0.03);
+    if (!tower && b.h > 3) piece(b.poly ? footPrism(sc, b.poly, top - 0.5, top - 0.05, 0.25) : (() => { const m = MeshBuilder.CreateBox("cornice", { width: b.w + 0.5, height: 0.45, depth: b.d + 0.5 }, sc); m.position.set(b.x, top - 0.28, b.z); return m; })(), trim, 0.03);
+    const [ccx, ccz] = b.poly ? centroid(b.poly) : [b.x, b.z]; // (R3: roof clutter round the middle of an angled roof)
+    // ---- R5: every roof: little vents, a hatch, a chimney on the older blocks (none in the way on low, lootable roofs) ----
+    if (!tower && !b.china && b.h >= 4 && !b.poly && Math.min(b.w, b.d) > 3) {
+      const ex = b.w / 2 - 0.6, ez = b.d / 2 - 0.6;
+      for (let k = 0; k < 2 + Math.floor(H(30) * 3); k++) {
+        const vx = b.x + (H(31 + k) - 0.5) * 2 * ex, vz = b.z + (H(36 + k) - 0.5) * 2 * ez;
+        if (H(41 + k) < 0.5) { const v = MeshBuilder.CreateCylinder("vent", { diameter: 0.28, height: 0.5, tessellation: 8 }, sc); v.position.set(vx, top + 0.25, vz); piece(v, "#c8c4cc", 0.012); const cap = MeshBuilder.CreateCylinder("ventcap", { diameter: 0.42, height: 0.08, tessellation: 8 }, sc); cap.position.set(vx, top + 0.55, vz); piece(cap, "#9a96a0", 0.01); }
+        else { const v = MeshBuilder.CreateBox("ventbox", { width: 0.6, height: 0.35, depth: 0.45 }, sc); v.position.set(vx, top + 0.18, vz); piece(v, "#9a96a0", 0.012); }
+      }
+      if (H(46) < 0.5) { const hx = b.x + (H(47) - 0.5) * ex, hz = b.z + (H(48) - 0.5) * ez; const h1 = MeshBuilder.CreateBox("hatch", { width: 0.9, height: 0.18, depth: 0.9 }, sc); h1.position.set(hx, top + 0.09, hz); piece(h1, "#5a5560", 0.012); }
+      if (tier < 2 && b.h >= 6 && H(49) < 0.55) { const cx2 = b.x + (H(50) < 0.5 ? -ex : ex) * 0.9, cz2 = b.z + (H(51) - 0.5) * ez; const ch = MeshBuilder.CreateBox("chimney", { width: 0.6, height: 1.3, depth: 0.6 }, sc); ch.position.set(cx2, top + 0.65, cz2); piece(ch, tier === 0 ? "#8a4a3a" : "#b8a890", 0.02); const chc = MeshBuilder.CreateBox("chimneycap", { width: 0.75, height: 0.12, depth: 0.75 }, sc); chc.position.set(cx2, top + 1.35, cz2); piece(chc, "#5a5560", 0.01); }
+      if (b.h >= 9 && H(52) < 0.3) { const ant = MeshBuilder.CreateCylinder("antenna", { diameterTop: 0.03, diameterBottom: 0.08, height: 3, tessellation: 5 }, sc); ant.position.set(b.x + ex * 0.7, top + 1.5, b.z - ez * 0.7); piece(ant, "#c8c4cc", 0.008); }
+    }
     // ---- roof clutter on roofs you can't reach (low roofs stay clear: rooftop loot lives there) ----
     if (!tower && b.h >= 9 && !b.china) { // (C5b: not under a tiled roof)
       if (H(20) < 0.45) {
-        const tx = b.x + (H(21) - 0.5) * b.w * 0.4, tz = b.z + (H(22) - 0.5) * b.d * 0.4;
+        const tx = b.poly ? ccx : b.x + (H(21) - 0.5) * b.w * 0.4, tz = b.poly ? ccz : b.z + (H(22) - 0.5) * b.d * 0.4;
         const tank = MeshBuilder.CreateCylinder("tank", { diameter: 2, height: 1.9, tessellation: 12 }, sc); tank.position.set(tx, top + 1.6, tz); piece(tank, "#8b5a2b", 0.04);
         const cone = MeshBuilder.CreateCylinder("tankroof", { diameterTop: 0, diameterBottom: 2.2, height: 0.7, tessellation: 12 }, sc); cone.position.set(tx, top + 2.9, tz); piece(cone, "#5a3a24", 0.03);
         for (const [lx, lz] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) { const leg = MeshBuilder.CreateBox("tankleg", { width: 0.12, height: 0.7, depth: 0.12 }, sc); leg.position.set(tx + lx, top + 0.35, tz + lz); piece(leg, "#3a3444", 0.015); }
       }
-      if (H(23) < 0.7) { const ac = MeshBuilder.CreateBox("ac", { width: 1.4, height: 0.9, depth: 1.1 }, sc); ac.position.set(b.x - b.w * 0.2, top + 0.45, b.z + b.d * 0.15); piece(ac, "#c8c4cc", 0.03); }
+      if (H(23) < 0.7 && !b.poly) { const ac = MeshBuilder.CreateBox("ac", { width: 1.4, height: 0.9, depth: 1.1 }, sc); ac.position.set(b.x - b.w * 0.2, top + 0.45, b.z + b.d * 0.15); piece(ac, "#c8c4cc", 0.03); }
     }
     // ---- Uptown tower crowns: a setback and, on the tallest, a mast ----
     if (tower && tier === 2 && b.h > 30 && Math.min(b.w, b.d) > 5) {
-      const crown = MeshBuilder.CreateBox("crown", { width: b.w * 0.62, height: 4.5, depth: b.d * 0.62 }, sc);
-      crown.position.set(b.x, top + 2.85, b.z); piece(crown, shade(color, -0.2), 0.05);
+      const crown = b.poly ? footPrism(sc, b.poly.map(([x, z]) => [ccx + (x - ccx) * 0.62, ccz + (z - ccz) * 0.62] as [number, number]), top + 0.6, top + 5.1)
+        : MeshBuilder.CreateBox("crown", { width: b.w * 0.62, height: 4.5, depth: b.d * 0.62 }, sc);
+      if (!b.poly) crown.position.set(b.x, top + 2.85, b.z);
+      piece(crown, shade(color, -0.2), 0.05);
       if (b.h > 45) {
         const mast = MeshBuilder.CreateCylinder("mast", { diameterTop: 0.12, diameterBottom: 0.4, height: 9, tessellation: 6 }, sc);
-        mast.position.set(b.x, top + 9.6, b.z); piece(mast, "#c8c4cc", 0.02);
-        const tip = MeshBuilder.CreateSphere("masttip", { diameter: 0.5, segments: 4 }, sc); tip.position.set(b.x, top + 14.2, b.z); piece(tip, "#ff3a3a", 0);
+        mast.position.set(ccx, top + 9.6, ccz); piece(mast, "#c8c4cc", 0.02);
+        const tip = MeshBuilder.CreateSphere("masttip", { diameter: 0.5, segments: 4 }, sc); tip.position.set(ccx, top + 14.2, ccz); piece(tip, "#ff3a3a", 0);
       }
     }
   }
@@ -708,6 +959,7 @@ export class CityRenderer {
 
   /** Shop sign on the face that looks toward the city centre. */
   private sign(b: Box) {
+    if (b.poly) { this.polySign(b); return; }
     const toC = [-b.x, -b.z];
     let nx = 0, nz = 0;
     if (b.face) { nx = Math.round(b.face[0]); nz = Math.round(b.face[1]); }
@@ -731,6 +983,22 @@ export class CityRenderer {
     p.material.zOffset = -4; p.material.zOffsetUnits = -8; // beats the (biased) windows behind it
     ink(p, 0.05);
     p.parent = this.root;
+  }
+
+  /** R3: the sign on an angled building: on the face that looks most along b.face (or toward the city centre). */
+  private polySign(b: Box) {
+    const want = b.face ?? [-b.x, -b.z], wl = Math.hypot(want[0], want[1]) || 1;
+    const f = footFaces(b).filter((q) => q.len >= 2).sort((p, q) => (q.nx * want[0] + q.nz * want[1]) / wl - (p.nx * want[0] + p.nz * want[1]) / wl)[0];
+    if (!f) return;
+    const top = b.y + b.h / 2;
+    const w = b.front === "shop" ? Math.min(f.len - 0.8, 5.2) : Math.min(f.len * 0.8, 7);
+    if (w < 1) return;
+    const p = MeshBuilder.CreatePlane("sign", { width: w, height: w * 0.22 }, this.scene);
+    const y = b.front === "shop" ? Math.min(4.05, top - 0.5 - w * 0.11) : b.kind === "tower" ? 5.5 : top - 0.9;
+    p.position.set(f.mx + f.nx * 0.34, y, f.mz + f.nz * 0.34);
+    p.rotation.y = Math.atan2(-f.nx, -f.nz);
+    p.isPickable = false;
+    this.atlasSigns.push({ mesh: p, text: b.sign!, bg: ["#f3e2b8", "#ffe14a", "#43c7a6", "#ff8fa3", "#9fe3ff"][Math.floor(hash(b.x, b.z) * 5)] });
   }
 
   /**
@@ -837,7 +1105,7 @@ export class CityRenderer {
         const font = (px: number) => `bold ${px}px "Bungee", "Arial Black", sans-serif`;
         c.font = font(size);
         while (size > 10 && c.measureText(sg.text).width > CW * 0.9) { size -= 2; c.font = font(size); }
-        c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#1b1420";
+        c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = sg.fg ?? "#1b1420";
         c.fillText(sg.text, x0 + CW / 2, y0 + CH / 2 + CH * 0.04);
         // point the plane's UVs at its cell (the texture is flipped: canvas top = v 1)
         const uv = sg.mesh.getVerticesData(VertexBuffer.UVKind);
@@ -867,6 +1135,10 @@ export class CityRenderer {
   private details(b: Box) {
     const sc = this.scene;
     const top = b.y + b.h / 2;
+    if (b.kind === "tower" && b.poly) { // (R3: an angled tower: a parapet round its own outline)
+      this.add(footPrism(sc, b.poly, top, top + 0.6, 0.2), "#4a4652", 0.05);
+      return;
+    }
     if (b.kind === "tower") {
       // roof clutter: AC units, a water tower on some, a parapet
       const par = MeshBuilder.CreateBox("parapet", { width: b.w + 0.4, height: 0.6, depth: b.d + 0.4 }, sc);
@@ -999,6 +1271,7 @@ export class CityRenderer {
         break;
       }
       case "case": {
+        if (b.deco === "jewels") break; // (R7: the pawn shops' glass counters: buildPawnShops fills them; the glass is the prop's)
         bx(b.w + 0.02, 0.35, b.d + 0.02, b.x, top - 0.2, b.z, "#bfe8ff", 0.01);
         for (let i = 0; i < 4; i++) bx(0.12, 0.08, 0.12, b.x + (hash(i, b.x) - 0.5) * b.w * 0.6, top - 0.3, b.z + (hash(b.z, i) - 0.5) * b.d * 0.6, i % 2 ? "#ffcf3a" : "#f4f1ea", 0);
         break;
@@ -1351,11 +1624,135 @@ export class CityRenderer {
     }
   }
 
+  /**
+   * R4: a Little Italy building's dressing (looks only): a low terracotta hip roof, green shutters either side of every
+   * upstairs window on the street, flower boxes of red geraniums, an iron balcony on some, wall lamps by the door.
+   */
+  private italyDress(b: Box) {
+    const sc = this.scene, MB = MeshBuilder, top = b.y + b.h / 2, bottom = b.y - b.h / 2;
+    const [nx, nz] = b.face ?? [1, 0];
+    const ux = -nz, uz = nx; // along the front
+    const frontLen = nx ? b.d : b.w, depth = nx ? b.w : b.d, H = hash(b.x * 1.7, b.z);
+    this.group = -1;
+    // the roof: a low terracotta hip with a little overhang
+    const roof = MB.CreateCylinder("itRoof", { diameterTop: 0.35, diameterBottom: 1.414, height: 1.1, tessellation: 4 }, sc);
+    roof.rotation.y = Math.PI / 4; roof.bakeCurrentTransformIntoVertices();
+    roof.scaling.set(b.w + 0.9, 1, b.d + 0.9); roof.position.set(b.x, top + 0.55, b.z); roof.bakeCurrentTransformIntoVertices();
+    this.add(roof, H < 0.5 ? "#c4562e" : "#b04a28", 0.04, false);
+    const fx = b.x + nx * (depth / 2), fz = b.z + nz * (depth / 2);
+    const at = (m: Mesh, along: number, y: number, out: number, col: string, o = 0.012) => { m.position.set(fx + ux * along + nx * out, y, fz + uz * along + nz * out); m.rotation.y = Math.atan2(nx, nz); this.add(m, col, o, false); return m; };
+    // the upstairs windows (the same grid as the façade's)
+    const winBottom = bottom + 4.8, winTop = top - 0.5, ph = winTop - winBottom, pw = frontLen - 1;
+    if (ph >= 1.5 && pw >= 1.5) {
+      const rows = Math.max(1, Math.round(ph / 2.2)), rowH = ph / rows, cols = Math.max(1, Math.round(pw / 1.6)), cellW = pw / cols;
+      const shutter = H < 0.33 ? "#2f6f4e" : H < 0.66 ? "#3d6f8f" : "#6b8f3a";
+      for (let i = 0; i < rows; i++) {
+        const cellTop = winTop - i * rowH, cy = cellTop - rowH * 0.5, sill = cellTop - (54 / 64) * rowH - 0.05;
+        for (let c = 0; c < cols; c++) {
+          const along = -pw / 2 + (c + 0.5) * cellW;
+          for (const s2 of [-1, 1]) at(MB.CreateBox("shutter", { width: cellW * 0.2, height: rowH * 0.58, depth: 0.06 }, sc), along + s2 * cellW * 0.4, cy, 0.17, shutter);
+          if (H * 7 + i + c * 3 > 0 && (i + c + Math.floor(H * 10)) % 2 === 0) {
+            at(MB.CreateBox("fbox", { width: cellW * 0.6, height: 0.22, depth: 0.3 }, sc), along, sill + 0.12, 0.32, "#8b5a2b");
+            for (let f = 0; f < 4; f++) at(MB.CreateSphere("gera", { diameter: 0.16, segments: 4 }, sc), along - cellW * 0.22 + f * cellW * 0.15, sill + 0.3, 0.33, f % 2 ? "#e0283c" : "#ff6b7a", 0);
+            for (let f = 0; f < 3; f++) at(MB.CreateSphere("leaf", { diameter: 0.12, segments: 3 }, sc), along - cellW * 0.15 + f * cellW * 0.15, sill + 0.24, 0.4, "#3f8f4a", 0);
+          }
+        }
+        // an iron balcony across the middle on some floors
+        if (i < rows - 1 && (H * 13 + i) % 3 < 1.1 && frontLen >= 5) {
+          const by = cellTop - (54 / 64) * rowH - 0.1, bw = Math.min(frontLen * 0.5, 4);
+          at(MB.CreateBox("ibal", { width: bw, height: 0.12, depth: 0.85 }, sc), 0, by, 0.45, "#e8d8b0", 0.01);
+          at(MB.CreateBox("irail", { width: bw, height: 0.05, depth: 0.05 }, sc), 0, by + 0.9, 0.85, "#2b2433", 0);
+          for (let t = -bw / 2; t <= bw / 2 + 0.01; t += 0.3) at(MB.CreateBox("ibar", { width: 0.03, height: 0.85, depth: 0.03 }, sc), t, by + 0.47, 0.85, "#2b2433", 0);
+          for (const t of [-bw / 2 + 0.3, bw / 2 - 0.3]) at(MB.CreateCylinder("ipot", { diameterTop: 0.3, diameterBottom: 0.22, height: 0.3, tessellation: 8 }, sc), t, by + 0.21, 0.6, "#b5653b", 0.01);
+        }
+      }
+    }
+    // wall lamps either side of the shopfront
+    for (const s2 of [-1, 1]) {
+      const along = s2 * (frontLen / 2 - 0.35);
+      at(MB.CreateBox("lampArm", { width: 0.05, height: 0.05, depth: 0.4 }, sc), along, 3.15, 0.3, "#2b2433", 0);
+      const lamp = MB.CreateSphere("itLamp", { diameter: 0.24, segments: 6 }, sc);
+      lamp.position.set(fx + ux * along + nx * 0.5, 3.05, fz + uz * along + nz * 0.5); lamp.material = this.glowMat("#ffd98a"); lamp.parent = this.root; lamp.isPickable = false;
+    }
+  }
+
+  /**
+   * R4: Little Italy's two arches (green, white and red bands, a "LITTLE ITALY" board, warm bulbs, potted cypresses),
+   * café string lights zig-zagging across the street, and washing lines between the upstairs windows.
+   */
+  private buildLittleItaly() {
+    const C = this.arena.littleItaly;
+    if (!C) return;
+    this.districtGates.italy = C.gates.length;
+    const sc = this.scene, MB = MeshBuilder, bulb = this.glowMat("#ffd98a");
+    this.group = -1; this.brk = "";
+    const light = (x: number, y: number, z: number, d = 0.16) => { const m = MB.CreateSphere("festoon", { diameter: d, segments: 5 }, sc); m.position.set(x, y, z); m.material = bulb; m.parent = this.root; m.isPickable = false; };
+    for (const g of C.gates) {
+      const half = g.w / 2 - 0.2, H0 = 5.2;
+      for (const sx of [-1, 1]) {
+        const pil = MB.CreateBox("itPillar", { width: 0.7, height: H0, depth: 0.7 }, sc); pil.position.set(g.x + sx * half, H0 / 2, g.z); this.add(pil, "#efe3c8", 0.04);
+        const cap = MB.CreateBox("itCap", { width: 0.95, height: 0.3, depth: 0.95 }, sc); cap.position.set(g.x + sx * half, H0 + 0.15, g.z); this.add(cap, "#d8c8a0", 0.03);
+        const base = MB.CreateBox("itBase", { width: 0.95, height: 0.5, depth: 0.95 }, sc); base.position.set(g.x + sx * half, 0.25, g.z); this.add(base, "#b9a06b", 0.03);
+        // a potted cypress at each foot (on the pavement side)
+        const pot = MB.CreateCylinder("cypPot", { diameterTop: 0.7, diameterBottom: 0.5, height: 0.55, tessellation: 10 }, sc); pot.position.set(g.x + sx * (half + 0.9), 0.28, g.z); this.add(pot, "#b5653b", 0.02);
+        const tree = MB.CreateCylinder("cypress", { diameterTop: 0.05, diameterBottom: 0.75, height: 2.6, tessellation: 8 }, sc); tree.position.set(g.x + sx * (half + 0.9), 1.85, g.z); this.add(tree, "#2f5a3a", 0.03);
+      }
+      // the arch: three bands (green outside, white, red inside) of small blocks round a half circle, bulbs along it
+      const bands: [number, string][] = [[half + 0.05, "#2f8f4e"], [half - 0.3, "#f4f1ea"], [half - 0.65, "#c8322c"]];
+      for (const [r, col] of bands) {
+        const n = 18;
+        for (let i = 0; i < n; i++) {
+          const a0 = (i / n) * Math.PI, a1 = ((i + 1) / n) * Math.PI, am = (a0 + a1) / 2, seg = r * (a1 - a0) + 0.04;
+          const m = MB.CreateBox("arch", { width: seg, height: 0.36, depth: 0.5 }, sc);
+          m.position.set(g.x + Math.cos(am) * r, H0 + Math.sin(am) * r * 0.55, g.z);
+          m.rotation.z = Math.atan2(Math.cos(am) * 0.55, -Math.sin(am)); // (along the arch's curve)
+          this.add(m, col, 0.02);
+        }
+      }
+      for (let i = 1; i < 12; i++) { const a = (i / 12) * Math.PI, r = half + 0.35; light(g.x + Math.cos(a) * r, H0 + Math.sin(a) * r * 0.55, g.z - 0.28, 0.14); light(g.x + Math.cos(a) * r, H0 + Math.sin(a) * r * 0.55, g.z + 0.28, 0.14); }
+      // the name board, both faces, hanging under the top of the arch
+      const bm = unlitTextured(sc, textTexture(sc, "LITTLE ITALY", { w: 512, h: 128, bg: "#f4f1ea", fg: "#2f8f4e" }), "itBoard");
+      for (const ry of [0, Math.PI]) {
+        const pl = MB.CreatePlane("itBoard", { width: 3.6, height: 0.9 }, sc);
+        pl.position.set(g.x, H0 + half * 0.55 - 1.0, g.z + (ry ? 0.3 : -0.3)); pl.rotation.y = ry; pl.material = bm; pl.parent = this.root; pl.isPickable = false;
+      }
+      const frame = MB.CreateBox("itFrame", { width: 3.8, height: 1.05, depth: 0.34 }, sc); frame.position.set(g.x, H0 + half * 0.55 - 1.0, g.z); this.add(frame, "#c8322c", 0.03); // (thin: its outline stays behind the boards at ±0.3)
+    }
+    // café lights: warm bulbs on sagging wires zig-zagging across the street, and washing lines higher up
+    const S = C.street, x0 = S.minX - 2.3, x1 = S.maxX + 2.3;
+    C.lanternRows.forEach((z, ri) => {
+      const za = z - 1.6, zb = z + 1.6, y = 5.9, n = 10;
+      for (const [zs, ze] of [[za, zb], [zb, za]] as const) {
+        const pts: Vector3[] = [];
+        for (let i = 0; i <= n; i++) { const t = i / n, sag = Math.sin(t * Math.PI) * 0.7; pts.push(new Vector3(x0 + (x1 - x0) * t, y - sag, zs + (ze - zs) * t)); if (i > 0 && i < n) light(x0 + (x1 - x0) * t, y - sag - 0.12, zs + (ze - zs) * t); }
+        for (let i = 0; i < n; i++) {
+          const a = pts[i], b = pts[i + 1], len = Vector3.Distance(a, b);
+          const w = MB.CreateCylinder("fwire", { diameter: 0.02, height: len, tessellation: 4 }, sc);
+          w.position.copyFrom(a.add(b).scale(0.5)); w.lookAt(b); w.rotation.x += Math.PI / 2; this.add(w, "#1b1420", 0, false);
+        }
+      }
+      if (ri % 2 === 0) { // a washing line with the laundry out
+        const y2 = 8.6, cols = ["#f4f1ea", "#ff8fa3", "#4fb3ff", "#ffe14a", "#c8322c", "#43c7a6"];
+        const wire = MB.CreateCylinder("lline", { diameter: 0.02, height: x1 - x0, tessellation: 4 }, sc); wire.rotation.z = Math.PI / 2; wire.position.set((x0 + x1) / 2, y2, z + 0.4); this.add(wire, "#e8e2d4", 0, false);
+        for (let i = 0; i < 7; i++) {
+          const cx = x0 + 1.2 + i * ((x1 - x0 - 2.4) / 6), sh = hash(cx, z);
+          // (two single-sided planes back to back: a double-sided mesh would stop the city's meshes merging)
+          for (const ry of [0, Math.PI]) {
+            const cloth = MB.CreatePlane("laundry", { width: 0.5 + sh * 0.4, height: 0.6 + sh * 0.5 }, sc);
+            cloth.position.set(cx, y2 - 0.35 - sh * 0.2, z + 0.4); cloth.rotation.y = ry;
+            this.add(cloth, cols[Math.floor(sh * cols.length)], 0, false);
+          }
+        }
+      }
+    });
+  }
+
   /** C5b: Chinatown's two red gates and the lanterns strung across the street */
   private buildChinatown() {
     const C = this.arena.chinatown;
     if (!C) return;
     const sc = this.scene, MB = MeshBuilder;
+    this.districtGates.china = C.gates.length;
     this.group = -1; this.brk = "";
     for (const g of C.gates) {
       const half = g.w / 2 - 0.2;
@@ -1384,7 +1781,7 @@ export class CityRenderer {
     // lanterns strung across the road (red and gold, a little sag), on thin wires between the buildings
     const S = C.street;
     for (const z of C.lanternRows) {
-      const x0 = S.minX - 1.5, x1 = S.maxX + 2.5, y = 6.4, n = 6;
+      const x0 = S.minX - (this.arena.variant ? 2.3 : 1.5), x1 = S.maxX + (this.arena.variant ? 2.3 : 2.5), y = 6.4, n = 6;
       for (let i = 0; i <= n; i++) {
         const t = i / n, sag = Math.sin(t * Math.PI) * 0.6;
         if (i > 0 && i < n) this.lantern(x0 + (x1 - x0) * t, y - sag - 0.45, z, 0.9, i % 2 === 0);
@@ -2411,6 +2808,7 @@ export class CityRenderer {
 
   /** C5b: how dark it is (0 day .. 1 night): the lanterns glow, and sway gently */
   setNight(n: number, dt: number) {
+    if (this.heliBeam) this.heliBeam.setEnabled(n > 0.5); // (R6: the helicopter's searchlight sweeps at night)
     if (!this.lanternMat) return;
     this.lanternT += dt;
     const glow = Color3.Lerp(Color3.FromHexString("#5a1010"), Color3.FromHexString("#ff5a30"), Math.min(1, n * 1.3));
@@ -2929,6 +3327,25 @@ export class CityRenderer {
           m.rotation.y = yaw;
           this.add(m, "#f4f1ea", 0, false);
         }
+      } else if (d.kind === "streetsign") {
+        // R3: a street-name sign: a pole and two green blades, each along its road, readable from both sides
+        const pole = MeshBuilder.CreateCylinder("signpole", { diameter: 0.1, height: 3.3, tessellation: 6 }, sc);
+        pole.position.set(d.x, 1.65, d.z);
+        this.add(pole, "#3a3444", 0.015);
+        const [t1, t2] = (d.text ?? "|").split("|");
+        ([[t1, d.yaw ?? 0, 3.05], [t2, d.yaw2 ?? 0, 2.7]] as [string, number, number][]).forEach(([text, yaw, y]) => {
+          if (!text) return;
+          const w = Math.min(3.2, 0.5 + text.length * 0.13);
+          for (const side of [0, Math.PI]) {
+            const blade = MeshBuilder.CreatePlane("streetblade", { width: w, height: 0.34 }, sc);
+            // (the blade runs along the road: its face looks across it)
+            const ry = yaw + Math.PI / 2 + side;
+            blade.position.set(d.x + Math.sin(yaw) * (w / 2 - 0.1) - Math.sin(ry) * 0.03, y, d.z + Math.cos(yaw) * (w / 2 - 0.1) - Math.cos(ry) * 0.03);
+            blade.rotation.y = ry;
+            blade.isPickable = false;
+            this.atlasSigns.push({ mesh: blade, text, bg: "#2e8b57", fg: "#ffffff" });
+          }
+        });
       } else if (d.kind === "streetlight") {
         const pole = MeshBuilder.CreateCylinder("lamppole", { diameter: 0.14, height: 5.2, tessellation: 8 }, sc);
         pole.position.set(d.x, 2.75, d.z);
@@ -2963,7 +3380,14 @@ export class CityRenderer {
         const pole = MeshBuilder.CreateCylinder("upole", { diameter: 0.05, height: 2.2, tessellation: 6 }, sc);
         pole.position.set(d.x, 1.25, d.z); this.add(pole, "#e8e2d4", 0.01);
         const top = MeshBuilder.CreateCylinder("utop", { diameterTop: 0.1, diameterBottom: 2.0, height: 0.45, tessellation: 8 }, sc);
-        top.position.set(d.x, 2.4, d.z); this.add(top, hash(d.x, d.z) > 0.5 ? "#e14b4b" : "#43c7a6", 0.02);
+        // (R4: Little Italy's are green, white or red with a white trim; Chinatown's are red paper parasols with a gold rim)
+        const ucol = d.text === "it" ? ["#2f8f4e", "#f4f1ea", "#c8322c"][Math.floor(hash(d.x, d.z) * 3)] : d.text === "cn" ? "#c0282a" : hash(d.x, d.z) > 0.5 ? "#e14b4b" : "#43c7a6";
+        top.position.set(d.x, 2.4, d.z); this.add(top, ucol, 0.02);
+        if (d.text === "it" || d.text === "cn") {
+          const rim = MeshBuilder.CreateTorus("urim", { diameter: 1.96, thickness: 0.06, tessellation: 16 }, sc); rim.position.set(d.x, 2.18, d.z); this.add(rim, d.text === "cn" ? "#e8b422" : "#f4f1ea", 0, false);
+          const knob = MeshBuilder.CreateSphere("uknob", { diameter: 0.14, segments: 5 }, sc); knob.position.set(d.x, 2.66, d.z); this.add(knob, d.text === "cn" ? "#e8b422" : "#c8322c", 0, false);
+          if (d.text === "cn") this.lantern(d.x + 0.7, 1.95, d.z, 0.6);
+        }
       } else if (d.kind === "scaffold") {
         // poles + planks up the side of a building (Slice 2B makes it climbable)
         const yaw = d.yaw ?? 0, w = d.w ?? 12, h = d.h ?? 12;
@@ -2983,6 +3407,564 @@ export class CityRenderer {
   /** C1: traffic-light lamps (red / amber / green per approach), recoloured every frame from the light clock */
   private lamps: { node: number; approach: number; red: StandardMaterial; amber: StandardMaterial; green: StandardMaterial; state: string }[] = [];
 
+  // =================================================================================================
+  // R5: HOT STUFF PAWN & LOAN (looks only). A crooked, grimy little shop: Twitchy Lou's barred booth in the middle
+  // of the front with a brass tray and a bell, a flickering neon flame over it, a door each side (OPEN / OPE neon),
+  // half-down roller shutters with tags, a sagging awning, barbed wire along the roof, a CCTV camera, a big roof
+  // sign facing the forts; Lou's Square paved out front. Inside: a wall of guitars, a stack of tellies all showing
+  // static, a stuffed bear, Lou's desk (cash box, a little fan, a lamp), the back room's safe; signs everywhere.
+  // =================================================================================================
+  private neon: { mats: StandardMaterial[]; base: Color3[]; seed: number }[] = [];
+  private stationLights: { red: StandardMaterial; blue: StandardMaterial } | null = null;
+  private buildPawnShops() {
+    const sc = this.scene, MB = MeshBuilder, L = HOT_PLOT, H = 4.4;
+    for (const hs of this.arena.hotShops ?? []) {
+      const sx = hs.idx ? 1 : -1, X = (x: number) => (sx < 0 ? x : -x), lou = hs.idx === 0;
+      const Fz = L.minZ, Bz = L.maxZ, x0 = L.minX, x1 = L.maxX, zv = (v: number) => Fz + v;
+      const G = 9101 + hs.idx; // (the inside's group: drawn only when you're near)
+      this.group = -1; this.brk = "";
+      const bx = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, outline = 0.02) => { const m = MB.CreateBox("ps", { width: w, height: h, depth: d }, sc); m.position.set(X(x), y, z); this.add(m, col, outline, false); return m; };
+      const cyl = (dia: number, h: number, x: number, y: number, z: number, col: string, outline = 0.012, t = 8) => { const m = MB.CreateCylinder("psc", { diameter: dia, height: h, tessellation: t }, sc); m.position.set(X(x), y, z); this.add(m, col, outline, false); return m; };
+      const sph = (dia: number, x: number, y: number, z: number, col: string, outline = 0.01, seg = 6) => { const m = MB.CreateSphere("pss", { diameter: dia, segments: seg }, sc); m.position.set(X(x), y, z); this.add(m, col, outline, false); return m; };
+      const plane = (w: number, h: number, x: number, y: number, z: number, nx: number, nz: number, mat: StandardMaterial) => { const p = MB.CreatePlane("psp", { width: w, height: h }, sc); p.position.set(X(x), y, z); p.rotation.y = Math.atan2(-nx * -sx, -nz); p.material = mat; p.parent = this.root; p.isPickable = false; return p; };
+      const sign = (text: string, w: number, h: number, x: number, y: number, z: number, nx: number, nz: number, o: { bg?: string; fg?: string; stroke?: string } = {}) =>
+        inG(plane(w, h, x, y, z, nx, nz, unlitTextured(sc, textTexture(sc, text, { w: 512, h: Math.max(64, Math.round(512 * h / w)), ...o }), "psSign-" + text))); // (inside: drawn near only)
+      const skin = (list: Mesh[], w: number, h: number, x: number, y: number, z: number, nx: number, nz: number, off = 0.12, tile = 2) => { const p = MB.CreatePlane("psk", { width: w, height: h }, sc); p.position.set(X(x + nx * off), y, z + nz * off); p.rotation.y = Math.atan2(-nx * -sx, -nz); scaleUVs(p, w / tile, h / tile); list.push(p); return p; };
+      const bulbs: Mesh[] = [];
+      const glow = (x: number, y: number, z: number, _col: string, d = 0.18) => { const b = MB.CreateSphere("psBulb", { diameter: d, segments: 5 }, sc); b.position.set(X(x), y, z); bulbs.push(b); return b; }; // (merged into one mesh at the end)
+      const inG = (m: Mesh) => { if (this.group >= 0) { (this.unitPlanes.get(this.group) ?? this.unitPlanes.set(this.group, []).get(this.group)!).push(m); m.setEnabled(false); } return m; };
+      const flicker = (mat: StandardMaterial) => { this.neon.push({ mats: [mat], base: [mat.emissiveColor.clone()], seed: this.neon.length * 7.3 + 1 + hs.idx }); return mat; };
+      const dvm = 1.5, dw = 1.8, W = x1 - x0;
+      // ---- outside: brick round the window and the door, the shop window, the fascia with the name
+      const brick = this.planes.brick;
+      skin(brick, 0.6, H, x0 + 0.3, H / 2, Fz, 0, -1); skin(brick, 0.6, H, x1 - 0.3, H / 2, Fz, 0, -1);
+      skin(brick, W - 1.2, 0.6, (x0 + x1) / 2, 0.3, Fz, 0, -1); skin(brick, W - 1.2, H - 2.8, (x0 + x1) / 2, 2.8 + (H - 2.8) / 2, Fz, 0, -1);
+      skin(brick, dvm - dw / 2, H, x0, H / 2, zv((dvm - dw / 2) / 2), -1, 0); skin(brick, dw, H - 2.6, x0, 2.6 + (H - 2.6) / 2, zv(dvm), -1, 0);
+      skin(brick, Bz - zv(dvm + dw / 2), H, x0, H / 2, (zv(dvm + dw / 2) + Bz) / 2, -1, 0);
+      skin(brick, W, H, (x0 + x1) / 2, H / 2, Bz, 0, 1); skin(brick, Bz - Fz, H, x1, H / 2, (Fz + Bz) / 2, 1, 0);
+      for (const k of [1, 2, 3]) bx(0.08, 2.2, 0.1, x0 + 0.6 + k * (W - 1.2) / 4, 1.7, Fz + 0.15, "#2b2433", 0.005); // (the window's mullions)
+      bx(W - 0.6, 0.85, 0.16, (x0 + x1) / 2, 3.45, Fz - 0.12, lou ? "#7a2f3a" : "#2f5a3a", 0.02); // (the fascia board)
+      sign(hs.name, W - 1.4, 0.6, (x0 + x1) / 2, 3.5, Fz - 0.32, 0, -1, { fg: "#ffd54a", stroke: "#1b1420" });
+      sign(lou ? "CASH 4 GOLD, GUITARS, GRANDMA'S TEETH" : "WE BUY. WE SELL. WE DON'T ASK.", W - 3, 0.26, (x0 + x1) / 2, 3.12, Fz - 0.32, 0, -1, { fg: "#f4f1ea", stroke: "#1b1420" });
+      // the awning over the window, the three gold balls over the door (the pawnbroker's sign), the door's frame and mat
+      { const aw = bx(W - 1.2, 0.08, 1.1, (x0 + x1) / 2, 2.72, Fz - 0.6, lou ? "#a83a3a" : "#3a7a5a", 0.02); aw.rotation.x = -0.35; }
+      bx(0.9, 0.08, 0.08, x0 - 0.45, 3.55, zv(dvm), "#3a3444", 0.01);
+      for (const [dz, y] of [[-0.25, 3.05], [0.25, 3.05], [0, 2.72]]) { sph(0.32, x0 - 0.85, y, zv(dvm) + dz, "#ffd54a", 0.012, 10); cyl(0.02, 3.55 - y, x0 - 0.85, (3.55 + y) / 2, zv(dvm) + dz, "#3a3444", 0); }
+      bx(0.3, 0.15, dw + 0.3, x0 - 0.05, 2.62, zv(dvm), "#2b2433", 0.015);
+      for (const e of [-1, 1]) bx(0.3, 2.55, 0.14, x0 - 0.05, 1.28, zv(dvm) + e * (dw / 2 + 0.05), "#2b2433", 0.01);
+      bx(0.9, 0.03, 1.5, x0 - 0.6, 0.05, zv(dvm), "#6b3a1e", 0);
+      { const nm = new StandardMaterial("psOpen" + hs.idx, sc); nm.disableLighting = true; const tx = textTexture(sc, "OPEN", { w: 256, h: 96, fg: "#43c7a6", stroke: "#0b2a24" }); nm.diffuseTexture = tx; nm.emissiveTexture = tx; nm.useAlphaFromDiffuseTexture = true; nm.emissiveColor = new Color3(1, 1, 1); plane(0.9, 0.34, x0 - 0.18, 2.95, zv(dvm + 1.5), -1, 0, flicker(nm)); }
+      // the neon in the window: HOT STUFF with a flame (Lou's) / FINDERS KEEPERS with a grabbing hand (Fran's)
+      {
+        const t = new DynamicTexture("psNeon" + hs.idx, { width: 512, height: 256 }, sc, true), c = t.getContext() as unknown as CanvasRenderingContext2D;
+        c.clearRect(0, 0, 512, 256);
+        c.font = "bold 84px 'Luckiest Guy', Impact, sans-serif"; c.textBaseline = "middle"; c.lineWidth = 10;
+        if (lou) {
+          const flame = (x: number, y: number, s: number) => { c.beginPath(); c.moveTo(x, y); c.bezierCurveTo(x - 40 * s, y - 50 * s, x - 10 * s, y - 90 * s, x + 5 * s, y - 130 * s); c.bezierCurveTo(x + 20 * s, y - 80 * s, x + 50 * s, y - 60 * s, x, y); c.closePath(); };
+          c.lineWidth = 9; c.strokeStyle = "#ff7a1a"; c.fillStyle = "rgba(255,140,40,0.35)"; flame(70, 230, 1.6); c.fill(); c.stroke();
+          c.strokeStyle = "#5a0f14"; c.lineWidth = 10; c.strokeText("HOT", 150, 80); c.strokeText("STUFF", 150, 180);
+          c.fillStyle = "#ff3c3c"; c.fillText("HOT", 150, 80); c.fillStyle = "#ffb03c"; c.fillText("STUFF", 150, 180);
+        } else {
+          c.strokeStyle = "#7aff6b"; c.lineWidth = 8; c.beginPath(); c.arc(70, 130, 46, 0, Math.PI * 2); c.stroke();
+          for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(40 + i * 20, 95); c.lineTo(40 + i * 20, 40); c.stroke(); }
+          c.strokeStyle = "#0b2a24"; c.lineWidth = 10; c.strokeText("FINDERS", 140, 80); c.strokeText("KEEPERS", 140, 180);
+          c.fillStyle = "#7aff6b"; c.fillText("FINDERS", 140, 80); c.fillStyle = "#ff6fb5"; c.fillText("KEEPERS", 140, 180);
+        }
+        t.update(); t.hasAlpha = true;
+        const m = new StandardMaterial("psNeonMat" + hs.idx, sc); m.diffuseTexture = t; m.emissiveTexture = t; m.useAlphaFromDiffuseTexture = true; m.disableLighting = true; m.backFaceCulling = false; m.emissiveColor = new Color3(1, 1, 1);
+        plane(2.6, 1.3, -55.4, 2.1, zv(0.35), 0, -1, flicker(m));
+      }
+      // the suit of armour out front (on a plinth by the door, a sword, a FOR SALE tag)
+      {
+        const a = hs.armour, ax = sx < 0 ? a.x : -a.x, az = a.z;
+        bx(0.75, 0.2, 0.75, ax, 0.1, az, "#5a3a24", 0.01);
+        for (const s of [-1, 1]) cyl(0.17, 0.75, ax, 0.6, az + s * 0.12, "#b8b4c8", 0.012);
+        { const body = MB.CreateCylinder("aBody", { diameterTop: 0.5, diameterBottom: 0.38, height: 0.65, tessellation: 10 }, sc); body.position.set(X(ax), 1.3, az); this.add(body, "#c9ccd4", 0.015, false); }
+        cyl(0.3, 0.36, ax, 1.82, az, "#d8dce4", 0.012, 10);
+        bx(0.04, 0.04, 0.2, ax - 0.15, 1.84, az, "#1b1420", 0);
+        { const pl = MB.CreateCylinder("aPlume", { diameterTop: 0.02, diameterBottom: 0.1, height: 0.3, tessellation: 6 }, sc); pl.position.set(X(ax + 0.03), 2.12, az); this.add(pl, "#d6264a", 0, false); }
+        for (const s of [-1, 1]) cyl(0.13, 0.6, ax, 1.25, az + s * 0.32, "#b8b4c8", 0.01);
+        bx(0.02, 1.1, 0.05, ax - 0.12, 0.95, az + 0.38, "#e8ecf2", 0.008);
+        sign(lou ? "SIR CLANKS-A-LOT  $900" : "GENUINE KNIGHT (ONE OWNER)", 0.7, 0.25, ax - 0.27, 1.25, az, -1, 0, { bg: "#f4f1ea", fg: "#1b1420" });
+      }
+      // a roof sign facing Gahookz, lit
+      {
+        const y = H + 1.5, sz = zv(1.2);
+        for (const x of [-56.0, -50.8]) { bx(0.12, 1.6, 0.12, x, H + 0.8, sz, "#3a3444", 0.01); }
+        bx(6.4, 1.3, 0.2, -53.4, y, sz, "#1b1420", 0.03);
+        sign(lou ? "HOT STUFF  -  WE BUY ANYTHING" : "FINDERS KEEPERS  -  NO QUESTIONS", 6.2, 1.1, -53.4, y, sz - 0.22, 0, -1, { bg: "#1b1420", fg: lou ? "#ff4a2a" : "#7aff6b" });
+        for (let x = -56.4; x <= -50.4; x += 0.6) glow(x, y + 0.72, sz, "#ffe08a", 0.13);
+      }
+      // ---- inside (drawn near only): wallpaper, a slatwall of junk at the back, guitars, bare bulbs, the counters' clutter
+      this.group = G;
+      const wp = (w: number, h: number, x: number, y: number, z: number, nx: number, nz: number) => skin(this.planes.wallpaper, w, h, x, y, z, nx, nz, 0.1, 2);
+      wp(W - 0.6, H, (x0 + x1) / 2, H / 2, Bz - 0.3, 0, -1);
+      wp(Bz - Fz - 0.6, H, x1 - 0.3, H / 2, (Fz + Bz) / 2, -1, 0);
+      wp(Bz - zv(dvm + dw / 2) - 0.3, H, x0 + 0.3, H / 2, (zv(dvm + dw / 2) + Bz - 0.3) / 2, 1, 0);
+      wp(W - 0.6, H - 2.8, (x0 + x1) / 2, 2.8 + (H - 2.8) / 2, Fz + 0.3, 0, 1);
+      // the slatwall: white slats right across the back, crammed with stuff
+      const sb = this.arena.boxes.find((b) => b.deco === "slatwall" && Math.abs(b.x - hs.boss.x) < 8)!;
+      const sz0 = sb.z - sb.d / 2; // (its front face, toward the counters)
+      bx(W - 0.8, 2.4, 0.06, (x0 + x1) / 2, 1.2 + 0.25, sz0 + 0.03, "#ece8dc", 0.01);
+      for (let k = 0; k < 14; k++) bx(W - 0.8, 0.02, 0.05, (x0 + x1) / 2, 0.35 + k * 0.17, sz0 - 0.01, "#b8b4a8", 0);
+      const cols = ["#d6264a", "#1b1420", "#ffd54a", "#3d6fb5", "#f4f1ea", "#43c7a6", "#ff8fa3", "#8b5a2b", "#6b3f7a", "#c9ccd4"];
+      const H2 = (i: number, j: number) => hash(i * 3.1 + hs.idx * 17, j * 1.7 + 5);
+      for (let i = 0; i < 22; i++) {
+        const x = x0 + 0.8 + (i + 0.5) * (W - 1.6) / 22, row = i % 3, y = 0.6 + row * 0.75 + H2(i, 1) * 0.15, z = sz0 - 0.12, c = cols[Math.floor(H2(i, 2) * cols.length)];
+        const kind = Math.floor(H2(i, 3) * 7);
+        if (kind === 0) { bx(0.45, 0.3, 0.18, x, y, z, c, 0.01); bx(0.35, 0.2, 0.02, x, y, z - 0.1, "#1b1420", 0); } // a boombox
+        else if (kind === 1) { sph(0.32, x, y + 0.1, z, c, 0.012, 8).scaling.set(1, 0.8, 0.5); bx(0.03, 0.4, 0.03, x, y + 0.42, z, "#3a3444", 0); } // a hat on a hook
+        else if (kind === 2) { bx(0.38, 0.5, 0.04, x, y + 0.1, z, "#8b5a2b", 0.01); bx(0.3, 0.42, 0.02, x, y + 0.1, z - 0.03, c, 0); } // a framed picture
+        else if (kind === 3) { bx(0.5, 0.12, 0.2, x, y, z, "#1b1420", 0.01); for (let k = 0; k < 6; k++) bx(0.05, 0.02, 0.12, x - 0.2 + k * 0.08, y + 0.07, z - 0.02, "#f4f1ea", 0); } // a little keyboard
+        else if (kind === 4) { cyl(0.22, 0.3, x, y, z, c, 0.01, 10); } // a drum
+        else if (kind === 5) { sph(0.28, x, y, z, c, 0.01, 6).scaling.set(1, 1.3, 0.6); bx(0.24, 0.04, 0.04, x, y + 0.22, z, "#3a3444", 0); } // a handbag
+        else { bx(0.34, 0.24, 0.14, x, y, z, c, 0.01); cyl(0.12, 0.05, x - 0.08, y + 0.02, z - 0.08, "#1b1420", 0).rotation.x = Math.PI / 2; } // a camera
+      }
+      // a moose head (well, a moose), a ship in a bottle on the top shelf, a disco ball
+      { const mz = sz0 - 0.2; sph(0.5, -53.4, 3.2, mz, "#7a4a2a", 0.015, 8).scaling.set(1, 0.9, 0.8); for (const s of [-1, 1]) { const an = bx(0.5, 0.05, 0.05, -53.4 + s * 0.35, 3.55, mz, "#c9a07a", 0.01); an.rotation.z = s * 0.5; } }
+      { const db = sph(0.4, -50.0, H - 0.6, zv(6.5), "#c9ccd4", 0.01, 8); void db; cyl(0.01, 0.3, -50.0, H - 0.25, zv(6.5), "#3a3444", 0); }
+      // the guitars on the owner's side wall
+      const gb = this.arena.boxes.find((b) => b.deco === "guitars" && Math.abs(b.x - hs.boss.x) < 8);
+      if (gb) for (let i = 0; i < 5; i++) {
+        const z = gb.z - gb.d / 2 + 0.4 + i * (gb.d - 0.8) / 4, x = (sx < 0 ? gb.x : -gb.x) + 0.25, c = cols[i * 2 % cols.length];
+        sph(0.45, x, 1.05, z, c, 0.015, 8).scaling.set(0.25, 1.25, 1); sph(0.34, x, 1.38, z, c, 0.015, 8).scaling.set(0.25, 1, 1);
+        bx(0.04, 0.75, 0.07, x, 1.85, z, "#8b5a2b", 0.01); bx(0.04, 0.18, 0.12, x, 2.3, z, "#5a3a24", 0.01);
+      }
+      // the counters: jewellery busts, watches, rings, chains, old phones, coins (and the glass over them breaks)
+      hs.counters.forEach((r0, ci) => {
+        const r = { minX: sx < 0 ? r0.minX : -r0.maxX, maxX: sx < 0 ? r0.maxX : -r0.minX, minZ: r0.minZ, maxZ: r0.maxZ }; // (in the left shop's x)
+        const w = r.maxX - r.minX, d = r.maxZ - r.minZ, cxx = (r.minX + r.maxX) / 2, czz = (r.minZ + r.maxZ) / 2, top = 1.05;
+        bx(w - 0.08, 0.04, d - 0.08, cxx, top - 0.37, czz, "#4a2a3a", 0); // (the felt inside, under the glass)
+        const n = Math.max(3, Math.round((w * d) / 0.18));
+        for (let i = 0; i < n; i++) {
+          const u = r.minX + 0.15 + H2(ci * 50 + i, 7) * (w - 0.3), v = r.minZ + 0.12 + H2(ci * 50 + i, 8) * (d - 0.24), k = Math.floor(H2(ci * 50 + i, 9) * 6), c = ["#ffd54a", "#c9ccd4", "#d6264a", "#43c7a6"][i % 4];
+          if (k === 0) { cyl(0.1, 0.22, u, top - 0.24, v, "#7a1a2a", 0.005); const ch = MB.CreateTorus("chain", { diameter: 0.12, thickness: 0.012, tessellation: 10 }, sc); ch.position.set(X(u), top - 0.16, v); ch.rotation.x = 0.4; this.add(ch, "#ffd54a", 0, false); }
+          else if (k === 1) { const rg = MB.CreateTorus("ring", { diameter: 0.05, thickness: 0.012, tessellation: 8 }, sc); rg.position.set(X(u), top - 0.33, v); this.add(rg, c, 0, false); sph(0.025, u, top - 0.31, v, "#9fe3ff", 0, 4); }
+          else if (k === 2) { cyl(0.07, 0.015, u, top - 0.34, v, "#1b1420", 0.004, 10); bx(0.03, 0.01, 0.14, u, top - 0.345, v, "#5a3a24", 0); } // a watch
+          else if (k === 3) { bx(0.09, 0.02, 0.16, u, top - 0.34, v, "#3a3444", 0.004); } // an old phone
+          else if (k === 4) { for (let j = 0; j < 3; j++) cyl(0.05, 0.01, u + j * 0.02, top - 0.345 + j * 0.01, v, "#e8b83a", 0, 8); } // coins
+          else { const nk = MB.CreateTorus("necklace", { diameter: 0.18, thickness: 0.01, tessellation: 12 }, sc); nk.position.set(X(u), top - 0.34, v); this.add(nk, c, 0, false); }
+        }
+        // the glass: its own mesh, tagged with its prop (smashed: it disappears)
+        const pid = [...(this.arena.props ?? [])].find((p) => p.kind === "glasscounter" && Math.abs(p.x - (r0.minX + r0.maxX) / 2) < 0.05 && Math.abs(p.z - czz) < 0.05)?.id ?? "";
+        // (see-through, and its own mesh: a smash hides it)
+        const gm = this.counterGlassMat ?? (() => { const m = new StandardMaterial("counterGlass", sc); m.diffuseColor = Color3.FromHexString("#bfe8ff"); m.emissiveColor = Color3.FromHexString("#2a5a70"); m.specularColor = Color3.FromHexString("#ffffff"); m.alpha = 0.25; m.backFaceCulling = false; return (this.counterGlassMat = m); })();
+        const gmesh = MB.CreateBox("counterGlass", { width: w + 0.02, height: 0.34, depth: d + 0.02 }, sc); gmesh.position.set(X(cxx), top - 0.17, czz); gmesh.material = gm; gmesh.parent = this.root; gmesh.isPickable = false; gmesh.alphaIndex = 2;
+        if (pid) this.glassOf.set(pid, gmesh);
+        bx(w + 0.04, 0.03, d + 0.04, cxx, top + 0.005, czz, "#c9a227", 0.006); // (the brass rim)
+      });
+      // the till: an old cash register, a bell, a sign; Lou's / Fran's stool, a calendar, a fan
+      {
+        const tx = sx < 0 ? hs.boss.x : -hs.boss.x, tz = hs.stand.z + 0.95;
+        bx(0.5, 0.32, 0.4, tx, 1.25, tz, "#c9a227", 0.012); bx(0.36, 0.12, 0.08, tx, 1.48, tz + 0.12, "#1b1420", 0);
+        bx(0.6, 0.04, 0.3, tx + 0.45, 1.08, tz - 0.05, "#3a3444", 0);
+        { const bell = MB.CreateSphere("psBell", { diameter: 0.12, segments: 6, slice: 0.5 }, sc); bell.position.set(X(tx - 0.5), 1.08, tz - 0.1); this.add(bell, "#d9a632", 0.01, false); }
+        sign(lou ? "RING 4 LOU" : "RING 4 FRAN (SHE HEARS YOU)", 0.9, 0.22, tx, 1.3, hs.stand.z + 0.58, 0, -1, { bg: "#f4f1ea", fg: "#c41e3a" });
+        cyl(0.4, 0.06, tx + 0.6, 0.75, hs.boss.z + 0.3, "#5a3a24", 0.01, 10); cyl(0.05, 0.72, tx + 0.6, 0.37, hs.boss.z + 0.3, "#3a3444", 0);
+        sign(lou ? "PIN-UP CALENDAR 1987" : "CATS OF 1993", 0.6, 0.8, -57.5, 2.0, sz0 - 0.08, 0, -1, { bg: "#f4f1ea", fg: "#c41e3a" });
+      }
+      // signs, bare bulbs
+      sign(lou ? "YOU BREAK IT, MEAT BREAKS YOU" : "YOU BREAK IT, COLD CUTS BREAKS YOU", 2.8, 0.4, -50.5, 3.2, sz0 - 0.1, 0, -1, { bg: "#ffd54a", fg: "#1b1420" });
+      sign("NO REFUNDS. NO RECEIPTS. NO REGRETS.", 2.6, 0.36, -56.0, 3.3, sz0 - 0.1, 0, -1, { bg: "#1b1420", fg: "#ffd54a" });
+      sign("DO NOT TAP ON THE GLASS", 1.6, 0.3, x1 - 0.42, 2.2, zv(3.0), -1, 0, { bg: "#c41e3a", fg: "#f4f1ea" });
+      // more clutter: a bicycle on the wall over the side case, a rug, a standing lamp, a ceiling fan, a mannequin
+      { const bz0 = zv(3.0), bxw = x1 - 0.45; for (const dz of [-0.55, 0.55]) { const wh = MB.CreateTorus("bikeWheel", { diameter: 0.62, thickness: 0.04, tessellation: 14 }, sc); wh.position.set(X(bxw), 2.75, bz0 + dz); wh.rotation.z = Math.PI / 2; this.add(wh, "#1b1420", 0, false); } bx(0.05, 0.05, 1.1, bxw, 2.85, bz0, "#d6264a", 0.006); bx(0.05, 0.5, 0.05, bxw, 3.0, bz0 + 0.25, "#d6264a", 0.006); bx(0.06, 0.04, 0.3, bxw, 3.25, bz0 + 0.3, "#1b1420", 0); }
+      bx(3.4, 0.015, 2.2, -54.4, 0.035, zv(2.8), "#8e1f2e", 0); bx(3.0, 0.016, 1.8, -54.4, 0.04, zv(2.8), "#c9a227", 0); bx(2.6, 0.017, 1.4, -54.4, 0.045, zv(2.8), "#8e1f2e", 0);
+      cyl(0.04, 1.7, x0 + 0.6, 0.85, zv(4.9), "#3a3444", 0); { const sh = MB.CreateCylinder("lampShade", { diameterTop: 0.25, diameterBottom: 0.45, height: 0.35, tessellation: 10 }, sc); sh.position.set(X(x0 + 0.6), 1.85, zv(4.9)); this.add(sh, "#e8b45a", 0.01, false); } glow(x0 + 0.6, 1.78, zv(4.9), "#ffe9a8", 0.15);
+      cyl(0.18, 0.12, -53.4, H - 0.3, zv(4.0), "#5a3a24", 0.01); for (const a of [0, Math.PI / 2]) { const bl = bx(1.5, 0.02, 0.2, -53.4, H - 0.38, zv(4.0), "#5a3a24", 0.005); bl.rotation.y = a + 0.4; }
+      // the cabinets under the glass counters (gold-trimmed wood)
+      for (const r0 of hs.counters) {
+        const r = { minX: sx < 0 ? r0.minX : -r0.maxX, maxX: sx < 0 ? r0.maxX : -r0.minX, minZ: r0.minZ, maxZ: r0.maxZ };
+        const w = r.maxX - r.minX, d = r.maxZ - r.minZ, cxx = (r.minX + r.maxX) / 2, czz = (r.minZ + r.maxZ) / 2;
+        bx(w, 0.68, d, cxx, 0.34, czz, "#5a3a24", 0.02); bx(w + 0.04, 0.05, d + 0.04, cxx, 0.69, czz, "#c9a227", 0.008);
+        for (const sxx of [-1, 1]) for (const szz of [-1, 1]) bx(0.04, 0.34, 0.04, cxx + sxx * (w / 2 - 0.02), 0.87, czz + szz * (d / 2 - 0.02), "#c9a227", 0);
+      }
+      for (const [x, v] of [[-57.5, 2.6], [-54.2, 2.8], [-50.8, 2.6], [-55.8, 7.8], [-51.0, 7.8]] as [number, number][]) { cyl(0.02, 0.5, x, H - 0.25, zv(v), "#1b1420", 0); glow(x, H - 0.55, zv(v), "#ffe9a8", 0.2); }
+      // the window display: the bear, the drums, the tellies (static)
+      for (const b of this.arena.boxes) {
+        if (!b.deco || Math.abs(b.x - hs.boss.x) > 8 || b.z < Fz || b.z > Bz) continue;
+        const lx = sx < 0 ? b.x : -b.x; // (left-shop x)
+        if (b.deco === "bear") {
+          bx(0.8, 0.2, 0.7, lx, 0.1, b.z, "#5a3a24", 0.01);
+          sph(0.8, lx, 0.75, b.z, "#7a4a2a", 0.02, 10).scaling.set(1, 1.3, 0.9); sph(0.5, lx, 1.4, b.z - 0.05, "#7a4a2a", 0.02, 10); sph(0.2, lx, 1.35, b.z - 0.27, "#c9a07a", 0.01);
+          for (const s of [-1, 1]) sph(0.16, lx + s * 0.18, 1.62, b.z, "#7a4a2a", 0.01);
+          sign("$40 OBO", 0.4, 0.2, lx, 0.8, b.z - 0.45, 0, -1, { bg: "#f4f1ea", fg: "#1b1420" });
+        } else if (b.deco === "mannequin") {
+          bx(0.6, 0.12, 0.6, lx, 0.06, b.z, "#3a3444", 0.01); cyl(0.04, 0.8, lx, 0.5, b.z, "#c8c4cc", 0);
+          sph(0.5, lx, 1.3, b.z, "#1b1420", 0.015).scaling.set(1, 1.4, 0.7); // (the leather jacket)
+          for (const s2 of [-1, 1]) { const arm = cyl(0.14, 0.6, lx + s2 * 0.3, 1.2, b.z, "#1b1420", 0.01); arm.rotation.z = s2 * 0.15; }
+          sph(0.26, lx, 1.78, b.z, "#e8dcc8", 0.01); bx(0.2, 0.05, 0.03, lx, 1.8, b.z - 0.13, "#1b1420", 0); // (head, shades)
+          sign("BARELY WORN", 0.45, 0.18, lx, 0.85, b.z - 0.31, 0, -1, { bg: "#f4f1ea", fg: "#c41e3a" });
+        } else if (b.deco === "drums") {
+          cyl(0.55, 0.4, lx, 0.5, b.z, "#d6264a", 0.012, 12).rotation.x = Math.PI / 2;
+          cyl(0.32, 0.18, lx - 0.35, 0.75, b.z - 0.15, "#f4f1ea", 0.01, 10); cyl(0.32, 0.18, lx + 0.35, 0.75, b.z - 0.15, "#f4f1ea", 0.01, 10);
+          cyl(0.4, 0.02, lx + 0.4, 1.2, b.z + 0.1, "#e8b83a", 0.005, 12); cyl(0.02, 1.2, lx + 0.4, 0.6, b.z + 0.1, "#3a3444", 0);
+        } else if (b.deco === "tvstack") {
+          for (let row = 0; row < 3; row++) for (let col = 0; col < 2; col++) {
+            const x = lx - 0.3 + col * 0.6, y = 0.3 + row * 0.55 + 0.27;
+            bx(0.58, 0.5, 0.6, x, y, b.z, ["#8b5a2b", "#3a3444", "#c9c5d6"][(row + col) % 3], 0.015);
+            const scr = MB.CreatePlane("tvScreen", { width: 0.42, height: 0.36 }, sc); scr.position.set(X(x), y, b.z - 0.31); scr.rotation.y = 0;
+            scr.material = this.tvStaticMat(); scr.parent = this.root; scr.isPickable = false; inG(scr);
+          }
+        }
+      }
+      this.group = -1;
+      const merged = bulbs.length ? Mesh.MergeMeshes(bulbs, true, true) : null;
+      if (merged) { merged.material = this.glowMat("#ffe9a8"); merged.parent = this.root; merged.isPickable = false; merged.freezeWorldMatrix(); }
+    }
+  }
+
+  /** (one shared material of TV static for the pawn shop's tellies) */
+  private tvStaticMat(): StandardMaterial {
+    if (this.tvMat) return this.tvMat;
+    const st = this.pawnStatic ?? (() => { const tex = new DynamicTexture("tvStatic", { width: 64, height: 64 }, this.scene, false); const c = tex.getContext() as unknown as CanvasRenderingContext2D; for (let i = 0; i < 64; i++) for (let j = 0; j < 64; j++) { const v = Math.floor(Math.random() * 255); c.fillStyle = `rgb(${v},${v},${v})`; c.fillRect(i, j, 1, 1); } tex.update(); tex.wrapU = 1; tex.wrapV = 1; this.pawnStatic = { tex, t: 0 }; return this.pawnStatic; })();
+    const m = new StandardMaterial("tvStaticMat2", this.scene); m.diffuseTexture = st.tex; m.emissiveTexture = st.tex; m.disableLighting = true;
+    return (this.tvMat = m);
+  }
+  private tvMat: StandardMaterial | null = null;
+
+  // =================================================================================================
+  // R6: the new city's police station (looks only), after Blake's photo: a modern civic building. Red-brick wings
+  // either side of a light stone centre, a tall glass entrance bay rising above the roof, a cantilevered canopy over
+  // the doors with POLICE standing on it, ribbon windows, three stone upper floors with a blue fascia, a helipad with
+  // a police helicopter (its rotor turns; its searchlight sweeps at night). Inside: the reception, the breakroom,
+  // and the holding cell (white subway tiles in the shower corner, a toilet, a bench, tally marks on the wall).
+  // =================================================================================================
+  private heliRotor: Mesh[] = [];
+  private lastUpd = performance.now();
+  private heliBeam: Mesh | null = null;
+  private buildStationUpper() {
+    const U = this.arena.stationUpper, st = this.arena.station;
+    if (!U || !st) return;
+    const sc = this.scene, MB = MeshBuilder, q = U.rect, y0 = U.y0, y1 = U.y1, cx = (q.minX + q.maxX) / 2, cz = (q.minZ + q.maxZ) / 2;
+    const W = q.maxX - q.minX, D = q.maxZ - q.minZ, R0 = st.rect, fz = R0.maxZ - 0.2, bz = R0.minZ + 0.2, xL = R0.minX + 0.2, xR = R0.maxX - 0.2;
+    const GH = 4.5, CB = 3.2; // (the ground floor's height; the stone centre bay's half-width)
+    this.group = -1; this.brk = "";
+    const bx = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, outline = 0.02, cast = false) => { const m = MB.CreateBox("pd", { width: w, height: h, depth: d }, sc); m.position.set(x, y, z); this.add(m, col, outline, cast); return m; };
+    const cyl = (dia: number, h: number, x: number, y: number, z: number, col: string, outline = 0.015, t = 10) => { const m = MB.CreateCylinder("pdc", { diameter: dia, height: h, tessellation: t }, sc); m.position.set(x, y, z); this.add(m, col, outline, false); return m; };
+    const plane = (w: number, hh: number, x: number, y: number, z: number, nx: number, nz: number, mat: StandardMaterial) => { const p = MB.CreatePlane("pdp", { width: w, height: hh }, sc); p.position.set(x, y, z); p.rotation.y = Math.atan2(-nx, -nz); p.material = mat; p.parent = this.root; p.isPickable = false; return p; };
+    const over = (list: Mesh[], w: number, hh: number, x: number, y: number, z: number, nx: number, nz: number, tile: number, off = 0.12) => { const p = MB.CreatePlane("pdo", { width: w, height: hh }, sc); p.position.set(x + nx * off, y, z + nz * off); p.rotation.y = Math.atan2(-nx, -nz); scaleUVs(p, w / tile, hh / tile); list.push(p); return p; };
+    const win = (list: Mesh[], w: number, hh: number, x: number, y: number, z: number, nx: number, nz: number) => { const p = MB.CreatePlane("win", { width: w, height: hh }, sc); p.position.set(x + nx * WIN_OFF, y, z + nz * WIN_OFF); p.rotation.y = Math.atan2(-nx, -nz); scaleUVs(p, Math.max(1, Math.round(w / 1.6)) / 4, Math.max(1, Math.round(hh / 2.2)) / 4); list.push(p); return p; };
+    // ---- R8: the outside skins, cut round the real windows (and the front doors): brick on the ground floor's wings,
+    //      sides and back, stone round the doors, stone panels upstairs. Each window gets a dark frame and mullions.
+    const gw0 = st.grand?.windows ?? [];
+    type Hole = { u0: number; u1: number; y0: number; y1: number };
+    const faceOf = (f: "N" | "S" | "E" | "W") => f === "N" ? { nx: 0, nz: 1, ua: xL, ub: xR, at: (u: number) => [u, fz] as [number, number] }
+      : f === "S" ? { nx: 0, nz: -1, ua: xL - 0.2, ub: xR + 0.2, at: (u: number) => [u, bz] as [number, number] }
+      : f === "E" ? { nx: 1, nz: 0, ua: 0, ub: fz - bz, at: (u: number) => [xR + 0.2, fz - u] as [number, number] }
+      : { nx: -1, nz: 0, ua: 0, ub: fz - bz, at: (u: number) => [xL - 0.2, fz - u] as [number, number] };
+    const skinFace = (list: Mesh[], f: "N" | "S" | "E" | "W", ua: number, ub: number, ya: number, yb: number, holes: Hole[], tile: number) => {
+      const F = faceOf(f), hs = holes.filter((h) => h.u1 > ua && h.u0 < ub && h.y1 > ya && h.y0 < yb);
+      const ys = [...new Set([ya, yb, ...hs.flatMap((h) => [Math.max(ya, h.y0), Math.min(yb, h.y1)])])].sort((p1, p2) => p1 - p2);
+      for (let i = 0; i + 1 < ys.length; i++) {
+        const y0s = ys[i], y1s = ys[i + 1]; if (y1s - y0s < 0.01) continue;
+        const act = hs.filter((h) => h.y0 <= y0s && h.y1 >= y1s).sort((p1, p2) => p1.u0 - p2.u0);
+        let u = ua;
+        const put = (u0: number, u1: number) => { if (u1 - u0 < 0.01) return; const [x, z] = F.at((u0 + u1) / 2); over(list, u1 - u0, y1s - y0s, x, (y0s + y1s) / 2, z, F.nx, F.nz, tile); };
+        for (const h of act) { put(u, Math.max(ua, h.u0)); u = Math.max(u, h.u1); }
+        put(u, ub);
+      }
+    };
+    const holes = (f: "N" | "S" | "E" | "W"): Hole[] => [...gw0.filter((w) => w.face === f), ...(f === "N" ? [{ u0: -1.5, u1: 1.5, y0: 0, y1: 2.8 }] : [])];
+    // (the frames: a dark surround, mullions every 1.6 m or so, a stone sill)
+    for (const w of gw0) {
+      const F = faceOf(w.face), len = w.u1 - w.u0, n = Math.max(1, Math.round(len / 1.6)), ry = Math.atan2(-F.nx, -F.nz);
+      const frame = (u: number, y: number, along: number, tall: number, col: string, d = 0.12) => { const [x, z] = F.at(u); const m = MB.CreateBox("pdFrame", { width: along, height: tall, depth: d }, sc); m.position.set(x + F.nx * 0.03, y, z + F.nz * 0.03); m.rotation.y = ry; this.add(m, col, 0.006, false); };
+      frame((w.u0 + w.u1) / 2, w.y1, len + 0.1, 0.1, "#2b3040"); frame((w.u0 + w.u1) / 2, w.y0 - 0.06, len + 0.3, 0.12, "#e8e2d4", 0.3);
+      for (let k = 0; k <= n; k++) frame(w.u0 + (len * k) / n, (w.y0 + w.y1) / 2, 0.08, w.y1 - w.y0, "#2b3040");
+    }
+    for (const sx of [-1, 1]) skinFace(this.planes.brick, "N", sx < 0 ? xL : CB, sx < 0 ? -CB : xR, 0, GH, holes("N"), 2);
+    skinFace(this.planes.brick, "E", 0, fz - bz, 0, GH, holes("E"), 2); skinFace(this.planes.brick, "W", 0, fz - bz, 0, GH, holes("W"), 2);
+    skinFace(this.planes.brick, "S", xL - 0.2, xR + 0.2, 0, GH, holes("S"), 2);
+    // the stone centre bay round the doors; the stone piers
+    skinFace(this.planes.concrete, "N", -CB, CB, 0, GH, holes("N"), 4);
+    for (const sx of [-1, 1]) bx(0.35, GH + 0.1, 0.45, sx * CB, GH / 2, fz + 0.12, "#e8e2d4", 0.025); // (stone piers)
+    // ---- the canopy over the doors, POLICE standing on it, two struts
+    {
+      const cw = 9, cd = 3.4, cy = 3.25;
+      bx(cw, 0.32, cd, 0, cy, fz + cd / 2, "#3a4558", 0.03, true);
+      bx(cw + 0.1, 0.12, cd + 0.1, 0, cy - 0.2, fz + cd / 2, "#2f5a9a", 0.015);
+      for (const sx of [-1, 1]) { const s = bx(0.16, 2.2, 0.16, sx * 2.6, cy - 1.0, fz + 1.6, "#3a4558", 0.012); s.rotation.x = -0.6; }
+      const t = textTexture(sc, "POLICE", { w: 1024, h: 220, fg: "#f4f1ea", stroke: "#3a4558" });
+      const m = new StandardMaterial("pdPolice", sc); m.diffuseTexture = t; m.emissiveTexture = t; m.useAlphaFromDiffuseTexture = true; m.disableLighting = true; m.emissiveColor = new Color3(1, 1, 1); m.backFaceCulling = false;
+      plane(6.4, 1.2, 0, cy + 0.78, fz + cd - 0.35, 0, 1, m);
+      for (let i = 0; i < 6; i++) bx(0.06, 0.3, 0.06, -2.7 + i * 1.08, cy + 0.3, fz + cd - 0.4, "#3a4558", 0);
+      const lamp = MB.CreateBox("canopyLight", { width: 0.5, height: 0.06, depth: 0.5 }, sc); lamp.position.set(0, cy - 0.2, fz + 1.4); lamp.material = this.glowMat("#fff2c8"); lamp.parent = this.root; lamp.isPickable = false;
+    }
+    // ---- the upper floors: stone panels, a ribbon window on every floor, a blue fascia on top (R7: the first floor
+    //      is real (walls, offices: the station's own boxes); the solid block only starts above it)
+    const wt = U.walkTop ?? y0;
+    bx(W, y1 - wt, D, cx, (wt + y1) / 2, cz, "#d8d2c6", 0.05, true);
+    // (the stone belt course between the ground floor and the first: a ring round the outside, not a slab through it)
+    for (const [w2, d2, x2, z2] of [[xR - xL + 0.6, 0.3, cx, fz + 0.15], [xR - xL + 0.6, 0.3, cx, bz - 0.15], [0.3, fz - bz, xL - 0.15, (fz + bz) / 2], [0.3, fz - bz, xR + 0.15, (fz + bz) / 2]] as [number, number, number, number][]) bx(w2, 0.35, d2, x2, y0 + 0.05, z2, "#e8e2d4", 0.03);
+    bx(W + 0.9, 0.7, D + 0.9, cx, y1 + 0.2, cz, "#2f5a9a", 0.03);
+    // (the first floor's real glass is cut out of the stone; the two floors above it get painted ribbon windows)
+    for (const f of ["N", "S", "E", "W"] as const) { const F = faceOf(f); skinFace(this.planes.concrete, f, F.ua, F.ub, GH, y1, holes(f), 3); }
+    const floors = 2, fh = (y1 - wt) / floors;
+    for (const [nx, nz, fw, wx, wz] of [[0, 1, xR - xL, cx, fz], [0, -1, xR - xL, cx, bz], [1, 0, fz - bz, xR + 0.2, (fz + bz) / 2], [-1, 0, fz - bz, xL - 0.2, (fz + bz) / 2]] as [number, number, number, number, number][]) {
+      for (let k = 0; k < floors; k++) {
+        const wy = wt + k * fh + fh * 0.55;
+        win(this.planes.winBlinds, fw - 1.6, fh * 0.5, wx, wy, wz, nx, nz);
+        const ry = Math.atan2(-nx, -nz), band = MB.CreateBox("pdband", { width: fw - 1.2, height: 0.14, depth: 0.32 }, sc); band.position.set(wx + nx * 0.16, wy - fh * 0.29, wz + nz * 0.16); band.rotation.y = ry; this.add(band, "#e8e2d4", 0.01, false);
+      }
+    }
+    // ---- the glass entrance bay: rising out of the canopy above the roof, stone piers either side, a blue cap
+    {
+      const gw = 4.4, gz = fz + 0.3, top = y1 + 2.2;
+      bx(gw, top - GH, 1.0, 0, GH + (top - GH) / 2, gz - 0.2, "#2b3a55", 0.03, true);
+      const cw2 = MB.CreatePlane("curt", { width: gw - 0.4, height: top - GH - 0.6 }, sc); cw2.position.set(0, GH + (top - GH) / 2, gz + 0.32); cw2.rotation.y = Math.PI; scaleUVs(cw2, 2, Math.round((top - GH) / 2.2)); this.planes.curtain.push(cw2);
+      for (const sx of [-1, 1]) bx(0.7, top - GH + 0.6, 1.2, sx * (gw / 2 + 0.3), GH + (top - GH) / 2 + 0.3, gz - 0.2, "#e8e2d4", 0.03, true);
+      bx(gw + 2.2, 0.5, 1.8, 0, top + 0.6, gz - 0.2, "#2f5a9a", 0.03);
+      const star = MB.CreateCylinder("pdStar", { diameter: 1.4, height: 0.14, tessellation: 6 }, sc); star.rotation.x = Math.PI / 2; star.position.set(0, top - 1.0, gz + 0.45); this.add(star, "#d9a632", 0.02, false);
+    }
+    // ---- the roof: a helipad with a police helicopter, an antenna, AC units
+    {
+      const hx = cx - 2.0, hz = cz - 0.6, ry = y1 + 0.6;
+      const pad = MB.CreateCylinder("helipad", { diameter: 8.4, height: 0.12, tessellation: 32 }, sc); pad.position.set(hx, ry, hz); this.add(pad, "#3a3a44", 0.02, false);
+      const ring = MB.CreateTorus("padring", { diameter: 7.4, thickness: 0.18, tessellation: 32 }, sc); ring.position.set(hx, ry + 0.07, hz); this.add(ring, "#ffd54a", 0, false);
+      const hm = unlitTextured(sc, textTexture(sc, "H", { w: 256, h: 256, fg: "#f4f1ea" }), "padH"); const hp = MB.CreateGround("padH", { width: 3.2, height: 3.2 }, sc); hp.position.set(hx, ry + 0.08, hz); hp.material = hm; hp.parent = this.root; hp.isPickable = false;
+      for (let a = 0; a < 8; a++) { const l = MB.CreateSphere("padlamp", { diameter: 0.16, segments: 4 }, sc); l.position.set(hx + Math.cos(a * Math.PI / 4) * 4.1, ry + 0.12, hz + Math.sin(a * Math.PI / 4) * 4.1); l.material = this.glowMat("#7fd0ff"); l.parent = this.root; l.isPickable = false; }
+      // the helicopter (nose to the north-east)
+      const yaw = 0.7, X = (u: number, w: number) => hx + Math.cos(yaw) * u + Math.sin(yaw) * w, Z = (u: number, w: number) => hz - Math.sin(yaw) * u + Math.cos(yaw) * w;
+      const node = new TransformNode("heli", sc); node.position.set(hx, ry + 0.1, hz); node.rotation.y = yaw;
+      const mk = (m: Mesh, col: string, x: number, y: number, z: number, outline = 0.025) => { m.parent = node; m.position.set(x, y, z); this.add(m, col, outline, false); return m; };
+      const body = MB.CreateSphere("heliBody", { diameter: 1, segments: 12 }, sc); body.scaling.set(2.1, 1.7, 3.6); mk(body, "#1f3a78", 0, 1.55, 0.2, 0.035);
+      const belly = MB.CreateSphere("heliBelly", { diameter: 1, segments: 10 }, sc); belly.scaling.set(2.0, 0.9, 3.2); mk(belly, "#f4f1ea", 0, 1.1, 0.25, 0.02);
+      const glass = MB.CreateSphere("heliGlass", { diameter: 1, segments: 10 }, sc); glass.scaling.set(1.7, 1.2, 1.6); mk(glass, "#9fe3ff", 0, 1.8, 1.45, 0.02);
+      const boom = MB.CreateCylinder("heliBoom", { diameterTop: 0.25, diameterBottom: 0.6, height: 4.2, tessellation: 10 }, sc); boom.rotation.x = Math.PI / 2; mk(boom, "#1f3a78", 0, 1.8, -3.3, 0.02);
+      const fin = MB.CreateBox("heliFin", { width: 0.12, height: 1.4, depth: 0.9 }, sc); mk(fin, "#1f3a78", 0, 2.3, -5.2, 0.015);
+      const tr = MB.CreateBox("heliTail", { width: 0.06, height: 1.1, depth: 0.14 }, sc); mk(tr, "#2b2433", 0.12, 2.3, -5.3, 0.01);
+      for (const sx of [-1, 1]) {
+        const sk = MB.CreateCylinder("heliSkid", { diameter: 0.12, height: 3.8, tessellation: 8 }, sc); sk.rotation.x = Math.PI / 2; mk(sk, "#2b2433", sx * 0.95, 0.15, 0.3, 0.01);
+        for (const sz of [-0.8, 1.2]) { const leg = MB.CreateBox("heliLeg", { width: 0.08, height: 0.8, depth: 0.08 }, sc); leg.rotation.z = sx * 0.3; mk(leg, "#2b2433", sx * 0.82, 0.55, sz, 0.008); }
+      }
+      const mast = MB.CreateCylinder("heliMast", { diameter: 0.22, height: 0.6, tessellation: 8 }, sc); mk(mast, "#2b2433", 0, 3.25, 0.1, 0.01);
+      const pm = unlitTextured(sc, textTexture(sc, "POLICE", { w: 512, h: 128, fg: "#f4f1ea" }), "heliText");
+      for (const sx of [-1, 1]) { const p = MB.CreatePlane("heliText", { width: 1.6, height: 0.4 }, sc); p.parent = node; p.position.set(sx * 1.07, 1.45, -0.3); p.rotation.y = sx > 0 ? -Math.PI / 2 : Math.PI / 2; p.material = pm; p.isPickable = false; }
+      const strobe = MB.CreateSphere("heliStrobe", { diameter: 0.18, segments: 4 }, sc); strobe.parent = node; strobe.position.set(0, 2.3, -0.4); strobe.material = this.stationLights?.red ?? this.glowMat("#ff2a3a"); strobe.isPickable = false;
+      // the main rotor and the tail rotor turn: own meshes (not merged), spun every frame
+      const rotor = new Mesh("heliRotor", sc); rotor.parent = this.root; rotor.position.set(hx + Math.sin(yaw) * 0.1, ry + 0.1 + 3.6, hz + Math.cos(yaw) * 0.1);
+      const bm = toon(sc, "#2b2433");
+      for (const a of [0, Math.PI / 2]) { const bl = MB.CreateBox("blade", { width: 9.5, height: 0.06, depth: 0.32 }, sc); bl.rotation.y = a; bl.parent = rotor; bl.material = bm; bl.isPickable = false; }
+      const hub = MB.CreateCylinder("hub", { diameter: 0.45, height: 0.2, tessellation: 8 }, sc); hub.parent = rotor; hub.material = bm; hub.isPickable = false;
+      const tailRotor = new Mesh("heliTailRotor", sc); tailRotor.parent = this.root; tailRotor.position.set(X(0.2, -5.3), ry + 0.1 + 2.3, Z(0.2, -5.3)); tailRotor.rotation.y = yaw;
+      for (const a of [0, Math.PI / 2]) { const bl = MB.CreateBox("tblade", { width: 0.04, height: 1.3, depth: 0.12 }, sc); bl.rotation.x = a; bl.parent = tailRotor; bl.material = bm; bl.isPickable = false; }
+      this.heliRotor = [rotor, tailRotor];
+      void X; void Z;
+      // the searchlight under the nose (on at night, sweeping)
+      const beam = MB.CreateCylinder("heliBeam", { diameterTop: 0.3, diameterBottom: 6, height: 14, tessellation: 16 }, sc);
+      beam.setPivotPoint(new Vector3(0, 7, 0)); beam.position.set(hx + Math.sin(yaw) * 2.0, ry + 0.9 - 7, hz + Math.cos(yaw) * 2.0);
+      const bmat = new StandardMaterial("heliBeamMat", sc); bmat.disableLighting = true; bmat.emissiveColor = Color3.FromHexString("#fff6c8"); bmat.alpha = 0.14; bmat.backFaceCulling = false; beam.material = bmat; beam.parent = this.root; beam.isPickable = false; beam.setEnabled(false);
+      this.heliBeam = beam;
+      bx(1.4, 0.9, 1.1, q.maxX - 1.5, y1 + 0.95, q.minZ + 1.5, "#c8c4cc", 0.02);
+      bx(1.4, 0.9, 1.1, q.maxX - 3.2, y1 + 0.95, q.minZ + 1.5, "#c8c4cc", 0.02);
+      const ant = MB.CreateCylinder("pdAnt", { diameterTop: 0.04, diameterBottom: 0.14, height: 5, tessellation: 5 }, sc); ant.position.set(q.maxX - 1, y1 + 3.0, q.maxZ - 1); this.add(ant, "#c8c4cc", 0.01, false);
+      const red = this.glowMat("#ff2a3a").clone("pdRed"), blue = this.glowMat("#2a6aff").clone("pdBlue");
+      this.stationLights = { red, blue };
+      strobe.material = red;
+      for (const [sx, m2] of [[-0.6, red], [0.6, blue]] as [number, StandardMaterial][]) { const l = MB.CreateSphere("pdLight", { diameter: 0.5, segments: 6 }, sc); l.position.set(sx, y1 + 3.6, q.maxZ + 0.3); l.material = m2; l.parent = this.root; l.isPickable = false; }
+    }
+    // ---- out front: blue lamps on posts, planters of grasses, boulders, a flagpole
+    {
+      for (const sx of [-1, 1]) {
+        bx(0.14, 3.2, 0.14, sx * 5.4, 1.6, fz + 3.0, "#2b2433", 0.01);
+        const lamp = MB.CreateBox("pdLamp", { width: 0.42, height: 0.5, depth: 0.42 }, sc); lamp.position.set(sx * 5.4, 3.45, fz + 3.0); lamp.material = this.glowMat("#5aa8ff"); lamp.parent = this.root; lamp.isPickable = false;
+        for (let k = 0; k < 3; k++) { const gx = sx * (6.6 + k * 1.1), gz = fz + 0.8; cyl(0.9, 0.12, gx, 0.06, gz, "#b9a68a", 0.01); for (let i = 0; i < 5; i++) { const blade = MB.CreateCylinder("grass", { diameterTop: 0, diameterBottom: 0.08, height: 0.55, tessellation: 4 }, sc); blade.position.set(gx + (hash(i, k) - 0.5) * 0.5, 0.35, gz + (hash(k, i) - 0.5) * 0.5); blade.rotation.z = (hash(i + 3, k) - 0.5) * 0.5; this.add(blade, "#8aa05a", 0, false); } }
+      }
+      cyl(0.1, 7, xL + 1.0, 3.5, fz + 1.3, "#c8c4cc", 0.01);
+      bx(0.05, 0.9, 1.4, xL + 1.0, 6.4, fz + 2.0, "#1f3a78", 0.01);
+    }
+    // ---- the back, on Gahookz Ghetto Lane: a staff door, a sign, a camera, a bike rack of confiscated bikes
+    {
+      bx(1.6, 2.5, 0.12, 4.0, 1.25, bz - 0.26, "#3a4558", 0.015);
+      bx(0.12, 0.12, 0.12, 4.55, 1.2, bz - 0.34, "#c9a227", 0);
+      win(this.planes.winBlinds, 6.5, 1.4, -4.6, 2.4, bz - 0.06, 0, -1);
+      plane(5.6, 0.7, -3.5, 3.6, bz - 0.3, 0, -1, unlitTextured(sc, textTexture(sc, "TRASHINGTON PD  -  STAFF ONLY", { w: 1024, h: 128, bg: "#1f3a78", fg: "#f4f1ea" }), "pdBackSign"));
+      plane(3.0, 0.5, 4.0, 2.9, bz - 0.3, 0, -1, unlitTextured(sc, textTexture(sc, "NO LOITERING (WE MEAN YOU)", { w: 512, h: 86, bg: "#f4f1ea", fg: "#c41e3a" }), "pdBackSign2"));
+      bx(0.3, 0.2, 0.42, -8.6, 3.9, bz - 0.25, "#c8c4cc", 0.015).rotation.x = -0.35;
+    }
+    // ---- inside (drawn near only). R7: the grand station's two floors
+    const g = st.grand, h = st.holding;
+    if (g && h) {
+      const V = (v: number) => (R0.maxZ - 0.2) - v, x0 = R0.minX + 0.2, x1 = R0.maxX - 0.2, UY = g.upY;
+      const inG = (m: Mesh) => { if (this.group >= 0) { (this.unitPlanes.get(this.group) ?? this.unitPlanes.set(this.group, []).get(this.group)!).push(m); m.setEnabled(false); } return m; };
+      const sign = (text: string, w: number, hh: number, x: number, y: number, z: number, nx: number, nz: number, o: { bg?: string; fg?: string } = {}) => inG(plane(w, hh, x + nx * 0.1, y, z + nz * 0.1, nx, nz, unlitTextured(sc, textTexture(sc, text, { w: 512, h: Math.max(64, Math.round(512 * hh / w)), ...o }), "pdSign-" + text))); // (0.1 m off the wall: clear of its ink outline)
+      const glowBox = (w: number, hh: number, d: number, x: number, y: number, z: number, col: string) => { const m = MB.CreateBox("pdGlow", { width: w, height: hh, depth: d }, sc); m.position.set(x, y, z); m.material = this.glowMat(col); m.parent = this.root; m.isPickable = false; return inG(m); };
+      const sph = (dia: number, x: number, y: number, z: number, col: string, outline = 0.01) => { const m = MB.CreateSphere("pds", { diameter: dia, segments: 6 }, sc); m.position.set(x, y, z); this.add(m, col, outline, false); return m; };
+      const tile = (list: Mesh[], w: number, hh: number, x: number, y: number, z: number, nx: number, nz: number, t = 1.2) => { const p = MB.CreatePlane("pdt", { width: w, height: hh }, sc); p.position.set(x + nx * 0.1, y, z + nz * 0.1); p.rotation.y = Math.atan2(-nx, -nz); scaleUVs(p, w / t, hh / t); list.push(p); return p; };
+      // ======== GROUND FLOOR ========
+      this.group = 9001;
+      const L = g.lobby, Hl = g.hall;
+      // the lobby: polished floor bands, the front desk's monitor and bell and sign, the crest over the hallway door,
+      // wanted posters, a flag, ceiling lights
+      for (let i = 0; i < 6; i++) bx(L.maxX - L.minX - 0.2, 0.012, 0.18, (L.minX + L.maxX) / 2, 0.04, L.maxZ - 0.6 - i * 1.2, "#b8b2a6", 0);
+      const deskZ = V(4.0);
+      bx(0.5, 0.36, 0.05, -1.2, 1.38, deskZ - 0.3, "#1b1420", 0.01); bx(0.1, 0.2, 0.1, -1.2, 1.18, deskZ - 0.3, "#3a3444", 0);
+      bx(0.5, 0.36, 0.05, 1.4, 1.38, deskZ - 0.3, "#1b1420", 0.01); bx(0.1, 0.2, 0.1, 1.4, 1.18, deskZ - 0.3, "#3a3444", 0);
+      { const bell = MB.CreateSphere("pdBell", { diameter: 0.14, segments: 6, slice: 0.5 }, sc); bell.position.set(0.3, 1.12, deskZ + 0.15); this.add(bell, "#d9a632", 0.01, false); }
+      bx(0.4, 0.1, 0.3, -0.5, 1.15, deskZ, "#f4f1ea", 0.005); // (a stack of forms)
+      sign("TRASHINGTON PD  -  FRONT DESK", 3.2, 0.36, 0, 0.75, deskZ + 0.47, 0, 1, { bg: "#1f3a78", fg: "#f4f1ea" });
+      sign("TO PROTECT AND TO SERVE (EVENTUALLY)", 4.6, 0.5, 0, 3.6, V(7.6) + 0.02, 0, 1, { bg: "#1f3a78", fg: "#ffd54a" });
+      cyl(1.2, 0.08, 0, 3.0, V(7.6) + 0.06, "#d9a632", 0.015, 6).rotation.x = Math.PI / 2;
+      for (const [i, txt] of ["WANTED: YOU", "HAVE YOU SEEN THIS RACCOON?", "WANTED: BOX FORT BANDITZ", "MISSING: ONE (1) DONUT"].entries()) sign(txt, 1.0, 1.3, 3.2 + i * 1.3, 2.4, V(7.6) + 0.02, 0, 1, { bg: "#f3e2b8", fg: "#1b1420" });
+      sign("PLEASE TAKE A NUMBER (THERE ARE NO NUMBERS)", 2.6, 0.4, -4.6, 2.6, V(7.6) + 0.02, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
+      for (const [x, v] of [[-4, 2.5], [4, 2.5], [-4, 6], [4, 6], [0, 6.5]] as [number, number][]) glowBox(1.2, 0.06, 0.3, x, 4.44, V(v), "#f4f6ff");
+      // the stairs: a handrail, a sign
+      { const st0 = g.stairs; const hx = st0.maxX + 0.05; for (const k of [0, 0.25, 0.5, 0.75, 1]) bx(0.05, 1.0, 0.05, hx, 0.5 + UY * k * 0.95, st0.maxZ - (st0.maxZ - st0.minZ) * k, "#c8c4cc", 0.004);
+        const hr = bx(0.06, 0.06, Math.hypot(st0.maxZ - st0.minZ, UY) + 0.2, hx, 1.0 + UY / 2, (st0.minZ + st0.maxZ) / 2, "#c8c4cc", 0.006); hr.rotation.x = -Math.atan2(UY, st0.maxZ - st0.minZ); }
+      sign("UPSTAIRS: STAFF ONLY. EVIDENCE: DEFINITELY STAFF ONLY.", 1.8, 0.5, x0 + 0.6, 2.6, V(0.45), 0, -1, { bg: "#c41e3a", fg: "#f4f1ea" });
+      // the hallway: lights, signs over the doors, a notice board, a water fountain, a mop and bucket
+      for (let v = 9.0; v < 22; v += 2.6) glowBox(0.9, 0.06, 0.3, 0, 4.44, V(v), "#f4f6ff");
+      sign("INTERROGATION 1", 1.4, 0.3, Hl.minX + 0.02, 2.9, V(10.75), 1, 0, { bg: "#3a4558", fg: "#f4f1ea" });
+      sign("INTERROGATION 2", 1.4, 0.3, Hl.minX + 0.02, 2.9, V(15.25), 1, 0, { bg: "#3a4558", fg: "#f4f1ea" });
+      sign("BREAK ROOM", 1.2, 0.3, Hl.minX + 0.02, 2.9, V(19.85), 1, 0, { bg: "#3a4558", fg: "#f4f1ea" });
+      sign("BOOKING", 1.2, 0.3, Hl.maxX - 0.02, 2.9, V(9.75), -1, 0, { bg: "#3a4558", fg: "#f4f1ea" });
+      sign("HOLDING  >>  (DON'T FEED THE CHAMP)", 2.2, 0.36, 0, 3.4, V(22.5) + 0.05, 0, 1, { bg: "#ff7a1a", fg: "#1b1420" });
+      bx(1.4, 0.9, 0.05, Hl.minX + 0.05, 1.7, V(12.2), "#8a6a4a", 0.01).rotation.y = Math.PI / 2;
+      for (let i = 0; i < 5; i++) bx(0.02, 0.22, 0.18, Hl.minX + 0.09, 1.55 + (i % 2) * 0.3, V(12.2) - 0.5 + i * 0.25, ["#f4f1ea", "#ffd54a", "#ff8fa3"][i % 3], 0);
+      bx(0.3, 0.9, 0.3, Hl.maxX - 0.25, 0.45, V(21.6), "#c8c4cc", 0.01); cyl(0.4, 0.3, Hl.minX + 0.35, 0.15, V(21.8), "#ffd54a", 0.01); bx(0.04, 1.3, 0.04, Hl.minX + 0.45, 0.8, V(21.8), "#8b5a2b", 0);
+      // (the one-way mirrors: dark frames)
+      for (const [m0, m1] of [[8.5, 9.6], [13.4, 14.4]]) bx(0.08, 1.2, m1 - m0 + 0.12, Hl.minX - 0.12, 1.6, V((m0 + m1) / 2), "#2b2433", 0.005);
+      // the interrogation rooms: a hanging lamp over the table, a camera in the corner, a sign
+      for (const r of g.interrogation) {
+        const mz = (r.minZ + r.maxZ) / 2;
+        cyl(0.02, 1.4, -5.4, 3.8, mz, "#1b1420", 0); { const shade = MB.CreateCylinder("lampShade", { diameterTop: 0.15, diameterBottom: 0.6, height: 0.3, tessellation: 10 }, sc); shade.position.set(-5.4, 3.0, mz); this.add(shade, "#3a4a3a", 0.01, false); }
+        glowBox(0.3, 0.05, 0.3, -5.4, 2.85, mz, "#fff2c8");
+        bx(0.25, 0.18, 0.3, r.minX + 0.3, 3.8, r.maxZ - 0.3, "#c8c4cc", 0.01).rotation.y = 0.7;
+        sign("SMILE. YOU'RE ON CAMERA.", 1.8, 0.35, -5.4, 2.4, r.maxZ - 0.02, 0, -1, { bg: "#f4f1ea", fg: "#1b1420" });
+        bx(0.3, 0.04, 0.22, -5.25, 0.81, mz, "#f4f1ea", 0); cyl(0.08, 0.1, -5.7, 0.84, mz + 0.1, "#f4f1ea", 0.005);
+      }
+      // booking: a height chart for mugshots, a camera on a tripod, the fingerprint pad, a counter of forms
+      const bk = g.booking;
+      tile(this.planes.paint, 2.4, 2.4, (bk.minX + bk.maxX) / 2 + 1.4, 1.3, bk.minZ, 0, 1, 2.4);
+      for (let k = 0; k < 7; k++) bx(2.0, 0.025, 0.02, (bk.minX + bk.maxX) / 2 + 1.4, 0.6 + k * 0.3, bk.minZ + 0.12, "#1b1420", 0);
+      sign("SAY CHEESE (OR DON'T)", 1.6, 0.3, (bk.minX + bk.maxX) / 2 + 1.4, 2.75, bk.minZ + 0.13, 0, 1, { bg: "#1f3a78", fg: "#f4f1ea" });
+      for (const s2 of [-1, 0, 1]) { const leg = bx(0.04, 1.3, 0.04, 3.8 + s2 * 0.18, 0.65, V(9.4) + (s2 === 0 ? 0.2 : -0.1), "#1b1420", 0); leg.rotation.z = s2 * 0.2; }
+      bx(0.35, 0.25, 0.3, 3.8, 1.4, V(9.4), "#2b2433", 0.01);
+      bx(0.25, 0.03, 0.18, 5.0, 0.92, V(10.6), "#1b1420", 0);
+      for (const [x, v] of [[5, 9], [5, 11.8]] as [number, number][]) glowBox(1.0, 0.06, 0.3, x, 4.44, V(v), "#f4f6ff");
+      // the breakroom: the coffee machine, a box of donuts, mugs, stools, a TV of static, a sign
+      const br = h.breakroom, cy = 0.95, ctrZ = br.minZ + 0.45;
+      bx(0.4, 0.45, 0.35, -6.8, cy + 0.23, ctrZ, "#2b2433", 0.012); bx(0.18, 0.12, 0.05, -6.8, cy + 0.32, ctrZ + 0.18, "#ff3a3a", 0);
+      bx(0.6, 0.12, 0.45, -5.2, cy + 0.06, ctrZ + 0.05, "#ff8fa3", 0.01);
+      for (let i = 0; i < 4; i++) { const dn = MB.CreateTorus("donut", { diameter: 0.14, thickness: 0.06, tessellation: 10 }, sc); dn.position.set(-5.4 + (i % 2) * 0.22, cy + 0.15, ctrZ - 0.05 + Math.floor(i / 2) * 0.17); this.add(dn, ["#f2c94c", "#ff8fa3", "#7a4a2a", "#f4f1ea"][i], 0.005, false); }
+      const tz = (br.minZ + br.maxZ) / 2;
+      for (let i = 0; i < 3; i++) cyl(0.1, 0.12, -6.2 + i * 0.4, 0.82, tz - 0.2 + i * 0.15, ["#f4f1ea", "#3d6fb5", "#d6264a"][i], 0.005);
+      for (const [dx2, dz2] of [[-1.5, 0], [1.5, 0], [0, -1.0], [0, 1.0]]) bx(0.45, 0.45, 0.45, -5.6 + dx2, 0.23, tz + dz2, "#3a4a72", 0.012);
+      bx(0.08, 0.7, 1.2, br.minX + 0.08, 2.6, tz, "#1b1420", 0.01);
+      { const tv = MB.CreatePlane("pdTV", { width: 1.05, height: 0.58 }, sc); tv.position.set(br.minX + 0.14, 2.6, tz); tv.rotation.y = -Math.PI / 2; tv.material = this.tvStaticMat(); tv.parent = this.root; tv.isPickable = false; inG(tv); }
+      sign("BREAK ROOM: NO BANDITS. NO EXCEPTIONS.", 2.4, 0.5, -5.6, 2.8, br.maxZ - 0.02, 0, -1, { bg: "#f4f1ea", fg: "#1f3a78" });
+      glowBox(1.0, 0.06, 0.3, -5.6, 4.44, tz, "#fff2c8");
+      // the cell's walls: cinder block (concrete) where there are no tiles
+      {
+        const c2 = h.cell, s2 = h.shower;
+        tile(this.planes.concrete, c2.maxX - c2.minX + 0.6, 4.4, (c2.minX + c2.maxX) / 2, 2.2, V(13.1), 0, -1, 1.5);
+        tile(this.planes.concrete, V(13.1) - s2.maxZ, 4.4, x1 - 0.2, 2.2, (V(13.1) + s2.maxZ) / 2, -1, 0, 1.5);
+      }
+      // the holding cell: white subway tiles round the shower corner, shower heads, a drain, tally marks, a slit window
+      const cell = h.cell, shw = h.shower, hv = cell.minZ - 0.3; // (the back wall's inside face)
+      for (const nz of [-1, 1]) tile(this.planes.subway, 1.8, 2.1, x1 - 2.6, 1.05, V(19.2) + nz * 0.06, 0, nz); // (the tiled half-wall, both faces)
+      tile(this.planes.subway, shw.maxZ - shw.minZ, 2.6, x1 - 0.2, 1.3, (shw.minZ + shw.maxZ) / 2, -1, 0);       // (the east wall in the shower corner)
+      tile(this.planes.subway, shw.maxX - shw.minX, 2.6, (shw.minX + shw.maxX) / 2, 1.3, hv + 0.02, 0, 1);       // (the back wall in the shower corner)
+      { const fl = MB.CreateGround("showerFloor", { width: shw.maxX - shw.minX, height: shw.maxZ - shw.minZ }, sc); fl.position.set((shw.minX + shw.maxX) / 2, 0.05, (shw.minZ + shw.maxZ) / 2); scaleUVs(fl, (shw.maxX - shw.minX) / 0.6, (shw.maxZ - shw.minZ) / 0.6); fl.isPickable = false; this.planes.subway.push(fl); }
+      for (const k of [0.3, 0.7]) { const z = shw.minZ + (shw.maxZ - shw.minZ) * k; bx(0.4, 0.06, 0.06, x1 - 0.25, 2.3, z, "#c8ccd4", 0.008); cyl(0.2, 0.08, x1 - 0.42, 2.25, z, "#c8ccd4", 0.008); }
+      cyl(0.3, 0.02, (shw.minX + shw.maxX) / 2, 0.065, (shw.minZ + shw.maxZ) / 2, "#5a5560", 0);
+      tile(this.planes.paint, cell.maxX - shw.minX + 1.0, 2.0, (cell.minX + shw.minX) / 2, 1.0, hv + 0.02, 0, 1, 2);
+      sign("IIII IIII IIII II", 1.4, 0.4, cell.minX + 1.0, 1.7, hv + 0.05, 0, 1, { fg: "#3a3444" });
+      sign("THE CHAMP: UNDEFEATED 1998-2009 (AND COUNTING)", 2.6, 0.4, 3.6, 2.3, hv + 0.05, 0, 1, { bg: "#ff7a1a", fg: "#1b1420" });
+      bx(1.6, 0.3, 0.1, 5.0, 3.6, hv + 0.02, "#9fd8ff", 0); for (let i = 0; i < 5; i++) bx(0.04, 0.32, 0.04, 4.3 + i * 0.35, 3.6, hv + 0.08, "#3a3444", 0);
+      glowBox(1.0, 0.06, 0.3, 4.5, 4.44, V(17), "#e8f0ff");
+      // ======== FIRST FLOOR ========
+      this.group = 9002;
+      const up = g.upstairs;
+      // carpet tiles, ceiling lights
+      { const sw = g.stairs; // (R8: the carpet goes round the stairwell, not over it)
+        bx(up.maxX - sw.maxX - 0.05, 0.02, up.maxZ - up.minZ - 0.1, (sw.maxX + up.maxX) / 2, UY + 0.012, (up.minZ + up.maxZ) / 2, "#5a6478", 0);
+        bx(sw.maxX - up.minX - 0.05, 0.02, sw.minZ - up.minZ - 0.1, (up.minX + sw.maxX) / 2, UY + 0.012, (up.minZ + sw.minZ) / 2, "#5a6478", 0);
+        bx(sw.minX - up.minX - 0.08, 0.02, up.maxZ - sw.minZ, (up.minX + sw.minX) / 2, UY + 0.012, (sw.minZ + up.maxZ) / 2, "#5a6478", 0); }
+      for (let v = 2; v < 22; v += 3.2) for (const x of [-6.5, 0, 6.5]) glowBox(1.2, 0.06, 0.3, x, 8.95, V(v), "#f4f6ff");
+      // the chief's corner office: a big desk (nameplate, a lamp, a golf putter), a trophy fish, a flag, blinds
+      const ch = g.chief, cmx = (ch.minX + ch.maxX) / 2;
+      sign("CHIEF O'NOTHING", 0.8, 0.2, 7.4, UY + 0.92, V(3.0) - 0.47, 0, -1, { bg: "#d9a632", fg: "#1b1420" });
+      cyl(0.04, 0.5, 8.3, UY + 1.05, V(3.0), "#1b1420", 0); glowBox(0.25, 0.15, 0.25, 8.3, UY + 1.35, V(3.0), "#fff2c8");
+      { const fish = sph(0.5, cmx, UY + 2.4, ch.minZ + 0.3, "#5a9e8a", 0.012); fish.scaling.set(1.8, 0.7, 0.2); }
+      bx(1.0, 0.6, 0.05, cmx, UY + 2.4, ch.minZ + 0.2, "#5a3a24", 0.01);
+      sign("WORLD'S OKAYEST CHIEF", 1.4, 0.3, cmx, UY + 3.1, ch.minZ + 0.15, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
+      // wood panelling, a rug, a bookcase, a bowling trophy
+      tile(this.planes.clapboard, ch.maxX - ch.minX - 0.3, 3.9, cmx, UY + 2.05, ch.minZ + 0.15, 0, 1, 1.4);
+      tile(this.planes.clapboard, ch.maxZ - ch.minZ - 0.3, 3.9, ch.minX + 0.15, UY + 2.05, (ch.minZ + ch.maxZ) / 2, 1, 0, 1.4);
+      bx(3.0, 0.015, 2.6, 7.4, UY + 0.03, V(3.4), "#7a1a2a", 0); bx(2.6, 0.016, 2.2, 7.4, UY + 0.035, V(3.4), "#c9a227", 0);
+      bx(0.4, 2.0, 1.4, x1 - 0.25, UY + 1.0, V(2.0), "#5a3a24", 0.015);
+      for (let k = 0; k < 4; k++) for (let j = 0; j < 6; j++) bx(0.25, 0.32, 0.12, x1 - 0.32, UY + 0.4 + k * 0.45, V(2.0) - 0.55 + j * 0.2, ["#8e1f2e", "#1f3a78", "#3a7a3a", "#c9a227"][(k + j) % 4], 0);
+      cyl(0.12, 0.3, 6.4, UY + 0.95, V(3.0), "#e8b83a", 0.006); sph(0.16, 6.4, UY + 1.18, V(3.0), "#1b1420", 0.006);
+      sign("CHIEF O'NOTHING - KNOCK. THEN GO AWAY.", 1.4, 0.35, ch.minX - 0.17, UY + 2.75, V(5.25), -1, 0, { bg: "#1f3a78", fg: "#f4f1ea" });
+      bx(0.03, 0.03, 1.2, 7.8, UY + 0.4, V(4.6), "#c8c4cc", 0).rotation.x = 0.3; // (the putter)
+      // the offices down the east side: names on the doors, piles of paper, a plant each
+      g.offices.forEach((r, i) => {
+        const mz = (r.minZ + r.maxZ) / 2;
+        sign(["DETECTIVES (ASLEEP)", "RECORDS (MISPLACED)", "INTERNAL AFFAIRS: DO NOT KNOCK"][i] ?? "OFFICE", 1.5, 0.32, r.minX - 0.2, UY + 2.8, r.maxZ - 1.95, -1, 0, { bg: "#3a4558", fg: "#f4f1ea" });
+        for (let k = 0; k < 4; k++) bx(0.3, 0.05 + k * 0.03, 0.22, 7.0 + k * 0.25, UY + 0.81 + k * 0.02, mz - 0.2, "#f4f1ea", 0.004);
+        bx(0.4, 0.4, 0.4, r.maxX - 0.4, UY + 0.2, r.minZ + 0.4, "#8b5a2b", 0.01); sph(0.55, r.maxX - 0.4, UY + 0.7, r.minZ + 0.4, "#3a7a3a", 0.012);
+      });
+      // the cubicles: a monitor, papers, a mug and a family photo on every desk
+      for (const b of this.arena.boxes) {
+        if (b.deco !== "cubicle" || b.y < UY) continue;
+        const top = b.y + b.h / 2;
+        bx(0.32, 0.04, 0.24, b.x - 0.3, top + 0.02, b.z, "#f4f1ea", 0);
+        cyl(0.08, 0.1, b.x + 0.42, top + 0.05, b.z - 0.15, ["#d6264a", "#3d6fb5", "#ffd54a"][Math.floor(hash(b.x, b.z) * 3)], 0.004);
+        bx(0.12, 0.15, 0.02, b.x + 0.2, top + 0.08, b.z + 0.2, "#c9a227", 0);
+      }
+      sign("BANDITZ TASK FORCE (THAT'S 2 GUYS)", 2.4, 0.4, 0, UY + 2.3, V(7.95), 0, 1, { bg: "#c41e3a", fg: "#f4f1ea" });
+      // the squad room: a whiteboard of suspects, lockers' vents
+      bx(2.6, 1.3, 0.05, -6.6, UY + 1.9, V(7.9) - 0.02, "#f4f1ea", 0.01);
+      sign("SUSPECTS: 1) A BOX  2) ANOTHER BOX  3) ??? ", 2.4, 1.1, -6.6, UY + 1.9, V(7.9) - 0.06, 0, -1, { fg: "#1f3a78" });
+      // the evidence room: the cage, boxes and bags on the racks, a sign, a sign-out clipboard nobody uses
+      const ev = g.evidence;
+      sign("EVIDENCE  -  DO NOT TOUCH. WE MEAN IT. (WE COUNT.)", 3.2, 0.45, (ev.minX + ev.maxX) / 2, UY + 2.9, ev.maxZ + 0.08, 0, 1, { bg: "#ffd54a", fg: "#1b1420" });
+      sign("LOST & FOUND (MOSTLY FOUND)", 1.8, 0.35, (ev.minX + ev.maxX) / 2, UY + 2.3, ev.minZ + 0.15, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
+      for (const b of this.arena.boxes) {
+        if (b.deco !== "evidence" || b.y < UY) continue;
+        const top = b.y + b.h / 2;
+        for (let k = 0; k < 4; k++) {
+          const ox = -b.w / 2 + 0.3 + k * (b.w - 0.6) / 3;
+          if (hash(b.x + k, b.z) < 0.45) continue; // (gaps: room for your loot)
+          const kind = hash(b.z + k, b.x);
+          if (kind < 0.5) { bx(0.36, 0.28, 0.36, b.x + ox, top + 0.14, b.z, "#c9a07a", 0.01); bx(0.2, 0.08, 0.01, b.x + ox, top + 0.14, b.z - 0.19, "#f4f1ea", 0); }
+          else { sph(0.36, b.x + ox, top + 0.16, b.z, "#e8e4dc", 0.01).scaling.set(1, 0.8, 0.7); bx(0.18, 0.12, 0.01, b.x + ox, top + 0.18, b.z - 0.13, "#ffd54a", 0); } // (an evidence bag, tagged)
+        }
+        for (let k = 0; k < 3; k++) { // (the shelf's own boxes, on its levels)
+          for (const lv of b.h > 1.5 ? [0.45, 1.05] : [0.45]) bx(0.42, 0.3, Math.min(0.5, b.d - 0.1), b.x - b.w / 2 + 0.6 + k * (b.w - 1.2) / 2, b.y - b.h / 2 + lv, b.z - 0.02, ["#c9a07a", "#a8743f", "#e8e4dc"][k], 0.008);
+        }
+      }
+      bx(0.3, 0.4, 0.03, ev.maxX + 0.25, UY + 1.4, ev.maxZ + 0.3, "#8b5a2b", 0.005);
+      glowBox(1.0, 0.06, 0.3, (ev.minX + ev.maxX) / 2, 8.95, (ev.minZ + ev.maxZ) / 2, "#fff2c8");
+      this.group = -1;
+    }
+  }
+
+  /** R6: the helicopter's rotors, every frame */
+  private updateHeli(dt: number) {
+    if (!this.heliRotor.length) return;
+    this.heliRotor[0].rotation.y += dt * 1.4;
+    this.heliRotor[1].rotation.x += dt * 6;
+    if (this.heliBeam?.isEnabled()) this.heliBeam.rotation.z = 0.5 + Math.sin(performance.now() / 1600) * 0.35;
+  }
+
+  /** R5: neon flicker and the station's roof lights (every frame) */
+  private updateNeon() {
+    const t = performance.now() / 1000;
+    for (const n of this.neon) {
+      const k = Math.sin(t * 13 + n.seed) + Math.sin(t * 31 + n.seed * 2.1);
+      const off = k > 1.55 || (Math.floor(t * 0.7 + n.seed) % 9 === 0 && Math.sin(t * 50) > 0);
+      for (let i = 0; i < n.mats.length; i++) n.mats[i].emissiveColor.copyFrom(off ? n.base[i].scale(0.25) : n.base[i]);
+    }
+    if (this.stationLights) {
+      const on = Math.floor(t * 2.5) % 2 === 0;
+      this.stationLights.red.emissiveColor.set(on ? 1 : 0.25, on ? 0.16 : 0.04, on ? 0.23 : 0.06);
+      this.stationLights.blue.emissiveColor.set(on ? 0.04 : 0.16, on ? 0.1 : 0.42, on ? 0.25 : 1);
+    }
+  }
+
   /** C1 scenery: the park lawn inside the roundabout, railway tracks, traffic lights, the station clock. */
   private buildScenery() {
     const sc = this.scene, MB = MeshBuilder;
@@ -2997,6 +3979,31 @@ export class CityRenderer {
         const kerb = MB.CreateTorus("kerb", { diameter: (d.r ?? 20) * 2, thickness: 0.35, tessellation: 64 }, sc);
         kerb.position.set(d.x, 0.08, d.z); kerb.scaling.y = 0.4;
         this.add(kerb, "#9aa3b5", 0.01, false);
+      } else if (d.kind === "viaduct") {
+        // R3: a piece of the curved viaduct over the fort bowl (looks only: nothing up there to stand on)
+        const y = d.h ?? 9.5, yaw = d.yaw ?? 0, L = d.d ?? 10, W = d.w ?? 14;
+        const deck = MB.CreateBox("deck", { width: W, height: 1, depth: L }, sc);
+        deck.position.set(d.x, y + 0.5, d.z); deck.rotation.y = yaw; this.add(deck, "#8e8a94", 0.04);
+        for (const o of [-W / 2 + 0.2, W / 2 - 0.2]) {
+          const wall = MB.CreateBox("deckwall", { width: 0.4, height: 1.1, depth: L }, sc);
+          wall.position.set(d.x + Math.cos(yaw) * o, y + 1.55, d.z - Math.sin(yaw) * o); wall.rotation.y = yaw; this.add(wall, "#b9b3a6", 0.02);
+        }
+        const under = MB.CreateBox("deckunder", { width: W - 3, height: 0.6, depth: L }, sc);
+        under.position.set(d.x, y - 0.3, d.z); under.rotation.y = yaw; this.add(under, "#6e6a78", 0.02, false);
+      } else if (d.kind === "pillar") {
+        // R3: a pair of viaduct pillars across the deck (their collision boxes are in the layout)
+        const t = d.yaw ?? 0, y = d.h ?? 9.5;
+        for (const o of [-4.5, 4.5]) {
+          const p = MB.CreateBox("pillar", { width: 1.8, height: y, depth: 1.8 }, sc);
+          p.position.set(d.x + Math.sin(t) * o, y / 2, d.z + Math.cos(t) * o); this.add(p, "#9aa3b5", 0.04);
+        }
+        const cap = MB.CreateBox("pillarcap", { width: 2.4, height: 0.6, depth: 11 }, sc);
+        cap.position.set(d.x, y - 0.3, d.z); cap.rotation.y = t; this.add(cap, "#9aa3b5", 0.03);
+      } else if (d.kind === "walk") {
+        // R2: a smooth pavement strip along a diagonal road (the collision underneath is 0.5 m steps)
+        const slab = MB.CreateBox("walk", { width: d.w ?? 2.5, height: 0.17, depth: d.d ?? 10 }, sc);
+        slab.position.set(d.x, 0.085, d.z); slab.rotation.y = d.yaw ?? 0;
+        this.add(slab, KIND_COLOR.sidewalk ?? "#b3aebb", 0.02, false);
       } else if (d.kind === "rail") {
         const len = d.d ?? 50;
         for (const off of [-0.72, 0.72]) {
@@ -3082,6 +4089,9 @@ export class CityRenderer {
       { text: "LAWYERS 4 LESS: WE MIGHT WIN", bg: "#f4f1ea", fg: "#1b1420", at: [-40, 14, 113], ry: 0 },
       { text: "HOTEL ADEQUATE: IT HAS BEDS", bg: "#ff8fa3", fg: "#1b1420", at: [113, 14, 40], ry: Math.PI / 2 },
     ];
+    // (R3: the city runs further south; the south billboard stands behind the fort bowl instead of over it)
+    const south = this.arena.southZ;
+    if (south !== undefined) for (const ad of ads) if (ad.at[2] < -100) ad.at[2] = south - 4;
     for (const ad of ads) {
       const board = MeshBuilder.CreatePlane("ad", { width: 16, height: 4 }, this.scene);
       board.position.set(ad.at[0], ad.at[1], ad.at[2]);
@@ -3099,5 +4109,58 @@ export class CityRenderer {
       }
     }
   }
+}
+
+/** R3: the middle of a polygon (its vertex average: fine for the convex footprints we use). */
+function centroid(P: [number, number][]): [number, number] {
+  let x = 0, z = 0;
+  for (const [px, pz] of P) { x += px; z += pz; }
+  return [x / P.length, z / P.length];
+}
+
+/**
+ * R3: an upright prism on a convex x/z polygon (counter-clockwise), from y0 to y1, its outline grown by
+ * `grow` metres. Flat-shaded, with UVs, so it merges with the city's boxes.
+ */
+export function footPrism(scene: Scene, P: [number, number][], y0: number, y1: number, grow = 0): Mesh {
+  let pts = P;
+  if (grow) {
+    // push each edge out by `grow` and re-intersect neighbours (a convex outline stays convex)
+    const n = P.length, lines = P.map(([ax, az], i) => {
+      const [bx, bz] = P[(i + 1) % n], l = Math.hypot(bx - ax, bz - az) || 1, nx = (bz - az) / l, nz = -(bx - ax) / l;
+      return { px: ax + nx * grow, pz: az + nz * grow, dx: (bx - ax) / l, dz: (bz - az) / l };
+    });
+    pts = lines.map((L, i) => {
+      const M = lines[(i + n - 1) % n], den = M.dx * L.dz - M.dz * L.dx;
+      if (Math.abs(den) < 1e-6) return [L.px, L.pz] as [number, number];
+      const t = ((L.px - M.px) * L.dz - (L.pz - M.pz) * L.dx) / den;
+      return [M.px + M.dx * t, M.pz + M.dz * t] as [number, number];
+    });
+  }
+  const pos: number[] = [], idx: number[] = [], uv: number[] = [];
+  const quad = (a: number[], b: number[], c: number[], d: number[], u: number) => {
+    const o = pos.length / 3;
+    pos.push(...a, ...b, ...c, ...d);
+    uv.push(0, 0, u, 0, u, 1, 0, 1);
+    idx.push(o, o + 1, o + 2, o, o + 2, o + 3); // (wound so the outside faces out: Babylon culls the other side)
+  };
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = pts[i], [bx, bz] = pts[(i + 1) % n];
+    quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], Math.hypot(bx - ax, bz - az));
+  }
+  // caps (a fan from the first point)
+  for (const [y, up] of [[y1, true], [y0, false]] as const) {
+    const o = pos.length / 3;
+    for (const [x, z] of pts) { pos.push(x, y, z); uv.push(x, z); }
+    for (let i = 1; i < n - 1; i++) up ? idx.push(o, o + i, o + i + 1) : idx.push(o, o + i + 1, o + i);
+  }
+  const normals: number[] = [];
+  VertexData.ComputeNormals(pos, idx, normals);
+  const vd = new VertexData();
+  vd.positions = pos; vd.indices = idx; vd.normals = normals; vd.uvs = uv;
+  const m = new Mesh("prism", scene);
+  vd.applyToMesh(m);
+  return m;
 }
 

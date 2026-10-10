@@ -15,7 +15,7 @@ import { CityRenderer } from "./cityRenderer.ts";
 import { RaidAlert } from "../ui/raidAlert.ts";
 import { ItemRenderer } from "./itemRenderer.ts";
 import { NpcRenderer } from "./npcRenderer.ts";
-import { EventRenderer, DragonRenderer } from "./eventRenderer.ts";
+import { EventRenderer, DragonRenderer, FestaRenderer } from "./eventRenderer.ts";
 import { PropRenderer } from "./propRenderer.ts";
 import { CarRenderer } from "./carRenderer.ts";
 import { CopCarRenderer } from "./copCarRenderer.ts";
@@ -23,7 +23,7 @@ import { LockpickUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, type PropDef,
+  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -55,12 +55,14 @@ const PROP_NAMES: Record<string, string> = {
   dummy: "Practice Dummy", throwgame: "THROW-O-MATIC", racegame: "TROLLEY GRAND PRIX",
   // C5b: Chinatown's stalls
   steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
+  // R4: Little Italy's
+  pizzacart: "Pizza Cart", gelato: "Gelato Cart", ricordi: "Souvenir Stall", deli: "Deli Counter",
   // C5c: Uptown's landmarks
   vaultdoor: "the Vault Door", depositbox: "Safety Deposit Box", nose: "the Mayor's Gold Nose", stash: "a Loose Brick",
   podium: "the Maitre d's Podium", cloakroom: "the Cloakroom", dessertcart: "the Dessert Trolley", piano: "the Grand Piano", chefstable: "the Chef's Table", kitchen: "the Stove",
   // C5c.3: THE COMPACTOR and PAWN-O-RAMA
   clubrope: "Big Crunch's Rope", djdecks: "the DJ's Decks", clubbar: "the Conveyor Bar", clubsafe: "the Club Safe", rider: "the DJ's Rider", lockers: "the Staff Lockers", sortbin: "the Sorting Bin", vipbooth: "the VIP Booth",
-  pawncounter: "Sal's Counter", pawncase: "the Pawn Case",
+  pawncounter: "Sal's Counter", pawncase: "the Pawn Case", toilet: "the Toilet", celldoor: "the Cell Door", glasscounter: "the Glass Counter", door: "the Door",
 };
 
 /** Round loop + event state for the HUD (read from the server / solo world). */
@@ -70,6 +72,8 @@ export interface MatchHud {
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
   lightT?: number;
   paradeD?: number;
+  /** R4: Little Italy's festa (progress, which one) */
+  festaD?: number; festaV?: number;
   /** C5c.3: when THE COMPACTOR's last DROP started (same clock as lightT) */
   clubB?: number;
 }
@@ -214,15 +218,15 @@ export class ArenaScene {
     let best: { t: number; x: number; y: number; z: number; nx: number; nz: number } | null = null;
     for (const b of nearBoxes(this.arena, cam.x, cam.z, TAG.reach + 1)) {
       if (!["building", "tower", "wall", "fence"].includes(b.kind) || b.off) continue;
-      // ray vs the box's four side faces
-      for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const fx = b.x + nx * b.w / 2, fz = b.z + nz * b.d / 2;
-        const den = nx ? dx * nx : dz * nz;
+      // ray vs the box's side faces (R3: angled faces too)
+      for (const f of footFaces(b)) {
+        const nx = f.nx, nz = f.nz;
+        const den = dx * nx + dz * nz;
         if (den >= -1e-3) continue; // facing away
-        const t = nx ? (fx - cam.x) / dx : (fz - cam.z) / dz;
+        const t = ((f.ax - cam.x) * nx + (f.az - cam.z) * nz) / den;
         if (t <= 0 || t > TAG.reach + 0.6) continue;
         const x = cam.x + dx * t, y = cam.y + dy * t, z = cam.z + dz * t;
-        if (nx ? Math.abs(z - b.z) > b.d / 2 - 0.3 : Math.abs(x - b.x) > b.w / 2 - 0.3) continue;
+        if (Math.abs((x - f.mx) * -nz + (z - f.mz) * nx) > f.len / 2 - 0.3) continue;
         if (y < b.y - b.h / 2 + 0.3 || y > b.y + b.h / 2 || y < this.cur.y + 0.4 || y > this.cur.y + 2.5) continue;
         if (!best || t < best.t) best = { t, x, y, z, nx, nz };
       }
@@ -250,7 +254,7 @@ export class ArenaScene {
   camOverride: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null;
 
   // Phase 3: round loop
-  match: MatchHud = { phase: "lobby", round: 0, rounds: ROUNDS, timeLeft: 0, results: "[]", evKind: "", evStage: "", evX: 0, evZ: 0, evR: 0, evT: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, lightT: 0, paradeD: -1, clubB: -999 };
+  match: MatchHud = { phase: "lobby", round: 0, rounds: ROUNDS, timeLeft: 0, results: "[]", evKind: "", evStage: "", evX: 0, evZ: 0, evR: 0, evT: 0, truckOn: false, truckX: 0, truckZ: 0, truckYaw: 0, lightT: 0, paradeD: -1, festaD: -1, festaV: 0, clubB: -999 };
   scores: ScoreLine[] = [];
   myColorIdx = 0;
   private events: EventRenderer;
@@ -258,6 +262,9 @@ export class ArenaScene {
   forceNight = false;
   /** C5b: the dragon parade in Chinatown */
   private dragon: DragonRenderer | null = null;
+  /** R4: Little Italy's festa */
+  private festa: FestaRenderer | null = null;
+  private festaBeatT = 0;
   private drumT = 0;
   /** C1: red screen edge + arrow home while your fort is being raided */
   readonly raidAlert = new RaidAlert();
@@ -378,6 +385,7 @@ export class ArenaScene {
     { const ps = arena.pawnShop, sh = ps ? arena.shops?.find((x) => x.id === ps.shop) : undefined; if (sh) this.npcs.salAt = { x: sh.cashier.x, z: sh.cashier.z }; } // (C5c.3)
     this.events = new EventRenderer(scene);
     if (this.arena.chinatown) this.dragon = new DragonRenderer(scene, this.arena.chinatown.route, { n: PARADE.segments, gap: PARADE.gap });
+    if (this.arena.littleItaly) this.festa = new FestaRenderer(scene, this.arena.littleItaly.route, { gap: FESTA.gap, segments: FESTA.segments });
     this.propsR = new PropRenderer(scene, this.arena.props ?? []);
     for (const pd of this.arena.props ?? []) if (pd.box !== undefined) this.brkBox.set(pd.id, pd.box);
     this.propsR.wallArt(this.arena); // (C4b: graffiti round the lower city)
@@ -385,6 +393,7 @@ export class ArenaScene {
     this.copCars = new CopCarRenderer(scene);
     this.lock = new LockpickUI(document.getElementById("hud") ?? document.body);
     this.lock.onPress = (pin, t) => this.onAction?.({ a: "pick", pin, t });
+    this.lock.onCancel = () => this.onAction?.({ a: "pickStop" } as never); // (R6: step away from the cell door)
     input.jailKeys = (code) => this.lock.key(code);
     input.jailMouse = (dx, dy) => this.lock.mouse(dx, dy);
 
@@ -538,6 +547,7 @@ export class ArenaScene {
       // C4a: smashed things vanish and stop blocking (repaired at dawn)
       const bd = this.brkBox.get(id);
       if (bd !== undefined) { this.propsR.syncBreakable(id, pv.ready); this.city.setBroken(id, !pv.ready); setBoxOff(this.arena, bd, !pv.ready); }
+      else if (id.startsWith("glasscounter")) this.city.setBroken(id, !pv.ready); // (R7: the pawn shops' glass counters: no box to switch off)
     });
     this.propsR.syncTags(view.tags); // (C4b)
     view.cars?.forEach((cv, id) => this.cars.sync(id, cv));
@@ -676,7 +686,7 @@ export class ArenaScene {
           }
           break;
         // ---- Phase 3: rounds, banking, city events ----
-        case "round": this.onRound(e.phase, e.round); break;
+        case "round": if (e.phase !== "hurry") this.shopWants = {}; this.onRound(e.phase, e.round); break; // (R5: a new scavenge, a new list)
         case "banked": {
           if (e.p !== me) break;
           const p = this.items.drawnPos(e.item);
@@ -734,7 +744,7 @@ export class ArenaScene {
           if (d) {
             const g = gainAt(x, 1, z);
             if (e.kind === "dummy") { this.propsR.wobble(e.prop); if (g > 0.1) { sfx.smash("bench", g * 0.6); this.pop(["THWACK!", "OOF!", "BOING!", "POW!"][Math.floor(Math.random() * 4)], x, d.y + 2.2, z, "#ff8fa3"); } break; }
-            if (g > 0.1) { sfx.smash(e.kind, g); this.pop(e.kind === "car" ? "SMASH!" : e.broke ? (e.kind === "shopglass" || e.kind === "busstop" ? "SHATTER!" : "CRUNCH!") : "CLANG!", x, 2.2, z, "#ffe14a"); }
+            if (g > 0.1) { sfx.smash(e.kind, g); this.pop(e.kind === "car" ? "SMASH!" : e.broke ? (e.kind === "shopglass" || e.kind === "busstop" || e.kind === "glasscounter" ? "SHATTER!" : "CRUNCH!") : "CLANG!", x, 2.2, z, "#ffe14a"); }
             if (d.box !== undefined) this.propsR.burst(e.kind, x, z, !!e.broke);
           }
           break;
@@ -742,6 +752,7 @@ export class ArenaScene {
         case "empty": if (e.p === me) this.onFeedback?.("Nothing left in there. It refills later.", "info"); break;
         // C5b: Chinatown
         case "firecracker": { this.dragon?.firecracker(e.x, e.z); const g = gainAt(e.x, 1, e.z); if (g > 0.05) sfx.firecracker(g); break; }
+        case "festaSplash": { this.festa?.petal(e.x, e.z, 16, "#6fc8ff"); const g = gainAt(e.x, 1, e.z); if (g > 0.05) sfx.splash(); break; }
         case "stallYell": if (e.p === me) this.onFeedback?.("\"HEY! You pay for that!\" (the stall keeper saw: +heat)", "bad"); break;
         // C5c: Uptown's landmarks
         case "drill": { const d = this.propsR.def(e.prop); if (d) { const g = gainAt(d.x, 1, d.z); if (g > 0.05) sfx.drill(g); this.propsR.sparks(d.x, d.z - 0.4); } break; }
@@ -784,10 +795,51 @@ export class ArenaScene {
           break;
         }
         // C5c.3: PAWN-O-RAMA
-        case "fenced": if (e.p === me) { sfx.cash(); this.onFeedback?.(`"Pleasure doing business." Sal paid $${e.cash} for the ${lootDef(e.type).name}. No questions asked.`, "good"); } break;
+        case "fenced": {
+          const hs = e.shop !== undefined && e.shop >= 0 ? this.arena.hotShops?.[e.shop] : undefined;
+          if (e.hot && hs) this.shopWants[hs.idx] = (this.shopWants[hs.idx] ?? []).filter((t) => t !== e.type); // (crossed off: maybe somebody else got there first)
+          if (e.p === me && hs) {
+            const who = NPC_DEFS[hs.owner].name;
+            sfx.cash();
+            if (e.hot) this.onBanner?.("TRIPLE!", `${who} wanted a ${lootDef(e.type).name}: $${e.cash} (x3). ${hs.owner === "lou" ? `"Pleasure. Now scram."` : `"Ooh, finders keepers, hon."`}`, "good");
+            else this.onFeedback?.(hs.owner === "lou" ? `Twitchy Lou counts $${e.cash} onto the glass for the ${lootDef(e.type).name}. *eye twitches*` : `Sticky Fran snaps her gum and hands over $${e.cash} for the ${lootDef(e.type).name}.`, "good");
+          } else if (e.p === me) { sfx.cash(); this.onFeedback?.(`"Pleasure doing business." Sal paid $${e.cash} for the ${lootDef(e.type).name}. No questions asked.`, "good"); }
+          break;
+        }
+        // R5/R7: the walk-in pawn shops
+        case "louList":
+          if (e.p === me) {
+            const hs = this.arena.hotShops?.[e.shop ?? 0], owner = hs?.owner ?? "lou";
+            this.shopWants[e.shop ?? 0] = [...e.types];
+            sfx.radio();
+            const list = e.types.map((t) => lootDef(t).name).join(", ");
+            this.onBanner?.(`${NPC_DEFS[owner].name.toUpperCase()} ${owner === "lou" ? "MUTTERS" : "LEANS IN"}...`, e.types.length ? (owner === "lou" ? `"Psst. Today I want: ${list}. Bring me one, I pay TRIPLE. First come, first served. You didn't hear it from me."` : `"Hon, today I'm after: ${list}. Bring me one and I'll pay you TRIPLE. First one only, sweetie."`) : `"Nothin' I want today. Sell or scram."`, "good");
+          }
+          break;
+        case "door": { const d = this.propsR.def(e.prop); if (d) { const g = gainAt(d.x, 1, d.z); if (g > 0.05) sfx.pickTick(); } break; }
+        case "keyLift": if (e.p === me) { sfx.offended(); this.onBanner?.("YOU TOOK THE CHIEF'S KEY", "It opens the holding cell. Stealing from the police: they'll want a word. Get it to the cell door.", "bad"); } break;
+        case "cellOpen": { const d = this.propsR.def(e.prop); if (d && gainAt(d.x, 1, d.z) > 0.05) { sfx.unlock(); this.pop("CLANK!", d.x, 2.2, d.z, "#ffd54a"); }
+          if (this.jailT > 0) this.onBanner?.("THE CELL'S OPEN!", `Somebody used the chief's key. ${e.time} s: walk out NOW.`, "good");
+          else if (e.p === me) this.onBanner?.("CELL UNLOCKED", `It's open for ${e.time} s. Everybody inside can walk out.`, "good");
+          break; }
+        case "cellShut": { const d = this.propsR.def(e.prop); if (d && gainAt(d.x, 1, d.z) > 0.05) sfx.pickTick(); break; }
+        case "evidenceLift": if (e.p === me) { sfx.offended(); this.onBanner?.("STOLEN FROM THE EVIDENCE ROOM", `The ${lootDef(e.type).name}'s yours again. Now every cop in the building wants a word. RUN.`, "bad"); } break;
+        case "lockStart": if (e.p === me) sfx.pickTick(); break;
+        case "flush": {
+          const g = gainAt(e.x, 1, e.z); if (g > 0.05) { sfx.splash(); this.pop("FLUSSSH!", e.x, 1.6, e.z, "#7fb4c8"); }
+          if (e.hit.includes(me)) { this.dirtyWater(); this.addTrauma(0.6); this.onFeedback?.(e.p === me ? "You flushed it. It flushed back. Everybody's soaked." : "Somebody flushed the toilet. EVERYBODY'S SOAKED.", "info"); }
+          break;
+        }
+        case "pawnTrouble": if (e.p === me) {
+          const hs = this.arena.hotShops?.[e.shop ?? 0], boss = NPC_DEFS[hs?.owner ?? "lou"].name, guard = NPC_DEFS[hs?.bouncer ?? "meat_locker"].name;
+          sfx.offended(); this.onBanner?.(`${guard.toUpperCase()} IS COMING`, e.why === "throw" ? `You threw stuff at ${boss}. RUN.` : e.why === "smash" ? "You smashed the glass. RUN." : `You hit ${boss}. RUN.`, "bad");
+        } break;
+        case "louWarn": if (e.p === me) { sfx.offended(); this.onFeedback?.(`Twitchy Lou: "Buy or bye, pal." Meat Locker cracks his knuckles. (Sell something or move along.)`, "bad"); } break;
+        case "meatPunch": { const n = this.npcs.pos(e.npc); if (n && gainAt(n.x, 1, n.z) > 0.05) { sfx.heavyLand(); this.pop("WHAM!", n.x, 2.6, n.z, "#ff3b30"); } if (e.p === me) this.addTrauma(0.9); break; }
         case "pawned": if (e.p === me) { sfx.cash(); this.onBanner?.("PAWNED", `$${e.cash} now for the ${lootDef(e.type).name}. Buy it back before dawn, or it goes on sale to anybody.`, "good"); } break;
         case "redeemed": if (e.p === me) { sfx.cash(); this.onFeedback?.(e.sale ? `Bought the ${lootDef(e.type).name} off the sale shelf for $${e.cash}.` : `Got your ${lootDef(e.type).name} back ($${e.cash}).`, "good"); } break;
-        case "pawnNo": if (e.p === me) { sfx.full(); this.onFeedback?.(e.reason === "hands" ? "Sal squints at your empty hands. \"What, you selling air?\" (Have something out in your hands.)" : e.reason === "full" ? "The case is full. Come back when somebody's bought something." : e.reason === "broke" ? "You can't afford it. Sal doesn't do credit. (Well. He does pawn.)" : "Nothing of yours in the case (and nothing on sale yet).", "info"); } break;
+        case "pawnNo": if (e.p === me && e.reason === "black") { sfx.offended(); this.onFeedback?.(this.heldInfo()?.type === "cell_key" ? `"A POLICE key? Are you TRYING to get me arrested?"` : `"Is that... THE SPOON? Get it away from me. Only the black market touches that." (Coming soon.)`, "bad"); break; }
+          if (e.p === me) { sfx.full(); this.onFeedback?.(e.reason === "hands" ? "Sal squints at your empty hands. \"What, you selling air?\" (Have something out in your hands.)" : e.reason === "full" ? "The case is full. Come back when somebody's bought something." : e.reason === "broke" ? "You can't afford it. Sal doesn't do credit. (Well. He does pawn.)" : "Nothing of yours in the case (and nothing on sale yet).", "info"); } break;
         case "caseSmashed": {
           const d = this.arena.pawnShop; if (d) { const g = gainAt(d.caseX, 1, d.caseZ); if (g > 0.05) sfx.glass(g); this.pop("SMASH & GRAB!", d.caseX, 2.2, d.caseZ, "#ff3b30"); }
           if (e.p === me) this.onBanner?.("SMASH & GRAB!", "Everything in the case is on the floor. Big Vinnie's coming. Grab and GO.", "bad");
@@ -883,6 +935,7 @@ export class ArenaScene {
             if (this.chargeStart) { this.chargeStart = 0; this.stopChargeTone?.(); this.stopChargeTone = null; this.input.cancelCharge(); this.viewmodel.setCharge(0); }
             // the jail screen is the headline; it says what they took
             this.lock.setHeadline(e.car ? "RUN OVER & BUSTED!" : "BUSTED!", e.count ? `They confiscated ${e.count} item${e.count > 1 ? "s" : ""} ($${e.value})` : "You're in the Trashington PD lock-up");
+            if (this.arena.station?.holding) this.onBanner?.(e.car ? "RUN OVER & BUSTED!" : "BUSTED!", `${e.count ? `They took ${e.count} item${e.count > 1 ? "s" : ""} ($${e.value}). ` : ""}You're in the holding cell. Walk about, flush the toilet, mind the Champ... or E at the cell door to pick the lock.`, "bad");
           } else {
             const name = this.scores.find((x) => x.id === e.p)?.name ?? "Someone";
             this.onFeedback?.(`${name} got BUSTED!${e.count ? ` ($${e.value} of loot confiscated)` : ""}`, "info");
@@ -894,7 +947,8 @@ export class ArenaScene {
             const st = this.arena.station;
             if (st) { const spot = e.breakout ? st.alley : st.door; this.input.yaw = ((spot.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2); this.input.pitch = 0; }
             this.roll = 0; this.lie = 0; this.trauma = 0; this.correction.set(0, 0, 0);
-            if (e.breakout) { sfx.unlock(); this.onBanner?.("JAILBREAK!", "You're out the back. The cops know... RUN!", "good"); }
+            if (e.breakout && e.walked) { sfx.unlock(); this.onBanner?.("JAILBREAK!", "You walked right out of the cell. The cops know... RUN!", "good"); }
+            else if (e.breakout) { sfx.unlock(); this.onBanner?.("JAILBREAK!", "You're out the back. The cops know... RUN!", "good"); }
             else { sfx.respawn(); this.onFeedback?.("Time served. You're free (and your record is clean).", "info"); }
           } else if (e.breakout) {
             const name = this.scores.find((x) => x.id === e.p)?.name ?? "Someone";
@@ -1025,6 +1079,13 @@ export class ArenaScene {
       if (kind === "happyhour") { sfx.happyHour(); this.onBanner?.("HAPPY HOUR!", `Loot in ${detail} is worth DOUBLE for 30 s. Grab it!`, "good"); }
       if (kind === "raccoons") { sfx.chitter(1); this.onBanner?.("RACCOON HEIST!", "Raccoons are sneaking into the forts. Bonk them!", "bad"); }
       if (kind === "parade") { sfx.gong(); this.onBanner?.("DRAGON PARADE!", "The dragon dances up Chinatown scattering red envelopes of lucky money. Get down there!", "good"); }
+      if (kind === "festa") {
+        sfx.gong();
+        const blurb = detail === FESTA.names[0] ? "A giant meatball is rolling down Little Italy. Dodge it, and grab the golden meatballs!"
+          : detail === FESTA.names[1] ? "The band is marching up Little Italy. Dance along (stamina!) and pinch the tips!"
+          : "A singing gondola is rolling up Little Italy throwing golden roses. Mind the splash!";
+        this.onBanner?.(`FESTA! ${detail}`, blurb, "good");
+      }
     } else if (stage === "end") {
       if (kind === "happyhour") this.onFeedback?.("Happy hour is over", "info");
     }
@@ -1450,6 +1511,27 @@ export class ArenaScene {
   }
   get pawnCaseFull() { return this.pawnCase.length >= PAWN_SHOP.caseMax; }
   /** C5c.3: what's out in my hands (for Sal's prompts): type and value */
+  /** R6: the toilet erupted on you: dirty water all over the screen, dripping off over a few seconds */
+  private dirtyEl: HTMLDivElement | null = null;
+  private dirtyWater() {
+    if (!this.dirtyEl) {
+      const d = document.createElement("div");
+      d.id = "fx-dirty";
+      d.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:40;opacity:0;transition:opacity 2.8s ease-out;";
+      const blots = Array.from({ length: 14 }, (_, i) => `radial-gradient(circle at ${(i * 37) % 100}% ${(i * 53 + 11) % 100}%, rgba(96,78,34,0.75) 0, rgba(110,92,40,0.45) ${6 + (i % 4) * 3}%, transparent ${12 + (i % 5) * 3}%)`);
+      d.style.background = blots.join(",") + ", rgba(90,80,40,0.25)";
+      document.body.appendChild(d);
+      this.dirtyEl = d;
+    }
+    const d = this.dirtyEl;
+    d.style.transition = "none"; d.style.opacity = "1";
+    void d.offsetWidth;
+    d.style.transition = "opacity 2.8s ease-out 0.6s"; d.style.opacity = "0";
+  }
+
+  /** R5: what Twitchy Lou told you he wants today (x3) */
+  /** R7: what each pawn shop's owner told you they want today (x3), by shop */
+  shopWants: Record<number, string[]> = {};
   heldInfo(): { type: string; value: number } | null {
     const id = this.activeItem(this.inventory)?.id;
     if (!id) return null;
@@ -1687,6 +1769,17 @@ export class ArenaScene {
       this.drumT -= dt;
       const hp = this.dragon.headPos;
       if (hp && this.drumT <= 0) { this.drumT = 0.42; const dd = Math.hypot(hp.x - this.cur.x, hp.z - this.cur.z); if (dd < 70) sfx.drum(1 / (1 + dd / 10)); }
+    }
+    // R4: Little Italy's festa (a rumble for the meatball, the band's beat)
+    if (this.festa) {
+      this.festa.update(this.match.festaD ?? -1, this.match.festaV ?? 0, dt);
+      const hp = this.festa.headPos;
+      this.festaBeatT -= dt;
+      if (hp && this.festaBeatT <= 0) {
+        const dd = Math.hypot(hp.x - this.cur.x, hp.z - this.cur.z), v = this.match.festaV ?? 0;
+        this.festaBeatT = v === 0 ? 0.9 : 0.5;
+        if (dd < 60) { if (v === 0) sfx.rumble(); else sfx.drum(0.6 / (1 + dd / 10)); }
+      }
     }
     this.city.setNight(this.night.level, dt);
     this.propsR.update(dt);

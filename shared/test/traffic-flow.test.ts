@@ -2,6 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World, nearBoxes, PLAYER, CAR_CLEAR_AFTER, type WorldEvent } from "../src/index.js";
+import { setCityMap as useCity } from "../src/index.js";
+useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const MOVING = new Set(["walk", "flee", "chase", "patrol", "sneak", "escape", "scram", "leave", "follow"]);
 

@@ -546,6 +546,232 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R8: glass doors, real windows, the chief's key, visual fixes (2026-10-10)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Station glass | first-floor windows on all four faces; ground-floor glass on the front; the chief's corner glass on the front and the side; one pane per window | unit (layout) + screenshots | pass |
+| Doors | three glass doors (the station, two shops), each a box that blocks while shut | unit (layout) | pass |
+| | E opens and shuts one; shut it blocks; open you walk through; a cop on the way opens a shut door himself | unit (world) | pass |
+| | browser: the door prompt, E opens the station's doors | e2e (new-city block) | pass |
+| Fairness | the walks measured with the doors open: unchanged (roundabout 137.7-138.3, police door 121.3-121.8, shops 53.6 / 46.9) | unit (layout) | pass |
+| The key | on the chief's desk each day; lifting it is heat; E at the cell door opens it (key used up); a jailed bandit who walks out is free with 1 star; it shuts again after 20 s | unit (world) | pass |
+| Guards | four station cops, all inside | unit (world) | pass |
+| Visual fixes | pavement round the shops and station from far away; the stairwell open from the stairs; the stairs off the wall; no flag; the bouncers' apron bits gone; lighter windows | screenshots | pass (reviewed) |
+| Browser | new-city block: everything from R7 plus the doors | e2e (new-city block on its own), normal and 110 ms lag | pass 26/26 both |
+| | full browser e2e, normal | e2e | NOT passed: 233/235. It crashed at the same multi-window join point as R4.1-R7. Also "the gym bro comes at you" (the classic city) missed its 10 s window; it timed out the same way in R6's normal run and passed in the lag run. |
+| | full browser e2e, 110 ms lag | e2e | NOT passed: 233/235. It crashed at the same join point. Also "picked up a spray can and got it out" missed its 10 s window (it read 5 uses a moment later: lag timing). The gym bro passed in this run. |
+| Everything | 223 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass |
+
+## Manual checklist for Blake (R8)
+
+- [ ] Open and shut the station's and the shops' doors; get chased through one.
+- [ ] Steal the chief's key, get a friend busted, and let them out.
+- [ ] Look at the station from across the street: can you see inside now?
+
+## R7: two pawn shops, the grand station, police presence (2026-10-10)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Pawn shops | two, mirror images, fronts on Gahookz, doors round the corner; glass counters (smashable) split the customers' side from the owner's; owner behind them, bouncer on the floor; a till; armour out front; nothing to steal; no city building on top | unit (layout) | pass |
+| Fairness | the two forts on each side to their shop: 53.6 / 46.9 m (within 8 m; the middle forts are closer, as close as that plot gets). The other walks are unchanged (roundabout 137.7-138.3, police door 121.3-121.8) | unit (layout) | pass |
+| Station | runs to Gahookz; receptionist in the lobby; 2 interrogation rooms and the breakroom west of the hallway, booking and the cell east, the cell at the back; one-way mirrors; stairs up to the first floor (4.8 m); offices, the chief's corner office, the evidence room's shelves behind a cage; two station beats; the jailbreak comes out the back | unit (layout) | pass |
+| Ground | everything walkable still joins up (behind the shop counters left out on purpose) | unit (layout) | pass |
+| Selling | each owner buys at the till (40%); separate x3 lists (no overlap), first of each only; each owner tells only whoever walks up; new lists every scavenge | unit (world) | pass |
+| Bouncers | hanging about 30 s and picking things up: nothing; punching the owner, throwing at them, smashing a glass counter: he comes (both shops); one hit = out cold 6 s, everything dropped, thrown; he follows you out through the door | unit (world) | pass |
+| | 28+ punches, out 40 s, back at his post | unit (world) | pass |
+| Evidence | busted with 2 things: both go up onto the shelves (same value); the guard is on duty upstairs; lifting one is +35 heat and the guard chases | unit (world) | pass |
+| Patrols | 6 foot patrols and 2 cruisers (lights off) on duty, the station's two cops; they walk; a clean bandit next to one is ignored; wanted in sight: chased; heat gone: back on patrol (not removed); a cruiser that sees you wanted turns its siren on | unit (world) | pass |
+| The Champ | 1st and 2nd punch: no stun, he turns on you; 3rd inside 4 s: dizzy 2 s+; punches 4+ s apart never stun | unit (world) | pass |
+| Receptionist | punching her is heat; she ducks | unit (world) | pass |
+| Server | 29 people synced in the lobby phase (20 walkers + 9 posted; the patrols come on duty when the scavenge starts) | server smoke | pass |
+| Browser | new-city block: all four shop people in, two shops, Lou and Fran each tell you their list at the till, the till prompts; walking up the station stairs reaches the first floor (y 4.80); the holding cell checks; no JS errors | e2e (new-city block on its own), normal and 110 ms lag | pass 23/23 both |
+| | full browser e2e, normal | e2e | NOT passed: 234/235. Every check up to friends joining passed (the new-city block included), then it crashed at the same multi-window join point as R4.1-R6. |
+| | full browser e2e, 110 ms lag | e2e | NOT passed: 233/235. It crashed at the same join point. Also "after 3 s: a bundle of cash" (the classic city's till hold-up) timed out once; it passed in the normal run and in R6's lag run, and nothing in R7 touches tills. |
+| Draw calls | per frame, R6 / R7 (software GPU, the same spots): fort 869 / 1006, Trolley St 519 / 634, Gahookz 701 / 791, Gahookz west 471 / 535, the lobby 532 / 604, Leftovers Ave 550 / 605. About +10-20%, mostly the 8 extra cops and the cruisers; the shop and station insides are drawn only near (42 m) | GL draw counter | measured |
+| Everything | 219 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass |
+
+Visual review:
+- both shop fronts (name, neon, armour, gold balls, awning, roof sign, see-through window);
+- inside Lou's shop (counters with junk under the glass, slatwall, guitars, rug, display);
+- the station from high up and from Gahookz;
+- the lobby (Officer Pam, posters, crest);
+- the hallway (bars, notice board), an interrogation room, the cell (tiles, cinder block, the Champ);
+- upstairs: the cubicles, the chief's office, the evidence room.
+
+## Manual checklist for Blake (R7)
+
+- [ ] Sell at both shops (and try Fran's list).
+- [ ] Smash a glass counter and see who comes.
+- [ ] Get busted carrying something, then go upstairs and steal it back.
+- [ ] Count the cops on the streets: enough presence now?
+
+## R6: the real station, the holding cell, the Champ, the pawn shop turned round (2026-10-10)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Station | the holding cell, reception and breakroom are inside; one cell door, the toilet and the shower in the cell; upper floors 10 m+ tall; ground still joins up | unit (layout) | pass |
+| Pawn shop | faces Gahookz (face -1) on the pavement; the other fairness walks are unchanged (within 2 m) | unit (layout) | pass |
+| Holding cell | land in the cell free to move, no lock; E at the door starts the lock, S/Esc stops it; the flush knocks back everyone in the cell (cooldown) | unit (world) | pass |
+| The Champ | about 25 punches; his hit knocks you down and he sits on you until you get up; KO drops the Spoon of Destiny; Lou and the fence refuse it | unit (world) | pass |
+| Meat Locker | 28+ punches, hp 30, fast windup | unit (world) | pass |
+| Server | 26 people synced in the new city (20 walkers + 6 posted) | server smoke | pass |
+| Browser | new-city block: the shop prompt from the Gahookz side; busted into the holding cell with no lockpick; cell prompt; toilet prompt; the flush splashes dirty water; released; no JS errors | e2e (new-city block on its own), normal and 110 ms lag | pass 19/19 both |
+| | full browser e2e, normal | e2e | NOT passed: 232/235. The run crashed at the same point as R4.1/R5: the friends' windows joining don't reach the game in time on this 2-CPU box. "The gym bro comes at you" and "time served" timed out at 8 fps with 112 s of stalls; both passed in the lag run. |
+| | full browser e2e, 110 ms lag | e2e | NOT passed: 234/235. Every check up to the friends joining passed, including the gym bro and time served; then it crashed at the same multi-window join point. |
+| Everything | 214 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass |
+
+Visual review:
+- the station front (brick wings, stone bay, glass tower, the POLICE canopy) and from high up;
+- the roof and the helicopter;
+- the reception, the cell (subway tiles, toilet, the Champ) and the breakroom;
+- the pawn front on Gahookz with its doors open;
+- the streets with the cleaner textures.
+
+## Manual checklist for Blake (R6)
+
+- [ ] Get busted: walk round the cell, flush the toilet with a friend in there, then pick the lock at the door.
+- [ ] Try the Champ. (Good luck.)
+- [ ] At night: does the helicopter's searchlight sweep?
+- [ ] Are the building walls clean enough now?
+
+## R5: HOT STUFF PAWN & LOAN, the station's second storey, textures (2026-10-10)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Chairs | every café chair faces its table | unit (layout) | pass |
+| The shop | dead centre below the station, facing it across Lou's Square, its back on the Gahookz pavement; barred window in the middle; a door each side (mirrored); Lou in his booth, Meat Locker; 6+ stocked back-room shelf spots; nothing else built in it or its alley; the station has a second storey | unit (layout) | pass |
+| Fairness | Lou's window: 131.7 / 132.2 / 131.7 / 131.7 m from the four forts (all the other walks still within 0.5 m: roundabout 137.3-137.8, police door 121.3-121.8, middle lot 233.3-233.8, Bin Juice 200.7-201.2) | unit (layout) | pass |
+| Ground | all walkable ground still joins up (Lou's booth is shut on purpose) | unit (layout) | pass |
+| Selling | the window buys for 40% cash; the 3 wanted things pay x3, the first of each only; a new list every scavenge; Lou tells only whoever walks up | unit (world) | pass |
+| Meat Locker | comes for you when you punch Lou, smash the case, lift from the back room, throw at the window, or loiter (warned first) | unit (world) | pass |
+| | his punch: out cold 6 s+, everything dropped, sent flying; he gets out of the shop to you through a door | unit (world) | pass |
+| | 12+ punches to knock out; out 40 s (no trouble for lifting meanwhile), then back at his post with full health | unit (world) | pass |
+| Server | 25 people synced in the new city (20 walkers + 5 posted) | server smoke | pass |
+| Browser | new-city block: Lou and Meat Locker in, the shop is there, Lou mutters his list when you walk up, the window prompt, no JS errors | e2e (new-city block on its own) | pass 12/12 |
+| | full browser e2e at normal speed | e2e | NOT passed: crashed at 233/235. The third window joining the room didn't reach the game in 15 min (Bob alone took 14 min, against 6.5-9 min before). "Mouse wheel selects pocket 1" also missed its 5 s. Same failure point as the three R4.1 runs; the test box is about 2-3x slower than it was (the unit tests take 400 s, were 137 s). Lag run not attempted. |
+| Everything | 211 shared + 3 client unit; matchmaking + server smoke | full suite | pass |
+
+Visual review:
+- the shop front from Lou's Square: neon flame, booth and tray, shutters with tags, awning, barbed wire, CCTV;
+- Lou behind his bars; the shop floor (wallpaper, bare bulbs, signs) and Meat Locker at the back-room door;
+- the back on Gahookz (brick, graffiti, the roof sign facing the forts);
+- the station: second storey, chief's office, flags, lit sign, lamps, planters;
+- streets in each tier and the rooftops (new wall materials, grime, window styles, shutters, tar and gravel roofs, vents, chimneys).
+
+## Manual checklist for Blake (R5)
+
+- [ ] Walk to Lou's window from each side of the station: does the square feel right?
+- [ ] Sell something on Lou's list (x3), then try your luck with Meat Locker.
+- [ ] Do the streets look less plain now?
+
+## R4.1: screenshot fixes (2026-10-09)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Parades and traffic | 3 seeds each of the dragon and the festa: no moving car gets within 1.5 m of a parade body in front of it, and no car of any kind gets within 1.5 m of one (the street is closed, so nothing is left waiting in it) | unit (match; fails without the fix: 0.02 m) | pass |
+| | 8 seeds with full traffic and walkers: every parade and festa finishes (no deadlock with waiting cars); closest car 2.0 m | sim script | pass |
+| Gate board | LITTLE ITALY readable on the gates, from the street (north and south faces) | screenshots | pass (reviewed) |
+| Everything | 206 shared + 3 client unit; matchmaking + server smoke | unit + smoke | pass |
+| | new-city browser block on its own (districts drawn, festa announced "IN 10s", rolls up Leftovers Avenue, drawn, no JS errors) | e2e (solo block) | pass 8/8 |
+| | full browser e2e at normal speed | e2e | NOT passed: three runs crashed on timeouts while the extra windows were joining (the 4th window after 25 min; twice the 3rd window after 15 min), after 288, 234 and 234 passing checks with no other failures. The test box itself had slowed: the R4 commit, with none of these changes, now also takes 32 s for the first click after Settings, so I raised that click's timeout. Not run at 110 ms lag. To rerun when the box is quicker. |
+
+## R4: Little Italy, Chinatown and the festa (2026-10-09)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Districts | Little Italy on Leftovers Avenue, Chinatown on Write-Off Avenue, between Gahookz Ghetto Lane and Mayor's Mugshot Mile; mirror images shop for shop (9 each), no two Little Italy shops share a name | unit (layout) | pass |
+| Stalls | each Little Italy stall (deli, pizza cart, souvenirs, gelato) has its Chinatown twin opposite, and pays the same on average (deli = seafood tank) | unit (layout) | pass |
+| Gates and lights | 2 gates each, pillars on the pavement (not the road); 6+ rows of lights over each street | unit (layout) | pass |
+| Terraces | 6+ café tables, each under an umbrella, in front of cafés set 6.5 m back | unit (layout) | pass |
+| Setbacks | buildings stand back from the kerb by different amounts (not all 2.5 m) | unit (layout) | pass |
+| Fairness | with the setbacks and the mid-block wall: roundabout 138.7 / 139.2 / 139.6 / 139.6; police door 120.7 / 121.2 / 121.5 / 121.5; middle lot 233.0 / 233.5 / 233.9 / 233.9; Bin Juice x Dead-Centre 200.4 / 200.9 / 201.3 / 201.3 (all within 0.9 m) | unit (layout) | pass |
+| Festa | each of the three rolls up Little Italy, gets a bandit out of its way (the meatball knocks you down; the band refills stamina; the gondola splashes), drops 12+ money items (each worth a red envelope) along the street, then leaves | unit (match) | pass |
+| | the dragon parade and the festa are both on the new map's event list | unit (match) | pass |
+| Browser | new-city block: both districts drawn, the festa announced, rolling up Leftovers Avenue and drawn in the street, no JS errors | e2e | pass |
+| Everything | 205 shared + 3 client unit; matchmaking + server smoke; e2e 313/313 normal and 313/313 at 110 ms lag | full suite | pass |
+
+Notes (R4): the first lag run went 311/313. "Left click punched the tourist" missed the robbed state within 10 s, though the tourist did drop loot. "A cop is dispatched" failed because the heat cooled before a cop was sent (the game clock crawls at lag); the cop busted you 10 s after the test topped the heat up. The punch check now waits 30 s, and the cop check keeps the heat on the way the bust check already does. After those changes the lag run passed 313/313. The normal run passed 313/313 before the two test changes.
+
+Visual review: Little Italy street (arch gate, festoon lights, laundry, awnings, shutters, terracotta roofs, terraces), Chinatown street (lanterns, gates), the giant meatball rolling through the Little Italy arch.
+
+## Manual checklist for Blake (R4)
+
+- [ ] Walk Leftovers Avenue: do the gates, lights and terraces look appealing enough?
+- [ ] Do the varied setbacks make the streets feel less uniform?
+- [ ] Catch the festa a few times (it comes round with the other city events) and try all three.
+
+## R3.1 fixes (2026-10-08)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Angled buildings | every triangle of an angled-building mesh faces outward (walls, roof, floor; cornices too) | client unit (fails on the old winding) | pass |
+| | a bare angled box beside a plain one: solid from the side and from above | screenshots | pass (reviewed) |
+| Roundabout | smooth curved pavement round the ring, cut square at the roads (the diagonals only beside themselves) | screenshots | pass (reviewed) |
+| Pavement | buildings 2.5 m from the kerb, never on it | unit (layout) | pass |
+| Fairness | all walks within 1.3 m (roundabout 140.1-141.4 m) | unit (layout) | pass |
+| Everything | 201 shared + 3 client unit; matchmaking + server smoke; e2e 309/309 normal and 309/309 at 110 ms lag | full suite | pass |
+
+## R3: angled walls + the new city (2026-10-08)
+
+| Area | Check | How | Result (2026-10-08) |
+|---|---|---|---|
+| Angled walls | a turned box at yaw 0 = a plain box (distances, overlaps); 45-degree squares and triangles have the right footprint and outward faces | unit (movement) | pass |
+| | running at a 45-degree wall: never inside it, a steady 1.4 m/s slide along it | unit (movement) | pass |
+| | can't walk into a triangle; stand on its roof; climb a 2 m crate turned 30 degrees just like a plain one | unit (movement) | pass |
+| | a thrown item glances off an angled wall the right way and never ends up inside | unit (movement) | pass |
+| | cops can't see through an angled wall; walkers can't cut through it; a spray tag sits flat on its angled face | unit (world) | pass |
+| | angled buildings draw with façades, shopfronts, signs, cornices | screenshots | pass (reviewed) |
+| Roads | Blake's 9 names plus 5 more; every road named; the whole network mirrored; no Bin Juice stub; no top road; Dead-Centre Drive; the diagonals leave the avenue corners pointing at the roundabout's middle; all joined; no dead-end lanes | unit (layout) | pass |
+| Forts | 4 yards evenly spaced (66.33 m), the outer two 7.5 m from the side walls, avenues centred between each pair, the viaduct over every yard, nothing to climb in the bowl, no ramp, no deck | unit (layout) | pass |
+| Fairness | walk from each fort (outer W / E, middle W / E): roundabout 134.9 / 135.4 / 134.9 / 134.9; police door 118.0 / 118.5 / 118.0 / 118.0; middle lot 229.5 / 230.0 / 230.3 / 230.3; Bin Juice x Dead-Centre 196.9 / 197.4 / 197.7 / 197.7 (all within 2 m) | unit (layout) | pass |
+| Blocks | every building has a mirror twin; none on a road or pavement; 16+ angled, with triangles, odd wedges and some round the roundabout; no loot in roads or buildings | unit (layout) | pass |
+| | all walkable ground joins up (the lots, the cells and the squat are closed on purpose) | unit (layout) | pass |
+| North | 5 empty lots behind hoardings north of Snob Row, no road through them | unit (layout) | pass |
+| Signs | every junction has a green sign naming roads that meet there | unit (layout) | pass |
+| City life | 5 minutes: 22 cars never off the road, longest wait 24 s; no pedestrian inside a building | sim script | pass |
+| Classic city | every earlier unit test, pinned to `?map=classic` | unit | pass (201 shared + 2 client in all) |
+| Server | matchmaking smoke; server smoke on the new city (23 NPCs: 20 walkers + 3; 40+ props) | smoke | pass |
+| Browser | full e2e (classic city) + the new-city block (badge, match starts in the bowl, run out of the fort, map, no JS errors) | e2e normal | 308/309: "a cop is dispatched" missed (the cop did come: BUSTED passed right after). The earlier normal run passed all 301 classic checks |
+| | | e2e 110 ms lag | 308/309: "the gym bro comes at you" missed his chase state between two polls (he knocked you down in the next check). That check now also accepts the punch or the knockdown |
+
+Visual review: overview, along Dodgy Cut-Through, the wedges, the roundabout, a street sign, the fort bowl under the viaduct, the lots, the police front, the map with every road's name. Known: in the fort bowl the e2e's high overview shot comes out washed out (daytime fog at 120 m up). The city builds in about 1.2 s (the classic city: 0.2 s).
+
+## Manual checklist for Blake (R3)
+
+- [ ] Run from each fort to the roundabout: do they feel the same?
+- [ ] The diagonals and the wedge buildings: is the hand-built look right?
+- [ ] Street signs: can you read them while sprinting?
+- [ ] The empty lots up north: big enough for the bank, casino and club?
+- [ ] Anything that feels too open (the plazas behind the rows) or too closed?
+
+## R2: road-layout test map (2026-10-07)
+
+| Area | Check | How | Result (2026-10-08) |
+|---|---|---|---|
+| Roads | every road from Blake's drawing is there (ring, double north road, avenues, Uptown Ave, Yards Rd, spokes, south spur, the fork, the roundabout) | unit (layout) | pass |
+| | the avenues stop at Gold St (one long block along the top, as drawn) | unit (layout) | pass |
+| | the fork's two diagonals run from Uptown Ave to the ring and count as road; nothing up the middle north of the park; the south spur stops at Yards Rd | unit (layout) | pass |
+| | every junction joined; every car lane leads on (no dead ends) | unit (layout) | pass |
+| Blocks | over 150 buildings; none reaches the pavement or the road (sampled every 1 m) | unit (layout) | pass |
+| | no loot in the road or inside a building | unit (layout) | pass |
+| | all walkable ground joins up (no sealed courtyards); every fort walks into town; the fork's pavement is reachable | unit (layout) | pass |
+| | the park, 4 forts, the squat and the police station kept; no classic landmarks | unit (layout) | pass |
+| Traffic + people | 5 minutes of city: 22 cars never off the road, longest wait 24 s (classic: 21 s); no pedestrian inside a building | sim script (not in the suite) | pass |
+| Client | `?map=roads` / the road-test preview build: badge "ROAD TEST / SOLO", solo match starts, run out of the fort into town, no JS errors | browser script + preview harness | pass |
+| | the map shows the diagonals, THE PARK, TENT TOWN and POLICE only | screenshot | pass (reviewed) |
+| Classic city | unchanged: all earlier checks still pass | full suite | pass: 192 shared + 2 client unit, matchmaking smoke, server smoke, e2e 305/305 normal and 305/305 at 110 ms lag |
+
+Visual review: overview, the fork from above, street level on a diagonal (the smooth kerb strip hides the 0.5 m steps underneath), the map, and in play. Known looks: the buildings along the diagonals are stepped squares (a sawtooth frontage); the ring's outer kerb is stepped like before.
+
+## Manual checklist for Blake (R2 road test)
+
+- [ ] Run around the whole map. Does the layout feel right? Too big / too small?
+- [ ] The fork north of the park: does the Y feel like your drawing? Is the triangle block worth keeping?
+- [ ] The long thin block between the two north roads: keep it, or one road?
+- [ ] Where should the landmarks go (bank, City Hall, casino, Chinatown, Le Dumpstère, The Compactor, Pawn-O-Rama, the skate park)?
+- [ ] Do you want the rail yard and the canal back down the sides (the edge roads sit where they were)?
+
 ## Manual checklist for Blake (Phase 4.5)
 
 - [ ] Police: better now? Still too many?

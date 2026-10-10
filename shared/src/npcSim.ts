@@ -3,9 +3,9 @@
 //   walk (route map) / idle -> [hit] -> stunned -> flee | chase -> windup -> strike -> gloat | ko -> flee
 import { makeMoveState, stepMovement, type MoveState, type MoveInput } from "./movement.js";
 import { PLAYER, SIM_DT } from "./constants.js";
-import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, BYSTANDER_SCREAMS, pickWeighted, pickLine, type NpcKind } from "./npc.js";
+import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, MEAT_LOCKER, CHAMP, BOUNCERS, SHOP_OWNERS, BYSTANDER_SCREAMS, pickWeighted, pickLine, type NpcKind } from "./npc.js";
 import { buildNavGraph, type NavNode } from "./navgraph.js";
-import { nearBoxes, onRoadAt, type ArenaLayout } from "./arena.js";
+import { nearBoxes, onRoadAt, inFoot, inRect, type ArenaLayout } from "./arena.js";
 
 export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup" | "gloat" | "ko" | "film" | "huff"
   // C4b: the old lady: asleep upstairs (not drawn), then yelling out of her window
@@ -19,7 +19,11 @@ export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup"
   // big shots' entourage (Phase 4.5): bodyguard / fans stick close to their boss
   | "follow"
   // shop cashiers (Phase 3.5): stand at the till / hands up
-  | "work" | "cower";
+  | "work" | "cower"
+  // R6: the Champ sitting on whoever he beat
+  | "sit"
+  // R7: a cop walking their beat (town patrols, the station's own)
+  | "beat";
 
 export interface NpcSimData {
   id: string;
@@ -66,6 +70,12 @@ export interface NpcSimData {
   post: { x: number; z: number; yaw: number; y?: number } | null;
   /** C5a: which tip Uncle Dumpster is on */
   tip?: number;
+  /** R7: the Champ counts the punches: the 3rd inside a few seconds makes him dizzy */
+  hitN?: number; hitT0?: number;
+  /** R7: a station cop on a fixed beat (walks its points; after a chase it heads back) */
+  beat?: number; beatI?: number;
+  /** R7: a town patrol cop (wanders the route network; never sent home) */
+  patrol?: boolean;
   shop: number;
 }
 
@@ -73,10 +83,10 @@ export interface NpcSimData {
 export interface NpcHost {
   arena: ArenaLayout;
   rng: () => number;
-  playersForNpcs(): { id: string; x: number; y: number; z: number; yaw: number; connected: boolean; knocked: boolean; immune: boolean }[];
+  playersForNpcs(): { id: string; x: number; y: number; z: number; yaw: number; connected: boolean; knocked: boolean; immune: boolean; inCell?: boolean }[];
   npcHitPlayer(npcId: string, playerId: string, knock: boolean): void;
   npcDropLoot(npcId: string, type: string, x: number, y: number, z: number, awayX: number, awayZ: number): void;
-  npcEvent(e: { t: "npcSay"; npc: string; line: string } | { t: "npcAttack"; npc: string; p: string; hit: boolean } | { t: "npcDodge"; npc: string; p: string } | { t: "npcKo"; npc: string; by: string } | { t: "panic"; npc: string } | BigShotEvent | OldLadyEvent): void;
+  npcEvent(e: { t: "npcSay"; npc: string; line: string } | { t: "npcAttack"; npc: string; p: string; hit: boolean } | { t: "npcDodge"; npc: string; p: string } | { t: "npcKo"; npc: string; by: string } | { t: "panic"; npc: string } | { t: "louHit"; npc: string; p: string; shop?: number } | BigShotEvent | OldLadyEvent): void;
   addNotoriety(playerId: string, amount: number): void;
   /** a cashier got punched: shop alarm */
   shopAlarm(shopId: number): void;
@@ -140,6 +150,8 @@ export class NpcSystem {
       if (po.y) n.move.y = po.y; // (C5a: Uncle Dumpster lives on the squat's roof)
       if (po.kind === "uncle_dumpster") n.sayCd = 1; // (he starts talking as soon as you arrive)
       n.state = po.kind === "old_lady" ? "sleep" : "work";
+      const hs = (host.arena.hotShops ?? []).find((h) => inRect(h.rect, po.x, po.z, 1.5)); // (R7: which pawn shop they work at)
+      if (hs) n.shop = hs.idx;
     }
   }
 
@@ -269,6 +281,9 @@ export class NpcSystem {
     return pool[Math.floor(this.rng() * pool.length)];
   }
 
+  /** R5: have this NPC say one of their lines out loud (e.g. Meat Locker's warning) */
+  sayLine(id: string, key: keyof (typeof NPC_DEFS)["tourist"]["lines"]) { const n = this.npcs.get(id); if (n) this.say(n, (NPC_DEFS[n.kind].lines as Record<string, string[] | undefined>)[key], true); }
+
   private say(n: NpcSimData, list: string[] | undefined, force = false) {
     if (!force && n.sayCd > 0) return;
     const line = pickLine(list, () => this.rng());
@@ -292,6 +307,21 @@ export class NpcSystem {
       this.host.shopAlarm(n.shop);
       n.state = "cower"; n.stateT = 6; n.target = byPlayer;
       this.say(n, def.lines.hit, true);
+      return "hit";
+    }
+    if (SHOP_OWNERS.has(n.kind)) {
+      // R5/R7: the shop owner ducks behind the till and hollers for the bouncer (they never come out)
+      n.state = "cower"; n.stateT = 3; n.target = byPlayer;
+      this.say(n, def.lines.hit, true);
+      this.host.npcEvent({ t: "louHit", npc: n.id, p: byPlayer, shop: n.shop });
+      return "hit";
+    }
+    if (n.kind === "receptionist") {
+      // R7: punching the front desk: heat (in a police station, of all places), she ducks
+      n.state = "cower"; n.stateT = 4; n.target = byPlayer;
+      this.say(n, def.lines.hit, true);
+      this.host.addNotoriety(byPlayer, def.notoriety);
+      this.panicBystanders(n, byPlayer);
       return "hit";
     }
     if (n.kind === "cop") {
@@ -350,10 +380,27 @@ export class NpcSystem {
     n.move.vx += (awayX / l) * 3; n.move.vz += (awayZ / l) * 3;
 
     if (def.fighter && n.hp <= 0) {
-      n.state = "ko"; n.stateT = 3.2; n.target = "";
+      n.state = "ko"; n.stateT = BOUNCERS.has(n.kind) ? MEAT_LOCKER.ko : n.kind === "champ" ? CHAMP.ko : 3.2; n.target = ""; // (R5: Meat Locker naps a good while: the back room's open)
       this.say(n, def.lines.lose, true);
       this.host.npcEvent({ t: "npcKo", npc: n.id, by: byPlayer });
       this.host.npcDropLoot(n.id, pickWeighted(KO_BONUS, () => this.rng()), n.move.x, n.move.y + 0.6, n.move.z, awayX, awayZ);
+      return "hit";
+    }
+    if (n.kind === "champ") {
+      // R7: punches 1 and 2 just nudge him back (he turns on you); the 3rd inside a few seconds: dizzy, he spins
+      if (n.hitT0 === undefined || this.time - n.hitT0 > CHAMP.stunWindow) { n.hitN = 0; n.hitT0 = this.time; }
+      n.hitN = (n.hitN ?? 0) + 1;
+      const l2 = Math.max(0.001, Math.hypot(awayX, awayZ));
+      n.move.vx += (awayX / l2) * (CHAMP.nudge - 3); n.move.vz += (awayZ / l2) * (CHAMP.nudge - 3); // (instead of the usual shove)
+      n.target = byPlayer; n.fromX = fromX; n.fromZ = fromZ;
+      if (n.hitN >= CHAMP.stunHits) {
+        n.hitN = 0; n.hitT0 = undefined;
+        n.state = "stunned"; n.stateT = CHAMP.dizzy;
+        this.say(n, ["*sees stars*", "Whoa... three spoons...", "Who turned the cell... sideways..."], true);
+        return "hit";
+      }
+      if (n.state !== "chase" && n.state !== "windup" && n.state !== "sit") { n.state = "chase"; n.chaseT = 0; }
+      this.say(n, n.hitN === 1 ? def.lines.hit : def.lines.fight, true);
       return "hit";
     }
     n.state = "stunned";
@@ -366,6 +413,21 @@ export class NpcSystem {
     if (n.kind === "tourist") this.host.applyToPlayer(byPlayer, "flash");
     return "hit";
   }
+
+  /**
+   * R7: a bouncer's way in and out of his walk-in shop: in the shop and the target outside (or the other way round),
+   * head for the door (just inside, then just outside); otherwise straight there.
+   */
+  private hotWay(n: NpcSimData, tx: number, tz: number): { x: number; z: number } {
+    const hs = (this.host.arena.hotShops ?? [])[n.shop];
+    if (!hs) return { x: tx, z: tz };
+    const inside = (x: number, z: number) => inRect(hs.rect, x, z, -0.2);
+    const a = inside(n.move.x, n.move.z), b = inside(tx, tz);
+    if (a === b) return { x: tx, z: tz };
+    const first = a ? hs.doorIn : hs.out, second = a ? hs.out : hs.doorIn;
+    return Math.hypot(first.x - n.move.x, first.z - n.move.z) > 0.6 && !(a ? !inside(n.move.x, n.move.z) : inside(n.move.x, n.move.z)) ? first : second;
+  }
+
 
   private startFlee(n: NpcSimData, fromX: number, fromZ: number, from: string, time: number) {
     n.state = "flee"; n.stateT = time; n.fromX = fromX; n.fromZ = fromZ; n.target = from;
@@ -527,7 +589,10 @@ export class NpcSystem {
   }
 
   // ------------------------------------------------------------------ thinking + moving
+  /** seconds of NPC time (R7: the Champ's punch window) */
+  time = 0;
   tick(dt: number) {
+    this.time += dt;
     this.acc += dt;
     while (this.acc >= NPC_STEP) {
       this.acc -= NPC_STEP;
@@ -628,13 +693,14 @@ export class NpcSystem {
         case "chase": {
           const p = pById.get(n.target);
           n.chaseT += dt;
-          if (!p || !p.connected || p.knocked || n.chaseT > CHASE_GIVE_UP || Math.hypot(p.x - n.move.x, p.z - n.move.z) > 20) {
+          if (!p || !(p.connected || (n.kind === "champ" && p.inCell)) || p.knocked || n.chaseT > CHASE_GIVE_UP || Math.hypot(p.x - n.move.x, p.z - n.move.z) > 20) {
             n.state = "huff"; n.stateT = 1.5; n.target = "";
             break;
           }
           tx = p.x; tz = p.z; speed = def.chase ?? 6.5; // (D1: a touch faster than you walk, slower than you sprint)
+          if (BOUNCERS.has(n.kind)) { const wp = this.hotWay(n, tx, tz); tx = wp.x; tz = wp.z; } // (R5/R7: out through the door, not through the wall)
           const d = Math.hypot(p.x - n.move.x, p.z - n.move.z);
-          if (d < ATTACK_RANGE && n.attackCd <= 0 && !p.immune) { n.state = "windup"; n.stateT = WINDUP; }
+          if (d < ATTACK_RANGE && n.attackCd <= 0 && !p.immune) { n.state = "windup"; n.stateT = BOUNCERS.has(n.kind) ? MEAT_LOCKER.windup : n.kind === "champ" ? CHAMP.windup : WINDUP; } // (R6: the big two swing fast)
           else if (d < 1.1) speed = 0;
           break;
         }
@@ -642,7 +708,7 @@ export class NpcSystem {
           const p = pById.get(n.target);
           if (p) face = Math.atan2(p.x - n.move.x, p.z - n.move.z);
           if (n.stateT <= 0) {
-            n.attackCd = 0.9;
+            n.attackCd = BOUNCERS.has(n.kind) ? MEAT_LOCKER.cooldown : n.kind === "champ" ? CHAMP.cooldown : 0.9;
             let hit = false;
             if (p && !p.knocked && !p.immune) {
               const d = Math.hypot(p.x - n.move.x, p.z - n.move.z);
@@ -676,6 +742,14 @@ export class NpcSystem {
           if (n.lifeT > 60) gone.push(n);
           break;
         }
+        case "sit": {
+          // R6: the Champ sits on whoever he beat, doing his crossword, until they're up
+          const p = pById.get(n.target);
+          if (!p || !p.knocked) { n.state = "work"; n.target = ""; break; }
+          n.move.x = p.x + 0.15; n.move.z = p.z; n.move.vx = 0; n.move.vz = 0; speed = 0; face = n.move.yaw;
+          if (n.sayCd <= 0 && this.rng() < 0.01) this.say(n, def.lines.win);
+          break;
+        }
         case "sleep": break; // (C4b: the old lady, upstairs: nothing to do until a noise wakes her)
         case "yell": {
           // C4b: leaning out of her window shouting; then she comes down after whoever made the noise
@@ -691,7 +765,7 @@ export class NpcSystem {
           if (n.state === "cower" && n.stateT <= 0) n.state = "work";
           const d = Math.hypot(post.x - n.move.x, post.z - n.move.z);
           if (d <= 0.3 && n.kind === "old_lady") { n.state = "sleep"; break; } // (back upstairs to bed)
-          if (d > 0.3) { tx = post.x; tz = post.z; speed = def.walk; } else face = post.yaw;
+          if (d > 0.3) { tx = post.x; tz = post.z; speed = def.walk; if (BOUNCERS.has(n.kind)) { const wp = this.hotWay(n, tx, tz); tx = wp.x; tz = wp.z; speed = 2.4; } } else face = post.yaw;
           if (n.kind === "uncle_dumpster") {
             // C5a: his tips, in order, whenever somebody's close enough to hear
             if (n.sayCd <= 0 && players.some((p) => Math.hypot(p.x - n.move.x, p.z - n.move.z) < 7 && Math.abs(p.y - n.move.y) < 3)) {
@@ -708,7 +782,10 @@ export class NpcSystem {
         }
         case "gloat": if (n.stateT <= 0) { n.state = n.post ? "work" : "walk"; n.target = ""; } break;
         case "huff": if (n.stateT <= 0) n.state = n.post ? "work" : "walk"; break;
-        case "ko": if (n.stateT <= 0) this.startFlee(n, n.move.x + 1, n.move.z, n.target, 3); break;
+        case "ko":
+          if (n.stateT > 0) break;
+          if (BOUNCERS.has(n.kind) || n.kind === "champ") { n.hp = def.hp; n.state = "work"; n.target = ""; this.say(n, def.lines.fight, true); break; } // (R5/R6: back on their feet, back to their post)
+          this.startFlee(n, n.move.x + 1, n.move.z, n.target, 3); break;
       }
 
       // a blocked car asked us to get off the road: step onto the sidewalk first
@@ -720,7 +797,7 @@ export class NpcSystem {
           // lying in the road: slid gently to the curb (never into a wall)
           const dx = d.x - n.move.x, dz = d.z - n.move.z, l = Math.hypot(dx, dz), step = Math.min(l, 1.5 * dt);
           this.nudge(n.move, (dx / l) * step, (dz / l) * step);
-        } else if (n.kind !== "cop" || n.state === "leave" || n.state === "patrol") {
+        } else if (n.kind !== "cop" || n.state === "leave" || n.state === "patrol" || n.state === "beat") {
           tx = d.x; tz = d.z; speed = Math.max(speed, NPC_DEFS[n.kind].walk * 1.4); face = null;
         }
       }
@@ -791,6 +868,14 @@ export class NpcSystem {
   }
 
   /** Called by the World when a chasing NPC's hit knocks a player down. */
+  /** R6: the Champ won: he sits on you */
+  sitOn(npcId: string, pid: string) {
+    const n = this.npcs.get(npcId);
+    if (!n) return;
+    n.state = "sit"; n.target = pid; n.stateT = 99;
+    this.say(n, NPC_DEFS[n.kind].lines.win, true);
+  }
+
   gloat(npcId: string) {
     const n = this.npcs.get(npcId);
     if (!n) return;
@@ -858,7 +943,7 @@ export class NpcSystem {
   private solidAt(x: number, z: number, y: number, r: number): boolean {
     for (const b of nearBoxes(this.host.arena, x, z, r + 1)) {
       if (b.y + b.h / 2 <= y + PLAYER.stepHeight || b.y - b.h / 2 >= y + 1.6) continue; // steppable / overhead
-      if (Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r) return true;
+      if (inFoot(b, x, z, r)) return true;
     }
     return false;
   }
@@ -905,7 +990,7 @@ export class NpcSystem {
     const x = m.x + dx, z = m.z + dz, r = PLAYER.radius;
     for (const b of nearBoxes(this.host.arena, x, z, 1)) {
       if (b.y + b.h / 2 <= m.y + 0.35 || b.y - b.h / 2 >= m.y + 1.6) continue; // curbs / overhead
-      if (Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r) return;
+      if (inFoot(b, x, z, r)) return;
     }
     m.x = x; m.z = z;
   }

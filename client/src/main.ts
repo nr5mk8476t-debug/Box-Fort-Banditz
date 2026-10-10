@@ -8,16 +8,22 @@ import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP } from "@bfb/shared";
+import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS } from "@bfb/shared";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
 } from "./net.ts";
 import {
-  MSG, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington, nearBoxes,
+  MSG, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington, setCityMap, cityMap, nearBoxes, inFoot,
   lootDef, RARITY_COLOR, starsOf, type MoveInput, pinPos as pinPosOf, type WorldView, type WorldEvent,
 } from "@bfb/shared";
 
+// R3: ?map=new / ?map=classic (or a build with VITE_BFB_MAP) picks the city. Everyone in a game needs the same one:
+// the host's and the joiners' pages build their own copy.
+const MAP_PARAM = new URLSearchParams(location.search).get("map") ?? import.meta.env.VITE_BFB_MAP;
+if (MAP_PARAM === "roads" || MAP_PARAM === "roads2" || MAP_PARAM === "new") setCityMap("new");
+if (MAP_PARAM === "classic") setCityMap("classic");
+const ROAD_TEST = cityMap() === "new";
 // Both the server and this client build the same city from the same shared code.
 const CITY = buildTrashington();
 
@@ -165,7 +171,7 @@ async function startSolo() {
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
   $("lp-hint").textContent = "Press ENTER to start. Each cycle: 3 min scavenge, 1 min NIGHT scavenge (x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
-  $("mode-badge").textContent = "CITY C5c.3 / SOLO";
+  $("mode-badge").textContent = ROAD_TEST ? "NEW CITY R3 / SOLO" : "CITY C5c.3 / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -268,6 +274,7 @@ function updateMatchHud(a: ArenaScene) {
     if (m.evKind === "airdrop") ev = m.evStage === "warn" ? `AIRDROP IN ${m.evT}s - WATCH FOR THE RED TARGET` : "AIRDROP CRATE FALLING - FIND THE RED TARGET!";
     if (m.evKind === "raccoons") { ev = m.evStage === "warn" ? "RACCOONS INCOMING..." : "RACCOONS ARE RAIDING THE FORTS!"; bad = true; }
     if (m.evKind === "parade") ev = m.evStage === "warn" ? `DRAGON PARADE IN CHINATOWN IN ${m.evT}s` : "DRAGON PARADE IN CHINATOWN: GRAB THE RED ENVELOPES!";
+    if (m.evKind === "festa") ev = m.evStage === "warn" ? `FESTA IN LITTLE ITALY IN ${m.evT}s` : "FESTA IN LITTLE ITALY: GRAB THE GOLDEN GOODIES!";
   }
   if (ev + bad !== eventSig) {
     eventSig = ev + bad;
@@ -813,7 +820,8 @@ function updateHud(a: ArenaScene) {
   const jailed = a.jailT > 0;
   const tagT = a.tagTarget, tagHolding = a.throwCharge >= 0 && !!tagT && a.canUses > 0;
   const at = a.arrestTarget;
-  const sig = jailed ? "jail" : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : "";
+  const cellUse = jailed && !a.lock.open && ut && (ut.kind === "toilet" || ut.kind === "celldoor") ? ut.kind : ""; // (R6: the holding cell)
+  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
     const key = document.createElement("span"); key.className = "key"; key.textContent = keyText;
@@ -825,7 +833,16 @@ function updateHud(a: ArenaScene) {
   };
   if (sig !== promptSig) {
     promptSig = sig;
-    if (jailed) prompt.classList.add("hidden");
+    if (jailed && cellUse === "celldoor" && ut?.empty) simple("", " THE CELL'S OPEN ", "", "walk out: you're free (but wanted)");
+    else if (jailed && cellUse === "toilet") simple("E", " Flush ", "the toilet", "everyone in the cell gets soaked and knocked flying");
+    else if (jailed && cellUse === "celldoor") simple("E", " Pick the lock ", "", `S or Esc to step away from it. Or just wait: out in ${Math.ceil(a.jailT)} s`);
+    else if (jailed && a.arenaLayout.station?.holding && !a.lock.open) simple("", " THE HOLDING CELL ", "", `out in ${Math.ceil(a.jailT)} s - or E at the cell door to pick the lock (don't wake the Champ)`);
+    else if (jailed) prompt.classList.add("hidden");
+    else if (!t && ut && ut.kind === "toilet") simple("", " The toilet ", "", "(you'd have to get yourself locked up first)");
+    else if (!t && ut && ut.kind === "celldoor" && ut.empty) simple("", " The holding cell ", "", "standing open: anybody inside can walk out");
+    else if (!t && ut && ut.kind === "celldoor" && a.carryingType("cell_key")) simple("E", " Unlock the cell ", "with the chief's key", "it swings open for 20 s: everybody inside walks (wanted)");
+    else if (!t && ut && ut.kind === "celldoor") simple("", " The holding cell ", "", "locked. The key's on the chief's desk upstairs...");
+    else if (!t && ut && ut.kind === "door") simple("E", ut.empty ? " Close " : " Open ", "the door", "");
     else if (a.pinBy) simple("SPACE", " PINNED! Mash to wriggle free ", "", `${Math.round(a.pinS * 100)}% free - or hope a friend knocks them off you`);
     else if (a.pinOn) simple("", " Holding them down for the cops... ", "", "don't move! (they're wriggling; the cops are on their way)");
     else if (a.arrestTarget) simple("E", " Citizen's arrest: ", a.arrestTarget.name, `hold them down for the cops: bounty $${a.arrestTarget.bounty} (taken off them)`);
@@ -845,6 +862,14 @@ function updateHud(a: ArenaScene) {
     else if (!t && ut && ut.kind === "clubsafe") simple("E", " Crack ", ut.name, ut.empty ? "cleaned out (the takings start again tomorrow)" : `6 s, LOUD: $${CLUB_SAFE.base} + every cover charge paid today. Alarm, heat, and Big Crunch.`);
     else if (!t && ut && (ut.kind === "clubbar" || ut.kind === "rider" || ut.kind === "lockers" || ut.kind === "sortbin" || ut.kind === "vipbooth")) simple("E", ut.kind === "clubbar" ? " Grab off the belt: " : " Rummage: ", ut.name, ut.empty ? (ut.kind === "clubbar" ? "the belt's empty, more coming" : "picked clean today") : ut.kind === "clubbar" ? "neon fizz, glow sticks..." : ut.kind === "rider" ? "the DJ's demands: rare vinyl, headphones, snacks" : ut.kind === "lockers" ? "staff stuff: wristbands, wallets, glow sticks" : ut.kind === "sortbin" ? "cans, bags... and the odd lost record" : "VIP leftovers: bling, wristbands... a mirror ball?");
     // C5c.3: PAWN-O-RAMA
+    else if (!t && ut && ut.kind === "pawncounter" && a.arenaLayout.hotShops?.length) {
+      // R7: a walk-in pawn shop's till (Twitchy Lou's or Sticky Fran's)
+      const si = a.arenaLayout.props?.find((q) => q.id === ut.id)?.shop ?? 0, hs = a.arenaLayout.hotShops[si] ?? a.arenaLayout.hotShops[0], who = NPC_DEFS[hs.owner].name;
+      const wants = a.shopWants[si] ?? [], h = a.heldInfo(), hot = !!h && wants.includes(h.type);
+      const want = wants.length ? `wants today (x3): ${wants.map((x) => lootDef(x).name).join(", ")}` : "walk up to the till and they'll tell you what they want today";
+      simple("E", h ? (hot ? ` Sell to ${who} x3!: ` : ` Sell to ${who}: `) : ` ${who} `, h ? `${lootDef(h.type).name}  ${h.value ? "$" + Math.max(1, Math.round(h.value * (hot ? HOT_STUFF.hotMult : PAWN_SHOP.fence))) : "$??"}` : "", h ? (hot ? "they WANT this: triple what it's worth (first one only)" : `cash right now. ${want}`) : want);
+    }
+    else if (!t && ut && ut.kind === "glasscounter") simple("", " The glass counter ", "", ut.empty ? "smashed (fixed at dawn)" : "rings, watches, chains... all junk, honestly. Smash it and the bouncer comes.");
     else if (!t && ut && ut.kind === "pawncounter") { const h = a.heldInfo(); simple("E", h ? " Sell to Sal: " : " Ring for Sal ", h ? `${lootDef(h.type).name}  ${h.value ? "$" + Math.max(1, Math.round(h.value * PAWN_SHOP.fence)) : "$??"}` : "", h ? "cash right now, no questions asked (less than the end-of-day shop pays)" : "hold something out in your hands and he'll make you an offer"); }
     else if (!t && ut && ut.kind === "pawncase") {
       const h = a.heldInfo(), pk = a.pawnPick();
@@ -1051,13 +1076,13 @@ enterTitle();
     camFree: () => { if (arena) arena.camOverride = null; },
     interiors: () => arena?.city.interiorsDrawn ?? 0,
     // C2: façade detail on/off (Performance mode) and how many pieces were built
-    facades: () => ({ detail: arena?.city.detail ?? null, pieces: arena?.city.detailPieces ?? 0 }),
+    facades: () => ({ detail: arena?.city.detail ?? null, pieces: arena?.city.detailPieces ?? 0, gates: arena?.city.districtGates ?? null }),
     cityBuildMs: () => Math.round(arena?.cityBuildMs ?? 0),
     // C4a: smashed things (how many this screen has hidden) and whether a spot is blocked for this screen
     smashed: () => arena?.city.brokenCount ?? 0,
     worldProp: (id: string) => { const ps = local?.world.props.props.get(id); return ps ? { ready: ps.ready, hp: ps.hp } : null; },
     worldMe: () => { const p = local?.world.players.get(SOLO_ID); return p ? { x: p.move.x, z: p.move.z, knockT: p.move.knockT, punchCd: p.punchCd, hand: p.hand, sel: p.sel, respawnT: p.respawnT, connected: p.connected } : null; },
-    blockedAt: (x: number, z: number) => { const a = arena?.arenaLayout; if (!a) return null; return nearBoxes(a, x, z, 0.1).some((b) => Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2 && b.y - b.h / 2 < 1 && b.y + b.h / 2 > 0.3); },
+    blockedAt: (x: number, z: number) => { const a = arena?.arenaLayout; if (!a) return null; return nearBoxes(a, x, z, 0.1).some((b) => inFoot(b, x, z) && b.y - b.h / 2 < 1 && b.y + b.h / 2 > 0.3); },
     // C5a: the lobby squat and the map
     lobby: () => { const me = netView()?.players?.get(myPlayerId()); const m = arena?.moveState; return { phase: arena?.match.phase ?? null, onRoof: !!(arena && m && inLobby(arena.arenaLayout, m.x, m.z, 3) && m.y > 20), y: m?.y ?? null, tb: me?.tb ?? 0, rb: me?.rb ?? 0, lg: me?.lg ?? "", hud: !$("lobby-hud").classList.contains("hidden") }; },
     mapOpen: () => mapOpen,
@@ -1086,6 +1111,7 @@ enterTitle();
     resto: () => CITY.resto ?? null,
     // C5c.3: THE COMPACTOR and PAWN-O-RAMA
     club: () => CITY.club ?? null,
+    hotShops: () => CITY.hotShops ?? [],
     pawnShop: () => { const ps = CITY.pawnShop; if (!ps) return null; const u = CITY.units![ps.unit]; return { ...ps, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, rect: u.rect }; },
     clubDrop: () => { if (local) local.world.clubB = local.world.traffic.clock; else room?.send("dbg", { op: "clubDrop" }); },
     clubFloor: () => { const a2 = (arena as any)?.arena; const i = a2?.pumpBoxes?.[0]; if (i === undefined) return null; const b = a2.boxes[i]; return b.y + b.h / 2; },
@@ -1132,7 +1158,7 @@ enterTitle();
     setTimeLeft: (t: number) => { if (local) { if (local.world.match.phase !== "lobby") local.world.match.timeLeft = t; } else room?.send("dbg", { op: "time", t }); },
     noEvents: () => { if (local) local.world.match.cancelPlannedEvents(); else room?.send("dbg", { op: "noEvents" }); },
     fxHistory: () => [...fxHistory],
-    props: () => { const out: any[] = []; const v: any = local ? local.view : room?.state; v?.props?.forEach((pv: any, id: string) => out.push({ id, ready: pv.ready, alarm: pv.alarm })); return out; },
+    props: () => { const out: any[] = []; const v: any = local ? local.view : room?.state; v?.props?.forEach((pv: any, id: string) => { const d = CITY.props?.find((q) => q.id === id); out.push({ id, ready: pv.ready, alarm: pv.alarm, kind: d?.kind, x: d?.x, z: d?.z }); }); return out; },
     propDefs: () => CITY.props,
     cars: () => arena?.carPositions() ?? [],
     useTarget: () => arena?.useTarget ?? null,

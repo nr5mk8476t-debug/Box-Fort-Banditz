@@ -12,10 +12,13 @@ import { LOOT, lootDef, rollValue, carrySpeedMul, type LootDef } from "./loot.js
 import type { ArenaLayout, LootZone, PropDef } from "./arena.js";
 import { buildTrashington } from "./city.js";
 import { sanitizeName } from "./names.js";
+import { MEAT_LOCKER, CHAMP, BOUNCERS } from "./npc.js";
+/** R6: the holding cell's toilet: how hard it erupts, how often */
+export const FLUSH = { cooldown: 6, push: 9, lift: 4.5, stumble: 0.8 };
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater, nearBoxes, inLobby, CLUB, clubStage, applyClubFloor } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
 import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
@@ -86,6 +89,10 @@ export interface ItemSim {
   mult: number; // happy-hour bonus (1 or 2)
   chute: boolean; // airdrop crate still under its parachute
   shop: number; // shop stock / register (-1 = not from a shop)
+  /** R7: sitting in the station's evidence room (lift it: heat) */
+  evidence?: boolean; evidenceT?: number;
+  /** R8: the holding cell's key, still on the chief's desk (lift it: heat) */
+  chiefKey?: boolean;
   /** Phase 5A tug of war (giant items): -1 = holder wins .. +1 = challenger (holder2) wins */
   tug: number;
   tugT: number;
@@ -101,6 +108,8 @@ export interface TagSim { id: string; x: number; y: number; z: number; nx: numbe
  * ground (moving over 1.2 m, getting knocked down or 60 s ends it); they mash SPACE to wriggle free (14 presses).
  * When a cop cuffs them you get the bounty: their heat x $5, out of what they were carrying, then their cash.
  */
+/** R7: heat for lifting something out of the police station's evidence room (just over 1 star) */
+export const EVIDENCE_HEAT = 35;
 export const ARREST = { reach: 1.9, minHeat: 30, perHeat: 5, maxTime: 60, breakFree: 14, moveCancel: 1.2, struggleCd: 0.07 };
 /** C5c: tagging the Mayor's statue */
 export const MAYOR_TAG = { aura: 5, heat: 15 };
@@ -187,10 +196,24 @@ export type WorldEvent =
   | { t: "clubDrop"; n: number; by: string }
   | { t: "djHijack"; p: string; prop: string }
   // C5c.3: PAWN-O-RAMA: sold to Sal / pawned / bought back (or off the sale shelf) / couldn't / the case got smashed
-  | { t: "fenced"; p: string; type: string; cash: number }
+  | { t: "fenced"; p: string; type: string; cash: number; hot?: boolean; shop?: number }
+  // R5: HOT STUFF PAWN & LOAN: Lou mutters today's wanted list to you (only you), you start trouble, Meat Locker warns you
+  | { t: "louHit"; npc: string; p: string }
+  | { t: "louList"; p: string; types: string[]; shop?: number }
+  | { t: "pawnTrouble"; p: string; why: "punch" | "smash" | "steal" | "throw" | "loiter"; shop?: number }
+  | { t: "louWarn"; p: string }
+  | { t: "evidenceLift"; p: string; item: string; type: string }
+  | { t: "door"; prop: string; open: boolean; by: string }
+  | { t: "cellOpen"; p: string; prop: string; time: number }
+  | { t: "cellShut"; prop: string }
+  | { t: "keyLift"; p: string }
+  | { t: "meatPunch"; npc: string; p: string }
+  // R6: the holding cell
+  | { t: "lockStart"; p: string }
+  | { t: "flush"; p: string; x: number; z: number; hit: string[] }
   | { t: "pawned"; p: string; type: string; cash: number }
   | { t: "redeemed"; p: string; type: string; cash: number; sale: boolean }
-  | { t: "pawnNo"; p: string; reason: "hands" | "full" | "broke" | "nothing" }
+  | { t: "pawnNo"; p: string; reason: "hands" | "full" | "broke" | "nothing" | "black" }
   | { t: "caseSmashed"; p: string }
   | { t: "piano"; p: string; prop: string }
   | { t: "chefYell"; p: string; prop: string }
@@ -231,6 +254,7 @@ export type WorldEvent =
   | { t: "cityEvent"; kind: CityEventKind; stage: "warn" | "live" | "end"; x: number; z: number; detail: string }
   | { t: "swept"; item: string; type: string; x: number; z: number }
   | { t: "firecracker"; x: number; z: number } // (C5b: the dragon parade)
+  | { t: "festaSplash"; x: number; z: number } // (R4: the gondola's bucket of canal water)
   | { t: "raccoonGrab"; npc: string; item: string; p: string }
   | { t: "raccoonEscaped"; npc: string; item: string; type: string; p: string; value: number }
   | PropEvent
@@ -250,6 +274,7 @@ export type WorldAction =
   | { a: "cycle"; dir?: number } // mouse wheel: next / previous carried item (or fists)
   | { a: "select"; slot: number } // keys 1-3 pockets, 4 fists
   | { a: "punch"; yaw: number; pitch: number }
+  | { a: "pickStop" } // R6: step away from the cell door's lock
   | { a: "use"; prop: string } // search a dumpster / bin (E), or start a hold-up at a till (hold R)
   | { a: "robStop" }
   | { a: "pick"; pin: number; t: number } // jail lock-pick press (t = seconds since locked up)
@@ -319,6 +344,25 @@ export class World {
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
+  /** R6: somebody flushed the holding cell's toilet: it erupts. Everyone in the cell is knocked back (and soaked). */
+  private flushT = -99;
+  flush(p: PlayerSim) {
+    const h = this.arena.station?.holding;
+    if (!h || this.time - this.flushT < FLUSH.cooldown) return;
+    this.flushT = this.time;
+    const hit: string[] = [];
+    for (const o of this.players.values()) {
+      const m = o.move;
+      if (!o.connected || m.x < h.cell.minX - 0.5 || m.x > h.cell.maxX + 0.5 || m.z < h.cell.minZ - 0.5 || m.z > h.cell.maxZ + 0.5) continue;
+      const dx = m.x - h.toilet.x, dz = m.z - h.toilet.z, l = Math.max(0.3, Math.hypot(dx, dz));
+      const k = FLUSH.push * Math.max(0.45, 1 - l / 12);
+      m.vx += (dx / l) * k; m.vz += (dz / l) * k; m.vy = Math.max(m.vy, FLUSH.lift); m.grounded = false;
+      m.stumbleT = Math.max(m.stumbleT, FLUSH.stumble);
+      hit.push(o.id);
+    }
+    this.emit({ t: "flush", p: p.id, x: h.toilet.x, z: h.toilet.z, hit });
+  }
+
   /** Raise a player's heat (notoriety), capped at 100. Cops who see it happen come running. */
   addHeat(p: PlayerSim, n: number) {
     if (p.jailT > 0) return;
@@ -360,20 +404,50 @@ export class World {
     p.queue.length = 0;
   }
 
-  /** Busted: everything carried is taken away for good. Returns how much. */
+  /** Busted: everything carried is taken away (R7, the new city: it goes up to the evidence room, where anybody
+   *  brave enough can lift it back; elsewhere, for good). Returns how much. */
   confiscateAll(p: PlayerSim): { count: number; value: number } {
     let count = 0, value = 0, guard = 0;
+    const ev = this.arena.station?.grand;
     while (this.anyItem(p) && guard++ < 10) {
       const a = this.anyItem(p)!;
       const it = a.item;
       if (lootDef(it.type).size === "giant" && it.holder2) { this.letGoOfGiant(it, p); continue; } // your partner keeps dragging it
       this.release(p, a.from);
       count++; value += itemWorth(it);
-      this.items.delete(it.id);
+      if (ev && lootDef(it.type).size !== "giant") this.toEvidence(it, ev.evidenceSpots);
+      else this.items.delete(it.id);
     }
     p.hand = ""; p.pockets.fill("");
     this.updateCarry(p);
     return { count, value };
+  }
+
+  /** R7: you picked something up: out of the evidence room = stealing from the police (heat; any cop who sees
+   *  it comes running, the evidence guard first) */
+  private onLift(p: PlayerSim, it: ItemSim, x: number, z: number) {
+    this.pawn.onGrab(p, x, z);
+    if (it.chiefKey) { it.chiefKey = false; this.addHeat(p, EVIDENCE_HEAT); this.emit({ t: "keyLift", p: p.id }); return; } // (R8: the chief's key)
+    if (!it.evidence) return;
+    it.evidence = false;
+    this.addHeat(p, EVIDENCE_HEAT);
+    this.emit({ t: "evidenceLift", p: p.id, item: it.id, type: it.type });
+  }
+
+  /** R7: tagged and bagged: onto a free spot on the evidence room's shelves (full: the oldest bag is "lost") */
+  private toEvidence(it: ItemSim, spots: { x: number; y: number; z: number }[]) {
+    const held = [...this.items.values()].filter((o) => o.evidence && o !== it && o.mode === "free");
+    let spot = spots.find((sp) => !held.some((o) => Math.hypot(o.body.x - sp.x, o.body.z - sp.z) < 0.5 && Math.abs(o.body.y - sp.y) < 0.6));
+    if (!spot) {
+      const oldest = held.sort((a, b) => (a.evidenceT ?? 0) - (b.evidenceT ?? 0))[0];
+      if (!oldest) { this.items.delete(it.id); return; }
+      spot = spots.find((sp) => Math.hypot(oldest.body.x - sp.x, oldest.body.z - sp.z) < 0.5) ?? spots[0];
+      this.items.delete(oldest.id);
+    }
+    it.holder = ""; it.holder2 = ""; it.fort = -1; it.locked = false; it.bankT = 0; it.shop = -1;
+    this.freeItem(it, spot.x, spot.y + 0.25, spot.z, 0, 0, 0);
+    it.body.rot = this.rng() * Math.PI * 2;
+    it.evidence = true; it.evidenceT = this.time;
   }
 
   /**
@@ -417,11 +491,20 @@ export class World {
     for (const it of [...this.items.values()]) {
       const slot = it.mode === "free" ? fortAt(this.arena, it.body.x, it.body.z) : -1;
       if (keepForts && slot >= 0 && this.match.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; continue; }
+      if (keepForts && it.evidence && it.mode === "free") continue; // (R7: the evidence room keeps its bags till dawn)
+      if (keepForts && it.type === "cell_key") continue; // (R8: one key a day: wherever it is, it stays till dawn)
       this.items.delete(it.id);
     }
     if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
     if (this.spawnLoot) { this.fillLoot(!keepForts); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only; C5c: the bank's vault refills at dawn)
     else this.props.reset(!keepForts);
+    this.pawn.rollHot(); // (R5: Lou's wanted list, new every scavenge)
+    // R8: a new day: the holding cell's key back on the chief's desk
+    const ks = this.arena.station?.grand?.keySpot;
+    if (ks && !keepForts && ![...this.items.values()].some((it) => it.type === "cell_key")) {
+      const id = this.placeItem("cell_key", ks.x, ks.y + 0.1, ks.z);
+      const k = this.items.get(id); if (k) { k.chiefKey = true; k.value = 1; }
+    }
     for (const p of this.players.values()) {
       p.hand = ""; p.pockets.fill(""); p.queued = null;
       const sp = this.arena.spawns[p.colorIdx % this.arena.spawns.length];
@@ -484,7 +567,7 @@ export class World {
       arena: this.arena,
       rng: () => this.rng(),
       playersForNpcs: () => [...w.players.values()].map((p) => ({
-        id: p.id, x: p.move.x, y: p.move.y, z: p.move.z, yaw: p.move.yaw, connected: p.connected && p.jailT <= 0,
+        id: p.id, x: p.move.x, y: p.move.y, z: p.move.z, yaw: p.move.yaw, connected: p.connected && p.jailT <= 0, inCell: p.connected && p.jailT > 0,
         knocked: p.move.knockT > 0, immune: p.move.immuneT > 0,
       })),
       npcHitPlayer: (npcId, pid) => {
@@ -492,11 +575,29 @@ export class World {
         if (!p || p.move.knockT > 0 || p.move.immuneT > 0) return;
         const n = w.npc.npcs.get(npcId);
         if (n) { const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, Math.hypot(dx, dz)); p.move.vx += (dx / l) * 3.5; p.move.vz += (dz / l) * 3.5; }
+        if (n?.kind === "champ") {
+          // R6: the Champ: one hit, you're down, and he sits on you till you're up
+          w.knockdown(p, npcId);
+          p.move.knockT = Math.max(p.move.knockT, CHAMP.knock); p.move.immuneT = Math.max(p.move.immuneT, p.move.knockT + 1.5);
+          w.emit({ t: "meatPunch", npc: npcId, p: pid });
+          w.npc.sitOn(npcId, pid);
+          return;
+        }
+        if (n && BOUNCERS.has(n.kind)) {
+          // R5: one punch: out cold, everything you carry flies, and you sail out onto the pavement
+          w.knockdown(p, npcId);
+          p.move.knockT = Math.max(p.move.knockT, MEAT_LOCKER.knock); p.move.immuneT = Math.max(p.move.immuneT, p.move.knockT + 1.5);
+          const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, Math.hypot(dx, dz));
+          p.move.vx = (dx / l) * MEAT_LOCKER.throw; p.move.vz = (dz / l) * MEAT_LOCKER.throw - 2; p.move.vy = MEAT_LOCKER.lift; p.move.grounded = false;
+          w.emit({ t: "meatPunch", npc: npcId, p: pid });
+          w.npc.gloat(npcId);
+          return;
+        }
         if (w.hurt(p, HEALTH.npcHit, npcId, { dropHand: true })) w.npc.gloat(npcId);
       },
       npcDropLoot: (_npcId, type, x, y, z, ax, az) => { w.popLoot(type, x, y, z, ax, az); },
       shopAlarm: (shopId) => { const t = [...w.props.props.values()].find((x) => x.def.kind === "till" && x.def.shop === shopId); if (t) { t.alarmT = 6; w.emit({ t: "alarm", kind: "shop", prop: t.def.id, x: t.def.x, z: t.def.z }); } },
-      npcEvent: (e) => w.emit(e),
+      npcEvent: (e) => { w.emit(e); if (e.t === "louHit") { const p = w.players.get(e.p); if (p) w.pawn.trouble(p, "punch", e.shop ?? 0); } },
       addNotoriety: (pid, n) => { const p = w.players.get(pid); if (p) w.addHeat(p, n); },
       copBrain: (n, dt) => w.police.brain(n, dt),
       cars: () => [...(w.traffic?.cars ?? []), ...(w.police?.cars ?? [])],
@@ -655,9 +756,12 @@ export class World {
     if (act.a === "haggle") { if (this.match.phase === "shop") this.pawn.haggle(p, String((act as any).item ?? "")); return; }
     if (act.a === "sellAll") { if (this.match.phase === "shop") this.pawn.sellAll(p); return; }
     if (act.a === "ready") { this.match.setReady(p); return; }
-    if (p.jailT > 0) { // locked up: the only thing you can do is pick the lock
-      if (act.a === "pick") this.police.pick(p, Number((act as any).pin), Number((act as any).t));
-      return;
+    if (p.jailT > 0) { // locked up: pick the lock; R6 (the holding cell): also walk about, flush the toilet, start a fight
+      if (act.a === "pick") { this.police.pick(p, Number((act as any).pin), Number((act as any).t)); return; }
+      if (act.a === "pickStop") { this.police.stopPick(p); return; }
+      if (!this.arena.station?.holding || p.lock) return;
+      if (act.a === "use") { const ps = this.props.props.get(String((act as any).prop ?? "")); if (ps && (ps.def.kind === "toilet" || ps.def.kind === "celldoor")) this.props.use(p, ps.def.id); return; }
+      if (act.a !== "punch") return;
     }
     if (act.a === "struggle") { this.struggle(p); return; } // (C5c.1: pinned down: wriggle)
     if (p.move.knockT > 0 || p.move.trapT > 0) return; // can't do anything while flattened / boxed in
@@ -778,6 +882,7 @@ export class World {
     }
 
     if (it.mode !== "free") return this.emit({ t: "whiff", p: p.id, reason: "taken" });
+    const gx = it.body.x, gz = it.body.z; // (R5: where it was lifted from: the pawn shop's back room is watched)
     if (def.money) {
       // coins / cash / wallets: straight into your cash
       const value = itemWorth(it);
@@ -785,6 +890,7 @@ export class World {
       this.items.delete(it.id);
       p.actionCd = ACTION_COOLDOWN;
       if (it.shop >= 0) this.props.onShopGrab(p, it);
+      this.onLift(p, it, gx, gz);
       return this.emit({ t: "cash", p: p.id, item: it.id, type: it.type, value });
     }
     if (def.size === "small") {
@@ -795,6 +901,7 @@ export class World {
         this.touch(it);
         p.actionCd = ACTION_COOLDOWN;
         if (it.shop >= 0) this.props.onShopGrab(p, it);
+        this.onLift(p, it, gx, gz);
         return this.emit({ t: "grab", p: p.id, item: it.id, to: "pocket" });
       }
       if (p.hand) return this.emit({ t: "whiff", p: p.id, reason: "full" });
@@ -807,6 +914,7 @@ export class World {
     this.updateCarry(p);
     p.actionCd = ACTION_COOLDOWN;
     if (it.shop >= 0) this.props.onShopGrab(p, it);
+    this.onLift(p, it, gx, gz);
     this.emit({ t: "grab", p: p.id, item: it.id, to: "hand" });
   }
 
@@ -891,14 +999,16 @@ export class World {
     if (Math.hypot(x - p.move.x, z - p.move.z) > TAG.reach || y < p.move.y + 0.3 || y > p.move.y + 2.6) return false;
     const nl = Math.hypot(nx, nz);
     if (nl < 0.5) return false;
-    const ux = Math.round(nx / nl), uz = Math.round(nz / nl);
-    // a real wall face right there
-    const wall = nearBoxes(this.arena, x, z, 0.5).find((b) => {
-      if (!["building", "tower", "wall", "fence"].includes(b.kind) && !b.mayor) return false;
-      if (y < b.y - b.h / 2 || y > b.y + b.h / 2) return false;
-      if (ux) return Math.abs(x - (b.x + ux * b.w / 2)) < 0.15 && Math.abs(z - b.z) < b.d / 2 - 0.3;
-      return Math.abs(z - (b.z + uz * b.d / 2)) < 0.15 && Math.abs(x - b.x) < b.w / 2 - 0.3;
-    });
+    let ux = nx / nl, uz = nz / nl;
+    // a real wall face right there (R3: any face, angled ones too: the tag takes that face's normal)
+    let wall: (typeof this.arena.boxes)[number] | undefined;
+    for (const b of nearBoxes(this.arena, x, z, 0.5)) {
+      if (!["building", "tower", "wall", "fence"].includes(b.kind) && !b.mayor) continue;
+      if (y < b.y - b.h / 2 || y > b.y + b.h / 2) continue;
+      const f = footFaces(b).find((f) => f.nx * ux + f.nz * uz > 0.9 && Math.abs((x - f.ax) * f.nx + (z - f.az) * f.nz) < 0.15
+        && Math.abs((x - f.mx) * -f.nz + (z - f.mz) * f.nx) < f.len / 2 - 0.3);
+      if (f) { wall = b; ux = f.nx; uz = f.nz; break; }
+    }
     if (!wall) return false;
     for (const o of this.tags.values()) if (Math.hypot(o.x - x, o.z - z) < TAG.spacing && Math.abs(o.y - y) < 1.5) return false;
     const id = "t" + this.nextTag++;
@@ -1276,6 +1386,7 @@ export class World {
     this.stepFreeItems(dt);
     this.match.tick(dt);
     this.props.tick(dt);
+    this.pawn.tick(dt);
     this.lobby.tick(dt);
     this.traffic.tick(dt);
     this.tickPins(dt);
@@ -1365,7 +1476,7 @@ export class World {
       if (it.body.resting) {
         it.idleT += dt;
         // cleanup: long-ignored common junk quietly disappears (keeps the city fresh)
-        if (it.idleT > 240 && def.rarity === "common" && it.fort < 0 && this.items.size > ITEM_TARGET * 0.6) this.items.delete(it.id);
+        if (it.idleT > 240 && def.rarity === "common" && it.fort < 0 && !it.evidence && this.items.size > ITEM_TARGET * 0.6) this.items.delete(it.id);
         continue;
       }
       const res = stepItem(it.body, def.radius, def.bounce, this.arena, dt);

@@ -17,7 +17,13 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   // C5c.2: Le Dumpstère's maître d'
   | "maitre_d"
   // C5c.3: THE COMPACTOR's bouncer (Big Crunch), and Sal's nephew Big Vinnie at PAWN-O-RAMA
-  | "bouncer" | "vinnie";
+  | "bouncer" | "vinnie"
+  // R5: HOT STUFF PAWN & LOAN: Twitchy Lou behind his barred window, and his bodyguard Meat Locker
+  | "lou" | "meat_locker"
+  // R6: the new station's holding cell: the Champ (an old prison arm-wrestling champion with a golden spoon)
+  | "champ"
+  // R7: the right-hand pawn shop's owner and bouncer (Meat Locker's twin brother); the station's receptionist
+  | "fran" | "cold_cuts" | "receptionist";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -42,7 +48,7 @@ export interface NpcDef {
   bigShot?: { title: string; weight: number; follower?: NpcKind; followers?: number; heat: number };
   /** only drops their loot when knocked out (armored courier) */
   dropOnKo?: boolean;
-  lines: { idle: string[]; hit: string[]; fight?: string[]; win?: string[]; lose?: string[]; dodge?: string[]; film?: string[]; yell?: string[]; holdup?: string[]; spot?: string[]; lost?: string[]; bust?: string[] };
+  lines: { idle: string[]; hit: string[]; fight?: string[]; win?: string[]; lose?: string[]; dodge?: string[]; film?: string[]; yell?: string[]; holdup?: string[]; spot?: string[]; lost?: string[]; bust?: string[]; warn?: string[] };
 }
 
 export const NPC_DEFS: Record<NpcKind, NpcDef> = {
@@ -115,6 +121,68 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       fight: ["You smashed the CASE?!", "Put it BACK!", "Nobody robs Pawn-O-Rama!"],
       win: ["Pawned.", "Sold, to the guy on the floor."],
       lose: ["Uncle Sal's gonna kill me..."],
+    },
+  },
+  // R5: HOT STUFF PAWN & LOAN. Lou never leaves his barred booth (he ducks); Meat Locker guards the back room.
+  lou: {
+    kind: "lou", name: "Twitchy Lou", walk: 1.0, flee: 1.0, fighter: false, hp: 1, dodge: 0, notoriety: 12, spawnWeight: 0,
+    loot: [["coin_pile", 1]],
+    lines: {
+      idle: ["Psst. Whatcha got?", "*eye twitches*", "I don't ask where it's from. Don't tell me.", "Cash. Today. No paperwork.", "Is that a cop? ...no? OK.", "Everything here fell off something."],
+      hit: ["HEY! Not the face! MEAT!", "MEAT LOCKER! WE GOT ONE!", "Through the BARS?! Rude!"],
+      yell: ["Buy or bye, pal.", "You're makin' me nervous. MEAT?", "This ain't a museum. Sell or scram."],
+    },
+  },
+  meat_locker: {
+    kind: "meat_locker", name: "Meat Locker", walk: 1.1, flee: 3.0, fighter: true, hp: 30, dodge: 0, notoriety: 16, spawnWeight: 0, chase: 7.0,
+    loot: [["coin_pile", 3], ["gold_chain", 1]],
+    lines: {
+      idle: ["...", "*cracks knuckles*", "Back room's closed.", "Lou says no.", "*flexes, slowly*", "I'm not here to talk."],
+      hit: ["...was that a punch?", "Cute.", "Hm."],
+      fight: ["You're done.", "Lights out.", "Meat's on the menu.", "Wrong shop, pal."],
+      win: ["Next.", "And stay on the pavement.", "Lou, we're good."],
+      lose: ["...ow. Need... a nap..."],
+      warn: ["Lou says buy or move along. Last warning.", "You're loitering. I don't like loitering."],
+    },
+  },
+  // R7: FINDERS KEEPERS PAWN (the mirror of Lou's shop): Sticky Fran behind the till, Cold Cuts on the door
+  fran: {
+    kind: "fran", name: "Sticky Fran", walk: 1.0, flee: 1.0, fighter: false, hp: 1, dodge: 0, notoriety: 12, spawnWeight: 0,
+    loot: [["coin_pile", 1]],
+    lines: {
+      idle: ["Finders keepers, hon. What'd you find?", "*chews gum loudly*", "No receipts. No questions. No refunds.", "Ooh, is that real? Don't answer.", "Cash only, sweetie.", "My ex-husband's in that cabinet. His watch, I mean."],
+      hit: ["COLD CUTS! He touched me!", "Not the NAILS!", "COLD CUTS! WORK!"],
+    },
+  },
+  cold_cuts: {
+    kind: "cold_cuts", name: "Cold Cuts", walk: 1.1, flee: 3.0, fighter: true, hp: 30, dodge: 0, notoriety: 16, spawnWeight: 0, chase: 7.0,
+    loot: [["coin_pile", 3], ["gold_chain", 1]],
+    lines: {
+      idle: ["...", "*cracks knuckles*", "Fran says no touching.", "My brother works at Lou's. He's the ugly one.", "*flexes, even slower than his brother*", "I'm not here to talk."],
+      hit: ["...was that a punch?", "Cute.", "Hm."],
+      fight: ["You're done.", "Lights out.", "Sliced and diced.", "Wrong shop, pal."],
+      win: ["Next.", "And stay on the pavement.", "Fran, we're good."],
+      lose: ["...ow. Tell my brother... nothing."],
+    },
+  },
+  // R7: the station's front desk
+  receptionist: {
+    kind: "receptionist", name: "Officer Pam (Front Desk)", walk: 1.0, flee: 1.0, fighter: false, hp: 1, dodge: 0, notoriety: 30, spawnWeight: 0,
+    loot: [["donut", 1]],
+    lines: {
+      idle: ["Take a number.", "Evidence room's upstairs. Don't even think about it.", "*stamps something*", "Is this about the TV? It's always about a TV.", "The chief is in a meeting. With his lunch.", "Please hold. Forever."],
+      hit: ["OFFICER DOWN! Well. Officer slightly bumped!", "You hit the FRONT DESK?!", "BACKUP! FRONT DESK!"],
+    },
+  },
+  champ: {
+    kind: "champ", name: "The Champ", walk: 1.0, flee: 2.0, fighter: true, hp: 40, dodge: 0, notoriety: 0, spawnWeight: 0, chase: 4.6, dropOnKo: true,
+    loot: [["golden_spoon", 1]],
+    lines: {
+      idle: ["Seven letters, 'a quiet place'... C-E-L-L-...", "*polishes his golden spoon*", "Arm-wrestling champ, cell block D, 1998 to 2009.", "Don't touch the spoon.", "Four down: 'loser'. That's you.", "Shower's cold. Always cold."],
+      hit: ["...a fly landed on me.", "Hm? You say something?", "Cute."],
+      fight: ["Alright. One round.", "You wanna arm wrestle? No? Fine.", "Sit DOWN."],
+      win: ["*sits on you* Now... nine across...", "Comfy. Stay.", "Champ's still champ."],
+      lose: ["...my spoon... MY SPOON...", "Nobody's ever... ugh."],
     },
   },
   bank_guard: {
@@ -260,9 +328,20 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
 /** Pedestrian types that wander the streets (raccoons and cashiers have their own jobs). */
 export const NPC_KINDS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => NPC_DEFS[k].spawnWeight > 0);
 /** Kinds that are never part of the everyday crowd (own jobs, own counts). */
-export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
+export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "lou", "meat_locker", "champ", "fran", "cold_cuts", "receptionist", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
 /** The four big shots. */
 export const BIG_SHOTS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => !!NPC_DEFS[k].bigShot);
+
+/** R5: Meat Locker: knocked out this long (the back room's unguarded), and what his one punch does to you */
+export const MEAT_LOCKER = { ko: 40, knock: 6, throw: 8.5, lift: 3.5, windup: 0.18, cooldown: 0.45 };
+/** R7: the two pawn shops' bouncers (Meat Locker and his twin Cold Cuts: the same in every way but the name) */
+export const BOUNCERS = new Set<NpcKind>(["meat_locker", "cold_cuts"]);
+/** R7: the two pawn shop owners (they never leave the till; they duck and holler for the bouncer) */
+export const SHOP_OWNERS = new Set<NpcKind>(["lou", "fran"]);
+/** R6: the Champ: one hit and he sits on you (as long as you're down); knocked out a good while; quick on the swing */
+export const CHAMP = { ko: 25, knock: 6, windup: 0.25, cooldown: 0.6,
+  /** R7: punches 1 and 2 just nudge him back; the 3rd inside this many seconds makes him dizzy (he spins) */
+  stunHits: 3, stunWindow: 4, dizzy: 2.2, nudge: 1.4 };
 
 /** Extra loot a KO'd fighter drops. */
 export const KO_BONUS: [string, number][] = [["mystery_wallet", 3], ["fancy_earbuds", 2], ["rolecks_watch", 1]];

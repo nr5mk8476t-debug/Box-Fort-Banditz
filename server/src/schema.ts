@@ -116,6 +116,8 @@ export const FortRoomState = schema({
   truckZ: t.float32(),
   truckYaw: t.float32(),
   paradeD: t.float32(),
+  festaD: t.float32(),
+  festaV: t.uint8(),
   lightT: t.float32(),
   clubB: t.float32(),
   players: t.map(PlayerState),

@@ -111,6 +111,9 @@ export function inviteLink(code: string): string {
   u.search = "";
   u.hash = "";
   u.searchParams.set("room", code);
+  // (R3: friends need the host's city: pass the map along when it isn't the default one)
+  const map = new URLSearchParams(location.search).get("map");
+  if (map) u.searchParams.set("map", map);
   return u.toString();
 }
 

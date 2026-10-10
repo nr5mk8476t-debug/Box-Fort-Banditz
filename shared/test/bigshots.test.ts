@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World, NPC_DEFS, BIG_SHOTS, BIG_SHOT_FIRST, BIG_SHOT_STAY, SPECIAL_KINDS, NPC_COUNT, lootDef, starsOf, type MoveInput, type WorldEvent } from "../src/index.js";
+import { setCityMap as useCity } from "../src/index.js";
+useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
   ({ seq, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false, ...p });

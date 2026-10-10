@@ -62,11 +62,14 @@ assert(evs.some((e) => e.t === "whiff" && e.p === a.sessionId), "grabbing a far 
 
 // Phase 2.5: pedestrians are synced
 const npcCount = (b.state as any).npcs.size;
-assert(npcCount === 44, `pedestrians + cashiers (Sal too) + the doorman, fisherman, old lady, Uncle Dumpster, 2 bank guards, the maitre d', Big Crunch and Big Vinnie synced to clients: ${npcCount} (20 + 15 + 9)`);
+// (R3: the server builds the new city: 20 walkers + the taco vendor, the fisherman and Uncle Dumpster; R5: + Twitchy Lou
+//  and Meat Locker at the pawn shop; R6: + the Champ in the holding cell; R7: + Sticky Fran, Cold Cuts and the station's receptionist (the patrols
+//  only come on duty once the scavenge starts); the classic city had 44 with its shops and landmarks)
+assert(npcCount === 29, `pedestrians + the taco vendor, the fisherman, Uncle Dumpster, Lou, Meat Locker, Fran, Cold Cuts, the receptionist and the Champ synced to clients: ${npcCount} (20 + 9)`);
 {
   const st2: any = a.state;
   assert(st2.cars.size === CAR_COUNT, `traffic synced: ${st2.cars.size} cars`);
-  assert(st2.props.size >= 60, `props synced: ${st2.props.size}`); // (C1 layout: 82; slice C4 adds the street mess)
+  assert(st2.props.size >= 40, `props synced: ${st2.props.size}`); // (C1 layout: 82; R3 new city: about 60 before its landmarks come back)
 }
 let anNpc: any = null;
 (b.state as any).npcs.forEach((n: any) => { if (!anNpc) anNpc = n; });

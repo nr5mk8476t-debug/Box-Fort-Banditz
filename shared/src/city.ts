@@ -24,8 +24,8 @@
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
 import {
-  box, tierAt, inRect, type Box, type ArenaLayout, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
-  CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef,
+  box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
+  CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
 } from "./arena.js";
 
 const HALF = 115;
@@ -48,6 +48,43 @@ export const HIGHWAY = { z0: -110, z1: -96, y: 9.5, h: 1 };
 
 type Dir = "N" | "S" | "E" | "W";
 
+/**
+ * Which city buildTrashington builds. "classic" = the city up to C5c.3 (its landmarks, still used by their
+ * tests); "new" = the R3 redesign (Blake, 2026-10-08): mirrored left / right, the forts on a curve so all four
+ * are the same walk from the town centre, the top road gone for big landmark lots, angled buildings along the
+ * diagonals and round the roundabout, every road named. Set it before building.
+ */
+export type CityMap = "classic" | "new";
+let CITY_MAP: CityMap = "new"; // (R3: the new city is the real one now; the classic city stays for its tests)
+export function setCityMap(m: CityMap) { CITY_MAP = m; }
+export function cityMap(): CityMap { return CITY_MAP; }
+/** R3: the new city's road lines (x of the edge roads and the avenues, z of the east-west streets) */
+export const NEW = {
+  /** Lefty Lane / Righty Lane */
+  edge: 109,
+  /** Leftovers Avenue / Write-Off Avenue: centred between each pair of forts */
+  inner: 66.33,
+  /** Snob Row: the top road, along the landmark lots */
+  snob: 72,
+  /** Bin Juice Boulevard: the diagonals leave from its ends */
+  binJuice: 45,
+  /** Shopping Trolley Terrace */
+  trolley: -53,
+  /** Gahookz Ghetto Lane: along the top of the fort bowl */
+  gahookz: -89,
+};
+/** R3: the four forts on a curve (slot 0 / 1 = the outer two, 2 / 3 = the middle two), evenly spaced across.
+ *  The middle two sit deeper so every fort is the same walk from the roundabout (tuned by the layout test). */
+export const NEW_FORTS = { xs: [-99.5, 99.5, -33.17, 33.17], zs: [-102, -102, -112.3, -112.3], half: 8, depth: 15 };
+/** R3: the police station (centre of the first long block in the low end). R7: it runs right through the block, from
+ *  Shopping Trolley Terrace (its front door) to Gahookz Ghetto Lane (the back, where you come out after a jailbreak) */
+const NEW_PRECINCT: Rect = { minX: -10, maxX: 10, minZ: -82.4, maxZ: -59.5 };
+/** R7: the left pawn shop's plot (where Hat Hut was), its front on the Gahookz Ghetto Lane pavement; the right one is
+ *  its mirror image. Its door is at the Leftovers Avenue end, so both left forts are about the same walk from it. */
+export const HOT_PLOT: Rect = { minX: -59.6, maxX: -47.2, minZ: -82.4, maxZ: -71.6 };
+const MID_WALL_Z = (NEW.gahookz + 4 + NEW.trolley - 4) / 2;
+const PLOT_X = 11.3; // (R5/R6: the clear plot for the station and the pawn shop: x within this)
+
 function hash(a: number, b: number) {
   const s = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
   return s - Math.floor(s);
@@ -63,6 +100,16 @@ const SIGNS_HIGH = ["INSURANCE-ISH", "BOXLY INC", "YELLING NEWS 24", "GOOCHY", "
   "BALENCI-AGAIN", "LOUIS VUITTONISH", "ROLEXISH", "TIFFANY-ADJACENT", "CARTIER-ISH", "HERMEZ", "MONOCLE WAREHOUSE", "CAVIAR EXPRESS", "YACHT PARTS (NEW)", "OVERPRICED WATER BAR", "SMALL DOG BOUTIQUE", "HEDGE FUND & SONS"];
 
 // ---- C2: each tier has its own materials (the renderer draws brick / render / stone + glass) ----
+/** R4: Little Italy's shops (parodies) and Chinatown's (name, second sign in Chinese, wall, roof) */
+const ITALY_SHOPS = ["MAMMA MIA-ISH", "PASTA LA VISTA", "PIZZA THE ACTION", "CANNOLI BELIEVE IT", "SPAGHETT ABOUT IT", "NONNA KNOWS BEST", "ESPRESSO YOURSELF",
+  "MOZZARELLA FELLAS", "GNOCCHI GNOCCHI", "LASAGNA LAND", "TORTELLINI TOWERS", "RAVIOLI RAVIOLI", "THE MEATBALL MAN", "CAFE CAPPUCCI-NO", "LITTLE TONY'S TAILORS", "SALAMI & SONS"];
+const CHINA_SHOPS: [string, string, string, string][] = [
+  ["DUMPLING DYNASTY", "饺子馆", "#b8322c", "#3f7f4f"], ["LUCKY NOODLE BAR", "面馆", "#e8d8b0", "#b8322c"], ["GOLDEN LEAF TEA HOUSE", "茶楼", "#3d8f6a", "#d8742c"],
+  ["JADE HERBAL SHOP", "药材", "#8e1f2e", "#3f7f4f"], ["GOLDEN MOON BAKERY", "饼家", "#c98a2a", "#b8322c"], ["TRIPLE HAPPY GROCER", "杂货", "#b8322c", "#d8742c"],
+  ["WOK AND ROLL", "炒锅", "#e8d8b0", "#3f7f4f"], ["BAO DOWN", "包子", "#3d8f6a", "#b8322c"], ["NOODLE ME THIS", "面条", "#8e1f2e", "#d8742c"],
+  ["LUCKY DRAGON KARAOKE", "卡拉OK", "#b8322c", "#3f7f4f"], ["TEA-RIFIC", "茶", "#c98a2a", "#3f7f4f"], ["DIM SUM DUMB SUM", "点心", "#e8d8b0", "#b8322c"],
+  ["KUNG FU-D", "功夫", "#8e1f2e", "#3f7f4f"], ["GOLDEN WOK", "金锅", "#3d8f6a", "#d8742c"], ["MOONCAKE MOON", "月饼", "#c98a2a", "#b8322c"], ["PEKING DUCK-ISH", "烤鸭", "#b8322c", "#d8742c"],
+];
 export const TIER_WALLS: string[][] = [
   ["#9e4a36", "#8a3f30", "#b3553f", "#7a4a3a", "#a86a4a", "#6f5a50", "#9a6a3c", "#84563f"],
   ["#d9b98a", "#a9c4a0", "#e8a98a", "#9fc4d9", "#c9b0d9", "#e8d58a", "#c98a7a", "#b9c9a0"],
@@ -157,6 +204,7 @@ interface BlockSpec {
 }
 
 export function buildTrashington(): ArenaLayout {
+  const R2 = CITY_MAP === "new"; // (R3: the new city; "R2" named it while it was the road test)
   const boxes: Box[] = [];
   const loot: SpawnPoint[] = [];
   const props: PropDef[] = [];
@@ -407,38 +455,67 @@ export function buildTrashington(): ArenaLayout {
     for (let i = 1; i < pts.length; i++) rd(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], hw, name, o);
   };
   const RR = RING.r;
-  nd(0, -50, "light", "Mile x Yards Rd"); nd(0, 50, "light", "Mile x Uptown Ave");
-  for (const [x, z] of [[RR, 0], [0, RR], [-RR, 0], [0, -RR]]) nd(x, z, "round");
-  // the edge ring
-  path([[-91, -89], [-91, -48], [-91, 0], [-91, 48], [-91, 83], [-91, 108]], 4, "West Rd");
-  path([[91, -89], [91, -52], [91, 0], [91, 52], [91, 83], [91, 108]], 4, "East Rd");
-  path([[-91, -89], [-56, -89], [0, -89], [58, -89], [91, -89]], 4, "Service Rd");
-  path([[-91, 108], [-56, 108], [0, 108], [56, 108], [91, 108]], 4, "North Parade");
-  // Mayor's Mile
-  path([[0, -89], [0, -50], [0, -RR]], 5, "Mayor's Mile");
-  path([[0, RR], [0, 50], [0, 70]], 5, "Mayor's Mile");
-  // crosstown streets (with a jog at the Mile)
-  path([[-91, -48], [-56, -48]], 4, "Yards Rd"); rd(-56, -48, 0, -50, 4, "Yards Rd", { pb: [0, -48] });
-  rd(0, -50, 58, -52, 4, "Yards Rd", { pa: [0, -52] }); path([[58, -52], [91, -52]], 4, "Yards Rd");
-  path([[-91, 48], [-56, 48]], 4, "Uptown Ave"); rd(-56, 48, 0, 50, 4, "Uptown Ave", { pb: [0, 48] });
-  rd(0, 50, 56, 52, 4, "Uptown Ave", { pa: [0, 52] }); path([[56, 52], [91, 52]], 4, "Uptown Ave");
-  // (C1.1: one-way eastbound, round the front of City Hall: Blake cut the loop's back off)
-  path([[-91, 83], [-56, 83], [-21, 83]], 3, "Gold St", { oneway: true });
-  path([[21, 83], [56, 83], [91, 83]], 3, "Gold St", { oneway: true });
-  path([[-56, -89], [-56, -48], [-56, 0], [-56, 48], [-56, 83], [-56, 108]], 3, "Crooked St");
-  path([[56, 52], [56, 83], [56, 108]], 3, "Diamond St");
-  path([[-91, 0], [-56, 0], [-RR, 0]], 4, "Crooked Spur");
-  rd(RR, 0, 38, 0, 3, "Market Link");
-  // the Market Row one-way loop (counter-clockwise), its links east and south
-  path([[38, 0], [38, -18], [58, -18], [72, -18], [72, 0], [72, 18], [38, 18], [38, 0]], 3, "Market Row", { oneway: true });
-  rd(72, 0, 91, 0, 3, "Market Link");
-  path([[58, -18], [58, -52], [58, -89]], 3, "Market St");
-  // the one-way U in front of City Hall: in from Gold St (west), round the front, out to Gold St (east)
-  path([[-21, 83], [-21, 70], [0, 70], [21, 70], [21, 83]], 3, "City Hall Drive", { oneway: true });
-  // the roundabout (counter-clockwise quarter arcs)
-  const arc = { cx: 0, cz: 0, r: RR };
-  rd(RR, 0, 0, RR, 4, "Roundabout", { oneway: true, arc }); rd(0, RR, -RR, 0, 4, "Roundabout", { oneway: true, arc });
-  rd(-RR, 0, 0, -RR, 4, "Roundabout", { oneway: true, arc }); rd(0, -RR, RR, 0, 4, "Roundabout", { oneway: true, arc });
+  if (R2) {
+    // ---- R3: the new city (Blake's drawing, mirrored and named) ----
+    const { edge: E, inner: I, snob: SN, binJuice: BJ, trolley: TT, gahookz: GZ } = NEW;
+    const ringAt = (deg: number): [number, number] => [Math.round(Math.cos((deg * Math.PI) / 180) * RR * 100) / 100, Math.round(Math.sin((deg * Math.PI) / 180) * RR * 100) / 100];
+    // the diagonals run straight at the middle of the roundabout from the avenue corners, so they meet the ring square on
+    const fork = (Math.atan2(BJ, I) * 180) / Math.PI;
+    const [qx, qz] = ringAt(fork);
+    const ring: [number, number][] = [[RR, 0], [qx, qz], [0, RR], [-qx, qz], [-RR, 0], [0, -RR]];
+    for (const [x, z] of ring) nd(x, z, "round");
+    for (const x of [-I, I]) for (const z of [BJ, 0, TT]) nd(x, z, "light");
+    nd(0, BJ, "light");
+    path([[-E, GZ], [-E, 0], [-E, SN]], 4, "Lefty Lane");
+    path([[E, GZ], [E, 0], [E, SN]], 4, "Righty Lane");
+    path([[-E, GZ], [-I, GZ], [I, GZ], [E, GZ]], 4, "Gahookz Ghetto Lane");
+    path([[-E, SN], [-I, SN], [0, SN], [I, SN], [E, SN]], 4, "Snob Row");
+    path([[-I, GZ], [-I, TT], [-I, 0], [-I, BJ], [-I, SN]], 4, "Leftovers Avenue");
+    path([[I, GZ], [I, TT], [I, 0], [I, BJ], [I, SN]], 4, "Write-Off Avenue");
+    path([[-I, BJ], [0, BJ], [I, BJ]], 4, "Bin Juice Boulevard");
+    path([[-I, TT], [0, TT], [I, TT]], 4, "Shopping Trolley Terrace");
+    path([[-RR, 0], [-I, 0], [-E, 0]], 4, "Mayor's Mugshot Mile");
+    path([[RR, 0], [I, 0], [E, 0]], 4, "Mayor's Mugshot Mile");
+    path([[0, RR], [0, BJ], [0, SN]], 4, "Dead-Centre Drive");
+    path([[0, -RR], [0, TT]], 4, "Loose Change Lane");
+    rd(-I, BJ, -qx, qz, 4, "Dodgy Cut-Through"); rd(I, BJ, qx, qz, 4, "Bank Run");
+    // THE SPIN CYCLE: the roundabout, counter-clockwise
+    const arc = { cx: 0, cz: 0, r: RR };
+    for (let k = 0; k < ring.length; k++) { const a = ring[k], b = ring[(k + 1) % ring.length]; rd(a[0], a[1], b[0], b[1], 4, "The Spin Cycle", { oneway: true, arc }); }
+  } else {
+    nd(0, -50, "light", "Mile x Yards Rd"); nd(0, 50, "light", "Mile x Uptown Ave");
+    for (const [x, z] of [[RR, 0], [0, RR], [-RR, 0], [0, -RR]]) nd(x, z, "round");
+    // the edge ring
+    path([[-91, -89], [-91, -48], [-91, 0], [-91, 48], [-91, 83], [-91, 108]], 4, "West Rd");
+    path([[91, -89], [91, -52], [91, 0], [91, 52], [91, 83], [91, 108]], 4, "East Rd");
+    path([[-91, -89], [-56, -89], [0, -89], [58, -89], [91, -89]], 4, "Service Rd");
+    path([[-91, 108], [-56, 108], [0, 108], [56, 108], [91, 108]], 4, "North Parade");
+    // Mayor's Mile
+    path([[0, -89], [0, -50], [0, -RR]], 5, "Mayor's Mile");
+    path([[0, RR], [0, 50], [0, 70]], 5, "Mayor's Mile");
+    // crosstown streets (with a jog at the Mile)
+    path([[-91, -48], [-56, -48]], 4, "Yards Rd"); rd(-56, -48, 0, -50, 4, "Yards Rd", { pb: [0, -48] });
+    rd(0, -50, 58, -52, 4, "Yards Rd", { pa: [0, -52] }); path([[58, -52], [91, -52]], 4, "Yards Rd");
+    path([[-91, 48], [-56, 48]], 4, "Uptown Ave"); rd(-56, 48, 0, 50, 4, "Uptown Ave", { pb: [0, 48] });
+    rd(0, 50, 56, 52, 4, "Uptown Ave", { pa: [0, 52] }); path([[56, 52], [91, 52]], 4, "Uptown Ave");
+    // (C1.1: one-way eastbound, round the front of City Hall: Blake cut the loop's back off)
+    path([[-91, 83], [-56, 83], [-21, 83]], 3, "Gold St", { oneway: true });
+    path([[21, 83], [56, 83], [91, 83]], 3, "Gold St", { oneway: true });
+    path([[-56, -89], [-56, -48], [-56, 0], [-56, 48], [-56, 83], [-56, 108]], 3, "Crooked St");
+    path([[56, 52], [56, 83], [56, 108]], 3, "Diamond St");
+    path([[-91, 0], [-56, 0], [-RR, 0]], 4, "Crooked Spur");
+    rd(RR, 0, 38, 0, 3, "Market Link");
+    // the Market Row one-way loop (counter-clockwise), its links east and south
+    path([[38, 0], [38, -18], [58, -18], [72, -18], [72, 0], [72, 18], [38, 18], [38, 0]], 3, "Market Row", { oneway: true });
+    rd(72, 0, 91, 0, 3, "Market Link");
+    path([[58, -18], [58, -52], [58, -89]], 3, "Market St");
+    // the one-way U in front of City Hall: in from Gold St (west), round the front, out to Gold St (east)
+    path([[-21, 83], [-21, 70], [0, 70], [21, 70], [21, 83]], 3, "City Hall Drive", { oneway: true });
+    // the roundabout (counter-clockwise quarter arcs)
+    const arc = { cx: 0, cz: 0, r: RR };
+    rd(RR, 0, 0, RR, 4, "Roundabout", { oneway: true, arc }); rd(0, RR, -RR, 0, 4, "Roundabout", { oneway: true, arc });
+    rd(-RR, 0, 0, -RR, 4, "Roundabout", { oneway: true, arc }); rd(0, -RR, RR, 0, 4, "Roundabout", { oneway: true, arc });
+  }
   // junction control: bends (2 roads) have none; lights / roundabout set above; the rest give way
   for (const n of nodes) {
     const deg = edges.filter((e) => e.a === n.id || e.b === n.id).length;
@@ -451,11 +528,16 @@ export function buildTrashington(): ArenaLayout {
   const crosswalks: Rect[] = [];
   const xLines = new Set<number>(), zLines = new Set<number>();
   const endP = (e: RoadEdge, end: "a" | "b"): [number, number] => (end === "a" ? e.pa : e.pb) ?? [nodes[e[end]].x, nodes[e[end]].z];
-  const straight = edges.filter((e) => !e.arc);
+  // (R2: a road that isn't along x or z is a diagonal: no rect, a segment surface; see roadSegs)
+  const isDiag = (e: RoadEdge) => { const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b"); return Math.abs(bx - ax) > 0.5 && Math.abs(bz - az) > 0.5; };
+  const lines = edges.filter((e) => !e.arc);
+  const straight = lines.filter((e) => !isDiag(e));
+  const diags = lines.filter(isDiag);
+  const roadSegs = diags.map((e) => { const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b"); return { ax, az, bx, bz, hw: e.hw }; });
   const rectOfEdge = new Map<RoadEdge, Rect>();
   for (const e of straight) {
     const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b");
-    const ext = (id: number) => nodes[id].ctl === "round" ? 0 : Math.max(0, ...straight.filter((o) => o !== e && (o.a === id || o.b === id)).map((o) => o.hw));
+    const ext = (id: number) => nodes[id].ctl === "round" ? 0 : Math.max(0, ...lines.filter((o) => o !== e && (o.a === id || o.b === id)).map((o) => o.hw));
     const alongX = Math.abs(bx - ax) > Math.abs(bz - az);
     const ea = ext(e.a), eb = ext(e.b);
     let r: Rect;
@@ -478,7 +560,7 @@ export function buildTrashington(): ArenaLayout {
   // where the pavement of the crossing road carries on
   for (const n of nodes) {
     if (n.ctl === "end") continue;
-    const inc = straight.filter((e) => e.a === n.id || e.b === n.id);
+    const inc = lines.filter((e) => e.a === n.id || e.b === n.id);
     for (const e of inc) {
       const [px, pz] = e.a === n.id ? endP(e, "a") : endP(e, "b");
       const [qx, qz] = e.a === n.id ? endP(e, "b") : endP(e, "a");
@@ -488,15 +570,29 @@ export function buildTrashington(): ArenaLayout {
       if (n.ctl === "round") reach = RING.r1 - RR + 5; // (C3: 5 m back from the ring, so a car waiting to join the ring isn't parked on the zebra)
       for (const o of inc) {
         if (o === e) continue;
-        const r = rectOfEdge.get(o)!;
+        const r = rectOfEdge.get(o);
         // how far the other road reaches along this road's direction from the junction centre
-        const far = dx > 0.5 ? r.maxX - px : dx < -0.5 ? px - r.minX : dz > 0.5 ? r.maxZ - pz : pz - r.minZ;
+        let far: number;
+        if (r && !isDiag(e)) far = dx > 0.5 ? r.maxX - px : dx < -0.5 ? px - r.minX : dz > 0.5 ? r.maxZ - pz : pz - r.minZ;
+        else {
+          // (R2: a diagonal meets it: how far along this road the other road's surface reaches, from the angle between them)
+          const [ox, oz] = o.a === n.id ? endP(o, "b") : endP(o, "a"), ol = Math.hypot(ox - px, oz - pz);
+          const sin = Math.max(0.3, Math.abs((dx * (oz - pz) - dz * (ox - px)) / ol)), cos = (dx * (ox - px) + dz * (oz - pz)) / ol;
+          far = o.hw / sin + e.hw * Math.abs(cos) / sin;
+        }
         reach = Math.max(reach, far);
       }
       const dc = reach + 1.5;
       if (dc + 3 > len) continue;
       const cx = px + dx * dc, cz = pz + dz * dc;
       if (crosswalks.some((c) => Math.hypot((c.minX + c.maxX) / 2 - cx, (c.minZ + c.maxZ) / 2 - cz) < 4)) continue;
+      if (isDiag(e)) {
+        // (R2: a crossing on a diagonal: a square box over it; the zebra turned to match)
+        const h = e.hw + 0.5;
+        crosswalks.push(R(cx - h, cx + h, cz - h, cz + h));
+        decor.push({ kind: "zebra", x: cx, z: cz, yaw: Math.atan2(dx, dz) - Math.PI / 2 });
+        continue;
+      }
       const alongX = Math.abs(dx) > 0.5;
       const cw = alongX ? R(cx - 1.5, cx + 1.5, cz - e.hw - 0.5, cz + e.hw + 0.5) : R(cx - e.hw - 0.5, cx + e.hw + 0.5, cz - 1.5, cz + 1.5);
       crosswalks.push(cw);
@@ -504,15 +600,17 @@ export function buildTrashington(): ArenaLayout {
       decor.push({ kind: "zebra", x: cx, z: cz, yaw: alongX ? 0 : Math.PI / 2 });
     }
   }
-  // the four ring crossings to the park (diagonal, at 45 degrees)
-  for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
-    const a = (RING.r0 - 1) / Math.SQRT2, b = (RING.r1 + 1) / Math.SQRT2;
-    crosswalks.push(R(Math.min(sx * a, sx * b) - 1.2, Math.max(sx * a, sx * b) + 1.2, Math.min(sz * a, sz * b) - 1.2, Math.max(sz * a, sz * b) + 1.2));
-    decor.push({ kind: "zebra", x: sx * RR / Math.SQRT2, z: sz * RR / Math.SQRT2, yaw: Math.atan2(sx, sz) });
+  // the ring crossings to the park (classic: the four at 45 degrees; R2: north, SW, SE: the fork takes NE and NW)
+  const parkCross = R2 ? [62, 118, 225, 315] : [45, 135, 225, 315]; // (R3: between the six arms)
+  for (const deg of parkCross) {
+    const t = (deg * Math.PI) / 180, sx = Math.cos(t), sz = Math.sin(t);
+    const a = RING.r0 - 1, b = RING.r1 + 1, ax = sx * a, bx = sx * b, az = sz * a, bz = sz * b;
+    crosswalks.push(R(Math.min(ax, bx) - 1.2, Math.max(ax, bx) + 1.2, Math.min(az, bz) - 1.2, Math.max(az, bz) + 1.2));
+    decor.push({ kind: "zebra", x: sx * RR, z: sz * RR, yaw: Math.atan2(sx, sz) });
   }
   // lane paint + street lights along the straight roads (skipping junction boxes)
   const nearJunction = (x: number, z: number, pad: number) => nodes.some((n) => n.ctl !== "end" && Math.abs(n.x - x) < pad && Math.abs(n.z - z) < pad);
-  for (const e of straight) {
+  for (const e of lines) {
     const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b");
     const len = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / len, dz = (bz - az) / len;
     for (let s = 4; s < len - 3; s += 6) {
@@ -547,9 +645,12 @@ export function buildTrashington(): ArenaLayout {
     if (!e.arc) { gEdges.push([e.a, e.b]); continue; }
     const A = nodes[e.a], B = nodes[e.b];
     const a0 = Math.atan2(A.z, A.x);
+    let a1 = Math.atan2(B.z, B.x);
+    while (a1 <= a0) a1 += Math.PI * 2;
+    const nk = Math.max(2, Math.round((a1 - a0) / (Math.PI / 6))); // (about every 30 degrees: 3 pieces a quarter, like before)
     let prev = e.a;
-    for (let k = 1; k < 3; k++) {
-      const t = a0 + (k * Math.PI / 2) / 3;
+    for (let k = 1; k < nk; k++) {
+      const t = a0 + (k * (a1 - a0)) / nk;
       gNodes.push({ x: Math.round(Math.cos(t) * RR * 100) / 100, z: Math.round(Math.sin(t) * RR * 100) / 100 });
       gEdges.push([prev, gNodes.length - 1]);
       prev = gNodes.length - 1;
@@ -628,7 +729,7 @@ export function buildTrashington(): ArenaLayout {
     const P = (deg: number, r: number) => ({ x: Math.round(Math.cos((deg * Math.PI) / 180) * r * 100) / 100, z: Math.round(Math.sin((deg * Math.PI) / 180) * r * 100) / 100 });
     const loop = [45, 0, 315, 270, 225, 180, 135, 90, 45].map((d) => P(d, 18.2));
     navChains.push(loop);
-    for (const d of [45, 135, 225, 315]) navChains.push([P(d, 31.8), P(d, 18.2)]);
+    for (const d of parkCross) navChains.push([P(d, 31.8), P(d, 18.2)]);
   }
 
   // =================================================================================================
@@ -834,12 +935,472 @@ export function buildTrashington(): ArenaLayout {
     B("Uptown: Museum block", -53, -24, 86, 104, ["N", "S", "W"], { keep: [LM.museum] }),
     B("Uptown: Mall block", 24, 53, 86, 104, ["N", "S", "E"], { keep: [LM.mall] }),
   ];
+  // =================================================================================================
+  // R2: THE ROAD TEST's blocks. No hand-made blocks: the ground is worked out on a 0.5 m grid (every cell off
+  // the road is pavement, merged into strips), then every road gets a row of plain buildings down each side,
+  // set back behind the pavement. Along the diagonals the buildings are squares stepped along the road (boxes
+  // can't turn). Loot, bins, hydrants and rooftop stashes go along the rows like on the classic streets.
+  // =================================================================================================
+  const fillRoadTest = () => {
+    const CELL = 0.5, X0 = -HALF, Z0 = HIGHWAY.z1 + 3, NX = Math.round((2 * HALF) / CELL), NZ = Math.round((HALF - Z0) / CELL);
+    /** how far (x, z) is from the nearest road surface (0 = on it; -1 = in the park) */
+    const roadDist = (x: number, z: number) => {
+      const rr = Math.hypot(x, z);
+      if (rr < RING.r0) return -1;
+      if (rr <= RING.r1) return 0;
+      let d = rr - RING.r1;
+      for (const r of roads) {
+        const dx = Math.max(r.minX - x, 0, x - r.maxX), dz = Math.max(r.minZ - z, 0, z - r.maxZ);
+        if (dx === 0 && dz === 0) return 0;
+        d = Math.min(d, Math.hypot(dx, dz));
+      }
+      for (const g of roadSegs) { const q = segDist(x, z, g.ax, g.az, g.bx, g.bz) - g.hw; if (q <= 0) return 0; d = Math.min(d, q); }
+      return d;
+    };
+    const dist = new Float32Array(NX * NZ);
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) dist[j * NX + i] = roadDist(X0 + (i + 0.5) * CELL, Z0 + (j + 0.5) * CELL);
+    const cellAt = (x: number, z: number) => {
+      const i = Math.floor((x - X0) / CELL), j = Math.floor((z - Z0) / CELL);
+      return i < 0 || j < 0 || i >= NX || j >= NZ ? -1 : dist[j * NX + i];
+    };
+    // ---- the pavement: runs of off-road cells along each row, stacked into strips while they line up ----
+    let open = new Map<string, Rect>();
+    // (the band round the roundabout's outside is laid as smooth curved pieces instead, below: the grid's
+    //  cells would leave a stepped kerb)
+    const BAND = RING.r1 + 3;
+    const paved = (i: number, j: number) => dist[j * NX + i] > 0 && Math.hypot(X0 + (i + 0.5) * CELL, Z0 + (j + 0.5) * CELL) >= BAND;
+    for (let j = 0; j <= NZ; j++) {
+      const next = new Map<string, Rect>();
+      if (j < NZ) {
+        for (let i = 0; i < NX;) {
+          if (!paved(i, j)) { i++; continue; }
+          const i0 = i;
+          while (i < NX && paved(i, j)) i++;
+          const key = i0 + "," + i, z1 = Z0 + (j + 1) * CELL, o = open.get(key);
+          if (o) { o.maxZ = z1; open.delete(key); next.set(key, o); } else next.set(key, R(X0 + i0 * CELL, X0 + i * CELL, Z0 + j * CELL, z1));
+        }
+      }
+      for (const r of open.values()) ground(r);
+      open = next;
+    }
+    // (the pavement along a diagonal is 0.5 m steps underneath: a smooth kerb strip on top, looks only)
+    for (const e of diags) {
+      const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b"), L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L;
+      for (const side of [-1, 1]) {
+        const nx = -uz * side, nz = ux * side, at = (t: number, o: number) => cellAt(ax + ux * t + nx * o, az + uz * t + nz * o);
+        let best: [number, number] = [0, 0], run = -1;
+        for (let t = 0; t <= L + 0.01; t += 0.25) {
+          const ok = at(t, e.hw + 0.6) > 0 && at(t, e.hw + 2.2) > 0;
+          if (ok && run < 0) run = t;
+          if ((!ok || t + 0.25 > L) && run >= 0) { const end = ok ? t : t - 0.25; if (end - run > best[1] - best[0]) best = [run, end]; run = -1; }
+        }
+        if (best[1] - best[0] < 2) continue;
+        const tm = (best[0] + best[1]) / 2, om = e.hw + (2.2 - 0.35) / 2;
+        scenery.push({ kind: "walk", x: ax + ux * tm + nx * om, z: az + uz * tm + nz * om, w: 2.55, d: best[1] - best[0], yaw: Math.atan2(ux, uz) });
+      }
+    }
+    // ---- R3: the pavement round the roundabout: 96 curved pieces from its kerb out past where the grid starts,
+    //      each cut back square from the roads that leave the ring ----
+    {
+      type P2 = [number, number];
+      const clipHP = (P: P2[], ox: number, oz: number, nx: number, nz: number): P2[] => {
+        const out: P2[] = [];
+        for (let q = 0; q < P.length; q++) {
+          const A = P[q], B = P[(q + 1) % P.length], da = (A[0] - ox) * nx + (A[1] - oz) * nz, db = (B[0] - ox) * nx + (B[1] - oz) * nz;
+          if (da >= 0) out.push(A);
+          if ((da >= 0) !== (db >= 0)) { const t = da / (da - db); out.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]); }
+        }
+        return out;
+      };
+      const segs = 96, r0 = RING.r1, r1 = BAND + 0.6;
+      for (let q = 0; q < segs; q++) {
+        const a0 = (q / segs) * Math.PI * 2, a1 = ((q + 1) / segs) * Math.PI * 2;
+        let P: P2[] = [[Math.cos(a0) * r0, Math.sin(a0) * r0], [Math.cos(a0) * r1, Math.sin(a0) * r1], [Math.cos(a1) * r1, Math.sin(a1) * r1], [Math.cos(a1) * r0, Math.sin(a1) * r0]];
+        const cx = Math.cos((a0 + a1) / 2) * (r0 + r1) / 2, cz = Math.sin((a0 + a1) / 2) * (r0 + r1) / 2;
+        for (const r of roads) {
+          if (!(r.maxX > Math.min(...P.map((p) => p[0])) && r.minX < Math.max(...P.map((p) => p[0])) && r.maxZ > Math.min(...P.map((p) => p[1])) && r.minZ < Math.max(...P.map((p) => p[1])))) continue;
+          const gaps = [r.minX - cx, cx - r.maxX, r.minZ - cz, cz - r.maxZ], m = Math.max(...gaps);
+          if (m < 0) { P = []; break; }
+          const side = gaps.indexOf(m);
+          P = side === 0 ? clipHP(P, r.minX, 0, -1, 0) : side === 1 ? clipHP(P, r.maxX, 0, 1, 0) : side === 2 ? clipHP(P, 0, r.minZ, 0, -1) : clipHP(P, 0, r.maxZ, 0, 1);
+          if (P.length < 3) break;
+        }
+        for (const g of roadSegs) {
+          if (P.length < 3) break;
+          const vx = g.bx - g.ax, vz = g.bz - g.az, l = Math.hypot(vx, vz), nx = -vz / l, nz = vx / l;
+          const sd = (cx - g.ax) * nx + (cz - g.az) * nz, sgn = sd >= 0 ? 1 : -1, t = ((cx - g.ax) * vx + (cz - g.az) * vz) / (l * l);
+          if (Math.abs(sd) > g.hw + 8 || t < -0.05 || t > 1.15) continue; // (only beside the diagonal itself, not its line carried on past the ring)
+          if (Math.abs(sd) < g.hw) { P = []; break; }
+          P = clipHP(P, g.ax + nx * g.hw * sgn, g.az + nz * g.hw * sgn, nx * sgn, nz * sgn);
+        }
+        if (P.length < 3) continue;
+        let A = 0;
+        for (let k = 0; k < P.length; k++) A += P[k][0] * P[(k + 1) % P.length][1] - P[(k + 1) % P.length][0] * P[k][1];
+        if (Math.abs(A) / 2 < 0.05) continue;
+        boxes.push(polyBox(P, 0.15, "sidewalk"));
+      }
+    }
+    blocks.push({ name: "Road test: the city", rect: R(-HALF, HALF, Z0, HALF), tier: 1, open: ["N", "S", "E", "W"] });
+    // ---- the buildings (R3: rows along every road; turned to match a diagonal; cut into wedges where a row runs
+    //      into a diagonal or the roundabout) ----
+    type Pt = [number, number];
+    const placed: Rect[] = [], placedB: Box[] = [];
+    const SN = NEW.snob, lotZ = SN + 4 + SW; // (north of Snob Row: the landmark lots)
+    /** R3: the pavement in front of the buildings (Blake: 4 m looked too big); R4: buildings vary their setback from it */
+    const PW = 2.5;
+    /** R4: LITTLE ITALY: along Leftovers Avenue between Gahookz Ghetto Lane and Mayor's Mugshot Mile (its mirror on
+     *  Write-Off Avenue is CHINATOWN). Cafés stand back for tables and umbrellas; stalls in front of some. */
+    const DZ0 = NEW.gahookz + 4 + 3, DZ1 = -4 - 3;
+    const ITALY_WALLS = ["#e8b45a", "#d8742c", "#f3e2b8", "#c26b4a", "#e8d0a0", "#f0c8a0", "#d9a07a", "#b5653b"];
+    let italyN = 0, stallN = 0;
+    const STALLS: PropKind[] = ["deli", "pizzacart", "ricordi", "gelato", "pizzacart", "ricordi", "gelato"];
+    // (R5: the station, the passages down its sides, Lou's Square, the pawn shop: one clear plot)
+    const keepOut: Rect[] = [R(-PLOT_X, PLOT_X, NEW_PRECINCT.minZ - 0.3, NEW_PRECINCT.maxZ + 0.5), // (R7: the station; the pawn shops)
+      R(HOT_PLOT.minX - 0.3, HOT_PLOT.maxX + 0.3, HOT_PLOT.minZ - 0.3, HOT_PLOT.maxZ + 0.3), R(-HOT_PLOT.maxX - 0.3, -HOT_PLOT.minX + 0.3, HOT_PLOT.minZ - 0.3, HOT_PLOT.maxZ + 0.3),
+      R(29, 34.5, -15, -9) /* the taco cart */, R(-HALF, HALF, lotZ - 0.5, HALF)];
+    const bbox = (P: Pt[]): Rect => { let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity; for (const [x, z] of P) { a = Math.min(a, x); b = Math.max(b, x); c = Math.min(c, z); d = Math.max(d, z); } return R(a, b, c, d); };
+    const area = (P: Pt[]) => { let A = 0; for (let q = 0; q < P.length; q++) { const [x0, z0] = P[q], [x1, z1] = P[(q + 1) % P.length]; A += x0 * z1 - x1 * z0; } return Math.abs(A) / 2; };
+    /** keep the part of P where (p - o) . n >= 0 */
+    const clip = (P: Pt[], ox: number, oz: number, nx: number, nz: number): Pt[] => {
+      const out: Pt[] = [];
+      for (let q = 0; q < P.length; q++) {
+        const A = P[q], B = P[(q + 1) % P.length], da = (A[0] - ox) * nx + (A[1] - oz) * nz, db = (B[0] - ox) * nx + (B[1] - oz) * nz;
+        if (da >= 0) out.push(A);
+        if ((da >= 0) !== (db >= 0)) { const t = da / (da - db); out.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]); }
+      }
+      return out;
+    };
+    /** cut a candidate footprint back from the diagonals and the roundabout (they make the wedges) */
+    const carve = (P: Pt[]): Pt[] => {
+      let Q = P;
+      const [cx, cz] = Q.reduce((a, p) => [a[0] + p[0] / Q.length, a[1] + p[1] / Q.length], [0, 0]);
+      for (const g of roadSegs) {
+        const vx = g.bx - g.ax, vz = g.bz - g.az, l = Math.hypot(vx, vz), gnx = -vz / l, gnz = vx / l;
+        const sd = (cx - g.ax) * gnx + (cz - g.az) * gnz, sgn = sd >= 0 ? 1 : -1, off = g.hw + PW;
+        // (only near this diagonal's length)
+        const t = ((cx - g.ax) * vx + (cz - g.az) * vz) / (l * l);
+        if (t < -0.05 || t > 1.05) continue;
+        Q = clip(Q, g.ax + gnx * off * sgn, g.az + gnz * off * sgn, gnx * sgn, gnz * sgn);
+        if (Q.length < 3) return Q;
+      }
+      // the straight roads: back off from the side of each one the footprint's middle is on
+      for (const r of roads) {
+        const bb = bbox(Q);
+        if (!rectI(bb, R(r.minX - PW, r.maxX + PW, r.minZ - PW, r.maxZ + PW))) continue;
+        const gaps = [r.minX - cx, cx - r.maxX, r.minZ - cz, cz - r.maxZ], m = Math.max(...gaps);
+        if (m < 0) return [];
+        const side = gaps.indexOf(m);
+        Q = side === 0 ? clip(Q, r.minX - PW, 0, -1, 0) : side === 1 ? clip(Q, r.maxX + PW, 0, 1, 0) : side === 2 ? clip(Q, 0, r.minZ - PW, 0, -1) : clip(Q, 0, r.maxZ + PW, 0, 1);
+        if (Q.length < 3) return Q;
+      }
+      // the roundabout: a flat face square on to the middle of the park
+      const rl = Math.hypot(cx, cz);
+      if (rl < RING.r1 + PW + 16) { const ux = cx / (rl || 1), uz = cz / (rl || 1), o = RING.r1 + PW; Q = clip(Q, ux * o, uz * o, ux, uz); }
+      return Q;
+    };
+    /** convex polygons overlap? (separating axes, a hair of slack) */
+    const overlap = (A: Pt[], B: Pt[]) => {
+      for (const P of [A, B]) for (let q = 0; q < P.length; q++) {
+        const [x0, z0] = P[q], [x1, z1] = P[(q + 1) % P.length], nx = z1 - z0, nz = x0 - x1;
+        let amin = Infinity, amax = -Infinity, bmin = Infinity, bmax = -Infinity;
+        for (const [x, z] of A) { const v = x * nx + z * nz; amin = Math.min(amin, v); amax = Math.max(amax, v); }
+        for (const [x, z] of B) { const v = x * nx + z * nz; bmin = Math.min(bmin, v); bmax = Math.max(bmax, v); }
+        const sl = 0.02 * Math.hypot(nx, nz);
+        if (amax <= bmin + sl || bmax <= amin + sl) return false;
+      }
+      return true;
+    };
+    const asPoly = (b: Box): Pt[] => b.poly ?? [[b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z + b.d / 2], [b.x - b.w / 2, b.z + b.d / 2]];
+    /** a decent shape? (big enough, no sliver corners) */
+    const shapely = (P: Pt[]) => {
+      if (P.length < 3 || area(P) < 22) return false;
+      for (let q = 0; q < P.length; q++) {
+        const A = P[(q + P.length - 1) % P.length], B = P[q], C = P[(q + 1) % P.length];
+        const ax2 = A[0] - B[0], az2 = A[1] - B[1], cx2 = C[0] - B[0], cz2 = C[1] - B[1];
+        const la = Math.hypot(ax2, az2), lc = Math.hypot(cx2, cz2);
+        if (la < 1.2 || lc < 1.2) return false;
+        if ((ax2 * cx2 + az2 * cz2) / (la * lc) > Math.cos((24 * Math.PI) / 180)) return false;
+      }
+      return true;
+    };
+    const fits = (P: Pt[]) => {
+      const rc = bbox(P);
+      if (rc.maxX > -0.05) return false; // (the west half only: the east half is its mirror image, see below)
+      if (rc.minX < -HALF + 1 || rc.maxX > HALF - 1 || rc.maxZ > HALF - 1 || rc.minZ < Z0) return false;
+      const rm = R(-rc.maxX, -rc.minX, rc.minZ, rc.maxZ); // (its mirror twin on the east half must fit too)
+      if (keepOut.some((q) => rectI(q, rc) || rectI(q, rm))) return false;
+      for (let q = 0; q < placed.length; q++) if (rectI(placed[q], rc) && overlap(asPoly(placedB[q]), P)) return false;
+      const probe = polyBox(P, 1, "building");
+      for (let x = rc.minX + 0.25; x < rc.maxX; x += 0.5) for (let z = rc.minZ + 0.25; z < rc.maxZ; z += 0.5) {
+        if (footSd(probe, x, z).d < -0.05 && cellAt(x, z) < PW - 0.3) return false;
+      }
+      return true;
+    };
+    const inBuilding = (x: number, z: number, pad = 0) => placedB.some((b) => inFoot(b, x, z, pad));
+    const roofLoot: [Box, number][] = [];
+    // (what this builds on the west half, to mirror onto the east half at the end: the two halves are the same city)
+    const lootStart = loot.length, boxStart = boxes.length, decorStart = decor.length, chainStart = navChains.length;
+    const propLog: [PropKind, number, number, number, number, number, number][] = [];
+    const len = (e: RoadEdge) => { const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b"); return Math.hypot(bx - ax, bz - az); };
+    let bseed2 = 0, k = 0;
+    for (const e of [...lines].sort((a, b) => (isDiag(b) ? 1 : 0) - (isDiag(a) ? 1 : 0) || len(b) - len(a))) { // (the diagonals first: they get the corner lots)
+      const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b"), L = len(e), ux = (bx - ax) / L, uz = (bz - az) / L, diag = isDiag(e);
+      for (const side of [-1, 1]) {
+        const nx = -uz * side, nz = ux * side; // (into this side's block)
+        bseed2++;
+        const H = (q: number) => hash(bseed2 * 7.13 + q + 500, bseed2 * 1.7 + q * 0.37);
+        // (faces the road: exactly, along a diagonal; otherwise the nearest of the four directions)
+        const face: [number, number] = diag ? [-nx, -nz] : Math.abs(nx) >= Math.abs(nz) ? [-Math.sign(nx), 0] : [0, -Math.sign(nz)];
+        const signStart = Math.floor(H(99) * 24);
+        let signCount = 0, prevColor = "";
+        const put = (P: Pt[], front: number, plain: boolean, italy = false) => {
+          const rc = bbox(P), [, mz] = P.reduce((a, p) => [a[0] + p[0] / P.length, a[1] + p[1] / P.length], [0, 0]);
+          const tier = tierAt(mz);
+          const hRaw = tier === 0 ? 4.8 + H(k + 50) * 4.9 : tier === 1 ? 5 + H(k + 50) * 11 : 12 + H(k + 50) * H(k + 90) * 42;
+          const h = Math.round(hRaw * 2) / 2;
+          const signs = tier === 0 ? SIGNS_LOW : tier === 1 ? SIGNS_MID : SIGNS_HIGH;
+          const name = signs[(signStart + signCount++) % signs.length];
+          const pal = h > 20 ? TIER_TOWERS[tier] : TIER_WALLS[tier];
+          let ci = Math.floor(H(k + 85) * pal.length);
+          if (pal[ci] === prevColor) ci = (ci + 1 + Math.floor(H(k + 86) * (pal.length - 1))) % pal.length;
+          prevColor = pal[ci];
+          const kind = h > 20 ? "tower" : "building";
+          const b: Box = {
+            ...(plain ? box((rc.minX + rc.maxX) / 2, (rc.minZ + rc.maxZ) / 2, rc.maxX - rc.minX, rc.maxZ - rc.minZ, h, kind) : polyBox(P, h, kind)),
+            color: pal[ci], windows: true, face, front: h > 20 ? "lobby" : "shop", ...(front >= 3 ? { sign: name } : {}),
+          };
+          if (italy && kind === "building") { // (R4: Little Italy: warm walls, Italian-ish names, the dressing; its mirror is Chinatown)
+            b.color = ITALY_WALLS[italyN % ITALY_WALLS.length];
+            b.sign = ITALY_SHOPS[italyN % ITALY_SHOPS.length];
+            b.italy = true; italyN++;
+          }
+          boxes.push(b); placed.push(rc); placedB.push(b);
+          if (h <= 7 && H(k + 60) < 0.35) roofLoot.push([b, h]);
+        };
+        for (let t = diag ? 0 : -8; t < L + (diag ? 0 : 8);) { // (a diagonal's row stops at its ends: past them is another block)
+          const tier = tierAt(az + uz * t);
+          const [wMin, wMax] = [[6, 11], [7, 13], [9, 15]][tier];
+          const w = wMin + H(++k) * (wMax - wMin);
+          let step = 0;
+          // (R4: every building its own setback; in Little Italy a café stands well back for its tables)
+          const mid = az + uz * (t + w / 2), inDist = e.name === "Leftovers Avenue" && mid > DZ0 && mid < DZ1;
+          const cafe = inDist && H(k + 7) < 0.55;
+          const sb = cafe ? 6.5 : PW + [0, 0, 0.5, 1, 2][Math.floor(H(k + 8) * 5)] * (inDist ? 0.5 : 1);
+          const off = e.hw + sb;
+          const at = (u: number, v: number): Pt => [ax + ux * u + nx * v, az + uz * u + nz * v];
+          // (quick outs: this spot is on the east half, or its front corner is inside a building already)
+          const [fx0, fz0] = at(t + 0.3, off + 0.3);
+          if (fx0 > -0.3 || inBuilding(fx0, fz0)) { t += 0.5; continue; }
+          for (let ww = w; ww >= 3 && !step; ww -= 1.5) {
+            for (let d = [10, 11, 12][tier]; d >= 4 && !step; d -= 1) {
+              const P0 = [at(t, off), at(t + ww, off), at(t + ww, off + d), at(t, off + d)];
+              const P = carve(P0);
+              if (!shapely(P) || !fits(P)) continue;
+              // (a plain row building stays a plain box; turned or cut ones are angled footprints)
+              const plain = P.length === 4 && P.every(([x0, z0], q) => { const [x1, z1] = P[(q + 1) % 4]; return Math.abs(x1 - x0) < 1e-6 || Math.abs(z1 - z0) < 1e-6; });
+              put(P, ww, plain, inDist);
+              step = ww;
+              if (cafe && ww >= 5) {
+                // the café's terrace: tables under umbrellas, and a street stall in front of some
+                const us = ww >= 8 ? [0.22, 0.78] : [0.3];
+                for (const f of us) {
+                  const [tx, tz] = at(t + ww * f, e.hw + 4.6);
+                  boxes.push({ ...box(tx, tz, 1.0, 1.0, 0.75, "table"), color: "#f4f1ea" });
+                  decor.push({ kind: "umbrella", x: tx, z: tz, text: "it" });
+                }
+                {
+                  const kind = STALLS[stallN++ % STALLS.length], [sx, sz] = at(t + ww * (ww >= 8 ? 0.5 : 0.75), e.hw + 4.4), yaw = Math.atan2(-nx, -nz);
+                  const [w2, d2, h2] = kind === "deli" ? [1.4, 0.8, 1.3] : [1.6, 0.9, 1.05];
+                  prop(kind, sx, sz, yaw, w2, d2, h2);
+                  propLog.push([kind, sx, sz, yaw, w2, d2, h2]);
+                }
+              }
+            }
+          }
+          t += step || 0.5;
+        }
+        // street life along this side: loot on the pavement, a bin or a booth against the buildings, a hydrant
+        for (let t = 6; t < L - 3; t += 17) {
+          const px = ax + ux * t + nx * (e.hw + 1.3), pz = az + uz * t + nz * (e.hw + 1.3);
+          if (px < -0.5 && cellAt(px, pz) > 1 && !inBuilding(px, pz, 0.5)) spawnAt(px, pz, "street", 0.15);
+        }
+        if (!diag && L > 12) {
+          const kinds: [PropKind, number, number, number][] = [["bin", 0.7, 0.7, 1.0], ["newsbox", 0.6, 0.5, 1.0], ["phone", 1.1, 1.1, 2.3], ["vending", 1.2, 0.9, 1.9], ["bin", 0.7, 0.7, 1.0]];
+          const pk = kinds[Math.floor(H(k + 11) * kinds.length)];
+          const t = 5 + H(k + 12) * (L - 10), off = e.hw + PW - 0.2 - pk[2] / 2;
+          const px = ax + ux * t + nx * off, pz = az + uz * t + nz * off;
+          if (px < -1 && cellAt(px, pz) > 1.5 && !inBuilding(px, pz, 0.8) && !keepOut.some((q) => inRect(q, px, pz, 1))) {
+            prop(pk[0], px, pz, Math.atan2(-nx, -nz), pk[1], pk[2], pk[3]);
+            propLog.push([pk[0], px, pz, Math.atan2(-nx, -nz), pk[1], pk[2], pk[3]]);
+          }
+        }
+        if (H(k + 13) < 0.6) {
+          const t = 3 + H(k + 14) * Math.max(0, L - 6), hx = ax + ux * t + nx * (e.hw + 0.4), hz = az + uz * t + nz * (e.hw + 0.4);
+          const clash = loot.some((q) => Math.hypot(q.x - hx, q.z - hz) < 1.5) || crosswalks.some((c) => inRect(c, hx, hz, 1));
+          if (hx < -0.5 && !clash && cellAt(hx, hz) > 0.1) boxes.push(box(hx, hz, 0.45, 0.45, 0.8, "hydrant"));
+        }
+        // walking routes along a diagonal's pavement (the street grid's route lines only run along x and z)
+        if (diag && ax + bx < 0) {
+          const chain: { x: number; z: number }[] = [];
+          for (let t = 3; t < L - 2; t += 4) {
+            const px = ax + ux * t + nx * (e.hw + 1.2), pz = az + uz * t + nz * (e.hw + 1.2);
+            if (cellAt(px, pz) > 0.8 && !inBuilding(px, pz, 0.4)) chain.push({ x: Math.round(px * 100) / 100, z: Math.round(pz * 100) / 100 });
+          }
+          if (chain.length > 1) navChains.push(chain);
+        }
+      }
+    }
+    // R4: a 3 m brick wall down the middle of the long low-end block (from the police station out to each avenue):
+    // the only ways from the fort bowl into town stay round the avenue ends, the same walk for every fort
+    // (buildings set back at different depths would otherwise leave gaps right through the block)
+    const midWall: Box[] = [];
+    {
+      const zc = MID_WALL_Z, xa = NEW_PRECINCT.maxX + 0.2, xb = NEW.inner - 4 - PW - 0.3; // (from the station's side: no short cut through the middle plot)
+      for (const sgn of [-1, 1]) midWall.push({ ...box(sgn * (xa + xb) / 2, zc, xb - xa, 0.5, 3, "wall"), color: "#8a4a3a", art: true });
+      for (const w of midWall) boxes.push(w);
+    }
+    // no sealed courtyards: flood the open ground from the Service Rd pavement; a pocket nobody can walk into
+    // loses the smallest building between it and the street (an alley appears), until there are none
+    {
+      const r = 0.45, free = new Uint8Array(NX * NZ);
+      for (let pass = 0; pass < 60; pass++) {
+        for (let c = 0; c < NX * NZ; c++) free[c] = dist[c] >= 0 ? 1 : 0;
+        // (each building blots out the cells it covers, its own outline grown by a body's radius)
+        for (const b of [...placedB, ...midWall]) {
+          const i0 = Math.max(0, Math.floor((b.x - b.w / 2 - r - X0) / CELL)), i1 = Math.min(NX - 1, Math.floor((b.x + b.w / 2 + r - X0) / CELL));
+          const j0 = Math.max(0, Math.floor((b.z - b.d / 2 - r - Z0) / CELL)), j1 = Math.min(NZ - 1, Math.floor((b.z + b.d / 2 + r - Z0) / CELL));
+          for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (inFoot(b, X0 + (i + 0.5) * CELL, Z0 + (j + 0.5) * CELL, r)) free[j * NX + i] = 0;
+        }
+        const seen = new Uint8Array(NX * NZ), q: number[] = [];
+        const s0 = Math.floor((NEW.gahookz + 5.5 - Z0) / CELL) * NX + Math.floor(NX / 2);
+        seen[s0] = 1; q.push(s0);
+        while (q.length) {
+          const c = q.pop()!, i = c % NX, j = (c - i) / NX;
+          for (const [a, b] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+            if (a < 0 || b < 0 || a >= NX || b >= NZ) continue;
+            const m = b * NX + a;
+            if (free[m] && !seen[m]) { seen[m] = 1; q.push(m); }
+          }
+        }
+        // the first sealed pocket
+        let pocket = -1;
+        for (let c = 0; c < NX * NZ && pocket < 0; c++) if (free[c] && !seen[c]) pocket = c;
+        if (pocket < 0) break;
+        // the smallest building next to it (flood the pocket, collect the buildings it touches)
+        const cells = [pocket], inP = new Uint8Array(NX * NZ); inP[pocket] = 1;
+        const touch = new Set<number>();
+        while (cells.length) {
+          const c = cells.pop()!, i = c % NX, j = (c - i) / NX, x = X0 + (i + 0.5) * CELL, z = Z0 + (j + 0.5) * CELL;
+          placedB.forEach((b, bi) => { if (inFoot(b, x, z, r + 0.6)) touch.add(bi); });
+          for (const [a, b] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+            if (a < 0 || b < 0 || a >= NX || b >= NZ) continue;
+            const m = b * NX + a;
+            if (free[m] && !inP[m]) { inP[m] = 1; cells.push(m); }
+          }
+        }
+        const pick = [...touch].sort((a, b) => placedB[a].w * placedB[a].d - placedB[b].w * placedB[b].d)[0];
+        if (pick === undefined) break;
+        const gone = placedB[pick];
+        placed.splice(pick, 1); placedB.splice(pick, 1);
+        boxes.splice(boxes.indexOf(gone), 1);
+        for (let n = roofLoot.length - 1; n >= 0; n--) if (roofLoot[n][0] === gone) roofLoot.splice(n, 1);
+      }
+    }
+    for (const [b, h] of roofLoot) {
+      const [cx, cz] = b.poly ? b.poly.reduce((a, p) => [a[0] + p[0] / b.poly!.length, a[1] + p[1] / b.poly!.length], [0, 0]) : [b.x, b.z];
+      spawnAt(cx, cz, "rooftop", h);
+    }
+    // R3: street-name signs: a green two-blade sign on a pole at a corner of every junction, one blade along each road
+    for (const n of nodes) {
+      if (n.ctl === "end" || n.x > 0.5) continue;
+      const arms = lines.filter((e) => e.a === n.id || e.b === n.id).map((e) => {
+        const [qx, qz] = e.a === n.id ? endP(e, "b") : endP(e, "a"), l = Math.hypot(qx - n.x, qz - n.z);
+        return { e, ux: (qx - n.x) / l, uz: (qz - n.z) / l };
+      });
+      if (n.ctl === "round") { // (a roundabout entry: the arm's own name and the roundabout's)
+        const a0 = arms[0];
+        if (!a0) continue;
+        const rx = -a0.uz, rz = a0.ux, x = n.x + a0.ux * (RING.r1 - RING.r + 7) + rx * (a0.e.hw + 1.4), z = n.z + a0.uz * (RING.r1 - RING.r + 7) + rz * (a0.e.hw + 1.4);
+        if (cellAt(x, z) > 0.4 && !inBuilding(x, z, 0.6)) decor.push({ kind: "streetsign", x, z, yaw: Math.atan2(a0.ux, a0.uz), yaw2: Math.atan2(rx, rz), text: `${a0.e.name!.toUpperCase()}|THE SPIN CYCLE` });
+        continue;
+      }
+      // two arms with different names, at a corner between them
+      let done = false;
+      for (const A of arms) for (const B of arms) {
+        if (done || A === B || A.e.name === B.e.name) continue;
+        const x = n.x + A.ux * (B.e.hw + 1.3) + B.ux * (A.e.hw + 1.3), z = n.z + A.uz * (B.e.hw + 1.3) + B.uz * (A.e.hw + 1.3);
+        if (cellAt(x, z) <= 0.4 || inBuilding(x, z, 0.6) || crosswalks.some((c) => inRect(c, x, z, 0.3))) continue;
+        decor.push({ kind: "streetsign", x, z, yaw: Math.atan2(A.ux, A.uz), yaw2: Math.atan2(B.ux, B.uz), text: `${A.e.name!.toUpperCase()}|${B.e.name!.toUpperCase()}` });
+        done = true;
+      }
+    }
+    // a few stashes in the courtyards behind the rows (the open ground no building took)
+    for (let n = 0, tries = 0; n < 24 && tries < 4000; tries++) {
+      const x = -HALF + 6 + hash(tries, 3.1) * (2 * HALF - 12), z = Z0 + 6 + hash(7.7, tries) * (HALF - Z0 - 12);
+      if (x > -0.5 || cellAt(x, z) < SW + 6 || inBuilding(x, z, 1.5) || keepOut.some((q) => inRect(q, x, z, 1))) continue;
+      spawnAt(x, z, "alley", 0.15);
+      n++;
+    }
+    // ---- the mirror: everything on the west half, flipped onto the east half (same shapes, heights, loot spots,
+    //      bins and routes, so neither side's forts get a better half of town; colours and shop names differ) ----
+    const swapName: Record<string, string> = { "LEFTY LANE": "RIGHTY LANE", "LEFTOVERS AVENUE": "WRITE-OFF AVENUE", "DODGY CUT-THROUGH": "BANK RUN" };
+    for (const [a, b] of Object.entries(swapName)) swapName[b] = a;
+    let chinaN = 0;
+    for (const b of [...placedB]) {
+      const base = b.y - b.h / 2, tier = tierAt(b.z);
+      if (b.italy) { // (R4: Little Italy's mirror image: Chinatown, shop for shop)
+        const m = b.poly ? polyBox(b.poly.map(([x, z]) => [-x, z] as Pt), b.h, b.kind, base) : box(-b.x, b.z, b.w, b.d, b.h, b.kind, base);
+        const [name, sign2, wall, roof] = CHINA_SHOPS[chinaN++ % CHINA_SHOPS.length];
+        boxes.push({ ...m, color: wall, windows: true, face: [-(b.face?.[0] ?? 0), b.face?.[1] ?? 0], front: b.front, sign: name, ...(b.poly ? {} : { china: { roof, sign2 } }) });
+        continue;
+      }
+      const m: Box = b.poly ? polyBox(b.poly.map(([x, z]) => [-x, z] as Pt), b.h, b.kind, base) : box(-b.x, b.z, b.w, b.d, b.h, b.kind, base);
+      const pal = b.h > 20 ? TIER_TOWERS[tier] : TIER_WALLS[tier];
+      const signs = tier === 0 ? SIGNS_LOW : tier === 1 ? SIGNS_MID : SIGNS_HIGH;
+      const j = Math.floor(hash(-b.x, b.z * 1.3) * 1000);
+      boxes.push({ ...m, color: pal[(pal.indexOf(b.color!) + 1 + (j % (pal.length - 1))) % pal.length], windows: true, face: [-(b.face?.[0] ?? 0), b.face?.[1] ?? 0], front: b.front, ...(b.sign ? { sign: signs[(signs.indexOf(b.sign) + 11 + (j % 7)) % signs.length] } : {}) });
+    }
+    const blocked = (x: number, z: number) => keepOut.some((q) => inRect(q, x, z, 0.8)); // (the taco cart isn't mirrored)
+    for (const b of boxes.slice(boxStart)) if ((b.kind === "hydrant" || b.kind === "table") && b.x < -0.5 && !blocked(-b.x, b.z)) boxes.push({ ...box(-b.x, b.z, b.w, b.d, b.h, b.kind), ...(b.kind === "table" ? { color: "#8e1f2e" } : {}) });
+    // (R4: Little Italy's stalls become Chinatown's, worth the same: pizza and gelato carts = dumpling steamers,
+    //  souvenirs = souvenirs, the deli counter = the seafood tank)
+    const TWIN: Partial<Record<PropKind, PropKind>> = { pizzacart: "steamer", gelato: "steamer", ricordi: "trinkets", deli: "fishtank" };
+    for (const [kind, x, z, yaw, w, d, h] of propLog) if (!blocked(-x, z)) prop(TWIN[kind] ?? kind, -x, z, -yaw, w, d, h);
+    for (const l of loot.slice(lootStart)) if (l.x < -0.5 && (l.y > 0.5 || !blocked(-l.x, l.z))) spawnAt(-l.x, l.z, l.zone, l.y);
+    for (const dd of decor.slice(decorStart)) if (dd.kind === "umbrella" && dd.x < -0.5) decor.push({ ...dd, x: -dd.x, text: "cn" });
+    for (const dd of decor.slice(decorStart)) {
+      if (dd.kind !== "streetsign" || dd.x > -0.5) continue;
+      const text = (dd.text ?? "|").split("|").map((t) => swapName[t] ?? t).join("|");
+      decor.push({ ...dd, x: -dd.x, yaw: -(dd.yaw ?? 0), yaw2: -(dd.yaw2 ?? 0), text });
+    }
+    for (const ch of navChains.slice(chainStart)) navChains.push(ch.map((q) => ({ x: -q.x, z: q.z })));
+  };
+  // (R2: the road test builds its own plain blocks and skips every landmark below, down to Tent Town)
+  let bank: NonNullable<ArenaLayout["bank"]> | undefined, statue: NonNullable<ArenaLayout["statue"]> | undefined, resto: NonNullable<ArenaLayout["resto"]> | undefined;
+  let club: NonNullable<ArenaLayout["club"]> | undefined, chinatown: NonNullable<ArenaLayout["chinatown"]> | undefined, littleItaly: NonNullable<ArenaLayout["chinatown"]> | undefined;
+  const pumpBoxes: number[] = [];
+  const pit = R(-87, -59, -85, -52);
+  /** the build yard (classic: the rail yard's south end; R2: the park) */
+  const T = R2 ? { x: 0, z: -8 } : { x: -97.5, z: -62 };
+  const dock = R(-99, -96, 8, 16);
+  if (R2) {
+    fillRoadTest();
+    // R4: the two themed streets: their gates (just inside each end), the lights strung across, the parade route
+    const z0 = NEW.gahookz + 4 + 6, z1 = -4 - 6, I = NEW.inner;
+    const street = (x: number) => R(x - 4, x + 4, z0 - 6, z1 + 6);
+    const rows: number[] = [];
+    for (let z = z0 + 4; z < z1 - 3; z += 6.5) if (Math.abs(z - NEW.trolley) > 8) rows.push(Math.round(z * 10) / 10);
+    const gates = (x: number) => [{ x, z: z0, w: 12 }, { x, z: z1, w: 12 }];
+    for (const x of [-I, I]) for (const g of gates(x)) for (const sx of [-1, 1]) boxes.push({ ...box(g.x + sx * (g.w / 2 - 0.2), g.z, 0.6, 0.6, 7.2, "wall"), hide: true });
+    chinatown = { street: street(I), gates: gates(I), lanternRows: rows, route: [{ x: I, z: z0 - 4 }, { x: I, z: z1 + 4.5 }] };
+    littleItaly = { street: street(-I), gates: gates(-I), lanternRows: rows, route: [{ x: -I, z: z0 - 4 }, { x: -I, z: z1 + 4.5 }] };
+  }
+  else {
   for (const s of specs) fillBlock(s);
   // =================================================================================================
   // C5c: UPTOWN LANDMARKS: the Trashington Bank (where the country club was), the Mayor's Golden Statue
   // (Mile West), and a golden stash in each (Mile East plaza too).
   // =================================================================================================
-  let bank: NonNullable<ArenaLayout["bank"]>, statue: NonNullable<ArenaLayout["statue"]>, resto: NonNullable<ArenaLayout["resto"]>;
   {
     // ---- the Trashington Bank: a marble hall you can walk into: lobby, teller counter, the back corridor,
     // the vault (a round door: drill it, or open it with the manager's keycard), the manager's office
@@ -979,8 +1540,6 @@ export function buildTrashington(): ArenaLayout {
   // office (the safe holds every cover charge paid today). Up top: the smokestack and a roof lounge with a dumpster
   // hot tub and the Golden Record.
   // =================================================================================================
-  let club: NonNullable<ArenaLayout["club"]>;
-  const pumpBoxes: number[] = [];
   {
     const blk = R(-87, -59, -44, -4);
     ground(blk, "sidewalk");
@@ -1113,7 +1672,6 @@ export function buildTrashington(): ArenaLayout {
   // C5b: CHINATOWN: the Market Row street by the canal (x 69..75, z -21..21). Two rows of shophouses face
   // it from the east (curved tiled roofs, lanterns, hanging signs), street stalls in front of them, the
   // market hall's side on the west, a red gate at each end and lanterns strung across the road.
-  let chinatown: NonNullable<ArenaLayout["chinatown"]>;
   {
     const street = R(69, 75, -21, 21);
     const SHOPS: [string, string, string, string][] = [
@@ -1153,7 +1711,6 @@ export function buildTrashington(): ArenaLayout {
   }
 
   // C4b: THE PIT: a small skate park in the Yards (ramps you can run up, walls to tag, spray cans lying about)
-  const pit = R(-87, -59, -85, -52);
   {
     const inner = R(pit.minX + 4, pit.maxX - 4, pit.minZ + 4, pit.maxZ - 4);
     // pavement round the edge (4 strips, so nothing overlaps the concrete: no flicker)
@@ -1269,7 +1826,6 @@ export function buildTrashington(): ArenaLayout {
   blocks.push({ name: "Rail yard", rect: R(-115, -95, -115, 115), tier: 1, open: ["N", "S", "E", "W"] });
   blocks.push({ name: "Canal side", rect: R(95, 115, -115, 115), tier: 1, open: ["N", "S", "E", "W"] });
   // --- build yard (south end): an open lot. The movement tests + tutorials use it, so it stays clear. ---
-  const T = { x: -97.5, z: -62 };
   boxes.push(box(-110, -91.5, 1.3, 1.3, 2.4, "portaloo"));
   boxes.push(box(-104, -91.5, 2.0, 1.4, 1.6, "mixer"));
   boxes.push(box(-99, -91.5, 1.2, 1.2, 0.5, "pallet"));
@@ -1277,7 +1833,6 @@ export function buildTrashington(): ArenaLayout {
   for (const [x, z] of [[-110, -50], [-102, -78]]) spawnAt(x, z, "yard", 0.15);
   // --- the junkyard (C4b: the old tutorial ledges and crawl tunnel are gone; the browser tests climb the
   //     freight loading dock and crawl the sewer pipe instead) ---
-  const dock = R(-99, -96, 8, 16);
   boxes.push({ ...box((dock.minX + dock.maxX) / 2, (dock.minZ + dock.maxZ) / 2, dock.maxX - dock.minX, dock.maxZ - dock.minZ, 1.4, "platform"), color: "#6b5a4a", sign: "FREIGHT DOCK", face: [1, 0] });
   spawnAt(-97.5, 12, "yard", 1.4);
   for (const [x, z, w, d, h] of [[-113, -37, 3, 3, 1.6], [-99, -39, 2, 4, 1.1], [-113, -25, 3, 2, 2.2], [-98.5, -22, 2.4, 2, 1.3], [-100, -12, 2, 3, 1.8], [-112, -9, 4, 2, 1.3]]) boxes.push(box(x, z, w, d, h, "junk"));
@@ -1357,63 +1912,323 @@ export function buildTrashington(): ArenaLayout {
   }
   for (const [x, z] of [[97, -100], [97, -40], [114, 10]]) spawnAt(x, z, "street", 0.15);
 
+  } // (end of the classic city's blocks and landmarks)
+
   // =================================================================================================
   // TENT TOWN under the highway, between the railway and the canal: four open fort yards (no walls:
   // walls are bought in the upgrades), evenly spaced, junk clusters between them, the broken ramp lookout
   // =================================================================================================
-  ground(R(-95, 95, -115, -93), "plaza", "#9a8a6e");
-  blocks.push({ name: "Tent Town", rect: R(-95, 95, -115, -93), tier: 0, open: ["N", "S", "E", "W"] });
-  // the highway deck on pillars (10 m up), right across, over the railway and the canal too
-  boxes.push({ ...box(0, (HIGHWAY.z0 + HIGHWAY.z1) / 2, 232, HIGHWAY.z1 - HIGHWAY.z0, HIGHWAY.h, "slab", HIGHWAY.y), color: "#8e8a94", sign: "INTERSTATE 0", face: [0, 1] });
-  scenery.push({ kind: "highway", x: 0, z: (HIGHWAY.z0 + HIGHWAY.z1) / 2, w: 232, d: HIGHWAY.z1 - HIGHWAY.z0, h: HIGHWAY.y + HIGHWAY.h });
-  for (const x of [-47.5, 0, 47.5]) for (const z of [-98.5, -107.5]) boxes.push({ ...box(x, z, 1.8, 1.8, HIGHWAY.y, "wall"), color: "#9aa3b5" });
-  for (const [x, z] of [[-113.5, -98.5], [-113.5, -107.5], [106, -99], [106, -104]]) boxes.push({ ...box(x, z, 1.6, 1.6, HIGHWAY.y, "wall"), color: "#9aa3b5" }); // bridge piers
-  // the broken ramp: a stepped concrete ramp you can run up to a lookout that ends in mid-air
-  for (let i = 1; i <= 26; i++) boxes.push({ ...box(-12 + (i - 0.5) * 0.5, -112.5, 0.5, 1.8, i * 0.3, "ramp-step"), color: "#9aa3b5" });
-  boxes.push({ ...box(2.5, -112.5, 3, 1.8, 7.8, "platform"), color: "#9aa3b5" });
-  spawnAt(2.5, -112.5, "rooftop", 7.8);
   const forts: FortLot[] = [];
-  const C = COMPOUND;
-  C.xs.forEach((cx, slot) => {
-    const fortBox = box(cx, C.z0 + 3.5, 2.4, 1.9, 1.5, "fort");
-    boxes.push(fortBox);
-    const zone = R(cx - C.half, cx + C.half, C.z0, C.z1);
-    forts.push({ slot, x: cx, z: fortBox.z, padX: cx, padZ: C.z0 + 9.5, yaw: 0, zone, backX: cx, backZ: C.z0 - 2 });
-  });
-  // junk clusters between the yards (cover + climbing, so raids aren't a straight run)
-  const junk = (x: number, z: number, w: number, d: number, h: number, kind: Box["kind"] = "junk", color?: string) => boxes.push({ ...box(x, z, w, d, h, kind), ...(color ? { color } : {}) });
-  for (const cx of [-47.5, 47.5]) {
-    junk(cx - 5, -101, 3, 2.4, 1.4, "junk", "#3d6fb5"); // tents
-    junk(cx + 4.5, -104, 2.6, 2.6, 1.3, "junk", "#6aa84f");
-    junk(cx - 3, -110.5, 2, 2, 1.1, "crate");
-    junk(cx + 5, -97.5, 1.2, 1.2, 0.9, "crate");
-    junk(cx - 6, -95.5, 1.2, 1.2, 0.5, "pallet");
-    prop("bin", cx + 2.5, -99.5, 0, 0.7, 0.7, 1.0); // burning barrel
-    spawnAt(cx, -103, "yard", 0.15); spawnAt(cx - 4, -106.5, "yard", 0.15);
+  let southZ = -HALF;
+  const lots: { name: string; rect: Rect }[] = [];
+  if (R2) {
+    // ---- R3: the fort bowl under a curved viaduct. The four yards sit on a curve (the middle two deeper, so all
+    //      four are the same walk from the roundabout), evenly spaced across, the outer two 7.5 m from the side
+    //      walls. The viaduct is looks only: no deck to stand on, no ramp; just its pillars on the ground. ----
+    const F = NEW_FORTS, top = NEW.gahookz - 4; // (the lane's south kerb)
+    southZ = Math.min(...F.zs) - F.depth / 2 - 9;
+    ground(R(-HALF, HALF, southZ, top), "plaza", "#9a8a6e");
+    blocks.push({ name: "Tent Town", rect: R(-HALF, HALF, southZ, top), tier: 0, open: ["N", "S", "E", "W"] });
+    F.xs.forEach((cx, slot) => {
+      const zc = F.zs[slot], z0 = zc - F.depth / 2, z1 = zc + F.depth / 2;
+      const fortBox = box(cx, z0 + 3.5, 2.4, 1.9, 1.5, "fort");
+      boxes.push(fortBox);
+      forts.push({ slot, x: cx, z: fortBox.z, padX: cx, padZ: z0 + 9.5, yaw: 0, zone: R(cx - F.half, cx + F.half, z0, z1), backX: cx, backZ: z0 - 2 });
+    });
+    // the viaduct: a circle through the four yards, symmetric about the middle (centre (0, c) north of town)
+    const [xo, xi] = [F.xs[1], F.xs[3]], [zo, zi] = [F.zs[1], F.zs[3]];
+    const c = (xo * xo + zo * zo - xi * xi - zi * zi) / (2 * (zo - zi)), Rv = Math.hypot(xi, zi - c);
+    const curveZ = (x: number) => c - Math.sqrt(Math.max(0, Rv * Rv - x * x));
+    const segs = 24, x0 = -HALF - 2, x1 = HALF + 2;
+    for (let q = 0; q < segs; q++) {
+      const xa = x0 + ((x1 - x0) * q) / segs, xb = x0 + ((x1 - x0) * (q + 1)) / segs, za = curveZ(xa), zb = curveZ(xb);
+      scenery.push({ kind: "viaduct", x: (xa + xb) / 2, z: (za + zb) / 2, w: 14, d: Math.hypot(xb - xa, zb - za) + 0.3, h: HIGHWAY.y, yaw: Math.atan2(xb - xa, zb - za) });
+    }
+    // pillars in pairs either side of the deck's middle line, between the yards (solid, on the ground)
+    const between = [-HALF + 2, (F.xs[0] + F.xs[2]) / 2, 0, (F.xs[3] + F.xs[1]) / 2, HALF - 2];
+    for (const x of between) {
+      const z = curveZ(x), t = Math.atan2(x, c - z); // (the curve's normal points at its centre)
+      for (const o of [-4.5, 4.5]) boxes.push({ ...box(x + Math.sin(t) * o, z + Math.cos(t) * o, 1.8, 1.8, HIGHWAY.y, "wall"), color: "#9aa3b5", hide: true });
+      scenery.push({ kind: "pillar", x, z, yaw: t, h: HIGHWAY.y });
+    }
+    // junk between the yards: tents, crates, burning barrels (cover for raids), the same round every yard
+    const junk = (x: number, z: number, w: number, d: number, h: number, kind: Box["kind"] = "junk", color?: string) => boxes.push({ ...box(x, z, w, d, h, kind), ...(color ? { color } : {}) });
+    const gaps = [(F.xs[0] + F.xs[2]) / 2, 0, (F.xs[3] + F.xs[1]) / 2];
+    gaps.forEach((gx, q) => {
+      const gz = curveZ(gx);
+      junk(gx - 5, gz + 4, 3, 2.4, 1.4, "junk", ["#3d6fb5", "#e14b4b", "#6aa84f"][q]);
+      junk(gx + 5, gz - 3, 2.6, 2.6, 1.3, "junk", ["#ffcf3a", "#43c7a6", "#9f5fd6"][q]);
+      junk(gx - 2, gz - 6, 2, 2, 1.1, "crate");
+      junk(gx + 3, gz + 6, 1.2, 1.2, 0.9, "crate");
+      prop("bin", gx + 1.5, gz + 1, 0, 0.7, 0.7, 1.0); // burning barrel
+      spawnAt(gx, gz - 2, "yard", 0.15); spawnAt(gx - 4, gz + 7, "yard", 0.15);
+    });
+    for (const x of [-HALF + 4, HALF - 4]) spawnAt(x, curveZ(x) + 6, "yard", 0.15);
+    for (const x of [-99.5, -66.33, -33.17, 0, 33.17, 66.33, 99.5]) decor.push({ kind: "streetlight", x, z: top - 1.2 });
+    // the south fence (the squat's tenement stands in it, between the middle yards)
+    boxes.push(box(0, southZ - 0.5, HALF * 2 + 2, 1, 3, "fence"));
+    // THE LANDMARK LOTS north of Snob Row: big empty plots behind hoardings, for Blake to place the landmarks
+    const lz0 = NEW.snob + 4 + SW, lz1 = HALF - 2;
+    const spans: [string, number, number][] = [["Lot W2", -111, -71], ["Lot W1", -67, -24], ["Lot C", -20, 20], ["Lot E1", 24, 67], ["Lot E2", 71, 111]];
+    for (const [name, a, b] of spans) {
+      const r = R(a, b, lz0, lz1);
+      lots.push({ name, rect: r });
+      const ply = "#c8a46a", hh = 2.6, t = 0.3;
+      const wall = (x: number, z: number, w: number, d: number, extra: Partial<Box> = {}) => boxes.push({ ...box(x, z, w, d, hh, "wall"), color: ply, ...extra });
+      wall((a + b) / 2, lz0 + t / 2, b - a, t, { sign: "COMING SOON: SOMETHING EXPENSIVE", face: [0, -1] });
+      wall((a + b) / 2, lz1 - t / 2, b - a, t);
+      wall(a + t / 2, (lz0 + lz1) / 2, t, lz1 - lz0 - 2 * t);
+      wall(b - t / 2, (lz0 + lz1) / 2, t, lz1 - lz0 - 2 * t);
+    }
+  } else {
+    ground(R(-95, 95, -115, -93), "plaza", "#9a8a6e");
+    blocks.push({ name: "Tent Town", rect: R(-95, 95, -115, -93), tier: 0, open: ["N", "S", "E", "W"] });
+    // the highway deck on pillars (10 m up), right across, over the railway and the canal too
+    boxes.push({ ...box(0, (HIGHWAY.z0 + HIGHWAY.z1) / 2, 232, HIGHWAY.z1 - HIGHWAY.z0, HIGHWAY.h, "slab", HIGHWAY.y), color: "#8e8a94", sign: "INTERSTATE 0", face: [0, 1] });
+    scenery.push({ kind: "highway", x: 0, z: (HIGHWAY.z0 + HIGHWAY.z1) / 2, w: 232, d: HIGHWAY.z1 - HIGHWAY.z0, h: HIGHWAY.y + HIGHWAY.h });
+    for (const x of [-47.5, 0, 47.5]) for (const z of [-98.5, -107.5]) boxes.push({ ...box(x, z, 1.8, 1.8, HIGHWAY.y, "wall"), color: "#9aa3b5" });
+    for (const [x, z] of [[-113.5, -98.5], [-113.5, -107.5], [106, -99], [106, -104]]) boxes.push({ ...box(x, z, 1.6, 1.6, HIGHWAY.y, "wall"), color: "#9aa3b5" }); // bridge piers
+    // the broken ramp: a stepped concrete ramp you can run up to a lookout that ends in mid-air
+    for (let i = 1; i <= 26; i++) boxes.push({ ...box(-12 + (i - 0.5) * 0.5, -112.5, 0.5, 1.8, i * 0.3, "ramp-step"), color: "#9aa3b5" });
+    boxes.push({ ...box(2.5, -112.5, 3, 1.8, 7.8, "platform"), color: "#9aa3b5" });
+    spawnAt(2.5, -112.5, "rooftop", 7.8);
+    const C = COMPOUND;
+    C.xs.forEach((cx, slot) => {
+      const fortBox = box(cx, C.z0 + 3.5, 2.4, 1.9, 1.5, "fort");
+      boxes.push(fortBox);
+      const zone = R(cx - C.half, cx + C.half, C.z0, C.z1);
+      forts.push({ slot, x: cx, z: fortBox.z, padX: cx, padZ: C.z0 + 9.5, yaw: 0, zone, backX: cx, backZ: C.z0 - 2 });
+    });
+    // junk clusters between the yards (cover + climbing, so raids aren't a straight run)
+    const junk = (x: number, z: number, w: number, d: number, h: number, kind: Box["kind"] = "junk", color?: string) => boxes.push({ ...box(x, z, w, d, h, kind), ...(color ? { color } : {}) });
+    for (const cx of [-47.5, 47.5]) {
+      junk(cx - 5, -101, 3, 2.4, 1.4, "junk", "#3d6fb5"); // tents
+      junk(cx + 4.5, -104, 2.6, 2.6, 1.3, "junk", "#6aa84f");
+      junk(cx - 3, -110.5, 2, 2, 1.1, "crate");
+      junk(cx + 5, -97.5, 1.2, 1.2, 0.9, "crate");
+      junk(cx - 6, -95.5, 1.2, 1.2, 0.5, "pallet");
+      prop("bin", cx + 2.5, -99.5, 0, 0.7, 0.7, 1.0); // burning barrel
+      spawnAt(cx, -103, "yard", 0.15); spawnAt(cx - 4, -106.5, "yard", 0.15);
+    }
+    for (const [x, z, w, d, h, c] of [[-10, -100.5, 3, 2.4, 1.4, "#e14b4b"], [9, -100, 2.6, 2.6, 1.3, "#ffcf3a"], [5, -107, 3, 2, 1.1, "#43c7a6"], [-7, -107.5, 2, 2, 1.5, ""], [10, -109.5, 1.2, 1.2, 0.9, ""]] as [number, number, number, number, number, string][]) junk(x, z, w, d, h, c ? "junk" : "crate", c || undefined);
+    for (const [x, z] of [[-3, -103], [4, -97], [-8, -104]]) spawnAt(x, z, "yard", 0.15);
+    for (const [x, z] of [[-36, -97], [36, -97], [-86, -97], [86, -97]]) spawnAt(x, z, "street", 0.15);
+    for (const x of [-84, -47.5, -12, 12, 47.5, 84]) decor.push({ kind: "streetlight", x, z: -94.2 });
   }
-  for (const [x, z, w, d, h, c] of [[-10, -100.5, 3, 2.4, 1.4, "#e14b4b"], [9, -100, 2.6, 2.6, 1.3, "#ffcf3a"], [5, -107, 3, 2, 1.1, "#43c7a6"], [-7, -107.5, 2, 2, 1.5, ""], [10, -109.5, 1.2, 1.2, 0.9, ""]] as [number, number, number, number, number, string][]) junk(x, z, w, d, h, c ? "junk" : "crate", c || undefined);
-  for (const [x, z] of [[-3, -103], [4, -97], [-8, -104]]) spawnAt(x, z, "yard", 0.15);
-  for (const [x, z] of [[-36, -97], [36, -97], [-86, -97], [86, -97]]) spawnAt(x, z, "street", 0.15);
-  for (const x of [-84, -47.5, -12, 12, 47.5, 84]) decor.push({ kind: "streetlight", x, z: -94.2 });
 
   // =================================================================================================
   // THE POLICE PRECINCT, Market Row by the east road and the canal, front door on the south street
   // =================================================================================================
   const station = (() => {
-    const P0 = LM.precinct, PD_H = 4.5, D = P0.maxZ - P0.minZ, zf = P0.minZ;
+    if (R2) {
+      // ============ R7: the grand station, all the way from Shopping Trolley Terrace to Gahookz Ghetto Lane (the pawn shop
+      // moved out to the sides). GROUND FLOOR: the lobby (the receptionist's desk, the stairs up), a hallway down the
+      // middle, two interrogation rooms (one-way mirrors onto the hallway), the breakroom, booking, and the holding cell
+      // tucked away at the back. FIRST FLOOR (walkable): cubicles and partitions, offices, the chief's corner office and
+      // the evidence room (your confiscated loot, guarded). The floors above are looks only.
+      const P0 = NEW_PRECINCT, H = 4.5, UY = 4.8, UT = 9.0, D = P0.maxZ - P0.minZ, zf = P0.maxZ, x0 = P0.minX, x1 = P0.maxX;
+      const V = (v: number) => zf - v;
+      const RV = (xa: number, xb: number, va: number, vb: number) => R(xa, xb, Math.min(V(va), V(vb)), Math.max(V(va), V(vb)));
+      const wc = "#d8d2c6";
+      const wall = (xa: number, xb: number, va: number, vb: number, h = H, y0 = 0, color = wc, kind: Box["kind"] = "wall", extra: Partial<Box> = {}) =>
+        boxes.push({ ...box((xa + xb) / 2, (V(va) + V(vb)) / 2, xb - xa, Math.abs(vb - va), h, kind, y0), color, ...extra });
+      const thing = (x: number, v: number, w: number, d: number, h: number, kind: Box["kind"], extra: Partial<Box> = {}, y0 = 0) =>
+        boxes.push({ ...box(x, V(v), w, d, h, kind, y0), ...extra });
+      // (a wall along v with doorways: gaps [from, to] in v; a wall along x with gaps in x)
+      const wallV = (x: number, va: number, vb: number, gaps: [number, number][], h = H, y0 = 0, color = wc) => {
+        let a = va;
+        for (const [g0, g1] of gaps) { if (g0 > a) wall(x - 0.15, x + 0.15, a, g0, h, y0, color); wall(x - 0.15, x + 0.15, g0, g1, h - 2.6, y0 + 2.6, color); a = g1; }
+        if (vb > a) wall(x - 0.15, x + 0.15, a, vb, h, y0, color);
+      };
+      const wallX = (v: number, xa: number, xb: number, gaps: [number, number][], h = H, y0 = 0, color = wc) => {
+        let a = xa;
+        for (const [g0, g1] of gaps) { if (g0 > a) wall(a, g0, v - 0.15, v + 0.15, h, y0, color); wall(g0, g1, v - 0.15, v + 0.15, h - 2.6, y0 + 2.6, color); a = g1; }
+        if (xb > a) wall(a, xb, v - 0.15, v + 0.15, h, y0, color);
+      };
+      // ---- the shell: the glass front doors in the middle, the outside walls up to the first floor's ceiling ----
+      // (R8: real glass: ribbon windows on the ground floor's front wings and right round the first floor, the chief's
+      //  corner office glass to the corner on both sides; the walls are built round them. u: x on the front / back,
+      //  metres in from the front on the sides)
+      const windows: NonNullable<StationDef["grand"]>["windows"] = [
+        { face: "N", u0: x0 + 0.8, u1: -3.6, y0: 1.0, y1: 3.0 }, { face: "N", u0: 3.6, u1: x1 - 0.8, y0: 1.0, y1: 3.0 },
+        { face: "N", u0: x0 + 0.8, u1: 4.3, y0: 5.6, y1: 7.8 }, { face: "N", u0: 4.6, u1: x1, y0: 5.0, y1: 8.6 },
+        { face: "E", u0: 0, u1: 6.4, y0: 5.0, y1: 8.6 }, { face: "E", u0: 6.8, u1: D - 0.8, y0: 5.6, y1: 7.8 },
+        { face: "W", u0: 0.8, u1: D - 0.8, y0: 5.6, y1: 7.8 }, { face: "S", u0: x0 + 0.8, u1: x1 - 0.8, y0: 5.6, y1: 7.8 },
+      ];
+      const faceWall = (face: "N" | "S" | "E" | "W", ua: number, ub: number, holes: { u0: number; u1: number; y0: number; y1: number; glass: boolean }[]) => {
+        const seg = (u0: number, u1: number, y0: number, y1: number, kind: Box["kind"]) => {
+          if (u1 - u0 < 0.01 || y1 - y0 < 0.01) return;
+          const t = kind === "glass" ? 0.1 : 0.4, c = kind === "glass" ? undefined : wc;
+          if (face === "N" || face === "S") { const vc = face === "N" ? 0.2 : D - 0.2; boxes.push({ ...box((u0 + u1) / 2, V(vc), u1 - u0, t, y1 - y0, kind, y0), ...(c ? { color: c } : {}) }); }
+          else { const xc = face === "W" ? x0 : x1; boxes.push({ ...box(xc, (V(u0) + V(u1)) / 2, t, u1 - u0, y1 - y0, kind, y0), ...(c ? { color: c } : {}) }); }
+        };
+        const ys = [...new Set([0, UT, ...holes.flatMap((h) => [h.y0, h.y1])])].sort((a, b) => a - b);
+        for (let i = 0; i + 1 < ys.length; i++) {
+          const ya = ys[i], yb = ys[i + 1], act = holes.filter((h) => h.y0 <= ya && h.y1 >= yb).sort((a, b) => a.u0 - b.u0);
+          let u = ua;
+          for (const h of act) { seg(u, h.u0, ya, yb, "wall"); u = Math.max(u, h.u1); }
+          seg(u, ub, ya, yb, "wall");
+        }
+        for (const h of holes) if (h.glass) seg(h.u0, h.u1, h.y0, h.y1, "glass"); // (one pane per window, not one per strip)
+      };
+      const holesOf = (f: string) => windows.filter((w) => w.face === f).map((w) => ({ ...w, glass: true }));
+      faceWall("N", x0, x1, [...holesOf("N"), { u0: -1.5, u1: 1.5, y0: 0, y1: 2.8, glass: false }]); // (the front doors' opening)
+      faceWall("S", x0 - 0.2, x1 + 0.2, holesOf("S")); faceWall("W", 0, D, holesOf("W")); faceWall("E", 0, D, holesOf("E"));
+      // the front doors: two glass leaves (E: open / close; cops open them too)
+      boxes.push({ ...box(0, V(0.2), 3.0, 0.12, 2.8, "glass"), hide: true });
+      props.push({ id: "door1", kind: "door", x: 0, y: 1.4, z: V(0.2), yaw: 0, hw: 1.5, hd: 0.15, box: boxes.length - 1 });
+      boxes.push({ ...box(0, (P0.minZ + P0.maxZ) / 2, x1 - x0 - 0.4, D - 0.4, 0.03, "shopfloor"), color: "#d8d4cc" });
+      // ---- the stairs: up the west side of the lobby, rising toward the back ----
+      // (R8: in off the wall, with a stringer between: it rises with the steps)
+      const SX0 = x0 + 0.8, SX1 = SX0 + 1.5, SV0 = 1.0, steps = UNIT.steps, run = UNIT.stepRun, SV1 = SV0 + steps * run;
+      for (let i = 1; i <= steps; i++) {
+        const top = 0.18 + (i * (UY - 0.18)) / steps;
+        thing((SX0 + SX1) / 2, SV0 + (i - 0.5) * run, SX1 - SX0, run, top, "step", { color: "#8a8478" });
+        thing((x0 + 0.2 + SX0) / 2, SV0 + (i - 0.5) * run, SX0 - x0 - 0.2, run, Math.min(top + 0.3, UY), "wall", { color: "#5a6070" });
+      }
+      // the ground floor's ceiling = the first floor (a hole over the stairs), the first floor's ceiling
+      wall(SX1, x1 - 0.2, 0.4, D - 0.4, 0.3, H, "#b8b2a6", "roof");
+      wall(SX0, SX1, SV1, D - 0.4, 0.3, H, "#b8b2a6", "roof");
+      wall(x0 + 0.2, SX0, 0.4, D - 0.4, 0.3, H, "#b8b2a6", "roof");
+      wall(x0 + 0.2, x1 - 0.2, 0.4, D - 0.4, 0.3, UT, "#9a948a", "roof");
+      wall(SX1 + 0.02, SX1 + 0.12, 0.6, SV1 - 1.2, 1.0, UY, "#3a4458"); // (the railings round the stairwell upstairs)
+      wall(SX0 - 0.12, SX0 - 0.02, 0.4, SV1 - 0.2, 1.0, UY, "#3a4458");
+      // ---- the lobby: the receptionist's desk, benches, a water cooler, the wanted board ----
+      const LV = 7.6;
+      thing(0, 4.0, 6, 0.9, 1.1, "counter", { color: "#4a3a2c", deco: "reception" });
+      posts.push({ kind: "receptionist", x: 0, z: V(5.0), yaw: 0 });
+      for (const v of [1.6, 4.6]) thing(x1 - 0.6, v, 0.6, 2.4, 0.45, "bench", { color: "#3a4a72" });
+      thing(x1 - 0.55, 6.7, 0.5, 0.5, 1.3, "cooler", { color: "#d8e8f4" });
+      thing(SX1 + 0.6, 6.9, 0.6, 0.6, 1.0, "pot", { color: "#3a7a3a" });
+      wallX(LV + 0.15, SX0, x1 - 0.2, [[-1.4, 1.4]]);
+      // ---- the hallway down the middle; interrogation rooms, the breakroom (west); booking, the holding cell (east) ----
+      const HX = 1.4, HV1 = D - 0.4;
+      const I1 = [LV + 0.3, 12.8] as const, I2 = [13.1, 17.6] as const, BR = [17.9, HV1] as const;
+      wallV(-HX - 0.15, LV + 0.3, HV1, [[10.0, 11.5], [14.5, 16.0], [19.1, 20.6]]);
+      // (the one-way mirrors: glass in the hallway wall, high enough to peer through)
+      for (const [m0, m1] of [[8.5, 9.6], [13.4, 14.4]]) wall(-HX - 0.2, -HX - 0.1, m0, m1, 1.1, 1.05, "#1a2028", "glass");
+      wallX(12.95, x0 + 0.2, -HX - 0.3, []); wallX(17.75, x0 + 0.2, -HX - 0.3, []);
+      for (const [a, b] of [I1, I2]) {
+        const mv = (a + b) / 2;
+        thing(-5.4, mv, 1.6, 0.9, 0.78, "table", { color: "#5a5a62", deco: "interrogation" });
+        thing(-5.4, mv - 1.0, 0.5, 0.5, 0.9, "chair", { color: "#3a3a42" });
+        thing(-5.4, mv + 1.0, 0.5, 0.5, 0.9, "chair", { color: "#3a3a42" });
+      }
+      // the breakroom
+      thing(-5.6, (BR[0] + BR[1]) / 2, 2.2, 1.2, 0.75, "table", { color: "#8a6a4a" });
+      thing(x0 + 0.65, BR[1] - 0.55, 0.9, 0.8, 1.9, "fridge", { color: "#e8e4dc" });
+      thing(-6.0, BR[1] - 0.45, 3.4, 0.6, 0.95, "counter", { color: "#7a5a3a", deco: "coffee" });
+      thing(-HX - 1.0, BR[1] - 0.55, 1.1, 0.8, 1.9, "vending", { color: "#c41e3a" });
+      thing(x0 + 0.65, BR[0] + 1.4, 0.9, 2.0, 0.8, "sofa", { color: "#5a6a8a" });
+      // booking: the fingerprint desk, the mugshot wall, filing cabinets
+      const BK = [LV + 0.3, 12.8] as const;
+      wallV(HX + 0.15, LV + 0.3, 12.95, [[9.0, 10.5]]);
+      wallX(12.95, HX + 0.3, x1 - 0.2, []);
+      thing(5.4, 10.6, 2.4, 0.8, 0.9, "desk", { color: "#6a5a4a", deco: "booking" });
+      for (const v of [8.6, 9.6]) thing(x1 - 0.45, v, 0.5, 0.9, 1.4, "shelf", { color: "#7a8494", deco: "filing" });
+      // the holding cell: bars along the hallway, its door in them; a bench, the toilet, the shower corner
+      const CV0 = 13.1, CX0 = HX + 0.15;
+      const CDV = 14.6; // (the cell door, in the bars)
+      thing(CX0, (CV0 + CDV - 0.6) / 2, 0.16, CDV - 0.6 - CV0, H, "bars", { color: "#8e96a8" });
+      thing(CX0, (CDV + 0.6 + HV1) / 2, 0.16, HV1 - CDV - 0.6, H, "bars", { color: "#8e96a8" });
+      thing(CX0, CDV, 0.16, 1.2, H, "bars", { color: "#8e96a8" });
+      const cellDoorBox = boxes.length - 1;
+      const cxa = CX0 + 0.1, cxb = x1 - 0.2;
+      thing(4.2, HV1 - 0.4, 4.8, 0.6, 0.45, "bench", { color: "#6b4a2b" });
+      const toilet = { x: x1 - 0.65, z: V(15.6) };
+      boxes.push({ ...box(toilet.x, toilet.z, 0.75, 0.55, 0.45, "plinth"), hide: true });
+      props.push({ id: "toilet1", kind: "toilet", x: toilet.x, y: 0.45, z: toilet.z, yaw: -Math.PI / 2 });
+      const door = { x: CX0, z: V(14.6) };
+      props.push({ id: "celldoor1", kind: "celldoor", x: door.x, y: 1.2, z: door.z, yaw: -Math.PI / 2, hw: 0.35, hd: 0.7, box: cellDoorBox });
+      const cell = RV(cxa + 0.3, cxb - 0.3, CV0 + 0.45, HV1 - 0.3);
+      const shower = RV(x1 - 3.4, cxb, 19.2, HV1);
+      thing(x1 - 2.6, 19.2, 1.8, 0.12, 2.1, "wall", { color: "#f4f4f4" }); // (a tiled half-wall round the shower corner)
+      const champ = { x: 4.6, z: V(20.4), yaw: 0 };
+      posts.push({ kind: "champ", x: champ.x, z: champ.z, yaw: champ.yaw });
+      const spots = [0, 1, 2, 3].map((i) => ({ x: cxa + 1.3 + i * 1.7, z: V(16.4) }));
+      const cells: NonNullable<ArenaLayout["station"]>["cells"] = [{ x: spots[0].x, z: spots[0].z, yaw: Math.PI, rect: cell }];
+      // ---- the FIRST FLOOR ----
+      // the chief's corner office (front-east, glass to the floor), offices down the east side, the evidence room
+      // (back-west, behind a cage), the squad room by the stairs, cubicles in the middle
+      const CH = RV(4.6, x1 - 0.2, 0.4, 6.4);
+      wallV(4.45, 0.4, 6.4, [[4.5, 6.0]], UT - UY, UY, "#c8c2b6");
+      wallX(6.4, 4.3, x1 - 0.2, [], UT - UY, UY, "#c8c2b6");
+      thing(7.4, 3.0, 2.6, 1.1, 0.8, "desk", { color: "#5a3a24", deco: "chiefdesk" }, UY);
+      const keySpot = { x: 6.6, y: UY + 0.8, z: V(3.2) }; // (R8: the holding cell's key, on the chief's desk)
+      thing(7.4, 1.6, 0.6, 0.6, 1.1, "chair", { color: "#7a2a2a" }, UY);
+      thing(x1 - 0.5, 5.4, 0.6, 0.6, 1.0, "pot", { color: "#3a7a3a" }, UY);
+      const OFF = [[6.7, 11.8], [12.1, 17.2], [17.5, HV1]] as const;
+      wallV(5.1, 6.4, HV1, OFF.map(([a]) => [a + 1.2, a + 2.7] as [number, number]), UT - UY, UY, "#c8c2b6");
+      for (const [, b] of OFF.slice(0, 2)) wallX(b + 0.15, 5.25, x1 - 0.2, [], UT - UY, UY, "#c8c2b6");
+      for (const [a, b] of OFF) {
+        thing(7.6, (a + b) / 2, 1.8, 0.9, 0.78, "desk", { color: "#6a5a4a", deco: "office" }, UY);
+        thing(x1 - 0.45, b - 0.6, 0.5, 0.9, 1.4, "shelf", { color: "#7a8494", deco: "filing" }, UY);
+      }
+      const EV = RV(x0 + 0.2, -4.4, 15.6, HV1);
+      thing((x0 + 0.2 - 5.5) / 2, 15.6, -5.5 - (x0 + 0.2), 0.12, UT - UY, "bars", { color: "#8e96a8" }, UY); // (the cage front, its gate at the east end)
+      thing(-4.95, 15.6, 1.1, 0.12, UT - UY - 2.4, "bars", { color: "#8e96a8" }, UY + 2.4);
+      wallV(-4.25, 15.6, HV1, [], UT - UY, UY, "#c8c2b6");
+      const evidenceSpots: { x: number; y: number; z: number }[] = [];
+      for (const v of [17.0, 18.8, 20.6]) { thing(-7.0, v, 3.6, 0.7, 1.0, "shelf", { color: "#5a6070", deco: "evidence" }, UY); for (const x of [-8.3, -7.0, -5.7]) evidenceSpots.push({ x, y: UY + 1.0, z: V(v) }); }
+      thing(-7.0, HV1 - 0.35, 5.0, 0.5, 1.8, "shelf", { color: "#5a6070", deco: "evidence" }, UY);
+      for (const x of [-8.8, -7.0, -5.2]) evidenceSpots.push({ x, y: UY + 1.8, z: V(HV1 - 0.35) });
+      const evidenceDoor = { x: -4.95, z: V(15.6) };
+      // the squad room (lockers, a whiteboard, a long table) between the stairs and the evidence room
+      thing(-6.6, 11.6, 3.4, 1.0, 0.78, "table", { color: "#7a6a5a" }, UY);
+      for (const v of [9.0, 10.0, 11.0, 12.0, 13.0]) thing(x0 + 0.45, v, 0.5, 0.95, 1.9, "shelf", { color: "#6a7a8a", deco: "lockers" }, UY);
+      // cubicles: low partitions and desks between the squad room and the offices
+      for (const v of [8.0, 11.2, 14.4, 17.6, 20.8]) {
+        thing(0.0, v, 6.6, 0.1, 1.4, "wall", { color: "#7a8aa0" }, UY);
+        for (const x of [-2.2, 0.0, 2.2]) {
+          thing(x, v + 0.55, 0.1, 1.1, 1.4, "wall", { color: "#7a8aa0" }, UY);
+          thing(x + 0.9, v + 0.5, 1.2, 0.6, 0.78, "desk", { color: "#8a7a62", deco: "cubicle" }, UY);
+        }
+      }
+      thing(-3.6, 6.0, 0.5, 0.5, 1.3, "cooler", { color: "#d8e8f4" }, UY);
+      // the station's cops: one walks the ground floor, one stands at the evidence room
+      // (R8: four: by the front doors, walking the hallway, outside the holding cell, at the evidence room)
+      const beats = [
+        { pts: [{ x: 3.0, z: V(6.2) }, { x: 0, z: V(9.0) }, { x: 0, z: V(12.4) }, { x: 0, z: V(9.0) }], y: 0 },
+        { pts: [{ x: -4.2, z: V(14.6) }], y: UY },
+        { pts: [{ x: 3.2, z: V(1.4) }], y: 0 },
+        { pts: [{ x: -0.4, z: V(21.4) }], y: 0 },
+      ];
+      navChains.push([{ x: 0, z: V(-2.4) }, { x: 0, z: V(1.6) }, { x: 4.4, z: V(2.6) }, { x: 4.4, z: V(6.4) }, { x: 0, z: V(6.8) }, { x: 0, z: V(9.0) }, { x: 0, z: V(15.0) }, { x: 0, z: V(21.4) }]);
+      const back = { x: 0, z: P0.minZ - 1.5, yaw: Math.PI };
+      spawnAt(x0 - 1.2, back.z, "alley"); spawnAt(x1 + 1.2, back.z, "alley");
+      return {
+        rect: { minX: x0 - 0.2, maxX: x1 + 0.2, minZ: P0.minZ - 0.2, maxZ: P0.maxZ + 0.2 },
+        door: { x: 0, z: V(-2.4), yaw: 0 },
+        alley: back,
+        cells,
+        holding: { cell, spots, door, toilet, shower, reception: RV(SX1, x1 - 0.2, 0.4, LV), breakroom: RV(x0 + 0.2, -HX - 0.3, BR[0], BR[1]), champ },
+        grand: {
+          lobby: RV(x0 + 0.2, x1 - 0.2, 0.4, LV), hall: RV(-HX, HX, LV + 0.3, HV1), interrogation: [RV(x0 + 0.2, -HX - 0.3, I1[0], I1[1]), RV(x0 + 0.2, -HX - 0.3, I2[0], I2[1])],
+          booking: RV(HX + 0.3, x1 - 0.2, BK[0], BK[1]), stairs: RV(SX0, SX1, SV0, SV1),
+          upY: UY, upstairs: RV(x0 + 0.2, x1 - 0.2, 0.4, HV1), chief: CH, offices: OFF.map(([a, b]) => RV(5.25, x1 - 0.2, a, b)),
+          evidence: EV, evidenceSpots, evidenceDoor, beats, windows, keySpot,
+        },
+      };
+    }
+    // (R3: the station faces north, so "in from the front" runs south: sg = -1)
+    const sg = R2 ? -1 : 1;
+    const P0 = R2 ? NEW_PRECINCT : LM.precinct, PD_H = 4.5, D = P0.maxZ - P0.minZ, zf = sg > 0 ? P0.minZ : P0.maxZ;
     const x0 = P0.minX, x1 = P0.maxX, pdX = (x0 + x1) / 2, pdZ = (P0.minZ + P0.maxZ) / 2;
-    const V = (v: number) => zf + v; // v = metres in from the front
+    const V = (v: number) => zf + sg * v; // v = metres in from the front
+    const out = sg > 0 ? Math.PI : 0; // (facing out of the front door)
     const pdWall = "#2f3a5c";
     const wall = (x: number, z: number, w: number, d: number, h = PD_H, baseY = 0, kind: Box["kind"] = "wall", color = pdWall) =>
       boxes.push({ ...box(x, z, w, d, h, kind, baseY), color });
-    wall(x0 + 1.5, V(0), 3, 0.4); // front wall, left of the door (door: x0+3 .. x0+6)
-    wall((x0 + 6 + x1) / 2, V(0), x1 - x0 - 6, 0.4); // right of the door
-    wall(x0 + 4.5, V(0), 3, 0.4, PD_H - 2.7, 2.7); // over the door
+    // (the door is 3 m wide: classic 3 m in from the west corner; R3 in the middle, so it's the same walk from either side)
+    const dl = R2 ? (x1 - x0) / 2 - 1.5 : 3;
+    wall(x0 + dl / 2, V(0), dl, 0.4); // front wall, left of the door
+    wall((x0 + dl + 3 + x1) / 2, V(0), x1 - x0 - dl - 3, 0.4); // right of the door
+    wall(x0 + dl + 1.5, V(0), 3, 0.4, PD_H - 2.7, 2.7); // over the door
     wall(pdX, V(D), x1 - x0 + 0.4, 0.4); // back wall
     wall(x0, pdZ, 0.4, D); wall(x1, pdZ, 0.4, D);
-    boxes.push({ ...box(pdX, pdZ, x1 - x0 + 0.4, D + 0.4, 0.3, "roof", PD_H), sign: "TRASHINGTON PD", face: [0, -1], color: "#1f2944" });
+    boxes.push({ ...box(pdX, pdZ, x1 - x0 + 0.4, D + 0.4, 0.3, "roof", PD_H), sign: "TRASHINGTON PD", face: [0, -sg], color: "#1f2944" });
     boxes.push({ ...box(pdX, pdZ, x1 - x0 - 0.4, D - 0.4, 0.03, "shopfloor"), color: "#c9ccd6" });
-    boxes.push({ ...box(x0 + 11.5, V(4.6), 8, 0.9, 1.1, "counter"), color: "#5a4632" }); // front desk
+    boxes.push({ ...box(R2 ? pdX : x0 + 11.5, V(R2 ? 5.2 : 4.6), R2 ? 6 : 8, 0.9, 1.1, "counter"), color: "#5a4632" }); // front desk
     const cellV0 = D - 6, cellV1 = D - 0.2, cellW = (x1 - x0 - 0.4) / 4;
     const cells: NonNullable<ArenaLayout["station"]>["cells"] = [];
     for (let i = 0; i < 4; i++) {
@@ -1421,44 +2236,143 @@ export function buildTrashington(): ArenaLayout {
       if (i > 0) wall(cx0, V((cellV0 + cellV1) / 2), 0.3, cellV1 - cellV0);
       boxes.push({ ...box(cx, V(cellV0), cellW - (i > 0 ? 0.3 : 0), 0.2, PD_H, "bars"), color: "#8e96a8" });
       boxes.push({ ...box(cx, V(D - 0.9), 2.2, 0.8, 0.45, "bench"), color: "#6b4a2b" });
-      cells.push({ x: cx, z: V(D - 3.3), yaw: Math.PI, rect: { minX: cx0 + 0.6, maxX: cx1 - 0.6, minZ: V(cellV0 + 0.5), maxZ: V(cellV1 - 0.6) } });
+      const ca = V(cellV0 + 0.5), cb = V(cellV1 - 0.6);
+      cells.push({ x: cx, z: V(D - 3.3), yaw: out, rect: { minX: cx0 + 0.6, maxX: cx1 - 0.6, minZ: Math.min(ca, cb), maxZ: Math.max(ca, cb) } });
     }
     // two cruisers parked in the lot behind (side on)
-    const lot = LM.copLot, lz = (lot.minZ + lot.maxZ) / 2;
-    for (const x of [lot.maxX - 3, lot.maxX - 8]) { boxes.push(box(x, lz, 4.2, 1.9, 1.5, "car")); decor.push({ kind: "copcar", x, z: lz, yaw: Math.PI / 2 }); }
-    spawnAt(x1 + 1.5, V(D) + 1.6, "alley");
+    // (R5, the new city: the car park is the pawn shop now; the station's back alley is the gap between them)
+    const alleyZ = V(D) + sg * 1.6;
+    if (!R2) {
+      const lot = LM.copLot, lz = (lot.minZ + lot.maxZ) / 2;
+      for (const x of [lot.maxX - 3, lot.maxX - 8]) { boxes.push(box(x, lz, 4.2, 1.9, 1.5, "car")); decor.push({ kind: "copcar", x, z: lz, yaw: Math.PI / 2 }); }
+    }
+    spawnAt(R2 ? x0 - 1.2 : x1 + 1.5, alleyZ, "alley");
+    if (R2) spawnAt(x1 + 1.2, alleyZ, "alley"); // (one at each end of the alley: fair)
     return {
       rect: { minX: x0 - 0.2, maxX: x1 + 0.2, minZ: P0.minZ - 0.2, maxZ: P0.maxZ + 0.2 },
-      door: { x: x0 + 4.5, z: V(-2.4), yaw: Math.PI },
-      alley: { x: x0 + 8, z: V(D) + 1.6, yaw: -Math.PI / 2 },
+      door: { x: x0 + dl + 1.5, z: V(-2.4), yaw: out },
+      alley: { x: R2 ? x0 + 4 : x0 + 8, z: alleyZ, yaw: -Math.PI / 2 },
       cells,
     };
   })();
 
+  // =================================================================================================
+  // R7: TWO WALK-IN PAWN SHOPS on Gahookz Ghetto Lane, one for each side (Blake): HOT STUFF PAWN & LOAN (Twitchy Lou,
+  // Meat Locker on the door) where Hat Hut was, and its mirror image FINDERS KEEPERS PAWN (Sticky Fran, Cold Cuts).
+  // You walk in; glass counters full of junk keep you off the owner's side; you sell over the till. Nothing to rob.
+  // A suit of armour stands out front. And the police station's upper floors (the first one is walkable now).
+  // =================================================================================================
+  let stationUpper: ArenaLayout["stationUpper"];
+  const hotShops: HotShop[] = [];
+  if (R2) {
+    for (const [idx, sx] of [[0, -1], [1, 1]] as [number, 1 | -1][]) {
+      const L = HOT_PLOT, Fz = L.minZ, Hh = 4.4, wc = idx ? "#3e4a3a" : "#4a3438";
+      const X = (x: number) => (sx < 0 ? x : -x); // (built for the left shop; the right one is its mirror image)
+      const Y = (yaw: number) => (sx < 0 ? yaw : -yaw);
+      const zv = (v: number) => Fz + v; // v = metres in from the front (the front faces -z)
+      const RX = (xa: number, xb: number, va: number, vb: number) => R(Math.min(X(xa), X(xb)), Math.max(X(xa), X(xb)), zv(Math.min(va, vb)), zv(Math.max(va, vb)));
+      const B = (xa: number, xb: number, va: number, vb: number, h: number, kind: Box["kind"], extra: Partial<Box> = {}, y0 = 0) => {
+        const r = RX(xa, xb, va, vb);
+        boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, h, kind, y0), ...extra });
+      };
+      const x0 = L.minX, x1 = L.maxX, BACK = L.maxZ - L.minZ;
+      // (the door is round the corner on the avenue side, near the front: the nearest the two forts on this side can
+      //  be to the same walk; the counter line)
+      const dv0 = 0.6, dv1 = 2.4, CV = 5.25, CD = 0.7;
+      // the front: the shop window right across (low wall, glass, the sign band above), solid corners
+      B(x0, x0 + 0.6, 0, 0.3, Hh, "wall", { color: wc }); B(x1 - 0.6, x1, 0, 0.3, Hh, "wall", { color: wc });
+      B(x0 + 0.6, x1 - 0.6, 0, 0.3, 0.6, "wall", { color: wc });
+      B(x0 + 0.6, x1 - 0.6, 0.1, 0.2, 2.2, "glass", {}, 0.6);
+      B(x0 + 0.6, x1 - 0.6, 0, 0.3, Hh - 2.8, "wall", { color: wc }, 2.8);
+      // the side on the avenue: the door; the back; the other side
+      B(x0, x0 + 0.3, 0.3, dv0, Hh, "wall", { color: wc }); B(x0, x0 + 0.3, dv0, dv1, Hh - 2.6, "wall", { color: wc }, 2.6); B(x0, x0 + 0.3, dv1, BACK, Hh, "wall", { color: wc });
+      // (R8: a glass door in it: E opens and closes it; the bouncer and walkers open it themselves)
+      B(x0 + 0.1, x0 + 0.2, dv0, dv1, 2.6, "glass", { hide: true });
+      { const r = RX(x0 + 0.1, x0 + 0.2, dv0, dv1); props.push({ id: `door${2 + idx}`, kind: "door", x: (r.minX + r.maxX) / 2, y: 1.3, z: (r.minZ + r.maxZ) / 2, yaw: Y(-Math.PI / 2), hw: 0.15, hd: (dv1 - dv0) / 2, box: boxes.length - 1, shop: idx }); }
+      B(x0, x1, BACK - 0.3, BACK, Hh, "wall", { color: wc }); B(x1 - 0.3, x1, 0.3, BACK, Hh, "wall", { color: wc });
+      B(x0 - 0.15, x1 + 0.15, -0.15, BACK + 0.15, 0.3, "roof", { color: "#2b2226" }, Hh);
+      B(x0 + 0.3, x1 - 0.3, 0.3, BACK - 0.3, 0.03, "shopfloor", { color: "#9a7a52" });
+      // the glass counters: a line right across (the till in the middle of it), a case down the side wall, an island
+      const tx0 = -55.2, tx1 = -53.0, tillX = (tx0 + tx1) / 2;
+      const counters: Rect[] = [];
+      const glass = (xa: number, xb: number, va: number, vb: number) => {
+        B(xa, xb, va, vb, 1.05, "case", { color: "#c9a227", deco: "jewels", hide: true }); // (drawn by the renderer: a cabinet, the junk, the glass)
+        const r = RX(xa, xb, va, vb); counters.push(r);
+        props.push({ id: `glasscounter${props.filter((q) => q.kind === "glasscounter").length + 1}`, kind: "glasscounter", x: (r.minX + r.maxX) / 2, y: 1.05, z: (r.minZ + r.maxZ) / 2, yaw: Y(Math.PI), hw: (r.maxX - r.minX) / 2, hd: (r.maxZ - r.minZ) / 2, shop: idx });
+      };
+      glass(x0 + 0.3, tx0, CV, CV + CD);
+      B(tx0, tx1, CV, CV + CD, 1.05, "counter", { color: "#5a3a24", deco: "till" });
+      glass(tx1, x1 - 0.3, CV, CV + CD);
+      glass(x1 - 1.0, x1 - 0.3, 1.4, 4.6);
+      glass(-52.6, -50.8, 2.3, 3.3);
+      // clutter: guitars and a slatwall of junk on the back wall, tellies, a stuffed bear, a drum kit, a keyboard
+      B(x0 + 0.4, x1 - 0.4, BACK - 0.85, BACK - 0.3, 2.4, "shelf", { color: "#e8e2d4", deco: "slatwall", hide: true });
+      B(x0 + 0.35, x0 + 0.95, CV + CD + 0.4, BACK - 1.0, 2.0, "shelf", { color: "#5a3a24", deco: "guitars" });
+      // (the window display: an old arcade machine, a mannequin in a leather jacket, a stuffed bear, a drum kit, a stack of tellies)
+      B(-57.0, -56.2, 0.45, 1.15, 1.8, "arcade", { color: "#3a2a5a" });
+      B(-55.6, -54.9, 0.5, 1.1, 1.9, "plinth", { deco: "mannequin", hide: true });
+      B(-53.6, -52.8, 0.45, 1.1, 1.5, "plinth", { deco: "bear", hide: true });
+      B(-52.0, -51.1, 0.45, 1.1, 1.3, "plinth", { deco: "drums", hide: true });
+      B(-50.6, -49.4, 0.45, 1.1, 1.6, "boxes", { deco: "tvstack", hide: true });
+      const boss = { x: X(tillX), z: zv(CV + CD + 0.7), yaw: Y(Math.PI) };
+      const guard = { x: X(x0 + 0.9), z: zv(3.9), yaw: Y(Math.PI / 2) };
+      const owner = idx ? "fran" as const : "lou" as const, bouncer = idx ? "cold_cuts" as const : "meat_locker" as const;
+      posts.push({ kind: owner, x: boss.x, z: boss.z, yaw: boss.yaw });
+      posts.push({ kind: bouncer, x: guard.x, z: guard.z, yaw: guard.yaw });
+      props.push({ id: `pawncounter${idx + 1}`, kind: "pawncounter", x: X(tillX), y: 1.05, z: zv(CV), yaw: Y(Math.PI), shop: idx });
+      // the suit of armour out front (on the pavement, by the door)
+      const armour = { x: X(x0 - 0.65), z: zv(3.3), yaw: Y(-Math.PI / 2) };
+      boxes.push({ ...box(armour.x, armour.z, 0.75, 0.75, 1.95, "plinth"), deco: "armour", hide: true });
+      const dvm = (dv0 + dv1) / 2;
+      navChains.push([{ x: X(x0 - 1.4), z: zv(dvm) }, { x: X(x0 + 1.1), z: zv(dvm) }, { x: X(tillX), z: zv(3.4) }, { x: X(-49.6), z: zv(3.8) }]);
+      hotShops.push({
+        idx, name: idx ? "FINDERS KEEPERS PAWN" : "HOT STUFF PAWN & LOAN", owner, bouncer,
+        rect: R(Math.min(X(x0), X(x1)), Math.max(X(x0), X(x1)), L.minZ, L.maxZ),
+        floor: RX(x0 + 0.3, x1 - 0.3, 0.3, CV), back: RX(x0 + 0.3, x1 - 0.3, CV + CD, BACK - 0.3),
+        door: { x: X(x0), z: zv(dvm) }, doorIn: { x: X(x0 + 1.1), z: zv(dvm) }, stand: { x: X(tillX), z: zv(CV - 0.6) }, boss, guard, out: { x: X(x0 - 1.3), z: zv(dvm) }, counters, armour,
+      });
+    }
+    // the police station's upper floors: the first is walkable (built with the station); above it, looks only
+    const P0 = NEW_PRECINCT, up = R(P0.minX + 0.2, P0.maxX - 0.2, P0.minZ + 0.2, P0.maxZ - 0.2);
+    boxes.push({ ...box((up.minX + up.maxX) / 2, (up.minZ + up.maxZ) / 2, up.maxX - up.minX, up.maxZ - up.minZ, 15.6 - 9.3, "wall", 9.3), hide: true });
+    stationUpper = { rect: up, y0: 4.8, y1: 15.6, face: [0, 1], walkTop: 9.3 };
+  }
+
   // ==== boundary fences (3 m, too tall to climb) ====================================================
+  // (R3: the south fence is further south, round the fort bowl; the side fences run down to it)
   boxes.push(box(0, HALF + 0.5, HALF * 2 + 2, 1, 3, "fence"));
-  boxes.push(box(0, -HALF - 0.5, HALF * 2 + 2, 1, 3, "fence"));
-  boxes.push(box(HALF + 0.5, 0, 1, HALF * 2, 3, "fence"));
-  boxes.push(box(-HALF - 0.5, 0, 1, HALF * 2, 3, "fence"));
+  if (!R2) boxes.push(box(0, -HALF - 0.5, HALF * 2 + 2, 1, 3, "fence"));
+  boxes.push(box(HALF + 0.5, (HALF + southZ) / 2, 1, HALF - southZ, 3, "fence"));
+  boxes.push(box(-HALF - 0.5, (HALF + southZ) / 2, 1, HALF - southZ, 3, "fence"));
 
   for (const [x, z] of streetLoot) spawnAt(x, z, "street", 0.15);
 
   // ==== event geometry ==============================================================================
   // (the garbage truck drives the right-hand lane of a straight road)
-  const truckRoutes = [
+  const truckRoutes = R2 ? [
+    { name: "GAHOOKZ GHETTO LANE", ax: -100, az: NEW.gahookz - 2, bx: 100, bz: NEW.gahookz - 2 },
+    { name: "SNOB ROW", ax: 100, az: NEW.snob + 2, bx: -100, bz: NEW.snob + 2 },
+    { name: "LEFTY LANE", ax: -NEW.edge + 2, az: -80, bx: -NEW.edge + 2, bz: 64 },
+    { name: "RIGHTY LANE", ax: NEW.edge - 2, az: 64, bx: NEW.edge - 2, bz: -80 },
+  ] : [
     { name: "the SERVICE ROAD", ax: -84, az: -91, bx: 84, bz: -91 },
     { name: "NORTH PARADE", ax: 84, az: 110, bx: -84, bz: 110 },
     { name: "the WEST ROAD", ax: -89, az: -82, bx: -89, bz: 102 },
     { name: "the EAST ROAD", ax: 89, az: 102, bx: 89, bz: -82 },
   ];
-  const happyZones = [
+  const happyZones = R2 ? [
+    { x: 0, z: 0, r: 18, name: "the Park" },
+    { x: 0, z: 58, r: 12, name: "Bin Juice Boulevard" },
+    { x: -33, z: -40, r: 12, name: "Shopping Trolley Terrace" },
+    { x: 33, z: -40, r: 12, name: "Shopping Trolley Terrace" },
+  ] : [
     { x: 0, z: 0, r: 18, name: "the Park" },
     { x: 55, z: -30, r: 14, name: "Market Row" },
     { x: -30, z: -60, r: 14, name: "The Yards" },
     { x: -40, z: 25, r: 14, name: "Old Brick" },
     { x: 0, z: 78, r: 12, name: "City Hall" },
   ];
-  const airdropSpots: [number, number][] = [[-12, 76], [12, 76], [0, 76], [-14, 86], [14, 86], [T.x - 8, T.z - 10], [T.x - 10, T.z + 6], [T.x - 4, T.z - 2]];
+  const airdropSpots: [number, number][] = R2 ? [[-12, 6], [12, -10], [-8, -14], [6, 14], [0, 12]] : [[-12, 76], [12, 76], [0, 76], [-14, 86], [14, 86], [T.x - 8, T.z - 10], [T.x - 10, T.z + 6], [T.x - 4, T.z - 2]];
 
   // fort slots: 0 + 1 are the corners, 2 + 3 the middle (2 players: corners, 3: + one middle)
   const spawns = forts.map((f) => ({ x: f.padX, z: f.padZ, yaw: f.yaw }));
@@ -1480,7 +2394,7 @@ export function buildTrashington(): ArenaLayout {
     /** far from every walk-in building (interiors culling) */
     noShops: { x: -105, z: -80, yaw: 0 },
     /** Slice 2A: standing in the doorway of Corner Mart, looking in */
-    martDoor: { x: units[0].doorX + units[0].out[0] * 1.5, z: units[0].doorZ + units[0].out[1] * 1.5, yaw: Math.atan2(-units[0].out[0], -units[0].out[1]) },
+    martDoor: R2 ? { x: 0, z: -18, yaw: 0 } : { x: units[0].doorX + units[0].out[0] * 1.5, z: units[0].doorZ + units[0].out[1] * 1.5, yaw: Math.atan2(-units[0].out[0], -units[0].out[1]) },
     pondEdge: { x: 10, z: pond.minZ - 2.5, yaw: 0, waterZ: pond.minZ },
     parkCentre: { x: 0, z: -8, yaw: 0 },
     // C3: a bush to hide in, the fountain
@@ -1488,6 +2402,9 @@ export function buildTrashington(): ArenaLayout {
     fountain: { x: 0, z: -2.2, yaw: 0 },
     cityHall: { x: 0, z: 76, yaw: 0 },
   };
+  if (R2) { // (R2: the classic-only spots the road test doesn't have)
+    for (const k of ["ledge14", "pitWall", "tunnelEntrance", "cityHall"] as const) delete (landmarks as Record<string, unknown>)[k];
+  }
   // (lines closer than 1.3 m merge into one: crowded route points make walkers dither. A crosswalk's
   //  centre line wins, so the merged line still runs through the crossing)
   const cwX = new Set(crosswalks.filter((c) => c.maxX - c.minX < 3.5).map((c) => Math.round((c.minX + c.maxX) * 5) / 10));
@@ -1615,37 +2532,38 @@ export function buildTrashington(): ArenaLayout {
       return !junkSpots.some((j) => Math.hypot(j.x - x, j.z - z) < r + 0.35);
     };
     /** try a spot, and a few nudges round it */
-    const put = (type: string, x: number, z: number, r: number, yaw = 0) => {
+    const put = (type: string, x: number, z: number, r: number, yaw = 0, face?: { x: number; z: number }) => {
       for (const [dx, dz] of [[0, 0], [0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8], [1.4, 1.4], [-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4]]) {
-        if (clear(x + dx, z + dz, r)) { junkSpots.push({ type, x: x + dx, z: z + dz, yaw }); return true; }
+        // (R5: a chair turns to face its table wherever it ends up; its seat faces local +z)
+        if (clear(x + dx, z + dz, r)) { junkSpots.push({ type, x: x + dx, z: z + dz, yaw: face ? Math.atan2(face.x - (x + dx), face.z - (z + dz)) : yaw }); return true; }
       }
       return false;
     };
     // chairs beside the outdoor café and picnic tables, lids beside the bins
-    for (const b of boxes) if (b.kind === "table" && b.unit === undefined && b.y - b.h / 2 < 0.5) put("cafe_chair", b.x + b.w / 2 + 0.6, b.z, 0.35, Math.PI / 2);
+    for (const b of boxes) if (b.kind === "table" && b.unit === undefined && b.y - b.h / 2 < 0.5) put("cafe_chair", b.x + b.w / 2 + 0.6, b.z, 0.35, 0, b);
     for (const pr of props) if (pr.kind === "bin") put("bin_lid", pr.x + 0.9, pr.z + 0.4, 0.32);
     // bottles in the alleys, crates by the courtyard dumpsters
     loot.filter((l) => l.zone === "alley").slice(0, 12).forEach((l, i) => put("glass_bottle", l.x + (i % 2 ? 0.7 : -0.7), l.z + 0.6, 0.12));
     for (const pr of props) if (pr.kind === "dumpster") put("plastic_crate", pr.x + 2.2, pr.z, 0.6);
     // the building site by the half-built skyscraper: bricks, a barrier; the build yard: barriers, barrels
-    for (let i = 0; i < 6; i++) put("brick", 41 + (i % 3) * 0.7, -62 - Math.floor(i / 3) * 0.7, 0.12, i * 0.7);
-    put("traffic_barrier", 42, -83, 0.45); put("traffic_barrier", T.x - 4, T.z + 12, 0.45, Math.PI / 2);
-    for (const [x, z] of [[-110, -44], [-99, -46], [-111, -5], [-98, -3]]) put("oil_barrel", x, z, 0.55);
+    if (!R2) for (let i = 0; i < 6; i++) put("brick", 41 + (i % 3) * 0.7, -62 - Math.floor(i / 3) * 0.7, 0.12, i * 0.7);
+    if (!R2) { put("traffic_barrier", 42, -83, 0.45); put("traffic_barrier", T.x - 4, T.z + 12, 0.45, Math.PI / 2); }
+    if (!R2) for (const [x, z] of [[-110, -44], [-99, -46], [-111, -5], [-98, -3]]) put("oil_barrel", x, z, 0.55);
     // trolleys outside Corner Mart
     const mart = units[0];
-    for (const s2 of [-1.6, 1.6]) put("shopping_trolley", mart.doorX + mart.out[0] * 2.4 - mart.out[1] * s2, mart.doorZ + mart.out[1] * 2.4 + mart.out[0] * s2, 0.6, Math.atan2(mart.out[0], mart.out[1]));
+    if (mart) for (const s2 of [-1.6, 1.6]) put("shopping_trolley", mart.doorX + mart.out[0] * 2.4 - mart.out[1] * s2, mart.doorZ + mart.out[1] * 2.4 + mart.out[0] * s2, 0.6, Math.atan2(mart.out[0], mart.out[1]));
     // C4b: spray cans: in the skate park, a few alleys, the build yard, under the railway arches
-    for (const [x, z] of [[(pit.minX + pit.maxX) / 2 - 3, pit.maxZ - 5.5], [(pit.minX + pit.maxX) / 2 + 2, (pit.minZ + pit.maxZ) / 2 - 1], [pit.minX + 5.5, pit.minZ + 6], [-109, 10], [-109, 42]]) put("spray_can", x, z, 0.1);
-    [[6, 8], [-6, 6], [4, -6], [-4, -8], [8, 0], [0, 10]].some(([dx, dz]) => put("spray_can", T.x + dx, T.z + dz, 0.1));
+    if (!R2) for (const [x, z] of [[(pit.minX + pit.maxX) / 2 - 3, pit.maxZ - 5.5], [(pit.minX + pit.maxX) / 2 + 2, (pit.minZ + pit.maxZ) / 2 - 1], [pit.minX + 5.5, pit.minZ + 6], [-109, 10], [-109, 42]]) put("spray_can", x, z, 0.1);
+    if (!R2) [[6, 8], [-6, 6], [4, -6], [-4, -8], [8, 0], [0, 10]].some(([dx, dz]) => put("spray_can", T.x + dx, T.z + dz, 0.1));
     loot.filter((l) => l.zone === "alley").filter((_, i) => i % 3 === 1).forEach((l) => put("spray_can", l.x - 0.9, l.z - 0.9, 0.1));
     // fish at the Market Row stalls and the marina
-    for (const [x, z] of [[50, -11.5], [60, -11.5], [97, 75], [97, 88]]) put("smelly_fish", x, z, 0.15);
+    if (!R2) for (const [x, z] of [[50, -11.5], [60, -11.5], [97, 75], [97, 88]]) put("smelly_fish", x, z, 0.15);
   }
 
   return {
-    halfSize: HALF, boxes, spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, crosswalks, navLines, navLinesZ, props,
+    halfSize: HALF, boxes, spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
-    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop,
+    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop, littleItaly, stationUpper, hotShops: R2 ? hotShops : undefined,
   };
 }
 

@@ -78,6 +78,17 @@ export function buildLootModel(scene: Scene, type: string, outlineColor?: Color3
       beak.position.set(0, 0.09, 0.18);
       break;
     }
+    case "cell_key": {
+      // R8: a big old jail key on a ring, with a red POLICE tag
+      const ring = P(MB.CreateTorus("r", { diameter: 0.09, thickness: 0.015, tessellation: 12 }, scene), "#c9a227", 0.006);
+      ring.position.z = -0.1;
+      const shaft = P(MB.CreateBox("s", { width: 0.025, height: 0.025, depth: 0.18 }, scene), "#c9a227", 0.006);
+      shaft.position.z = 0.0;
+      for (const [z, w] of [[0.07, 0.07], [0.1, 0.05]] as [number, number][]) { const bit = P(MB.CreateBox("b", { width: w, height: 0.02, depth: 0.02 }, scene), "#c9a227", 0.005); bit.position.set(w / 2, 0, z); }
+      const tag = P(MB.CreateBox("t", { width: 0.06, height: 0.01, depth: 0.08 }, scene), "#d6264a", 0.005);
+      tag.position.set(-0.05, 0, -0.14);
+      break;
+    }
     case "golden_spork": {
       const handle = P(MB.CreateBox("h", { width: 0.035, height: 0.02, depth: 0.26 }, scene), "#ffcf3a", 0.01);
       handle.position.z = -0.05;
@@ -601,6 +612,80 @@ export function buildLootModel(scene: Scene, type: string, outlineColor?: Color3
     case "red_envelope": {
       P(MB.CreateBox("e", { width: 0.1, height: 0.01, depth: 0.16 }, scene), "#d8261e", 0.008);
       const g = P(MB.CreateBox("g", { width: 0.05, height: 0.012, depth: 0.05 }, scene), "#ffd54a", 0); g.position.set(0, 0.002, 0.02);
+      break;
+    }
+    // ---- R4: Little Italy ----
+    case "pizza_slice": {
+      const sl = P(MB.CreateCylinder("p", { diameter: 0.3, height: 0.025, tessellation: 3 }, scene), "#f2c94c", 0.01); sl.scaling.set(0.8, 1, 1.3);
+      const crust = P(MB.CreateBox("c", { width: 0.2, height: 0.04, depth: 0.04 }, scene), "#c98a2a", 0.006); crust.position.set(0, 0.01, 0.13);
+      for (const [x, z] of [[0, 0], [-0.04, 0.06], [0.04, 0.05], [0, -0.07]]) { const pep = P(MB.CreateCylinder("pp", { diameter: 0.035, height: 0.01, tessellation: 8 }, scene), "#c8322c", 0); pep.position.set(x, 0.016, z); }
+      break;
+    }
+    case "garlic_knot": {
+      const k = P(MB.CreateTorus("k", { diameter: 0.1, thickness: 0.045, tessellation: 10 }, scene), "#e0b86a", 0.01); k.rotation.x = 0.6;
+      for (let i = 0; i < 4; i++) { const g = P(MB.CreateSphere("g", { diameter: 0.012, segments: 3 }, scene), "#3f8f4a", 0); g.position.set(-0.03 + i * 0.02, 0.03, 0); }
+      break;
+    }
+    case "gelato_cup": {
+      P(MB.CreateCylinder("c", { diameterTop: 0.11, diameterBottom: 0.08, height: 0.07, tessellation: 10 }, scene), "#f4f1ea", 0.01);
+      ["#ffd1dc", "#c9f2c7", "#7a4a2a"].forEach((col, i) => { const sc = P(MB.CreateSphere("s", { diameter: 0.07, segments: 6 }, scene), col, 0.005); sc.position.set(-0.025 + i * 0.025, 0.05 + (i === 1 ? 0.03 : 0), 0); });
+      const sp = P(MB.CreateBox("sp", { width: 0.01, height: 0.08, depth: 0.02 }, scene), "#2f8f4e", 0); sp.position.set(0.03, 0.08, 0); sp.rotation.z = -0.4;
+      break;
+    }
+    case "breadstick": {
+      const b = P(MB.CreateCylinder("b", { diameter: 0.025, height: 0.3, tessellation: 6 }, scene), "#d8a05a", 0.006); b.rotation.z = Math.PI / 2;
+      break;
+    }
+    case "tiramisu": {
+      P(MB.CreateBox("t", { width: 0.13, height: 0.06, depth: 0.13 }, scene), "#f3e2b8", 0.01);
+      const top = P(MB.CreateBox("c", { width: 0.13, height: 0.012, depth: 0.13 }, scene), "#6b3e1e", 0); top.position.y = 0.035;
+      const mid = P(MB.CreateBox("m", { width: 0.135, height: 0.012, depth: 0.135 }, scene), "#a8641e", 0); mid.position.y = 0;
+      break;
+    }
+    case "cheese_wheel": {
+      P(MB.CreateCylinder("w", { diameter: 0.26, height: 0.1, tessellation: 14 }, scene), "#f2c94c", 0.012);
+      const rind = P(MB.CreateTorus("r", { diameter: 0.26, thickness: 0.02, tessellation: 14 }, scene), "#d9a632", 0); void rind;
+      const cut = P(MB.CreateBox("c", { width: 0.1, height: 0.102, depth: 0.02 }, scene), "#fff3b0", 0); cut.position.set(0.05, 0, 0); cut.rotation.y = 0.5;
+      break;
+    }
+    case "salami": {
+      const sal = P(MB.CreateCapsule("s", { radius: 0.05, height: 0.32 }, scene), "#8e2a2a", 0.01); sal.rotation.z = Math.PI / 2;
+      const str = P(MB.CreateTorus("st", { diameter: 0.1, thickness: 0.008, tessellation: 8 }, scene), "#e8e2d4", 0); str.rotation.z = Math.PI / 2; str.position.x = 0.1;
+      break;
+    }
+    case "mini_gondola": {
+      const hull = P(MB.CreateBox("h", { width: 0.3, height: 0.04, depth: 0.07 }, scene), "#1b1420", 0.008); hull.rotation.z = 0.12;
+      for (const sx of [-1, 1]) { const tip = P(MB.CreateCylinder("t", { diameterTop: 0, diameterBottom: 0.03, height: 0.08, tessellation: 4 }, scene), "#1b1420", 0); tip.position.set(sx * 0.16, 0.04, 0); tip.rotation.z = -sx * 0.6; }
+      const man = P(MB.CreateCylinder("m", { diameter: 0.025, height: 0.08, tessellation: 6 }, scene), "#f4f1ea", 0); man.position.set(0.05, 0.06, 0);
+      const hat = P(MB.CreateCylinder("hat", { diameter: 0.04, height: 0.008, tessellation: 8 }, scene), "#f2c94c", 0); hat.position.set(0.05, 0.105, 0);
+      break;
+    }
+    case "tower_globe": {
+      P(MB.CreateCylinder("b", { diameter: 0.12, height: 0.05, tessellation: 12 }, scene), "#5a3a2a", 0.008).position.y = -0.06;
+      const t = P(MB.CreateCylinder("t", { diameter: 0.035, height: 0.11, tessellation: 8 }, scene), "#f4f1ea", 0.004); t.rotation.z = 0.25; t.position.y = 0.02;
+      const g = MB.CreateSphere("g", { diameter: 0.15, segments: 10 }, scene); g.position.y = 0.02; P(g, "#cfeeff", 0.006); g.visibility = 0.45;
+      break;
+    }
+    case "golden_accordion": {
+      for (let i = 0; i < 7; i++) { const f = P(MB.CreateBox("f", { width: 0.06, height: 0.34, depth: 0.22 }, scene), i % 2 ? "#ffd54a" : "#d9a632", 0.01); f.position.x = -0.2 + i * 0.066; f.scaling.y = i % 2 ? 1 : 0.94; }
+      for (const sx of [-0.27, 0.27]) { const end = P(MB.CreateBox("e", { width: 0.08, height: 0.38, depth: 0.26 }, scene), "#c8322c", 0.012); end.position.x = sx; }
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) { const k = P(MB.CreateSphere("k", { diameter: 0.03, segments: 4 }, scene), "#f4f1ea", 0); k.position.set(-0.29, 0.1 - r * 0.08, -0.05 + c * 0.1); }
+      break;
+    }
+    // ---- R4: Little Italy's festa drops ----
+    case "golden_meatball": {
+      P(MB.CreateSphere("m", { diameter: 0.16, segments: 8 }, scene), "#ffd54a", 0.01);
+      for (let i = 0; i < 4; i++) { const l = P(MB.CreateSphere("l", { diameter: 0.05, segments: 4 }, scene), "#e8b422", 0); l.position.set(Math.cos(i * 1.6) * 0.07, Math.sin(i * 2.1) * 0.05, Math.sin(i * 1.6) * 0.07); }
+      break;
+    }
+    case "tip_coins": {
+      for (let i = 0; i < 4; i++) { const c = P(MB.CreateCylinder("c", { diameter: 0.07, height: 0.012, tessellation: 10 }, scene), "#ffd54a", 0.005); c.position.set((i % 2) * 0.03 - 0.015, i * 0.013, Math.floor(i / 2) * 0.02); }
+      break;
+    }
+    case "golden_rose": {
+      const st = P(MB.CreateCylinder("st", { diameter: 0.015, height: 0.22, tessellation: 5 }, scene), "#3f8f4a", 0); st.rotation.z = Math.PI / 2;
+      const head = P(MB.CreateSphere("h", { diameter: 0.07, segments: 6 }, scene), "#ffd54a", 0.008); head.position.x = 0.12;
+      const leaf = P(MB.CreateSphere("lf", { diameter: 0.05, segments: 4 }, scene), "#3f8f4a", 0); leaf.scaling.set(1, 0.2, 0.5); leaf.position.set(0.02, 0.02, 0);
       break;
     }
     // ---- C5c: the bank and the golden stashes ----

@@ -334,3 +334,81 @@ test("D1 snappier: walk 5.8 in ~0.12 s, sprint 9.4, a sprint stops in ~0.3 s wit
   const d = makeMoveState(0, 0); d.carryMul = 0.6; run(d, empty, 1, { mz: 1, sprint: true });
   assert.ok(Math.abs(horizontalSpeed(d) - PLAYER.sprintSpeed * 0.6) < 1e-6, "loaded down: clearly slower");
 });
+
+// ---------------------------------------------------------------- R3: angled walls (turned boxes, wedges, triangles)
+import { rotBox, polyBox, footSd, inFoot, footFaces, box as mkBox, stepItem, type Box } from "../src/index.js";
+
+const arenaOf = (boxes: Box[]): ArenaLayout => ({ halfSize: 50, boxes, spawns: [{ x: 0, z: 0, yaw: 0 }] });
+
+test("R3 footprints: a turned box at yaw 0 is the same as a plain box; signed distance and faces are right", () => {
+  const plain = mkBox(2, 3, 4, 2, 3, "wall"), turned = rotBox(2, 3, 4, 2, 0, 3, "wall");
+  for (const [x, z] of [[0, 0], [2, 3], [4.35, 3], [2, 4.5], [5, 5], [-1, 3.2], [3.9, 2.1]]) {
+    const a = footSd(plain, x, z), b = footSd(turned, x, z);
+    assert.ok(Math.abs(a.d - b.d) < 1e-9, `distance at ${x},${z}: ${a.d} vs ${b.d}`);
+    assert.equal(inFoot(plain, x, z, 0.3), inFoot(turned, x, z, 0.3));
+  }
+  // a 45-degree square: its corner points straight along +x
+  const diamond = rotBox(0, 0, 2, 2, Math.PI / 4, 3, "wall");
+  assert.ok(Math.abs(diamond.w - 2 * Math.SQRT2) < 1e-9 && Math.abs(diamond.d - 2 * Math.SQRT2) < 1e-9, "bounding box covers the turned square");
+  assert.ok(inFoot(diamond, 1.3, 0) && !inFoot(diamond, 1.3, 1.3), "a corner pokes out along x; the bounding-box corner is empty");
+  assert.ok(Math.abs(footSd(diamond, 0, 0).d + 1) < 1e-9, "1 m deep at the middle");
+  // a triangle: 3 faces, outward normals, either winding
+  const tri = polyBox([[0, 0], [0, 4], [4, 0]], 2, "wall"); // (clockwise in: stored counter-clockwise)
+  const faces = footFaces(tri);
+  assert.equal(faces.length, 3);
+  for (const f of faces) assert.ok((f.mx + f.nx * 0.1 - 4 / 3) * f.nx + (f.mz + f.nz * 0.1 - 4 / 3) * f.nz > 0, "normals point out");
+  assert.ok(inFoot(tri, 1, 1) && !inFoot(tri, 2.5, 2.5));
+});
+
+test("R3 movement: running at a 45-degree wall slides you along it smoothly (no bumps, never inside)", () => {
+  // a long wall turned 45 degrees: its face runs from south-west to north-east, north-west of the start
+  const wall = rotBox(-3, 3, 40, 1, Math.PI / 4 + Math.PI / 2, 4, "wall");
+  const A = arenaOf([wall]);
+  const s = makeMoveState(0, 0, 0);
+  const speeds: number[] = [];
+  for (let i = 0; i < SIM_HZ * 3; i++) {
+    stepMovement(s, input({ mz: 1, mx: -0.6 }, i), A);
+    assert.ok(footSd(wall, s.x, s.z).d > PLAYER.radius - 0.02, `inside the wall at step ${i}`);
+    if (i > SIM_HZ) speeds.push(horizontalSpeed(s));
+  }
+  // pressed against the wall, the leftover speed runs along it (north-east), steadily
+  // (the push toward the wall is 0.24 of the walk direction's length along it: about 1.4 m/s, and steady)
+  const lo = Math.min(...speeds), hi = Math.max(...speeds);
+  assert.ok(lo > 1.2 && hi - lo < 0.05, `slide speed ${lo.toFixed(3)}..${hi.toFixed(3)}`);
+  const along = (s.x + s.z) / Math.SQRT2;
+  assert.ok(along > 2.5, `slid north-east along the wall (${s.x.toFixed(1)}, ${s.z.toFixed(1)})`);
+});
+
+test("R3 movement: you can't walk into a triangle, you can stand on its roof, and mantle a turned crate", () => {
+  const tri = polyBox([[2, -3], [2, 3], [6, 0]], 1.2, "crate");
+  const A = arenaOf([tri]);
+  const s = run(makeMoveState(0, 0, Math.PI / 2), A, 2, { mz: 1, yaw: Math.PI / 2 });
+  assert.ok(s.x < 2 - PLAYER.radius + 0.02, `stopped at the triangle's face (x ${s.x.toFixed(2)})`);
+  // drop onto the roof
+  const t = makeMoveState(4, 0, 0); t.y = 3; t.grounded = false;
+  run(t, A, 1, {});
+  assert.ok(Math.abs(t.y - 1.2) < 1e-6 && t.grounded, `standing on the roof (y ${t.y})`);
+  // mantle a 2 m crate turned 30 degrees (too high to jump onto): jump at it and climb up, like a plain one
+  for (const crate of [mkBox(0, 3, 2, 2, 2, "crate"), rotBox(0, 3, 2, 2, Math.PI / 6, 2, "crate")]) {
+    const B = arenaOf([crate]);
+    const m = makeMoveState(0, 0.5, 0);
+    let on = false;
+    for (let i = 0; i < SIM_HZ * 2; i++) { stepMovement(m, input({ mz: 1, jump: i % 30 < 15 }, i), B); if (m.grounded && Math.abs(m.y - 2) < 0.01) on = true; }
+    assert.ok(on, `climbed onto the ${crate.poly ? "turned" : "plain"} crate`);
+  }
+});
+
+test("R3 items: a thrown item bounces off an angled wall the right way and never ends up inside it", () => {
+  // a wall along the line x = z (turned 45 degrees); throw at it from the south-east, heading west
+  const wall = rotBox(0, 0, 20, 1, Math.PI / 4, 4, "wall");
+  const A = arenaOf([wall]);
+  // (yaw 45 degrees: the wall runs north-west to south-east; its face toward the item looks north-east)
+  const body = { x: 4, y: 1, z: -1, vx: -10, vy: 0, vz: 0, rot: 0, spin: 0, resting: false };
+  let maxVz = 0;
+  for (let i = 0; i < 40; i++) {
+    stepItem(body, 0.25, 0.4, A, 1 / 60);
+    maxVz = Math.max(maxVz, body.vz);
+    assert.ok(footSd(wall, body.x, body.z).d > 0.2 || body.y - 0.25 > 4, "never inside the wall");
+  }
+  assert.ok(maxVz > 2, `glances off north (vz ${maxVz.toFixed(2)}): the wall's normal is diagonal, not along x`);
+});

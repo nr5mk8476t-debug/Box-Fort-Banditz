@@ -13,9 +13,24 @@ import { fortAt } from "./arena.js";
 import type { World, ItemSim, PlayerSim } from "./world.js";
 
 export type MatchPhase = "lobby" | "intro" | "scavenge" | "dusk" | "night" | "dawn" | "shop" | "upgrades" | "over";
-export type CityEventKind = "airdrop" | "truck" | "happyhour" | "raccoons" | "parade";
+export type CityEventKind = "airdrop" | "truck" | "happyhour" | "raccoons" | "parade" | "festa";
 /** C5b: the dragon parade: walking pace, how far behind the head each of the dragon's body segments is, red envelopes every few metres */
 export const PARADE = { speed: 1.6, segments: 9, gap: 1.15, envelopeEvery: 2.6, push: 5.5, r: 1.0 };
+/**
+ * R4: LITTLE ITALY'S FESTA (Chinatown's dragon parade's twin, picked by Blake): one of three, up Leftovers Avenue.
+ *  0 THE GIANT MEATBALL ROLL: a huge meatball rolls down the street (it knocks you flat), chefs chasing it.
+ *  1 THE ACCORDION BAND: a marching band; anyone near it gets the dance buff (stamina refills fast).
+ *  2 THE GONDOLA-ON-WHEELS: a singing gondolier on a trailer, splashing "canal water" (you slip).
+ * Each drops a money pick-up as often, and worth the same, as the dragon's red envelopes (so neither district pays more).
+ */
+export const FESTA = {
+  speed: [2.6, 1.4, 1.6], segments: [2, 4, 3], gap: [1.6, 1.3, 1.6], dropEvery: 2.6, push: 5.5, r: [1.5, 0.8, 1.2],
+  drop: ["golden_meatball", "tip_coins", "golden_rose"], names: ["THE GIANT MEATBALL ROLL", "THE ACCORDION BAND", "THE GONDOLA-ON-WHEELS"],
+  /** the band's dance buff: how near, how fast stamina comes back */
+  danceR: 7, danceRate: 0.7,
+  /** the gondola's splash: how near, how often */
+  splashR: 3.5, splashEvery: 3,
+};
 
 export const CYCLES = 3;
 /** (kept for older code: a "round" is now a whole cycle) */
@@ -38,6 +53,9 @@ export const TRUCK_LEN = 5.5;
 export const TRUCK_WIDTH = 2.6;
 export const HAPPY_HOUR_TIME = 30;
 const EVENT_WARN = 5;
+/** R4: the dragon parade and the festa announce themselves longer: their street closes to traffic meanwhile */
+const PARADE_WARN = 10;
+const warnOf = (k: string) => (k === "happyhour" ? 3 : k === "parade" || k === "festa" ? PARADE_WARN : EVENT_WARN);
 
 export interface RoundLine {
   id: string; name: string; colorIdx: number;
@@ -58,6 +76,8 @@ export interface EventView {
   truckOn: boolean; truckX: number; truckZ: number; truckYaw: number;
   /** C5b: how far the dragon's head has walked along Chinatown's route (-1 = no parade) */
   paradeD: number;
+  /** R4: Little Italy's festa: how far along (-1 = none), which one */
+  festaD: number; festaV: number;
 }
 
 interface ActiveEvent {
@@ -101,6 +121,11 @@ export class MatchSystem {
   /** C5b: the dragon parade (distance walked; -1 = not on) */
   paradeD = -1;
   private nextEnvelope = 0;
+  /** R4: Little Italy's festa (distance; -1 = not on) and which one (see FESTA) */
+  festaD = -1;
+  festaV = 0;
+  private nextDrop = 0;
+  private splashT = 0;
 
   constructor(private w: World) {}
 
@@ -316,7 +341,7 @@ export class MatchSystem {
   // ---------------------------------------------------------------- events
   /** Escalation: round 1 gets 1 event, round 2 gets 2, round 3+ gets 3, all different kinds. */
   private planEvents() {
-    const kinds: CityEventKind[] = ["airdrop", "truck", "happyhour", "raccoons", ...(this.w.arena.chinatown ? ["parade" as const] : [])];
+    const kinds: CityEventKind[] = ["airdrop", "truck", "happyhour", "raccoons", ...(this.w.arena.chinatown ? ["parade" as const] : []), ...(this.w.arena.littleItaly ? ["festa" as const] : [])];
     for (let i = kinds.length - 1; i > 0; i--) { const j = Math.floor(this.w.random() * (i + 1)); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
     const n = Math.min(3, this.round);
     // spread between 25 s in and 45 s before the end, at least ~35 s apart
@@ -345,6 +370,10 @@ export class MatchSystem {
     } else if (kind === "parade") {
       const r0 = this.w.arena.chinatown?.route[0] ?? { x: 0, z: 0 };
       this.ev = { kind, stage: "warn", t: 0, x: r0.x, z: r0.z, r: 0 };
+    } else if (kind === "festa") {
+      const r0 = this.w.arena.littleItaly?.route[0] ?? { x: 0, z: 0 };
+      this.festaV = Math.floor(rnd() * 3);
+      this.ev = { kind, stage: "warn", t: 0, x: r0.x, z: r0.z, r: 0 };
     } else {
       this.ev = { kind, stage: "warn", t: 0, x: 0, z: 0, r: 0 };
     }
@@ -356,6 +385,7 @@ export class MatchSystem {
     if (!e) return "";
     if (e.kind === "truck") return this.truckRoutes.find((r) => r.ax === e.ax && r.az === e.az)?.name ?? "";
     if (e.kind === "happyhour") return this.happyZones.find((z) => z.x === e.x && z.z === e.z)?.name ?? "";
+    if (e.kind === "festa") return FESTA.names[this.festaV];
     return "";
   }
 
@@ -366,7 +396,7 @@ export class MatchSystem {
     if (!e) return;
     e.t += dt;
     if (e.stage === "warn") {
-      if (e.t >= (e.kind === "happyhour" ? 3 : EVENT_WARN)) { e.stage = "live"; e.t = 0; this.goLive(e); }
+      if (e.t >= warnOf(e.kind)) { e.stage = "live"; e.t = 0; this.goLive(e); }
       return;
     }
     switch (e.kind) {
@@ -377,6 +407,7 @@ export class MatchSystem {
       }
       case "truck": this.truckTick(e, dt); break;
       case "parade": this.paradeTick(dt); break;
+      case "festa": this.festaTick(dt); break;
       case "happyhour": {
         for (const it of this.w.items.values()) if (it.mode === "free" && it.fort < 0 && inZone(it, e)) it.mult = 2;
         if (e.t >= HAPPY_HOUR_TIME) this.stopEvent();
@@ -407,13 +438,15 @@ export class MatchSystem {
     } else if (e.kind === "raccoons") {
       for (const p of this.w.players.values()) if (p.connected) this.w.npc.spawnRaccoon(p.colorIdx);
     } else if (e.kind === "parade") {
-      this.paradeD = 0; this.nextEnvelope = PARADE.envelopeEvery;
+      this.paradeD = 0; this.nextEnvelope = PARADE.envelopeEvery; this.w.traffic.towFromClosed();
+    } else if (e.kind === "festa") {
+      this.festaD = 0; this.nextDrop = FESTA.dropEvery; this.splashT = FESTA.splashEvery; this.w.traffic.towFromClosed();
     }
   }
 
   /** C5b: where along Chinatown's route a point `d` metres from the start is (and which way it faces) */
-  paradeAt(d: number): { x: number; z: number; yaw: number } {
-    const rt = this.w.arena.chinatown?.route ?? [{ x: 0, z: 0 }, { x: 0, z: 1 }];
+  paradeAt(d: number, rt0?: { x: number; z: number }[]): { x: number; z: number; yaw: number } {
+    const rt = rt0 ?? this.w.arena.chinatown?.route ?? [{ x: 0, z: 0 }, { x: 0, z: 1 }];
     let left = Math.max(0, d);
     for (let i = 0; i < rt.length - 1; i++) {
       const a = rt[i], b = rt[i + 1], len = Math.hypot(b.x - a.x, b.z - a.z);
@@ -422,8 +455,8 @@ export class MatchSystem {
     }
     return { x: rt[0].x, z: rt[0].z, yaw: 0 };
   }
-  private routeLength() {
-    const rt = this.w.arena.chinatown?.route ?? [];
+  private routeLength(rt0?: { x: number; z: number }[]) {
+    const rt = rt0 ?? this.w.arena.chinatown?.route ?? [];
     let n = 0; for (let i = 0; i < rt.length - 1; i++) n += Math.hypot(rt[i + 1].x - rt[i].x, rt[i + 1].z - rt[i].z);
     return n;
   }
@@ -432,8 +465,34 @@ export class MatchSystem {
    * C5b: the dragon dances up Chinatown: anyone in its way gets bumped aside (no knockdown), and it scatters
    * red envelopes of lucky money as it goes. Done when its tail has passed the far gate.
    */
+  /** R4: a car stopped just ahead of the parade's head (at a light, say): the parade waits for it to go */
+  private carAhead(d: number, r: number, rt?: { x: number; z: number }[]): boolean {
+    if (d > this.routeLength(rt)) return false;
+    const h = this.paradeAt(d, rt), fx = Math.sin(h.yaw), fz = Math.cos(h.yaw);
+    return this.w.traffic.cars.some((c) => {
+      const dx = c.x - h.x, dz = c.z - h.z, al = dx * fx + dz * fz;
+      // (only a car going its way, waiting at a light: cars crossing or coming at it wait for the parade instead)
+      return al > -0.5 && al < r + 3.2 && Math.abs(dx * fz - dz * fx) < r + 1.3 && Math.sin(c.yaw) * fx + Math.cos(c.yaw) * fz > 0.7;
+    });
+  }
+
+  /** R4: where the dragon's and the festa's bodies are right now (traffic waits for them) */
+  paradeBodies(): { x: number; z: number; r: number }[] {
+    const out: { x: number; z: number; r: number }[] = [];
+    if (this.paradeD >= 0) for (let s = 0; s <= PARADE.segments; s++) {
+      const d = this.paradeD - s * PARADE.gap;
+      if (d >= 0) { const q = this.paradeAt(d); out.push({ x: q.x, z: q.z, r: PARADE.r }); }
+    }
+    const rt = this.w.arena.littleItaly?.route, v = this.festaV;
+    if (this.festaD >= 0 && rt) for (let s = 0; s <= FESTA.segments[v]; s++) {
+      const d = this.festaD - s * FESTA.gap[v];
+      if (d >= 0) { const q = this.paradeAt(d, rt); out.push({ x: q.x, z: q.z, r: FESTA.r[v] }); }
+    }
+    return out;
+  }
+
   private paradeTick(dt: number) {
-    this.paradeD += PARADE.speed * dt;
+    if (!this.carAhead(this.paradeD, PARADE.r)) this.paradeD += PARADE.speed * dt; // (R4: waits for a car stopped in its way)
     const d = this.paradeD;
     for (const p of this.w.players.values()) {
       if (!p.connected || p.move.y > 2.5) continue;
@@ -454,6 +513,42 @@ export class MatchSystem {
       this.w.emit({ t: "firecracker", x: h.x, z: h.z });
     }
     if (d >= this.routeLength() + PARADE.segments * PARADE.gap + 2) this.stopEvent();
+  }
+
+  /** R4: Little Italy's festa (see FESTA): its own way of being in the way, money pick-ups as it goes */
+  private festaTick(dt: number) {
+    const rt = this.w.arena.littleItaly?.route ?? [{ x: 0, z: 0 }, { x: 0, z: 1 }], v = this.festaV;
+    if (!this.carAhead(this.festaD, FESTA.r[v], rt)) this.festaD += FESTA.speed[v] * dt;
+    const d = this.festaD, L = this.routeLength(rt);
+    const head = this.paradeAt(d, rt);
+    for (const p of this.w.players.values()) {
+      if (!p.connected || p.move.y > 2.5 || p.respawnT > 0) continue;
+      // the band: dance! (stamina comes back fast near it)
+      if (v === 1 && d <= L && Math.hypot(p.move.x - head.x, p.move.z - head.z) < FESTA.danceR) p.move.stamina = Math.min(1, p.move.stamina + FESTA.danceRate * dt);
+      for (let s = 0; s <= FESTA.segments[v]; s++) {
+        if (d - s * FESTA.gap[v] < 0) continue;
+        const q = this.paradeAt(d - s * FESTA.gap[v], rt);
+        const dx = p.move.x - q.x, dz = p.move.z - q.z, dist = Math.hypot(dx, dz);
+        if (dist > FESTA.r[v] + 0.4) continue;
+        const fx = Math.sin(q.yaw), fz = Math.cos(q.yaw), side = dx * fz - dz * fx >= 0 ? 1 : -1;
+        p.move.vx = fz * side * FESTA.push; p.move.vz = -fx * side * FESTA.push;
+        if (v === 0 && s === 0) { if (p.move.knockT <= 0) this.w.knockdown(p, "meatball"); } // (the meatball flattens you; the chefs just shove)
+        else p.move.stumbleT = Math.max(p.move.stumbleT, 0.25);
+        break;
+      }
+    }
+    // the gondola: a bucket of canal water now and then (anyone close slips)
+    if (v === 2 && d <= L && (this.splashT -= dt) <= 0) {
+      this.splashT = FESTA.splashEvery;
+      for (const p of this.w.players.values()) if (p.connected && p.move.y < 2.5 && Math.hypot(p.move.x - head.x, p.move.z - head.z) < FESTA.splashR) { p.move.stumbleT = Math.max(p.move.stumbleT, 0.6); p.move.vx *= 0.3; p.move.vz *= 0.3; }
+      this.w.emit({ t: "festaSplash", x: head.x, z: head.z });
+    }
+    if (d >= this.nextDrop && d <= L) {
+      this.nextDrop += FESTA.dropEvery;
+      const side = this.w.random() < 0.5 ? -1 : 1;
+      this.w.popLoot(FESTA.drop[v], head.x, 2.2, head.z, Math.cos(head.yaw) * side, -Math.sin(head.yaw) * side);
+    }
+    if (d >= L + FESTA.segments[v] * FESTA.gap[v] + 2) this.stopEvent();
   }
 
   private truckTick(e: ActiveEvent, dt: number) {
@@ -503,6 +598,7 @@ export class MatchSystem {
     }
     if (e.kind === "truck") this.truck.on = false;
     if (e.kind === "parade") this.paradeD = -1;
+    if (e.kind === "festa") this.festaD = -1;
     if (e.kind === "raccoons") this.w.npc.clearRaccoons();
     if (e.kind === "airdrop" && e.crate) { const c = this.w.items.get(e.crate); if (c) c.chute = false; }
     this.w.emit({ t: "cityEvent", kind: e.kind, stage: "end", x: e.x, z: e.z, detail: "" });
@@ -514,9 +610,10 @@ export class MatchSystem {
     out.kind = e?.kind ?? "";
     out.stage = e?.stage ?? "";
     out.x = e?.x ?? 0; out.z = e?.z ?? 0; out.r = e?.r ?? 0;
-    out.timeLeft = !e ? 0 : e.stage === "warn" ? Math.max(0, (e.kind === "happyhour" ? 3 : EVENT_WARN) - e.t) : e.kind === "happyhour" ? Math.max(0, HAPPY_HOUR_TIME - e.t) : 0;
+    out.timeLeft = !e ? 0 : e.stage === "warn" ? Math.max(0, warnOf(e.kind) - e.t) : e.kind === "happyhour" ? Math.max(0, HAPPY_HOUR_TIME - e.t) : 0;
     out.truckOn = this.truck.on; out.truckX = this.truck.x; out.truckZ = this.truck.z; out.truckYaw = this.truck.yaw;
     out.paradeD = this.paradeD;
+    out.festaD = this.festaD; out.festaV = this.festaV;
     return out;
   }
 }

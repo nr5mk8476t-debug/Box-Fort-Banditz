@@ -104,7 +104,10 @@ export class LockpickUI {
   }
 
   /** A/D/arrows/wheel choose a pin, SPACE/click sets it. */
+  /** R6: step away from the lock (the holding cell: back to walking about) */
+  onCancel: (() => void) | null = null;
   key(code: string) {
+    if ((code === "Escape" || code === "KeyS") && this.onCancel) { this.onCancel(); return; }
     const r = this.run;
     if (!r || r.solved) return;
     const n = r.def.pins.length;

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Builds preview/box-fort-banditz.html: the solo-only page published to claude.ai.
-Babylon.js loads from the jsDelivr CDN; the game code (~35 KB) is inlined."""
-import re, glob, subprocess, os
+Babylon.js loads from the jsDelivr CDN; the game code (~35 KB) is inlined.
+`python3 scripts-build-preview.py roads` builds the road-layout test instead (preview/road-test.html)."""
+import re, glob, subprocess, os, sys
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-subprocess.run(["npx", "vite", "build", "-c", "vite.preview.config.ts"], cwd="client", check=True, capture_output=True)
+ROADS = len(sys.argv) > 1 and sys.argv[1] == "roads"
+env = dict(os.environ, **({"VITE_BFB_MAP": "roads2"} if ROADS else {}))
+subprocess.run(["npx", "vite", "build", "-c", "vite.preview.config.ts"], cwd="client", check=True, capture_output=True, env=env)
 html = open("client/dist-preview/index.html").read()
 css = open(glob.glob("client/dist-preview/assets/*.css")[0]).read()
 js = open(glob.glob("client/dist-preview/assets/*.js")[0]).read().replace("</script", "<\\/script")
@@ -11,7 +14,7 @@ body = re.search(r"<body>(.*)</body>", html, re.S).group(1)
 body = re.sub(r"<script[^>]*></script>", "", body)
 body = body.replace("PHASE 0 PROTOTYPE</span> Placeholder art &amp; sound. Nothing is final.",
                     "PHASE 0 SOLO PREVIEW</span> Placeholder art &amp; sound. Multiplayer needs the real server.")
-out = f'''<title>Box Fort Banditz</title>
+out = f'''<title>{"Trashington Road Test" if ROADS else "Box Fort Banditz"}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
@@ -37,5 +40,6 @@ document.getElementById("boot-note").remove();
 </script>
 '''
 os.makedirs("preview", exist_ok=True)
-open("preview/box-fort-banditz.html", "w").write(out)
-print("preview/box-fort-banditz.html", len(out), "bytes")
+name = "preview/road-test.html" if ROADS else "preview/box-fort-banditz.html"
+open(name, "w").write(out)
+print(name, len(out), "bytes")

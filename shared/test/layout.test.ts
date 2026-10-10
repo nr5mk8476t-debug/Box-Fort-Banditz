@@ -2,9 +2,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildTrashington, buildLanes, onRoadAt, inWater, inDeepWater, nearBoxes, inRect, tierAt, fortAt, PLAYER, RING, COMPOUND, HIGHWAY,
+  buildTrashington, setCityMap, setBoxOff, NEW, footSd, inFoot, lootDef, STALL_LOOT, DELI_LOOT, buildLanes, onRoadAt, inWater, inDeepWater, nearBoxes, inRect, tierAt, fortAt, PLAYER, RING, COMPOUND, HIGHWAY,
   type ArenaLayout,
 } from "../src/index.js";
+import { setCityMap as useCity } from "../src/index.js";
+useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const city = buildTrashington();
 
@@ -29,7 +31,7 @@ function walkGrid(c: ArenaLayout) {
 }
 const free = walkGrid(city);
 /** Walking distance (m) from a point to every cell (4-neighbour BFS, roads included). */
-function distFrom(x: number, z: number): Float32Array {
+function distFrom(x: number, z: number, fr: Uint8Array = free): Float32Array {
   const d = new Float32Array(N * N).fill(Infinity);
   const q = new Int32Array(N * N);
   let h = 0, t = 0;
@@ -41,7 +43,7 @@ function distFrom(x: number, z: number): Float32Array {
       const a = i + di, b = j + dj;
       if (a < 0 || b < 0 || a >= N || b >= N) continue;
       const m = a * N + b;
-      if (!free[m] || d[m] !== Infinity) continue;
+      if (!fr[m] || d[m] !== Infinity) continue;
       d[m] = d[k] + CELL; q[t++] = m;
     }
   }
@@ -289,4 +291,322 @@ test("C3 park: a pear-shaped pond you can wade in, a fountain with a rim you can
   // no loot and no bench in the pond
   for (const s of city.lootSpawns!) assert.ok(!inShape(s.x, s.z) || s.y > 0.2, `loot in the pond at ${s.x},${s.z}`);
   assert.ok(city.posts!.some((p) => p.kind === "fisherman" && !inWater(city, p.x, p.z)), "the fisherman stands on dry land (his jetty)");
+});
+
+// ---------------------------------------------------------------- R3: the new city (mirrored, fair, named)
+setCityMap("new");
+const nc = buildTrashington();
+setCityMap("classic");
+// (R8: the glass doors: the walks are measured with them open)
+for (const p of nc.props ?? []) if (p.kind === "door" && p.box !== undefined) setBoxOff(nc, p.box, true);
+const SZ = nc.southZ!;
+/** a walking grid over the new city (it runs further south: the fort bowl) */
+function walkGridNew(c: ArenaLayout) {
+  const C = 0.5, NX = Math.round((c.halfSize * 2) / C), NZ = Math.round((c.halfSize - SZ) / C), free = new Uint8Array(NX * NZ), r = PLAYER.radius;
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    const x = -c.halfSize + (i + 0.5) * C, z = SZ + (j + 0.5) * C;
+    let ok = true;
+    for (const b of nearBoxes(c, x, z, r + 0.1)) { const top = b.y + b.h / 2, bot = b.y - b.h / 2; if (top <= 0.45 || bot >= 1.8) continue; if (inFoot(b, x, z, r)) { ok = false; break; } }
+    free[j * NX + i] = ok ? 1 : 0;
+  }
+  return { free, NX, NZ, C, at: (x: number, z: number) => Math.floor((z - SZ) / C) * NX + Math.floor((x + c.halfSize) / C) };
+}
+/** walking distance (8 directions, round corners) from every free cell to the nearest target cell */
+function walkFrom(g: ReturnType<typeof walkGridNew>, target: (x: number, z: number) => boolean) {
+  const { free, NX, NZ, C } = g, D = new Float32Array(NX * NZ).fill(Infinity);
+  const cap = NX * NZ * 9, hc = new Int32Array(cap), hk = new Float32Array(cap); let hn = 0;
+  const push = (c: number, d: number) => { let i = hn++; while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= d) break; hc[i] = hc[p]; hk[i] = hk[p]; i = p; } hc[i] = c; hk[i] = d; };
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const c = j * NX + i; if (free[c] && target(-nc.halfSize + (i + 0.5) * C, SZ + (j + 0.5) * C)) { D[c] = 0; push(c, 0); } }
+  const nb = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
+  while (hn > 0) {
+    const c = hc[0], d = hk[0], lc = hc[--hn], lk = hk[hn];
+    let i = 0;
+    for (;;) { const l = 2 * i + 1; if (l >= hn) break; let m = l; if (l + 1 < hn && hk[l + 1] < hk[l]) m = l + 1; if (hk[m] >= lk) break; hc[i] = hc[m]; hk[i] = hk[m]; i = m; }
+    hc[i] = lc; hk[i] = lk;
+    if (d > D[c]) continue;
+    const ci = c % NX, cj = (c - ci) / NX;
+    for (const [di, dj, w] of nb) {
+      const a = ci + di, b = cj + dj;
+      if (a < 0 || b < 0 || a >= NX || b >= NZ) continue;
+      const m = b * NX + a;
+      if (!free[m] || (di && dj && (!free[cj * NX + a] || !free[b * NX + ci]))) continue;
+      const nd = d + w * C;
+      if (nd < D[m]) { D[m] = nd; push(m, nd); }
+    }
+  }
+  return D;
+}
+const ng = walkGridNew(nc);
+
+test("R3 roads: Blake's names, the whole network mirrored left / right, no upper-left stub, no top road, Dead-Centre Drive up the middle", () => {
+  const net = nc.roadNet!;
+  const names = new Set(net.edges.map((e) => e.name));
+  for (const n of ["Lefty Lane", "Righty Lane", "Gahookz Ghetto Lane", "Dead-Centre Drive", "Bin Juice Boulevard", "Mayor's Mugshot Mile", "Shopping Trolley Terrace", "Dodgy Cut-Through", "Bank Run",
+    "Snob Row", "Leftovers Avenue", "Write-Off Avenue", "The Spin Cycle", "Loose Change Lane"]) assert.ok(names.has(n), `a road called ${n}`);
+  assert.ok(net.edges.every((e) => e.name), "every road has a name");
+  // mirrored: every junction has its twin on the other side, every road its mirror image
+  const key = (x: number, z: number) => `${Math.round(x * 10)},${Math.round(z * 10)}`;
+  const nodeAt = new Set(net.nodes.map((n) => key(n.x, n.z)));
+  for (const n of net.nodes) assert.ok(nodeAt.has(key(-n.x, n.z)), `junction ${n.x},${n.z} has a mirror twin`);
+  const seg = new Set(net.edges.map((e) => { const a = net.nodes[e.a], b = net.nodes[e.b]; return [key(a.x, a.z), key(b.x, b.z)].sort().join("|"); }));
+  for (const e of net.edges) { const a = net.nodes[e.a], b = net.nodes[e.b]; assert.ok(seg.has([key(-a.x, a.z), key(-b.x, b.z)].sort().join("|")), `${e.name} has a mirror image`); }
+  // the stub on the upper cross street is gone (it stops at the avenues), the top road is gone, Dead-Centre Drive runs north
+  assert.ok(!onRoadAt(nc, -90, NEW.binJuice) && !onRoadAt(nc, 90, NEW.binJuice), "Bin Juice Boulevard stops at the two avenues");
+  assert.ok(!onRoadAt(nc, 0, 104) && !onRoadAt(nc, -60, 104), "no road along the very top");
+  assert.ok(onRoadAt(nc, 0, 35) && onRoadAt(nc, 0, 60), "Dead-Centre Drive runs up the middle to Snob Row");
+  // the diagonals leave from the avenue corners and run straight at the middle of the roundabout (clean joins)
+  for (const g of nc.roadSegs!) {
+    assert.ok(Math.abs(Math.abs(g.ax) - NEW.inner) < 0.01 && Math.abs(g.az - NEW.binJuice) < 0.01, "from an avenue corner");
+    const cross = g.ax * g.bz - g.az * g.bx;
+    assert.ok(Math.abs(cross) / Math.hypot(g.ax, g.az) < 0.05, "pointing at the roundabout's middle");
+  }
+  // all joined; every car lane leads on
+  const seen = new Set([0]), q = [0];
+  while (q.length) { const n = q.pop()!; for (const e of net.edges) { const o = e.a === n ? e.b : e.b === n ? e.a : -1; if (o >= 0 && !seen.has(o)) { seen.add(o); q.push(o); } } }
+  assert.equal(seen.size, net.nodes.length, "every junction joined up");
+  const lanes = buildLanes(net);
+  assert.equal(lanes.filter((l) => !l.conn && l.outs.length === 0).length, 0, "no dead-end lanes");
+});
+
+test("R3 forts: 4 yards evenly spaced across the bowl, the outer two 5-10 m from the side walls, under a look-only viaduct", () => {
+  const f = [...nc.forts!].sort((a, b) => a.x - b.x);
+  assert.equal(f.length, 4);
+  const gaps = [f[1].x - f[0].x, f[2].x - f[1].x, f[3].x - f[2].x];
+  assert.ok(Math.max(...gaps) - Math.min(...gaps) < 0.2, `even spacing (${gaps.map((g) => g.toFixed(2)).join(", ")})`);
+  for (const q of [f[0], f[3]]) {
+    const gap = nc.halfSize - Math.max(Math.abs(q.zone.minX), Math.abs(q.zone.maxX));
+    assert.ok(gap >= 5 && gap <= 10, `outer yard ${gap.toFixed(1)} m from the side wall`);
+  }
+  // the avenues sit centred between each pair of forts
+  assert.ok(Math.abs((f[0].x + f[1].x) / 2 + NEW.inner) < 0.1 && Math.abs((f[2].x + f[3].x) / 2 - NEW.inner) < 0.1, "avenues centred between the forts");
+  // the viaduct: drawn over every yard; nothing solid up there, no ramp, nothing to climb
+  const deck = nc.scenery!.filter((s) => s.kind === "viaduct");
+  assert.ok(deck.length > 10);
+  for (const q of f) assert.ok(deck.some((s) => Math.hypot(s.x - q.x, s.z - q.z) < 9), `the viaduct passes over fort ${q.slot}`);
+  const high = nc.boxes.filter((b) => b.z < NEW.gahookz - 4 && b.y + b.h / 2 > 3 && !b.hide && b.kind !== "fence" && b.kind !== "building" && !inRect(nc.lobby!.rect, b.x, b.z, 0.5));
+  assert.deepEqual(high.map((b) => b.kind), [], "nothing tall to climb in the bowl but the pillars");
+  assert.ok(!nc.boxes.some((b) => b.kind === "ramp-step" || (b.kind === "slab" && b.y > 8)), "no ramp and no deck to stand on");
+});
+
+test("R3 fairness: every fort is the same walk from the roundabout, the police, the north lots and the middle of town", () => {
+  const places: [string, (x: number, z: number) => boolean][] = [
+    ["the roundabout", (x, z) => Math.hypot(x, z) <= RING.r1],
+    ["the police station's door", (x, z) => Math.abs(x - nc.station!.door.x) < 1.5 && Math.abs(z - nc.station!.door.z) < 1],
+    ["the middle landmark lot", (x, z) => Math.abs(x) < 3 && Math.abs(z - (NEW.snob + 6)) < 1],
+    ["Bin Juice x Dead-Centre", (x, z) => Math.abs(x) < 2 && Math.abs(z - NEW.binJuice) < 1],
+  ];
+  const report: string[] = [];
+  for (const [name, t] of places) {
+    const D = walkFrom(ng, t);
+    const d = nc.forts!.map((q) => D[ng.at(q.padX, q.padZ)]);
+    report.push(`${name}: ${d.map((v) => v.toFixed(1)).join(" / ")}`);
+    assert.ok(d.every(Number.isFinite), `every fort can walk to ${name}`);
+    assert.ok(Math.max(...d) - Math.min(...d) <= 2, `${name}: within 2 m (${d.map((v) => v.toFixed(1)).join(", ")})`);
+  }
+  console.log("  R3 fort walks (outer W / outer E / middle W / middle E):\n   " + report.join("\n   "));
+});
+
+test("R3 blocks: the two halves mirror each other; buildings never on a road or the pavement; angled and wedge buildings by the diagonals and the roundabout", () => {
+  const blds = nc.boxes.filter((b) => (b.kind === "building" || b.kind === "tower") && b.y - b.h / 2 < 0.5 && b.z > NEW.gahookz - 4 && b.z < NEW.snob + 6);
+  assert.ok(blds.length > 120, `a full city (${blds.length} buildings)`);
+  const sig = (b: typeof blds[number], m: number) => `${Math.round(m * b.x * 10)},${Math.round(b.z * 10)},${Math.round(b.w * 10)},${Math.round(b.d * 10)},${b.h}`;
+  const mine = new Set(blds.map((b) => sig(b, 1)));
+  for (const b of blds) if (Math.abs(b.x) > 0.5) assert.ok(mine.has(sig(b, -1)), `building at ${b.x.toFixed(1)},${b.z.toFixed(1)} has a mirror twin`);
+  for (const b of blds) for (let x = b.x - b.w / 2 + 0.3; x < b.x + b.w / 2; x += 1) for (let z = b.z - b.d / 2 + 0.3; z < b.z + b.d / 2; z += 1) {
+    if (!inFoot(b, x, z)) continue;
+    assert.ok(!onRoadAt(nc, x, z, 2.0), `building at ${b.x.toFixed(1)},${b.z.toFixed(1)} reaches the pavement or road`); // (R3: 2.5 m pavement)
+  }
+  const angled = blds.filter((b) => b.poly);
+  assert.ok(angled.length >= 16, `angled buildings (${angled.length})`);
+  assert.ok(angled.some((b) => b.poly!.length === 3), "some triangles");
+  assert.ok(angled.some((b) => b.poly!.length >= 5), "some odd-shaped wedges");
+  assert.ok(angled.some((b) => Math.hypot(b.x, b.z) < RING.r1 + 20), "some round the roundabout");
+  // loot never in the road or inside a building
+  for (const s of nc.lootSpawns!) {
+    if (s.y > 0.5) continue;
+    assert.ok(!onRoadAt(nc, s.x, s.z) || nc.crosswalks!.some((c) => inRect(c, s.x, s.z)), `loot in the road at ${s.x.toFixed(1)},${s.z.toFixed(1)}`);
+    assert.ok(!blds.some((b) => footSd(b, s.x, s.z).d < 0), `loot inside a building at ${s.x.toFixed(1)},${s.z.toFixed(1)}`);
+  }
+});
+
+test("R3 ground: everything walkable joins up (no sealed courtyards; the landmark lots are fenced off on purpose)", () => {
+  const D = walkFrom(ng, (x, z) => Math.abs(x) < 1 && Math.abs(z - (NEW.gahookz - 6)) < 1);
+  const pockets: string[] = [];
+  for (let j = 2; j < ng.NZ - 2; j += 2) for (let i = 2; i < ng.NX - 2; i += 2) {
+    const c = j * ng.NX + i, x = -nc.halfSize + (i + 0.5) * ng.C, z = SZ + (j + 0.5) * ng.C;
+    if (!ng.free[c] || D[c] !== Infinity) continue;
+    if (nc.station!.cells.some((q) => inRect(q.rect, x, z, 1))) continue; // (the cells are locked)
+    if (nc.lots!.some((l) => inRect(l.rect, x, z, 0.5))) continue; // (the lots: fenced till a landmark goes there)
+    if (inRect(nc.lobby!.rect, x, z, 1)) continue; // (the squat's tenement)
+    if (nc.hotShops!.some((h) => inRect(h.back, x, z, 0.3))) continue; // (R7: behind the pawn shops' counters)
+    pockets.push(`${x.toFixed(1)},${z.toFixed(1)}`);
+  }
+  assert.ok(pockets.length === 0, `sealed ground at ${pockets.slice(0, 12).join(" ")} (${pockets.length} cells)`);
+});
+
+test("R3 north: five empty landmark lots behind hoardings north of Snob Row, nothing built in them, no road up there", () => {
+  assert.equal(nc.lots!.length, 5);
+  for (const l of nc.lots!) {
+    assert.ok(l.rect.minZ > NEW.snob + 4, `${l.name} is north of Snob Row`);
+    const inside = nc.boxes.filter((b) => b.kind !== "sidewalk" && inRect(l.rect, b.x, b.z, -1));
+    assert.deepEqual(inside.map((b) => b.kind), [], `${l.name} is empty`);
+    assert.ok(nc.boxes.some((b) => b.sign === "COMING SOON: SOMETHING EXPENSIVE" && inRect(l.rect, b.x, b.z, 0.5)), `${l.name} has its hoarding sign`);
+    for (let x = l.rect.minX; x <= l.rect.maxX; x += 5) assert.ok(!onRoadAt(nc, x, (l.rect.minZ + l.rect.maxZ) / 2), "no road through the lots");
+  }
+});
+
+test("R3 street signs: every junction has a green name sign, with the names of the roads that meet there", () => {
+  const net = nc.roadNet!, signs = nc.decor!.filter((d) => d.kind === "streetsign");
+  for (const n of net.nodes) {
+    if (n.ctl === "end") continue;
+    const here = signs.filter((s) => Math.hypot(s.x - n.x, s.z - n.z) < 14);
+    assert.ok(here.length > 0, `a sign at the junction ${n.x},${n.z}`);
+    const names = new Set(net.edges.filter((e) => e.a === n.id || e.b === n.id).map((e) => e.name!.toUpperCase()));
+    if (n.ctl === "round") names.add("THE SPIN CYCLE");
+    assert.ok(here.some((s) => s.text!.split("|").every((t) => names.has(t))), `the sign at ${n.x},${n.z} names roads that meet there (${here.map((s) => s.text).join(" ; ")})`);
+  }
+});
+
+test("R4 Little Italy and Chinatown: mirror images shop for shop, stall for stall (same loot value), gates, lights, café terraces", () => {
+  const I = NEW.inner, LI = nc.littleItaly!, CT = nc.chinatown!;
+  assert.ok(Math.abs((LI.street.minX + LI.street.maxX) / 2 + I) < 0.01 && Math.abs((CT.street.minX + CT.street.maxX) / 2 - I) < 0.01, "on Leftovers Avenue and Write-Off Avenue");
+  assert.ok(LI.street.minZ > NEW.gahookz && LI.street.maxZ < 0, "between Gahookz Ghetto Lane and Mayor's Mugshot Mile");
+  const it = nc.boxes.filter((b) => b.italy), cn = nc.boxes.filter((b) => b.china);
+  assert.ok(it.length >= 8 && it.length === cn.length, `${it.length} Little Italy shops, ${cn.length} Chinatown shops`);
+  for (const b of it) assert.ok(cn.some((c) => Math.abs(c.x + b.x) < 0.01 && Math.abs(c.z - b.z) < 0.01 && Math.abs(c.w - b.w) < 0.01 && c.h === b.h), `${b.sign} has its Chinatown twin`);
+  assert.equal(new Set(it.map((b) => b.sign)).size, it.length, "no two Little Italy shops share a name");
+  // stalls: each Little Italy stall has its Chinatown twin, and they're worth the same
+  const mean = (pool: [string, number][]) => { const W = pool.reduce((s, [, w]) => s + w, 0); return pool.reduce((s, [t, w]) => { const d = lootDef(t); return s + (w / W) * (d.valueMin + d.valueMax) / 2; }, 0); };
+  const TWIN: Record<string, string> = { pizzacart: "steamer", gelato: "steamer", ricordi: "trinkets", deli: "fishtank" };
+  const itStalls = nc.props!.filter((p) => TWIN[p.kind]);
+  assert.ok(itStalls.length >= 3 && itStalls.some((p) => p.kind === "deli"), `${itStalls.map((p) => p.kind).join(",")}`);
+  for (const s of itStalls) {
+    assert.ok(nc.props!.some((q) => q.kind === TWIN[s.kind] && Math.abs(q.x + s.x) < 0.01 && Math.abs(q.z - s.z) < 0.01), `${s.id} has its Chinatown twin`);
+    if (s.kind !== "deli") assert.ok(Math.abs(mean(STALL_LOOT[s.kind]!) - mean(STALL_LOOT[TWIN[s.kind] as "steamer"]!)) < 0.01, `${s.kind} pays what ${TWIN[s.kind]} pays`);
+  }
+  assert.ok(Math.abs(mean(DELI_LOOT) - mean([["live_crab", 3], ["smelly_fish", 4]])) < 0.01, "the deli pays what the seafood tank pays");
+  // gates (their pillars on the pavement, not the road), lights over the street
+  for (const d of [LI, CT]) {
+    assert.equal(d.gates.length, 2);
+    for (const g of d.gates) for (const sx of [-1, 1]) assert.ok(!onRoadAt(nc, g.x + sx * (g.w / 2 - 0.2), g.z), "gate pillars on the pavement");
+    assert.ok(d.lanternRows.length >= 6, `${d.lanternRows.length} rows of lights`);
+  }
+  // café terraces: tables under umbrellas in front of cafés that stand well back from the road
+  const tables = nc.boxes.filter((b) => b.kind === "table" && Math.abs(Math.abs(b.x) - I) < 12 && b.z > NEW.gahookz && b.z < 0);
+  assert.ok(tables.length >= 6, `${tables.length} café tables`);
+  for (const t of tables) assert.ok(nc.decor!.some((d) => d.kind === "umbrella" && Math.hypot(d.x - t.x, d.z - t.z) < 0.01), "each under an umbrella");
+});
+
+test("R4 setbacks: buildings stand back from the kerb by different amounts (not all 2.5 m)", () => {
+  const offs = new Map<number, number>();
+  for (const b of nc.boxes) {
+    if ((b.kind !== "building" && b.kind !== "tower") || b.poly || !b.face || b.y - b.h / 2 > 0.5) continue;
+    const [fx, fz] = b.face, ex = b.x + fx * b.w / 2, ez = b.z + fz * b.d / 2;
+    // distance from the front face out to the road's edge
+    let d = 0;
+    while (d < 9 && !onRoadAt(nc, ex + fx * (d + 0.25), ez + fz * (d + 0.25))) d += 0.25;
+    if (d >= 9) continue;
+    const k = Math.round(d * 2) / 2;
+    offs.set(k, (offs.get(k) ?? 0) + 1);
+  }
+  const total = [...offs.values()].reduce((a, b) => a + b, 0), top = Math.max(...offs.values());
+  assert.ok(offs.size >= 4, `setbacks used: ${[...offs.entries()].sort((a, b) => a[0] - b[0]).map(([k, n]) => `${k} m x${n}`).join(", ")}`);
+  assert.ok(top / total < 0.6, `no one setback for most buildings (${top} of ${total})`);
+});
+
+test("R7 two walk-in pawn shops on Gahookz (left: where Hat Hut was; right: its mirror), glass counters between you and the owner, a till, a bouncer, a suit of armour out front; about the same walk from both forts on their side", () => {
+  const hs = nc.hotShops!;
+  assert.equal(hs.length, 2);
+  const [L, Rt] = hs;
+  assert.ok(L.rect.maxX < -40 && Rt.rect.minX > 40, "one each side");
+  assert.ok(Math.abs(L.rect.minX + Rt.rect.maxX) < 0.01 && Math.abs(L.door.x + Rt.door.x) < 0.01 && Math.abs(L.rect.minZ - Rt.rect.minZ) < 0.01, "mirror images");
+  for (const h of hs) {
+    assert.ok(h.rect.minZ - (NEW.gahookz + 4) < 3 && h.door.z - h.rect.minZ < 3 && !onRoadAt(nc, h.out.x, h.out.z, 0.3), `${h.name}: its front on the Gahookz pavement, its door just round the corner`);
+    assert.ok(h.counters.length >= 3 && h.counters.every((c) => nc.props!.some((p) => p.kind === "glasscounter" && inRect(c, p.x, p.z))), "glass counters (smashable)");
+    assert.ok(h.floor.maxZ <= h.back.minZ, "the counters split the customers' side from the owner's");
+    assert.ok(nc.posts!.some((p) => p.kind === h.owner && inRect(h.back, p.x, p.z)) && nc.posts!.some((p) => p.kind === h.bouncer && inRect(h.floor, p.x, p.z)), "the owner behind the counters, the bouncer on the shop floor");
+    assert.ok(nc.props!.some((p) => p.kind === "pawncounter" && p.shop === h.idx && Math.hypot(p.x - h.stand.x, p.z - h.stand.z) < 1), "the till");
+    assert.ok(nc.boxes.some((b) => b.deco === "armour" && Math.hypot(b.x - h.armour.x, b.z - h.armour.z) < 0.1 && !inRect(h.rect, b.x, b.z)), "a suit of armour out front");
+    assert.ok(!nc.lootSpawns!.some((l) => inRect(h.rect, l.x, l.z)), "nothing to steal");
+    const others = nc.boxes.filter((b) => (b.kind === "building" || b.kind === "tower") && inRect(h.rect, b.x, b.z, -0.5));
+    assert.equal(others.length, 0, "no city building on top of it");
+  }
+  assert.ok(!nc.pawnShop, "the old pawn shop behind the station is gone");
+  // fairness: the two forts on each side walk about the same to their shop
+  const f = [...nc.forts!].sort((a, b) => a.x - b.x);
+  const report: string[] = [];
+  for (const [h, pair] of [[L, [f[0], f[1]]], [Rt, [f[2], f[3]]]] as const) {
+    const D = walkFrom(ng, (x, z) => Math.hypot(x - h.stand.x, z - h.stand.z) < 0.8);
+    const d = pair.map((q) => D[ng.at(q.padX, q.padZ)]);
+    report.push(`${h.name}: ${d.map((v) => v.toFixed(1)).join(" / ")}`);
+    assert.ok(d.every(Number.isFinite), "both can walk there");
+    assert.ok(Math.abs(d[0] - d[1]) <= 8, `${h.name}: within 8 m (${d.map((v) => v.toFixed(1)).join(", ")})`);
+  }
+  console.log("  R7 pawn shop walks (outer / middle):\n   " + report.join("\n   "));
+  const up = nc.stationUpper!;
+  assert.ok(up && up.y1 - up.y0 >= 10 && up.walkTop! > 9, "the station's upper floors (the first one walkable)");
+});
+
+test("R5 the café chairs face their tables", () => {
+  const tables = nc.boxes.filter((b) => b.kind === "table");
+  const chairs = (nc.junkSpots ?? []).filter((j) => j.type === "cafe_chair");
+  assert.ok(chairs.length >= 6);
+  for (const c of chairs) {
+    const t = tables.reduce((m, b) => (Math.hypot(b.x - c.x, b.z - c.z) < Math.hypot(m.x - c.x, m.z - c.z) ? b : m), tables[0]);
+    const fx = Math.sin(c.yaw ?? 0), fz = Math.cos(c.yaw ?? 0), dx = t.x - c.x, dz = t.z - c.z, l = Math.hypot(dx, dz);
+    assert.ok((fx * dx + fz * dz) / l > 0.95, `chair at ${c.x.toFixed(1)},${c.z.toFixed(1)} faces its table`);
+  }
+});
+
+test("R6 the new station: a reception, a breakroom and ONE holding cell (bars, a bench, a toilet, a shower corner, the Champ)", () => {
+  const st = nc.station!, h = st.holding!;
+  assert.ok(h, "the holding cell");
+  assert.equal(st.cells.length, 1, "one cell for everybody");
+  for (const sp of h.spots) assert.ok(inRect(h.cell, sp.x, sp.z), "every landing spot is in the cell");
+  assert.ok(inRect(h.cell, h.toilet.x, h.toilet.z, 0.6) && inRect(h.cell, (h.shower.minX + h.shower.maxX) / 2, (h.shower.minZ + h.shower.maxZ) / 2, 0.5), "the toilet and the shower are in the cell");
+  assert.ok(nc.props!.some((p) => p.kind === "toilet") && nc.props!.some((p) => p.kind === "celldoor"), "the toilet and the cell door can be used");
+  assert.ok(nc.posts!.some((p) => p.kind === "champ" && inRect(h.cell, p.x, p.z)), "the Champ is in the cell");
+  assert.ok(nc.boxes.some((b) => b.kind === "bars" && (Math.abs(b.z - h.door.z) < 0.3 || (Math.abs(b.x - h.door.x) < 0.3 && b.d > 4))), "bars along the cell's front");
+  assert.ok(inRect(st.rect, (h.reception.minX + h.reception.maxX) / 2, (h.reception.minZ + h.reception.maxZ) / 2) && h.breakroom.maxX < h.cell.minX, "the reception at the front, the breakroom beside the cell");
+  assert.ok(nc.boxes.some((b) => b.kind === "fridge" && inRect(h.breakroom, b.x, b.z)) && nc.boxes.some((b) => b.kind === "table" && inRect(h.breakroom, b.x, b.z)), "the breakroom has a fridge and a table");
+});
+
+test("R7 the grand station: right through the block to Gahookz; the lobby (receptionist, stairs), a hallway, two interrogation rooms, booking, the breakroom, the holding cell at the back; upstairs offices, the chief's corner office, the evidence room", () => {
+  const st = nc.station!, g = st.grand!, h = st.holding!;
+  assert.ok(g, "the grand station");
+  assert.ok(st.rect.minZ - (NEW.gahookz + 4) < 3.2, "its back is on the Gahookz pavement");
+  assert.ok(nc.posts!.some((p) => p.kind === "receptionist" && inRect(g.lobby, p.x, p.z)), "the receptionist at her desk in the lobby");
+  assert.equal(g.interrogation.length, 2);
+  for (const r of [...g.interrogation, h.breakroom]) assert.ok(r.maxX < g.hall.minX, "interrogation rooms and the breakroom off the west of the hallway");
+  assert.ok(g.booking.minX > g.hall.maxX && h.cell.minX > g.hall.maxX, "booking and the cell off the east");
+  assert.ok((h.cell.minZ + h.cell.maxZ) / 2 < (g.booking.minZ + g.booking.maxZ) / 2 - 4, "the cell tucked away at the back");
+  assert.ok(nc.boxes.filter((b) => b.kind === "glass" && b.y > 1 && inRect(st.rect, b.x, b.z)).length >= 2, "one-way mirrors");
+  // the stairs climb to the first floor
+  const steps = nc.boxes.filter((b) => b.kind === "step" && inRect(g.stairs, b.x, b.z, 0.1));
+  assert.ok(steps.length >= 12 && Math.abs(Math.max(...steps.map((b) => b.y + b.h / 2)) - g.upY) < 0.05, "stairs up to the first floor");
+  const slab = nc.boxes.some((b) => b.kind === "roof" && Math.abs(b.y + b.h / 2 - g.upY) < 0.05 && inRect(st.rect, b.x, b.z));
+  assert.ok(slab, "a floor to stand on upstairs");
+  assert.ok(inRect(g.upstairs, (g.chief.minX + g.chief.maxX) / 2, (g.chief.minZ + g.chief.maxZ) / 2) && g.chief.maxX > st.rect.maxX - 1 && g.chief.maxZ > st.rect.maxZ - 1, "the chief's corner office (front, east)");
+  assert.ok(g.offices.length >= 3, "offices upstairs");
+  assert.ok(g.evidenceSpots.length >= 9 && g.evidenceSpots.every((s) => inRect(g.evidence, s.x, s.z) && s.y > g.upY), "the evidence room's shelves");
+  assert.ok(nc.boxes.some((b) => b.kind === "bars" && b.y > g.upY && Math.abs(b.z - g.evidenceDoor.z) < 0.2), "behind a cage");
+  assert.ok(g.beats.length >= 2 && g.beats.some((b) => b.y > 4), "a cop walks the ground floor, one guards the evidence room");
+  assert.ok(st.alley.z < st.rect.minZ && !onRoadAt(nc, st.alley.x, st.alley.z, 0.3), "a jailbreak comes out the back, on the Gahookz pavement");
+});
+
+test("R8 the station's real glass: ribbon windows on the ground floor's front and right round the first floor, the chief's office glass to the corner; three glass doors; the cell door its own bars", () => {
+  const st = nc.station!, g = st.grand!;
+  const glass = nc.boxes.filter((b) => b.kind === "glass" && !b.hide && inRect(st.rect, b.x, b.z, 0.3) && !inRect(st.rect, b.x, b.z, -0.6));
+  assert.ok(glass.some((b) => b.y > g.upY && b.z > st.rect.maxZ - 0.8), "first-floor glass on the front");
+  for (const f of ["N", "S", "E", "W"]) assert.ok(g.windows.some((w) => w.face === f && w.y0 > g.upY), `first-floor windows on face ${f}`);
+  assert.ok(glass.some((b) => b.y < 3 && b.z > st.rect.maxZ - 0.8), "ground-floor glass on the front");
+  const ch = g.chief;
+  assert.ok(glass.some((b) => b.y > g.upY && Math.abs(b.x - st.rect.maxX + 0.2) < 0.2 && b.z > ch.minZ && b.z < ch.maxZ + 0.5), "the chief's corner: glass on the side too");
+  const doors = nc.props!.filter((p) => p.kind === "door");
+  assert.equal(doors.length, 3, "the station's front doors and the two pawn shops' doors");
+  for (const d of doors) assert.ok(d.box !== undefined && nc.boxes[d.box].kind === "glass", "each blocks while shut");
+  const cd = nc.props!.find((p) => p.kind === "celldoor")!;
+  assert.ok(cd.box !== undefined && nc.boxes[cd.box].kind === "bars", "the cell door is its own bars (the key opens it)");
+  assert.ok(inRect(ch, g.keySpot.x, g.keySpot.z) && g.keySpot.y > g.upY, "the key's on the chief's desk");
+  assert.equal(g.beats.length, 4, "four cops guard the station");
 });

@@ -1,7 +1,7 @@
 // Walking routes for pedestrians, built automatically from the city layout:
 // a grid of candidate points along the streets; points inside anything solid are dropped,
 // and neighbours are linked only if the straight walk between them is clear.
-import { inRect, nearBoxes, onRoadAt, type ArenaLayout } from "./arena.js";
+import { inRect, nearBoxes, onRoadAt, inFoot, type ArenaLayout } from "./arena.js";
 
 export interface NavNode { id: number; x: number; z: number; links: number[]; }
 
@@ -16,7 +16,7 @@ function blockedAt(arena: ArenaLayout, x: number, z: number): boolean {
     const bottom = b.y - b.h / 2;
     if (top <= 0.4) continue; // curbs/sidewalks are walkable
     if (bottom > 1.8) continue; // overhead things (roofs, slabs up high)
-    if (Math.abs(x - b.x) < b.w / 2 + CLEARANCE && Math.abs(z - b.z) < b.d / 2 + CLEARANCE) return true;
+    if (inFoot(b, x, z, CLEARANCE)) return true;
   }
   return false;
 }

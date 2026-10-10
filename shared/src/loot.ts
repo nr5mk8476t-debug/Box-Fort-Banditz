@@ -32,6 +32,8 @@ export interface LootDef {
   money?: boolean;
   /** C4a: street junk: sits at its own spots round the city (never a random loot spawn), worth $0-5, back each day */
   junk?: boolean;
+  /** R6: only the black market will touch it (Lou, Sal and the shop round won't buy it) */
+  blackMarket?: boolean;
 }
 
 export const LOOT: LootDef[] = [
@@ -124,6 +126,22 @@ export const LOOT: LootDef[] = [
   { type: "lucky_cat", name: "Lucky Waving Cat", size: "small", rarity: "rare", valueMin: 25, valueMax: 60, weight: 0.05, material: "plastic", radius: 0.12, bounce: 0.25, spawnWeight: 0, npcOnly: true, blurb: "It never stops waving. Good luck for your fort." },
   { type: "jade_dragon", name: "Jade Dragon Statue", size: "big", rarity: "epic", valueMin: 80, valueMax: 200, weight: 0.3, heavy: true, material: "glass", radius: 0.3, bounce: 0.1, spawnWeight: 0, npcOnly: true, blurb: "Heavy, green and definitely priceless-ish." },
   { type: "red_envelope", name: "Red Envelope", size: "small", rarity: "uncommon", valueMin: 5, valueMax: 40, weight: 0, material: "cloth", radius: 0.08, bounce: 0.1, spawnWeight: 0, npcOnly: true, money: true, blurb: "Lucky money from the dragon! Straight into your wallet." },
+  // R4: Little Italy (from its stalls and the deli counter; never loose in the street). Each one is worth what its
+  // Chinatown twin is worth, so the two districts are equal.
+  { type: "pizza_slice", name: "Slice of Pizza", size: "small", rarity: "common", valueMin: 6, valueMax: 14, weight: 0, material: "cardboard", radius: 0.12, bounce: 0.15, spawnWeight: 0, npcOnly: true, blurb: "Floppy, cheesy, legally a meal." },
+  { type: "garlic_knot", name: "Garlic Knot", size: "small", rarity: "common", valueMin: 3, valueMax: 8, weight: 0, material: "cloth", radius: 0.09, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Smells like a vampire's worst nightmare." },
+  { type: "gelato_cup", name: "Cup of Gelato", size: "small", rarity: "common", valueMin: 3, valueMax: 8, weight: 0, material: "cardboard", radius: 0.09, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "Three scoops. Melting fast. Sell it quick." },
+  { type: "breadstick", name: "Breadstick", size: "small", rarity: "common", valueMin: 1, valueMax: 5, weight: 0, material: "cardboard", radius: 0.07, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Crunchy. Also a decent pointer." },
+  { type: "tiramisu", name: "Tiramisu", size: "small", rarity: "uncommon", valueMin: 8, valueMax: 20, weight: 0, material: "cardboard", radius: 0.09, bounce: 0.1, spawnWeight: 0, npcOnly: true, blurb: "Coffee, cream and a nap afterwards." },
+  { type: "cheese_wheel", name: "Wheel of Cheese", size: "small", rarity: "uncommon", valueMin: 10, valueMax: 25, weight: 0, material: "rubber", radius: 0.13, bounce: 0.4, spawnWeight: 0, npcOnly: true, blurb: "It rolls. It really, really rolls." },
+  { type: "salami", name: "Salami", size: "small", rarity: "common", valueMin: 1, valueMax: 5, weight: 0, material: "rubber", radius: 0.14, bounce: 0.4, spawnWeight: 0, junk: true, blurb: "A sausage you can hit people with. Bonk." },
+  { type: "mini_gondola", name: "Mini Gondola", size: "small", rarity: "common", valueMin: 3, valueMax: 9, weight: 0, material: "plastic", radius: 0.1, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "Plays a song when you squeeze it. Badly." },
+  { type: "tower_globe", name: "Leaning Tower Snow Globe", size: "small", rarity: "rare", valueMin: 25, valueMax: 60, weight: 0.05, material: "glass", radius: 0.12, bounce: 0.25, spawnWeight: 0, npcOnly: true, blurb: "It leans. Shake it and it leans more." },
+  { type: "golden_accordion", name: "Golden Accordion", size: "big", rarity: "epic", valueMin: 80, valueMax: 200, weight: 0.3, heavy: true, material: "metal", radius: 0.3, bounce: 0.1, spawnWeight: 0, npcOnly: true, blurb: "Heavy, shiny, wheezes when you carry it." },
+  // R4: Little Italy's festa drops (worth what the dragon's red envelopes are: straight into your wallet)
+  { type: "golden_meatball", name: "Golden Meatball", size: "small", rarity: "uncommon", valueMin: 5, valueMax: 40, weight: 0, material: "metal", radius: 0.09, bounce: 0.3, spawnWeight: 0, npcOnly: true, money: true, blurb: "Fell off the giant one. Somehow it's worth money." },
+  { type: "tip_coins", name: "Band's Tips", size: "small", rarity: "uncommon", valueMin: 5, valueMax: 40, weight: 0, material: "metal", radius: 0.08, bounce: 0.2, spawnWeight: 0, npcOnly: true, money: true, blurb: "Pinched from the tip hat. The tuba didn't notice." },
+  { type: "golden_rose", name: "Golden Rose", size: "small", rarity: "uncommon", valueMin: 5, valueMax: 40, weight: 0, material: "metal", radius: 0.08, bounce: 0.2, spawnWeight: 0, npcOnly: true, money: true, blurb: "Thrown by the gondolier. Straight into your wallet." },
   // C5c: the Trashington Bank's vault, its deposit boxes, the manager's keycard
   { type: "cash_bag", name: "Bag of Cash", size: "small", rarity: "rare", valueMin: 50, valueMax: 120, weight: 0, material: "cloth", radius: 0.14, bounce: 0.1, spawnWeight: 0, npcOnly: true, money: true, blurb: "It has a dollar sign on it. Classic." },
   { type: "pearl_necklace", name: "Pearl Necklace", size: "small", rarity: "rare", valueMin: 60, valueMax: 140, weight: 0, material: "plastic", radius: 0.08, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "From a safety deposit box. Very safe. Was." },
@@ -149,6 +167,8 @@ export const LOOT: LootDef[] = [
   { type: "mirror_ball", name: "Crushed-Can Mirror Ball", size: "big", rarity: "epic", valueMin: 70, valueMax: 150, weight: 0.2, heavy: true, material: "metal", radius: 0.3, bounce: 0.35, spawnWeight: 0, npcOnly: true, blurb: "Two thousand squashed soda cans. Sparkly." },
   { type: "golden_record", name: "The Golden Record", size: "small", rarity: "legendary", valueMin: 240, valueMax: 460, weight: 0, material: "metal", radius: 0.16, bounce: 0.2, spawnWeight: 0, npcOnly: true, blurb: "Platinum was taken. 'TRASH TALK' by MC Compactor." },
   { type: "spray_can", name: "Spray Can", size: "small", rarity: "common", valueMin: 2, valueMax: 4, weight: 0, material: "metal", radius: 0.1, bounce: 0.35, spawnWeight: 0, npcOnly: true, junk: true, blurb: "5 tags left. Hold E on a blank wall." },
+  { type: "golden_spoon", name: "The Spoon of Destiny", size: "small", rarity: "legendary", valueMin: 2500, valueMax: 4000, weight: 0, material: "metal", radius: 0.1, bounce: 0.3, spawnWeight: 0, npcOnly: true, blackMarket: true, blurb: "The Champ's golden spoon. Only the black market will take it. Nobody else dares." },
+  { type: "cell_key", name: "The Holding Cell Key", size: "small", rarity: "rare", valueMin: 1, valueMax: 1, weight: 0, material: "metal", radius: 0.08, bounce: 0.3, spawnWeight: 0, npcOnly: true, blackMarket: true, blurb: "Off the chief's desk. E at the holding cell's door: it swings open for 20 s and everybody walks." },
   { type: "rolecks_watch", name: "Rolecks Watch", size: "small", rarity: "epic", valueMin: 150, valueMax: 300, weight: 0, material: "metal", radius: 0.09, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Genuine imitation luxury." },
 ];
 

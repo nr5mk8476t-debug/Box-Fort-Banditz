@@ -18,10 +18,13 @@ interface Vis { def: PropDef; node: TransformNode; ready: boolean; alarm: boolea
   door?: TransformNode; open?: number; glint?: Mesh;
   /** C5c.3: the pawn case: what's on show inside it (rebuilt when its contents change) */
   note?: string; items?: TransformNode;
+  /** R8: a glass door's leaves (hinged at their outer edges) */
+  leaves?: { hinge: TransformNode; dir: number }[];
  }
 
 export class PropRenderer {
   private map = new Map<string, Vis>();
+  private doorGlass: StandardMaterial | null = null;
   private t = 0;
   private alarmMat: StandardMaterial;
   private alarmOff: StandardMaterial;
@@ -124,7 +127,7 @@ export class PropRenderer {
     this.crackedMat = toon(scene, "#46505a");
     this.vendGlass = toon(scene, "#9fe3ff");
     for (const d of props) {
-      if (d.box !== undefined && d.kind !== "vaultdoor") { this.brkDefs.set(d.id, d); this.brkReady.set(d.id, true); continue; } // (C4a: drawn in the city, hidden when smashed)
+      if (d.box !== undefined && d.kind !== "vaultdoor") { this.brkDefs.set(d.id, d); this.brkReady.set(d.id, true); if (d.kind !== "door" && d.kind !== "celldoor") continue; } // (C4a: drawn in the city, hidden when smashed; R8: doors drawn here)
       const node = new TransformNode("prop-" + d.id, scene);
       node.position.set(d.x, d.y, d.z);
       node.rotation.y = d.yaw;
@@ -185,6 +188,54 @@ export class PropRenderer {
           const sg = MeshBuilder.CreatePlane("stallSign", { width: 1.4, height: 0.32 }, scene); sg.position.set(0, 2.05, 0.55); sg.rotation.y = Math.PI; sg.parent = node; sg.isPickable = false;
           sg.material = unlitTextured(scene, textTexture(scene, d.kind === "steamer" ? "HOT DUMPLINGS" : "LUCKY SOUVENIRS", { w: 512, h: 120, bg: "#ffd54a", fg: "#8e1f2e" }), "stallSign");
         }
+      } else if (d.kind === "pizzacart" || d.kind === "gelato" || d.kind === "ricordi" || d.kind === "deli") {
+        // R4: Little Italy's street stalls (local x = along the counter, z = toward the street)
+        const bx = (w: number, h: number, dd: number, x: number, y: number, z: number, col: string, o = 0.02) => { const m = MeshBuilder.CreateBox("it", { width: w, height: h, depth: dd }, scene); m.position.set(x, y, z); return part(m, col, o); };
+        const cyl = (dia: number, h: number, x: number, y: number, z: number, col: string, o = 0.015, top?: number) => { const m = MeshBuilder.CreateCylinder("it", { diameterBottom: dia, diameterTop: top ?? dia, height: h, tessellation: 14 }, scene); m.position.set(x, y, z); return part(m, col, o); };
+        const sign = (text: string, bg: string, fg: string, y = 2.05, z = 0.55) => { const sg = MeshBuilder.CreatePlane("itSign", { width: 1.4, height: 0.32 }, scene); sg.position.set(0, y, z); sg.rotation.y = Math.PI; sg.parent = node; sg.isPickable = false; sg.material = unlitTextured(scene, textTexture(scene, text, { w: 512, h: 120, bg, fg }), "itSign"); };
+        const tricolour = (y: number, depth = 1.1, w = 1.68) => { const cols = ["#2f8f4e", "#f4f1ea", "#c8322c"]; for (let i = 0; i < 6; i++) { const aw = bx(w / 6, 0.04, depth, -w / 2 + w / 12 + i * w / 6, y, 0.05, cols[i % 3], 0); aw.rotation.x = 0.25; } bx(w, 0.12, 0.04, 0, y - 0.18, 0.62, "#c8322c", 0); };
+        if (d.kind === "deli") {
+          // a glass deli counter: cheese wheels, salamis, a ham hanging over it
+          bx(1.4, 0.55, 0.8, 0, 0.28, 0, "#5a3a2a");
+          bx(1.42, 0.06, 0.82, 0, 0.58, 0, "#e8e2d4", 0.01);
+          const glass = MeshBuilder.CreateBox("deliGlass", { width: 1.36, height: 0.6, depth: 0.76 }, scene); glass.position.y = 0.92; glass.parent = node; glass.isPickable = false;
+          const gm = new StandardMaterial("deliGlassMat", scene); gm.diffuseColor = Color3.FromHexString("#cfeeff"); gm.emissiveColor = Color3.FromHexString("#2a4a5a"); gm.alpha = 0.32; glass.material = gm; v.glass = glass;
+          for (let i = 0; i < 3; i++) cyl(0.32, 0.14, -0.42 + i * 0.42, 0.7, 0.12, "#f2c94c", 0.01);
+          for (let i = 0; i < 3; i++) { const sal = MeshBuilder.CreateCapsule("salami", { radius: 0.06, height: 0.42 }, scene); sal.rotation.z = Math.PI / 2; sal.position.set(-0.4 + i * 0.4, 0.72, -0.18); part(sal, "#8e2a2a", 0.008); }
+          bx(1.5, 0.05, 0.86, 0, 1.24, 0, "#5a3a2a", 0.01);
+          for (const sx of [-0.6, 0.6]) bx(0.05, 0.8, 0.05, sx, 1.65, -0.35, "#3a3444", 0);
+          bx(1.3, 0.04, 0.04, 0, 2.05, -0.35, "#3a3444", 0);
+          for (const hx of [-0.35, 0.3]) { const ham = MeshBuilder.CreateSphere("ham", { diameter: 0.28, segments: 6 }, scene); ham.scaling.set(0.8, 1.4, 0.8); ham.position.set(hx, 1.75, -0.35); part(ham, "#b5653b", 0.01); }
+          sign("SALAMI & SONS", "#2f8f4e", "#f4f1ea", 2.3, 0.2);
+        } else {
+          // a cart: bright paint, a striped green-white-red awning on posts, chunky wheels
+          const body = d.kind === "pizzacart" ? "#2f8f4e" : d.kind === "gelato" ? "#f7d7e0" : "#f3e2b8";
+          bx(1.6, 0.9, 0.9, 0, 0.45, 0, body);
+          bx(1.7, 0.06, 1.0, 0, 0.93, 0, "#8a5a3a", 0.01);
+          for (const sx of [-0.7, 0.7]) cyl(0.32, 0.1, sx, 0.08, 0.4, "#1b1420", 0.01).rotation.x = Math.PI / 2;
+          for (const sx of [-0.78, 0.78]) bx(0.05, 1.3, 0.05, sx, 1.6, -0.35, "#8a5a3a", 0);
+          tricolour(2.25);
+          if (d.kind === "pizzacart") {
+            // a little brick oven with a glowing mouth, pizzas on the counter
+            const dome = MeshBuilder.CreateSphere("oven", { diameter: 0.7, segments: 10, slice: 0.5 }, scene); dome.position.set(-0.35, 0.96, -0.1); part(dome, "#b5653b", 0.02);
+            const mouth = bx(0.26, 0.16, 0.05, -0.35, 1.04, 0.24, "#ff9a2e", 0); void mouth;
+            cyl(0.1, 0.5, -0.35, 1.45, -0.15, "#5a4636", 0.01);
+            for (const [x, z] of [[0.3, 0.05], [0.55, -0.15]] as const) { cyl(0.42, 0.04, x, 0.98, z, "#f2c94c", 0.008); for (let k = 0; k < 4; k++) cyl(0.07, 0.02, x - 0.1 + (k % 2) * 0.2, 1.01, z - 0.08 + Math.floor(k / 2) * 0.16, "#c8322c", 0); }
+            sign("HOT PIZZA", "#c8322c", "#f4f1ea");
+          } else if (d.kind === "gelato") {
+            // tubs of gelato in pastel colours under a glass lid, cones in a rack
+            const tubs = ["#ffd1dc", "#c9f2c7", "#fff3b0", "#7a4a2a", "#c7e3ff", "#f4f1ea"];
+            for (let i = 0; i < 6; i++) { cyl(0.2, 0.08, -0.55 + (i % 3) * 0.32, 1.0, -0.15 + Math.floor(i / 3) * 0.28, tubs[i], 0.006); const sc2 = MeshBuilder.CreateSphere("scoop", { diameter: 0.17, segments: 6 }, scene); sc2.scaling.y = 0.6; sc2.position.set(-0.55 + (i % 3) * 0.32, 1.06, -0.15 + Math.floor(i / 3) * 0.28); part(sc2, tubs[i], 0.006); }
+            for (let i = 0; i < 4; i++) cyl(0.08, 0.2, 0.45 + (i % 2) * 0.14, 1.05, -0.1 + Math.floor(i / 2) * 0.18, "#d8a05a", 0.005, 0.01);
+            sign("GELATO!", "#ffd1dc", "#2f8f4e");
+          } else {
+            // souvenirs: little gondolas, leaning towers, flags and postcards
+            for (let i = 0; i < 3; i++) { const g = MeshBuilder.CreateBox("gondola", { width: 0.4, height: 0.06, depth: 0.1 }, scene); g.position.set(-0.55 + i * 0.4, 1.0, 0.15); g.rotation.z = 0.15; part(g, "#1b1420", 0.006); }
+            for (let i = 0; i < 3; i++) { const t = cyl(0.12, 0.34, -0.5 + i * 0.45, 1.13, -0.18, "#f4f1ea", 0.008); t.rotation.z = 0.12; }
+            for (let i = 0; i < 3; i++) for (let c = 0; c < 3; c++) bx(0.08, 0.16, 0.01, -0.45 + i * 0.45 + (c - 1) * 0.08, 1.55, -0.38, ["#2f8f4e", "#f4f1ea", "#c8322c"][c], 0);
+            sign("SOUVENIRS (GENUINE-ISH)", "#f3e2b8", "#2f8f4e");
+          }
+        }
       } else if (d.kind === "dummy") {
         // C5a: a stuffed sack dummy on a spring post, with a painted face and a "PUNCH ME" sign
         const box = (w: number, h: number, dd: number, x: number, y: number, z: number, col: string, o = 0.02, par: TransformNode = node) => { const m = MeshBuilder.CreateBox("dm", { width: w, height: h, depth: dd }, scene); m.position.set(x, y, z); part(m, col, o); m.parent = par; return m; };
@@ -227,6 +278,37 @@ export class PropRenderer {
         this.buildRestoProp(d, v, node, part);
       } else if (d.kind === "clubrope" || d.kind === "clubsafe" || d.kind === "pawncounter" || d.kind === "pawncase") {
         this.buildC5c3(d, v, node, part);
+      } else if (d.kind === "toilet") {
+        // R6: the holding cell's steel toilet (the flush handle on the tank)
+        const steel = "#c8ccd4";
+        const base = MeshBuilder.CreateCylinder("tbase", { diameterTop: 0.36, diameterBottom: 0.28, height: 0.3, tessellation: 12 }, scene); base.position.y = -0.3; part(base, steel, 0.012);
+        const bowl = MeshBuilder.CreateCylinder("tbowl", { diameterTop: 0.5, diameterBottom: 0.36, height: 0.18, tessellation: 14 }, scene); bowl.scaling.z = 1.25; bowl.position.set(0, -0.06, 0.05); part(bowl, steel, 0.012);
+        const water = MeshBuilder.CreateCylinder("twater", { diameter: 0.38, height: 0.01, tessellation: 12 }, scene); water.scaling.z = 1.25; water.position.set(0, 0.02, 0.05); part(water, "#7fb4c8", 0);
+        const tank = MeshBuilder.CreateBox("ttank", { width: 0.5, height: 0.45, depth: 0.2 }, scene); tank.position.set(0, 0.2, -0.27); part(tank, steel, 0.012);
+        const handle = MeshBuilder.CreateBox("thandle", { width: 0.14, height: 0.03, depth: 0.04 }, scene); handle.position.set(-0.2, 0.36, -0.15); part(handle, "#8e96a8", 0.006);
+      } else if (d.kind === "door") {
+        // R8: a glass door: one leaf (a pawn shop's) or two (the station's), hinged at the outer edges, swinging out
+        const turned = Math.abs(Math.sin(d.yaw)) > 0.5, W = 2 * ((turned ? d.hd : d.hw) ?? 0.9), H = 2.6;
+        const n = W > 2.2 ? 2 : 1, lw = W / n;
+        const glassMat = this.doorGlass ?? (() => { const m = new StandardMaterial("doorGlass", scene); m.diffuseColor = Color3.FromHexString("#bfe8ff"); m.emissiveColor = Color3.FromHexString("#2a5a70"); m.alpha = 0.3; m.backFaceCulling = false; return (this.doorGlass = m); })();
+        v.leaves = [];
+        for (let i = 0; i < n; i++) {
+          const side = n === 2 ? (i ? 1 : -1) : -1; // (hinge on this side)
+          const hinge = new TransformNode("doorHinge", scene); hinge.parent = node; hinge.position.set(side * W / 2, -d.y + H / 2 + 0.02, 0);
+          const cxl = -side * lw / 2;
+          const pane = MeshBuilder.CreateBox("doorPane", { width: lw - 0.12, height: H - 0.14, depth: 0.04 }, scene); pane.parent = hinge; pane.position.set(cxl, 0, 0); pane.material = glassMat; pane.isPickable = false;
+          for (const [w2, h2, x2, y2] of [[lw, 0.08, cxl, H / 2 - 0.04], [lw, 0.12, cxl, -H / 2 + 0.06], [0.07, H, -side * 0.035, 0], [0.07, H, -side * (lw - 0.035), 0]] as [number, number, number, number][]) {
+            const f = MeshBuilder.CreateBox("doorFrame", { width: w2, height: h2, depth: 0.07 }, scene); f.parent = hinge; f.position.set(x2, y2, 0); f.material = toon(scene, "#3a3444"); f.isPickable = false;
+          }
+          const bar = MeshBuilder.CreateBox("doorBar", { width: lw * 0.55, height: 0.05, depth: 0.05 }, scene); bar.parent = hinge; bar.position.set(-side * lw * 0.55, 0.05, 0.06); bar.material = toon(scene, "#c9ccd4"); bar.isPickable = false;
+          const bar2 = bar.clone("doorBar2"); bar2.position.z = -0.06;
+          v.leaves.push({ hinge, dir: side });
+        }
+        v.open = 0;
+      } else if (d.kind === "celldoor") {
+        // R6: the cell door is part of the bars (drawn with the city); just its big padlock here
+        const lock = MeshBuilder.CreateBox("padlock", { width: 0.22, height: 0.26, depth: 0.12 }, scene); lock.position.set(0, -0.05, 0); part(lock, "#d9a632", 0.012);
+        const shackle = MeshBuilder.CreateTorus("shackle", { diameter: 0.16, thickness: 0.03, tessellation: 10 }, scene); shackle.position.set(0, 0.12, 0); shackle.rotation.x = Math.PI / 2; part(shackle, "#c8ccd4", 0.006);
       } else {
         continue; // bins, meters, newsboxes: nothing changes visibly (they just go empty)
       }
@@ -489,12 +571,13 @@ export class PropRenderer {
       if (v.lid) v.lid.rotation.x = v.ready ? 0 : -1.9; // flipped open after a search
       if (v.handset) v.handset.setEnabled(v.ready);
       if (v.glass && v.def.kind === "vending") v.glass.material = v.ready ? this.vendGlass : this.crackedMat;
-      if (v.glass && (v.def.kind === "car" || v.def.kind === "fishtank")) v.glass.setEnabled(v.ready); // smashed (C5b: the seafood tank too)
+      if (v.glass && (v.def.kind === "car" || v.def.kind === "fishtank" || v.def.kind === "deli")) v.glass.setEnabled(v.ready); // smashed (C5b: the seafood tank too)
       if (v.glass && (v.def.kind === "nose" || v.def.kind === "stash")) v.glass.setEnabled(v.ready); // (C5c: taken)
       if (v.glint) v.glint.setEnabled(v.ready);
       if (v.door && (v.def.kind === "dessertcart" || v.def.kind === "chefstable" || v.def.kind === "kitchen")) v.door.setEnabled(v.ready); // (C5c.2: raided)
       if (v.glass && v.def.kind === "cloakroom") v.glass.setEnabled(v.ready);
       if (v.glass && v.def.kind === "pawncase") v.glass.setEnabled(v.ready); // (C5c.3: smashed)
+      if (v.def.kind === "celldoor") for (const m of v.node.getChildMeshes()) m.setEnabled(v.ready); // (R8: the key: the door's gone, so's its padlock)
       if (v.def.kind === "vaultdoor" && v.lights) (v.lights[0].material as StandardMaterial).emissiveColor = Color3.FromHexString(v.ready ? "#ff3b30" : "#6fff8a");
     }
     if (v.def.kind === "pawncase" && (pv.note ?? "") !== v.note) this.fillCase(v, pv.note ?? ""); // (C5c.3)
@@ -506,6 +589,14 @@ export class PropRenderer {
 
   update(dt: number) {
     this.t += dt;
+    // R8: doors swing open / shut (open = not ready)
+    for (const v of this.map.values()) {
+      if (!v.leaves) continue;
+      const want = v.ready ? 0 : 1, o = v.open ?? 0;
+      if (Math.abs(want - o) < 0.001) continue;
+      v.open = o + Math.sign(want - o) * Math.min(Math.abs(want - o), dt * 3);
+      for (const l of v.leaves) l.hinge.rotation.y = -l.dir * v.open * 1.45;
+    }
     for (let i = this.debris.length - 1; i >= 0; i--) {
       const d = this.debris[i];
       d.t -= dt;

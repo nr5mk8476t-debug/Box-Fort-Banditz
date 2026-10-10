@@ -4,6 +4,8 @@ import {
   World, buildNavGraph, buildTrashington, inRect, lootDef, PLAYER, NPC_DEFS, PUNCH_COOLDOWN, KNOCK_TIMES, NPC_COUNT, KNOCK_IMMUNITY,
   HEALTH, throwImpact, LOOT, type MoveInput, type WorldEvent,
 } from "../src/index.js";
+import { setCityMap as useCity } from "../src/index.js";
+useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
   ({ seq, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false, ...p });

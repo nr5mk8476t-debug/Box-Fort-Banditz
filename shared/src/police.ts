@@ -17,7 +17,8 @@
 // BUSTED: everything you carry is confiscated (gone), heat resets, 30 s in a cell at the station.
 // JAIL: pick the lock (lockpick.ts) to break out early into the back alley (still wanted, 1 star),
 // or serve the 30 s and walk out the front door clean.
-import { nearBoxes, inBush, type Box } from "./arena.js";
+import { nearBoxes, inBush, inFoot, inRect, type Box, type Rect } from "./arena.js";
+const R0: Rect = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
 import { makeMoveState } from "./movement.js";
 import { PLAYER } from "./constants.js";
 import { NPC_DEFS, pickLine } from "./npc.js";
@@ -50,11 +51,19 @@ const COOL_FAST = 4; // heat per second
 const COOL_SLOW = 0.6;
 const COOL_UNWANTED = 1;
 export const COPCAR = { speed: 15, halfLen: 2.2, halfWidth: 1.0, deployDist: 15 };
+/**
+ * R7: the city's police presence (the new city): foot patrols walking beats round town, cruisers driving round all
+ * day, and the station's own cops (one walking the ground floor, one guarding the evidence room). They ignore you
+ * unless you're wanted (or they see a crime); then they're ordinary cops till they lose you, and go back on patrol.
+ */
+export const PATROL = { foot: 6, footNight: 8, cars: 2, walk: 1.7, cruise: 9, carSight: 30, respawn: 10, hidden: 30 };
 
 export interface CopCarSim {
   id: string; x: number; z: number; yaw: number; v: number;
   target: string;
-  mode: "drive" | "parked" | "leave";
+  mode: "drive" | "parked" | "leave" | "cruise";
+  /** R7: a patrol car (drives round town when nobody's wanted; never goes away) */
+  patrol?: boolean;
   route: { x: number; z: number }[];
   replanT: number; calmT: number; lifeT: number; deployed: boolean;
 }
@@ -63,7 +72,7 @@ export type PoliceEvent =
   | { t: "copSpawn"; npc: string; p: string }
   | { t: "spotted"; npc: string; p: string }
   | { t: "busted"; p: string; by: string; count: number; value: number; car: boolean }
-  | { t: "released"; p: string; breakout: boolean }
+  | { t: "released"; p: string; breakout: boolean; walked?: boolean }
   | { t: "lock"; p: string; r: LockResult }
   | { t: "copCar"; car: string; p: string; stage: "dispatch" | "deploy" | "leave" }
   | { t: "taser"; npc: string; p: string; stage: "aim" | "hit" | "miss"; x: number; z: number };
@@ -99,6 +108,10 @@ export class PoliceSystem {
 
   /** Every cop (foot) in the city. */
   cops(): NpcSimData[] { return [...this.w.npc.npcs.values()].filter((n) => n.kind === "cop"); }
+  /** R7: on patrol (a beat round town, or one of the station's own) rather than sent after somebody */
+  private onBeat(n: NpcSimData) { return !!n.patrol || n.beat !== undefined; }
+  private patrolT = 0;
+  private get patrolsOn() { return this.w.arena.variant === "new"; }
 
   /** New round: no cops, no cars, nobody in jail. */
   reset() {
@@ -117,7 +130,10 @@ export class PoliceSystem {
         // (the lock's own timers - tension, noise - run on the PLAYER's press times inside lockPress,
         //  never on the server clock: a laggy client would otherwise have its pins dropped by the server)
         p.jailT -= dt;
-        if (p.jailT <= 0) this.release(p, false);
+        if (p.jailT <= 0) { this.release(p, false); continue; }
+        // R8: the chief's key opened the cell: whoever walks out is free (wanted: 1 star)
+        const hold = w.arena.station?.holding;
+        if (hold && !inRect(hold.cell, p.move.x, p.move.z, 0.9) && w.props.cellOpen()) this.walkOut(p);
         continue;
       }
       // Heat cooling. Nothing for 4 s after a crime or a sighting. Then: slowly while cops are still
@@ -132,6 +148,7 @@ export class PoliceSystem {
     }
     this.dispatchAcc += dt;
     if (this.dispatchAcc >= 0.5) { this.dispatchAcc = 0; this.dispatch(); }
+    if (this.patrolsOn && (this.patrolT -= dt) <= 0) { this.patrolT = 1; this.keepPatrols(); }
     for (const car of [...this.cars]) this.driveCar(car, dt);
   }
 
@@ -148,12 +165,13 @@ export class PoliceSystem {
       if (!stars) continue;
       // (a car on its way counts as the cop it's bringing, so 3 stars stays 3 cops however the timing falls)
       const on = cops.filter((c) => c.target === p.id && c.state !== "leave").length + this.cars.filter((c) => c.target === p.id && c.mode !== "leave" && !c.deployed).length;
+      const sent = cops.filter((c) => !this.onBeat(c)).length;
       const want = this.night ? stars * 2 : stars;
-      if (on < want && cops.length < (this.night ? MAX_COPS_NIGHT : MAX_COPS) && (this.nextCop.get(p.id) ?? 0) <= w.time) {
+      if (on < want && sent < (this.night ? MAX_COPS_NIGHT : MAX_COPS) && (this.nextCop.get(p.id) ?? 0) <= w.time) {
         const c = this.spawnCop(p);
         if (c) { cops.push(c); this.nextCop.set(p.id, w.time + (this.night ? 2 : 4)); }
       }
-      if (stars >= (this.night ? 2 : 3) && this.cars.length < MAX_CARS && !this.cars.some((c) => c.target === p.id && c.mode !== "leave") && (this.nextCarT.get(p.id) ?? 0) <= w.time) {
+      if (stars >= (this.night ? 2 : 3) && this.cars.filter((c) => !c.patrol).length < MAX_CARS && !this.cars.some((c) => c.target === p.id && c.mode !== "leave") && (this.nextCarT.get(p.id) ?? 0) <= w.time) {
         if (this.spawnCar(p)) this.nextCarT.set(p.id, w.time + 12);
       }
     }
@@ -196,7 +214,7 @@ export class PoliceSystem {
       const x = ax + (bx - ax) * k, y = ay + (by - ay) * k, z = az + (bz - az) * k;
       for (const b of nearBoxes(this.w.arena, x, z, 0.05) as Box[]) {
         if (b.kind === "bars" || b.kind === "tree") continue;
-        if (Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2 && y > b.y - b.h / 2 && y < b.y + b.h / 2) return false;
+        if (inFoot(b, x, z) && y > b.y - b.h / 2 && y < b.y + b.h / 2) return false;
       }
     }
     return true;
@@ -257,15 +275,17 @@ export class PoliceSystem {
     n.lifeT += dt;
     const p = w.players.get(n.target);
     if (n.state === "stunned" || n.state === "ko") {
-      if (n.stateT <= 0) { n.state = p && this.wanted(p) ? "chase" : "leave"; n.lostT = 0; n.path = []; }
+      if (n.stateT <= 0) { if (p && this.wanted(p)) n.state = "chase"; else this.leave(n); n.lostT = 0; n.path = []; }
       return stay;
     }
+    if (n.state === "beat") return this.beatBrain(n, dt);
     if (n.state !== "leave" && (!p || !this.wanted(p) || starsOf(p.notoriety) === 0)) {
       if (p && this.wanted(p)) this.say(n, NPC_DEFS.cop.lines.lost);
       this.leave(n);
     }
     if (n.state === "leave") return this.walkOff(n);
-    const pl = p!;
+    if ((n.state as string) === "beat" || !p) return this.beatBrain(n, dt); // (R7: back on patrol)
+    const pl = p;
     // eyes (checked 5x a second)
     n.losT -= dt;
     if (n.losT <= 0) {
@@ -367,7 +387,107 @@ export class PoliceSystem {
   }
 
   private leave(n: NpcSimData) {
-    n.state = "leave"; n.target = ""; n.path = []; n.lifeT = 0; n.sees = false;
+    n.target = ""; n.path = []; n.lifeT = 0; n.sees = false;
+    // R7: a patrol cop goes back on patrol (a station cop who's chased you out of the station walks off; another
+    // one takes their place later)
+    const st = this.w.arena.station;
+    if (n.patrol || (n.beat !== undefined && st && inRect(st.rect, n.move.x, n.move.z, -0.3))) { this.resume(n); return; }
+    n.state = "leave";
+  }
+
+  // ------------------------------------------------------------------ R7 patrols
+  /** back on patrol: town cops pick up the route network where they are; station cops head back to their beat */
+  private resume(n: NpcSimData) {
+    n.state = "beat"; n.target = ""; n.path = []; n.sees = false; n.lostT = 0;
+    if (n.patrol) { n.node = this.w.npc.nearestClearNode(n.move.x, n.move.z, -1); n.prevNode = n.node; }
+    else {
+      const b = this.w.arena.station?.grand?.beats[n.beat!];
+      if (b) { let best = 0, bd = Infinity; b.pts.forEach((q, i) => { const d = Math.hypot(q.x - n.move.x, q.z - n.move.z); if (d < bd) { bd = d; best = i; } }); n.beatI = best; }
+    }
+  }
+
+  /** walking the beat; anyone wanted in sight gets chased */
+  private beatBrain(n: NpcSimData, dt: number): { tx: number; tz: number; speed: number; face: number | null } {
+    const w = this.w;
+    n.losT -= dt;
+    if (n.losT <= 0) {
+      n.losT = 0.25;
+      for (const p of w.players.values()) {
+        if (!this.wanted(p) || starsOf(p.notoriety) === 0 || !this.canSee(n, p)) continue;
+        n.state = "chase"; n.target = p.id; n.sees = true; n.lostT = 0; n.path = [];
+        n.lastX = p.move.x; n.lastZ = p.move.z; p.seenT = w.time; p.knownX = p.move.x; p.knownZ = p.move.z;
+        this.say(n, NPC_DEFS.cop.lines.spot);
+        w.emit({ t: "spotted", npc: n.id, p: p.id });
+        return { tx: p.move.x, tz: p.move.z, speed: COP_RUN, face: null };
+      }
+    }
+    if (n.sayCd <= 0 && w.random() < 0.003 && [...w.players.values()].some((p) => p.connected && Math.hypot(p.move.x - n.move.x, p.move.z - n.move.z) < 6)) this.say(n, NPC_DEFS.cop.lines.idle);
+    if (n.patrol) {
+      // wander the route network, one junction to the next
+      const g = w.npc.graph;
+      const at = g[n.node];
+      if (!at) { n.node = w.npc.nearestClearNode(n.move.x, n.move.z, -1); return { tx: n.move.x, tz: n.move.z, speed: 0, face: null }; }
+      if (Math.hypot(at.x - n.move.x, at.z - n.move.z) < 1.1) {
+        const links = at.links.filter((l) => l !== n.prevNode);
+        const pool = links.length ? links : at.links;
+        n.prevNode = n.node; n.node = pool.length ? pool[Math.floor(w.random() * pool.length)] : n.node;
+      }
+      const q = g[n.node];
+      return { tx: q.x, tz: q.z, speed: PATROL.walk, face: null };
+    }
+    const b = w.arena.station?.grand?.beats[n.beat!];
+    if (!b) return { tx: n.move.x, tz: n.move.z, speed: 0, face: null };
+    const q = b.pts[(n.beatI ?? 0) % b.pts.length];
+    if (Math.hypot(q.x - n.move.x, q.z - n.move.z) < 0.6) {
+      if (b.pts.length === 1) return { tx: n.move.x, tz: n.move.z, speed: 0, face: Math.PI / 2 };
+      n.beatI = ((n.beatI ?? 0) + 1) % b.pts.length;
+    }
+    return { tx: q.x, tz: q.z, speed: PATROL.walk * 0.8, face: null };
+  }
+
+  /** keep the patrols up to strength: missing ones walk in from somewhere nobody's looking */
+  private keepPatrols() {
+    const w = this.w;
+    if (!w.match || !["scavenge", "dusk", "night"].includes(w.match.phase)) return;
+    const cops = this.cops();
+    const players = [...w.players.values()].filter((p) => p.connected && p.jailT <= 0);
+    const unseen = (x: number, z: number, y = 0) => players.every((p) => Math.hypot(p.move.x - x, p.move.z - z) > PATROL.hidden || !this.los(x, y + 1.6, z, p.move.x, p.move.y + 1.6, p.move.z));
+    // the town beats
+    const want = this.night ? PATROL.footNight : PATROL.foot;
+    if (cops.filter((c) => c.patrol).length < want && (this.nextCop.get("patrol") ?? 0) <= w.time) {
+      const g = w.npc.graph.filter((q) => unseen(q.x, q.z) && !inRect(w.arena.station?.rect ?? R0, q.x, q.z, 1));
+      if (g.length) {
+        const q = g[Math.floor(w.random() * g.length)];
+        const c = this.newCop(q.x, q.z, w.random() * Math.PI * 2);
+        if (c) { c.patrol = true; c.node = q.id; c.prevNode = q.id; c.state = "beat"; this.nextCop.set("patrol", w.time + 2); }
+      }
+    }
+    // the station's own
+    (w.arena.station?.grand?.beats ?? []).forEach((b, i) => {
+      if (cops.some((c) => c.beat === i) || (this.nextCop.get("beat" + i) ?? 0) > w.time) return;
+      const q = b.pts[0];
+      if (!unseen(q.x, q.z, b.y) && players.some((p) => Math.hypot(p.move.x - q.x, p.move.z - q.z) < 12)) return;
+      const c = this.newCop(q.x, q.z, b.pts.length > 1 ? Math.atan2(b.pts[1].x - q.x, b.pts[1].z - q.z) : Math.PI / 2, b.y);
+      if (c) { c.beat = i; c.beatI = 0; c.state = "beat"; this.nextCop.set("beat" + i, w.time + PATROL.respawn); }
+    });
+    // the cruisers
+    if (this.cars.filter((c) => c.patrol).length < PATROL.cars) {
+      const pts = this.roadPoints().filter((r) => unseen(r.x, r.z) && players.every((p) => Math.hypot(p.move.x - r.x, p.move.z - r.z) > 45));
+      if (pts.length) {
+        const r = pts[Math.floor(w.random() * pts.length)];
+        this.cars.push({ id: "cop" + this.nextCar++, x: r.x, z: r.z, yaw: w.random() * Math.PI * 2, v: 0, target: "", mode: "cruise", route: [], replanT: 0, calmT: 0, lifeT: 0, deployed: false, patrol: true });
+      }
+    }
+  }
+
+  private newCop(x: number, z: number, yaw: number, y = 0): NpcSimData | null {
+    const c = this.w.npc.spawn("cop");
+    if (!c) return null;
+    c.move = makeMoveState(x, z, yaw); c.move.y = y;
+    c.node = this.w.npc.nearestClearNode(x, z, -1);
+    c.target = ""; c.robbed = true; c.hp = NPC_DEFS.cop.hp; c.path = []; c.lifeT = 0; c.lostT = 0; c.sees = false; c.losT = this.w.random() * 0.25; c.lane = 0; c.pace = 1;
+    c.lastX = x; c.lastZ = z;
+    return c;
   }
 
   /** Stroll off and vanish once nobody is around (or after a while). */
@@ -403,14 +523,23 @@ export class PoliceSystem {
     w.payBounty(p, value); // (C5c.1: somebody held them down for us)
     p.notoriety = 0; p.seenT = -99;
     const cells = w.arena.station?.cells ?? [];
-    const taken = new Set([...w.players.values()].filter((o) => o !== p && o.jailT > 0).map((o) => o.jailCell));
-    let cell = p.colorIdx % Math.max(1, cells.length);
-    for (let i = 0; i < cells.length && taken.has(cell); i++) cell = (cell + 1) % cells.length;
-    const c = cells[cell] ?? { x: 0, z: 0, yaw: 0 };
-    w.movePlayer(p, c.x, c.z, c.yaw);
-    p.jailT = JAIL_TIME; p.jailCell = cell;
-    p.lockSeed = 1 + Math.floor(w.random() * 1e9);
-    p.lock = newLockRun(p.lockSeed); p.lockT0 = w.time;
+    const hold = w.arena.station?.holding;
+    if (hold) {
+      // R6: the new city: everybody shares the one holding cell; you can walk about in it (E at the door: pick the lock)
+      const sp = hold.spots[p.colorIdx % hold.spots.length];
+      w.movePlayer(p, sp.x, sp.z, Math.PI);
+      p.jailT = JAIL_TIME; p.jailCell = 0;
+      p.lockSeed = 0; p.lock = null; p.lockT0 = w.time;
+    } else {
+      const taken = new Set([...w.players.values()].filter((o) => o !== p && o.jailT > 0).map((o) => o.jailCell));
+      let cell = p.colorIdx % Math.max(1, cells.length);
+      for (let i = 0; i < cells.length && taken.has(cell); i++) cell = (cell + 1) % cells.length;
+      const c = cells[cell] ?? { x: 0, z: 0, yaw: 0 };
+      w.movePlayer(p, c.x, c.z, c.yaw);
+      p.jailT = JAIL_TIME; p.jailCell = cell;
+      p.lockSeed = 1 + Math.floor(w.random() * 1e9);
+      p.lock = newLockRun(p.lockSeed); p.lockT0 = w.time;
+    }
     for (const cop of this.cops()) if (cop.target === p.id && cop.state !== "ko") this.leave(cop);
     for (const cc of this.cars) if (cc.target === p.id) this.carLeave(cc);
     w.emit({ t: "busted", p: p.id, by, count, value, car });
@@ -425,6 +554,27 @@ export class PoliceSystem {
     const r = lockPress(p.lock, Math.floor(pin), t);
     if (r === "guard" || r === "solved") w.emit({ t: "lock", p: p.id, r });
     if (r === "solved") this.release(p, true);
+  }
+
+  /** R6: E at the holding cell's door: start picking its lock (a fresh lock every time you start) */
+  startPick(p: PlayerSim) {
+    if (p.jailT <= 0 || p.lock) return;
+    p.lockSeed = 1 + Math.floor(this.w.random() * 1e9);
+    p.lock = newLockRun(p.lockSeed); p.lockT0 = this.w.time;
+    this.w.emit({ t: "lockStart", p: p.id });
+  }
+  /** R6: step away from the door (the lock-picking screen closes; you can walk about the cell again) */
+  stopPick(p: PlayerSim) {
+    if (p.jailT <= 0 || !p.lock || !this.w.arena.station?.holding) return;
+    p.lock = null; p.lockSeed = 0;
+  }
+
+  /** R8: out through the open cell door (the chief's key): free where you stand, but wanted */
+  private walkOut(p: PlayerSim) {
+    const w = this.w;
+    p.jailT = 0; p.lock = null; p.lockSeed = 0; p.jailCell = -1;
+    p.notoriety = BREAKOUT_HEAT; p.seenT = w.time; p.knownX = p.move.x; p.knownZ = p.move.z;
+    w.emit({ t: "released", p: p.id, breakout: true, walked: true });
   }
 
   private release(p: PlayerSim, breakout: boolean) {
@@ -502,6 +652,7 @@ export class PoliceSystem {
   }
 
   private carLeave(car: CopCarSim) {
+    if (car.patrol) { if (car.mode !== "cruise") { car.mode = "cruise"; car.target = ""; car.route = []; car.deployed = false; car.calmT = 0; } return; } // (R7: back to cruising)
     if (car.mode === "leave") return;
     car.mode = "leave"; car.route = []; car.lifeT = 0;
     this.w.emit({ t: "copCar", car: car.id, p: car.target, stage: "leave" });
@@ -512,12 +663,43 @@ export class PoliceSystem {
     car.lifeT += dt;
     const p = w.players.get(car.target);
     const valid = !!p && this.wanted(p);
-    if (car.mode !== "leave") {
+    if (car.mode !== "leave" && car.mode !== "cruise") {
       car.calmT = valid && starsOf(p!.notoriety) >= 2 ? 0 : car.calmT + dt; // stays on you down to 2 stars
       if (car.calmT > 4) this.carLeave(car);
     }
     let want = 0;
-    if (car.mode === "leave") {
+    if (car.mode === "cruise") {
+      // R7: a cruiser on patrol: round town at a steady pace; anyone wanted in sight, siren on
+      car.replanT -= dt;
+      if (car.replanT <= 0) {
+        car.replanT = 0.5;
+        for (const o of w.players.values()) {
+          if (!this.wanted(o) || starsOf(o.notoriety) === 0 || Math.hypot(o.move.x - car.x, o.move.z - car.z) > PATROL.carSight) continue;
+          if (!this.los(car.x, 1.4, car.z, o.move.x, o.move.y + 1.4, o.move.z)) continue;
+          car.mode = "drive"; car.target = o.id; car.calmT = 0; car.replanT = 0; car.deployed = false;
+          o.seenT = w.time; o.knownX = o.move.x; o.knownZ = o.move.z;
+          w.emit({ t: "copCar", car: car.id, p: o.id, stage: "dispatch" });
+          break;
+        }
+      }
+      if (car.mode === "cruise") {
+        if (car.route.length <= 1 && (!car.route[0] || Math.hypot(car.route[0].x - car.x, car.route[0].z - car.z) < 4)) {
+          const g = w.arena.roadGraph!;
+          const nd = g.nodes[Math.floor(w.random() * g.nodes.length)];
+          const r = this.nearestRoad(nd.x, nd.z);
+          if (r) this.planCar(car, r);
+        }
+        want = PATROL.cruise;
+        // don't drive into the back of the traffic
+        const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
+        for (const t of w.traffic?.cars ?? []) {
+          const dx = t.x - car.x, dz = t.z - car.z, along = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
+          if (along > 0 && along < 9 && side < 1.8) want = Math.min(want, Math.max(0, t.v - 0.5), along < 5 ? 0 : want);
+        }
+      }
+    }
+    if (car.mode === "cruise") { /* (steering below) */ }
+    else if (car.mode === "leave") {
       const players = [...w.players.values()].filter((o) => o.connected);
       if (car.lifeT > 25 || (car.lifeT > 3 && players.every((o) => Math.hypot(o.move.x - car.x, o.move.z - car.z) > 60))) {
         this.cars.splice(this.cars.indexOf(car), 1);

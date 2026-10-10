@@ -8,7 +8,7 @@
 //   mantle (locks everything) > stumble (limits) > slide > dodge > normal movement.
 
 import { PLAYER, SIM_DT } from "./constants.js";
-import { localArena, inWater, inDeepWater, inLobby, type ArenaLayout, type Box } from "./arena.js";
+import { localArena, inWater, inDeepWater, inLobby, footSd, type ArenaLayout, type Box } from "./arena.js";
 
 /** Slice 2A: speed while wading through the pond */
 export const WADE_SPEED = 0.45;
@@ -153,6 +153,15 @@ function verticalOverlap(y: number, h: number, b: Box, bottomSlack = 0): boolean
  */
 function pushOutXZ(s: MoveState, b: Box): boolean {
   const r = PLAYER.radius;
+  if (b.poly) { // R3: an angled footprint
+    const f = footSd(b, s.x, s.z);
+    if (f.d >= r) return false;
+    const pen = r - f.d;
+    s.x += f.nx * pen; s.z += f.nz * pen;
+    const vn = s.vx * f.nx + s.vz * f.nz;
+    if (vn < 0) { s.vx -= vn * f.nx; s.vz -= vn * f.nz; }
+    return true;
+  }
   const minX = b.x - b.w / 2;
   const maxX = b.x + b.w / 2;
   const minZ = b.z - b.d / 2;
@@ -197,6 +206,7 @@ function pushOutXZ(s: MoveState, b: Box): boolean {
 
 function footprintOverlapsAt(x: number, z: number, b: Box, shrink = 0.02): boolean {
   const r = PLAYER.radius - shrink;
+  if (b.poly) return footSd(b, x, z).d < r;
   const cx = clamp(x, b.x - b.w / 2, b.x + b.w / 2);
   const cz = clamp(z, b.z - b.d / 2, b.z + b.d / 2);
   const dx = x - cx;
@@ -244,9 +254,8 @@ export function findMantle(s: MoveState, arena: ArenaLayout): { top: number; x: 
     const rise = top - s.y;
     if (rise < PLAYER.mantleMin || rise > PLAYER.mantleMax) continue;
     if (b.y - b.h / 2 > s.y + 0.6) continue; // floating slab we can't reach from below
-    const inX = Math.abs(px - b.x) <= b.w / 2 + 0.05;
-    const inZ = Math.abs(pz - b.z) <= b.d / 2 + 0.05;
-    if (inX && inZ && top < bestTop) { best = b; bestTop = top; }
+    const inside = b.poly ? footSd(b, px, pz).d <= 0.05 : Math.abs(px - b.x) <= b.w / 2 + 0.05 && Math.abs(pz - b.z) <= b.d / 2 + 0.05;
+    if (inside && top < bestTop) { best = b; bestTop = top; }
   }
   if (!best) return null;
   // Landing point: far enough onto the ledge that our whole footprint is on it
@@ -468,7 +477,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   const lim = arena.halfSize - PLAYER.radius;
   if (!inLobby(arena, s.x, s.z, 2)) { // (C5a: the lobby roof is past the edge; its fence keeps you on it)
     s.x = clamp(s.x, -lim, lim);
-    s.z = clamp(s.z, -lim, lim);
+    s.z = clamp(s.z, (arena.southZ ?? -arena.halfSize) + PLAYER.radius, lim); // (R3: the fort bowl runs further south)
   }
 
   // ---- 10. vertical move + land -----------------------------------------------------

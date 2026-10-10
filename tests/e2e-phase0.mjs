@@ -35,7 +35,8 @@ async function openPage(name, query = "?test=1") {
   page.on("pageerror", (e) => page.errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") page.errors.push(m.text()); });
   // generous timeouts: with 3 other windows rendering the city on the CPU, a 4th page loads slowly
-  await page.goto(BASE + "/" + query + (LAG ? `&lag=${LAG}` : "") + "&seathold=900", { waitUntil: "domcontentloaded", timeout: 480000 }); // (C5c: 480 s: the 5th window opens while 4 are drawing the city on this CPU)
+  // (R3: these checks were written for the classic city and its landmarks; E2E_MAP=new runs them on the new one)
+  await page.goto(BASE + "/" + query + (LAG ? `&lag=${LAG}` : "") + "&seathold=900&map=" + (process.env.E2E_MAP ?? "classic"), { waitUntil: "domcontentloaded", timeout: 480000 }); // (C5c: 480 s: the 5th window opens while 4 are drawing the city on this CPU)
   await page.waitForFunction(() => window.__bfb?.info().screen === "title", null, { timeout: 480000 });
   page.label = name;
   return page;
@@ -69,7 +70,7 @@ try {
   await A.click("#btn-settings-close");
 
   console.log("\n# Solo mode");
-  await A.click("#btn-solo");
+  await A.click("#btn-solo", { timeout: 180000 }); // (R4.1: on this test box the first click after closing Settings has taken 32 s)
   await A.waitForFunction(() => window.__bfb.info().screen === "playing");
   let i = await info(A);
   ok(i.mode === "solo", "solo mode starts without a server");
@@ -330,7 +331,7 @@ try {
   ok(/Bonk/.test(await A.textContent("#prompt")) && /Tourist/.test(await A.textContent("#prompt")), `prompt: "${(await A.textContent("#prompt")).slice(0, 50)}"`);
   const itemsBefore = new Set((await A.evaluate(() => window.__bfb.items())).map((x) => x.id));
   await A.mouse.click(640, 360);
-  const hitState = await A.waitForFunction((id) => { const n = window.__bfb.npcs().find((x) => x.id === id); return n && n.robbed ? n.state : null; }, tId, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
+  const hitState = await A.waitForFunction((id) => { const n = window.__bfb.npcs().find((x) => x.id === id); return n && n.robbed ? n.state : null; }, tId, { timeout: 30000 }).then((h) => h.jsonValue(), () => null);
   ok(hitState, `left click punched the tourist (now "${hitState}")`);
   await sleep(250);
   await hide();
@@ -355,7 +356,7 @@ try {
   await A.waitForFunction(() => window.__bfb.punchTarget()?.kind === "gym_bro", null, { timeout: 10000 }).catch(() => {});
   ok(/FIGHTS BACK/.test(await A.textContent("#prompt")), "prompt warns that the gym bro fights back");
   await A.mouse.click(640, 360);
-  const fought = await A.waitForFunction((id) => { const n = window.__bfb.npcs().find((x) => x.id === id); return n && (n.state === "chase" || n.state === "windup"); }, gId, { timeout: 10000 }).then(() => true, () => false);
+  const fought = await A.waitForFunction((id) => { const n = window.__bfb.npcs().find((x) => x.id === id); return (n && ["chase", "windup", "punch", "gloat"].includes(n.state)) || window.__bfb.info().hud?.pose === "knocked"; }, gId, { timeout: 10000 }) /* (R3: at 110 ms lag he can be on you between two polls) */.then(() => true, () => false);
   ok(fought, "the gym bro comes at you");
   const knocked = await A.waitForFunction(() => window.__bfb.move().knockT > 0, null, { timeout: 75000 }).then(() => true, () => false); // (C5a: 75 s: the game clock crawls on this CPU-only box)
   ok(knocked, "two slaps from the gym bro = you're knocked down");
@@ -747,7 +748,13 @@ try {
   // 1 star: a cop comes for you
   await A.evaluate(() => { window.__bfb.teleport(window.__bfb.T.x + (-16), window.__bfb.T.z + (-8), 0); window.__bfb.clearNpcs(window.__bfb.T.x + (-16), window.__bfb.T.z + (-8), 12); window.__bfb.setHeat(40); });
   ok(await A.waitForFunction(() => window.__bfb.stars() === 1, null, { timeout: 10000 }).then(() => true, () => false), "40 heat = 1 wanted star on the HUD");
-  ok(await A.waitForFunction(() => window.__bfb.cops().length >= 1, null, { timeout: 150000 }).then(() => true, () => false), "a cop is dispatched"); // (C4b/D1: 150 s: the game clock crawls on this CPU-only box)
+  // (R4: keep the heat on while waiting, like the bust loop below: at 110 ms lag the heat twice cooled off before a cop could be sent)
+  let copSent = false;
+  for (let i = 0; i < 30 && !copSent; i++) {
+    copSent = await A.waitForFunction(() => window.__bfb.cops().length >= 1 || window.__bfb.jail()?.jailT > 0, null, { timeout: 5000, polling: 100 }).then(() => true, () => false);
+    if (!copSent && (await A.evaluate(() => window.__bfb.heat())) < 35) await A.evaluate(() => window.__bfb.setHeat(40));
+  }
+  ok(copSent, "a cop is dispatched (or has already got you)"); // (C4b/D1: up to 150 s: the game clock crawls on this CPU-only box)
   // stand still: busted
   // (C5c: the cop walks over on the game clock, which crawls on this CPU-only box: at 110 ms lag it once took just over 90 s,
   //  and once so long your heat cooled below 1 star first and the cop went home. So keep the heat on while you wait, up to 5 min.)
@@ -1375,6 +1382,113 @@ try {
     const errs = p.errors.filter((e) => !/favicon|fonts\.g/.test(e) && !(p === B && /status of 522/.test(e)));
     ok(errs.length === 0, `${p.label}: no JS errors${errs.length ? " -> " + errs.slice(0, 3).join(" | ") : ""}`);
   }
+
+  // ---- R3: the new city (the real map now): solo on it, out of a fort into town ----
+  console.log("\n# R3 new city (solo)");
+  for (const p of [B, C, D]) await p.context().close().catch(() => {}); // (fewer windows drawing on this CPU)
+  const R3 = await openPage("R", "?test=1&map=new");
+  await R3.click("#btn-solo", { timeout: 240000 });
+  await R3.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 480000 });
+  ok(/NEW CITY/.test(await R3.textContent("#mode-badge")), "the new city loads (badge says NEW CITY)");
+  await R3.evaluate(() => { window.__bfb.testInput(true); window.__bfb.startMatch(); });
+  ok(await R3.waitForFunction(() => window.__bfb.move().y < 1 && window.__bfb.move().z < -95, null, { timeout: 120000 }).then(() => true, () => false), "the match starts in a fort down in the bowl");
+  const r3start = await R3.evaluate(() => window.__bfb.move());
+  await R3.evaluate(() => { window.__bfb.setYaw(0); window.__bfb.setAxes({ mx: 0, mz: 1, sprint: true }); });
+  ok(await R3.waitForFunction((z) => window.__bfb.move().z > z + 15, r3start.z, { timeout: 120000 }).then(() => true, () => false), "run north out of the fort, up to Gahookz Ghetto Lane");
+  await R3.evaluate(() => window.__bfb.setAxes(null));
+  await R3.evaluate(() => window.__bfb.toggleMap(true)); await sleep(1500); await hideOverlays(R3);
+  await shot(R3, "r3-new-city-map.png");
+  await R3.evaluate(() => window.__bfb.toggleMap(false));
+  await R3.evaluate(() => window.__bfb.camAt(0, 120, -170, 0, 0.6)); await sleep(2500); await hideOverlays(R3);
+  await shot(R3, "r3-new-city-overview.png");
+  await R3.evaluate(() => window.__bfb.camFree());
+  // R4: Little Italy (Leftovers Avenue) and Chinatown (Write-Off Avenue), and the festa
+  const hasDistricts = await R3.evaluate(() => { const g = window.__bfb.facades().gates; return [g?.italy === 2, g?.china === 2]; });
+  ok(hasDistricts.every(Boolean), "Little Italy and Chinatown are drawn (gates, lights, shopfronts)");
+  await R3.evaluate(() => window.__bfb.camAt(-66.33 + 6, 6, -64, -0.6, 0.12)); await sleep(2500); await hideOverlays(R3);
+  await shot(R3, "r4-little-italy-street.png");
+  await R3.evaluate(() => window.__bfb.camAt(66.33 - 6, 6, -64, 0.6, 0.12)); await sleep(2500); await hideOverlays(R3);
+  await shot(R3, "r4-chinatown-street.png");
+  await R3.evaluate(() => window.__bfb.triggerEvent("festa"));
+  ok(await R3.waitForFunction(() => /FESTA/.test(document.getElementById("event-hud").textContent), null, { timeout: 30000 }).then(() => true, () => false), `festa: event bar says "${await R3.textContent("#event-hud")}"`);
+  ok(await R3.waitForFunction(() => window.__bfb.match().festaD > 3, null, { timeout: 240000 }).then(() => true, () => false), "the festa rolls up Leftovers Avenue");
+  const festaVis = await R3.evaluate(() => ["festaMeatball", "festaBand", "festaGondola"].some((n) => { const t = window.__bfb.scene().getTransformNodeByName(n); return t && t.isEnabled(); }));
+  ok(festaVis, "the festa float is drawn in the street");
+  const fd = await R3.evaluate(() => window.__bfb.match().festaD);
+  await R3.evaluate((d) => window.__bfb.camAt(-66.33 + 1.5, 4.5, -86 + d + 14, Math.PI, 0.18), fd); await sleep(2000); await hideOverlays(R3);
+  await shot(R3, "r4-festa.png");
+  await R3.evaluate(() => window.__bfb.camFree());
+  // R5/R7: the two walk-in pawn shops: Lou and Meat Locker, Fran and Cold Cuts; the owner mutters the list at the till
+  const hsPeople = await R3.evaluate(() => window.__bfb.npcs().filter((n) => ["lou", "meat_locker", "fran", "cold_cuts"].includes(n.kind)).map((n) => n.kind).sort().join(","));
+  ok(hsPeople === "cold_cuts,fran,lou,meat_locker", `the pawn shops' people are in (${hsPeople})`);
+  const shops = await R3.evaluate(() => window.__bfb.hotShops());
+  ok(shops.length === 2, "two pawn shops in the new city");
+  if (shops.length === 2) {
+    for (const [i, who] of [[0, /TWITCHY LOU/], [1, /STICKY FRAN/]]) {
+      const hs = shops[i];
+      await R3.evaluate(([x, z]) => { window.__bfb.teleport(x, z, 0); window.__bfb.setPitch(0.1); }, [hs.stand.x, hs.stand.z]);
+      ok(await R3.waitForFunction((re) => new RegExp(re).test(document.getElementById("bb-title").textContent), who.source, { timeout: 120000 }).then(() => true, () => false), `${hs.name}: the owner mutters today's list ("${(await R3.textContent("#bb-sub")).slice(0, 80)}")`);
+      ok(await R3.waitForFunction(() => /Lou|Fran/.test(window.__bfb.promptText()), null, { timeout: 60000 }).then(() => true, () => false), `the till prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 60)}"`);
+    }
+    const L = shops[0];
+    await R3.evaluate(([x, z]) => window.__bfb.camAt(x - 4, 2.6, z - 7.5, 0.55, 0.06), [(L.rect.minX + L.rect.maxX) / 2, L.rect.minZ]); await sleep(2500); await hideOverlays(R3);
+    await shot(R3, "r7-pawn-front.png");
+    await R3.evaluate(([x, z]) => window.__bfb.camAt(x, 1.7, z, 0.15, 0.08), [L.doorIn.x + 0.4, L.rect.minZ + 0.6]); await sleep(2500); await hideOverlays(R3);
+    await shot(R3, "r7-pawn-inside.png");
+    await R3.evaluate(() => window.__bfb.camAt(12, 4, -46, -2.45, 0.12)); await sleep(2500); await hideOverlays(R3);
+    await shot(R3, "r7-police-station.png");
+    await R3.evaluate(() => window.__bfb.camFree());
+  }
+  // R8: the glass doors: E opens the station's front doors
+  {
+    const door = await R3.evaluate(() => window.__bfb.props().find((p) => p.id === "door1") ?? null);
+    ok(!!door && door.ready, "the station's front doors are there, shut");
+    if (door) {
+      await R3.evaluate(([x, z]) => { window.__bfb.teleport(x, z, Math.PI); window.__bfb.setPitch(0.1); }, [door.x, door.z + 1.3]);
+      await sleep(1500);
+      ok(await R3.waitForFunction(() => /Open/.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `door prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
+      await R3.keyboard.press("e");
+      ok(await R3.waitForFunction(() => window.__bfb.props().find((p) => p.id === "door1")?.ready === false, null, { timeout: 30000 }).then(() => true, () => false), "E opens it");
+      await R3.evaluate(([x, z]) => window.__bfb.camAt(x + 3, 2.2, z + 5, -2.6, 0.08), [door.x, door.z]); await sleep(2500); await hideOverlays(R3);
+      await shot(R3, "r8-station-doors.png");
+      await R3.evaluate(() => window.__bfb.camFree());
+    }
+  }
+  // R7: the station's stairs really take you up to the first floor
+  const grand = await R3.evaluate(() => window.__bfb.station()?.grand ?? null);
+  ok(!!grand, "the grand station");
+  if (grand) {
+    await R3.evaluate(([x, z]) => { window.__bfb.teleport(x, z, Math.PI); window.__bfb.setAxes({ mx: 0, mz: 1, sprint: false }); }, [(grand.stairs.minX + grand.stairs.maxX) / 2, grand.stairs.maxZ + 0.6]);
+    ok(await R3.waitForFunction((y) => window.__bfb.move().y > y - 0.3, grand.upY, { timeout: 90000 }).then(() => true, () => false), `up the stairs to the first floor (y ${(await R3.evaluate(() => window.__bfb.move().y)).toFixed(2)})`);
+    await R3.evaluate(() => window.__bfb.setAxes(null));
+    const ev = grand.evidence;
+    await R3.evaluate(([x, y, z]) => window.__bfb.camAt(x + 3.6, y + 1.9, z + 2.6, -2.4, 0.25), [(ev.minX + ev.maxX) / 2, grand.upY, ev.maxZ]); await sleep(2500); await hideOverlays(R3);
+    await shot(R3, "r7-upstairs.png");
+    await R3.evaluate(() => window.__bfb.camAt(0, 2.0, -60.6, Math.PI, 0.05)); await sleep(2500); await hideOverlays(R3);
+    await shot(R3, "r7-lobby.png");
+    await R3.evaluate(() => window.__bfb.camFree());
+  }
+  // R6: the holding cell: you land in it free to walk about, no instant lockpick; the toilet flushes back at you
+  const holding = await R3.evaluate(() => window.__bfb.station()?.holding ?? null);
+  ok(!!holding, "the new station has a holding cell");
+  if (holding) {
+    await R3.evaluate(() => { window.__bfb.clearCops(); window.__bfb.bust(); });
+    ok(await R3.waitForFunction(() => (window.__bfb.jail()?.jailT ?? 0) > 0, null, { timeout: 60000 }).then(() => true, () => false), "busted: in the holding cell");
+    await sleep(1500);
+    ok(!(await R3.evaluate(() => window.__bfb.jail().open)), "the lockpick doesn't open straight away");
+    ok(await R3.waitForFunction(() => /HOLDING CELL/i.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `cell prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 60)}"`);
+    const t = holding.toilet;
+    await R3.evaluate(([x, z]) => window.__bfb.teleport(x - 1.1, z, Math.PI / 2), [t.x, t.z]);
+    ok(await R3.waitForFunction(() => /Flush/i.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `toilet prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 60)}"`);
+    await R3.keyboard.press("e");
+    ok(await R3.waitForFunction(() => !!document.getElementById("fx-dirty"), null, { timeout: 30000 }).then(() => true, () => false), "flushing splashes dirty water over the screen");
+    await R3.evaluate(() => window.__bfb.setJailTime(0.1));
+    ok(await R3.waitForFunction(() => (window.__bfb.jail()?.jailT ?? 1) <= 0, null, { timeout: 60000 }).then(() => true, () => false), "released from the holding cell");
+  }
+  const r3errs = R3.errors.filter((e) => !/favicon|fonts\.g/.test(e));
+  ok(r3errs.length === 0, `new city: no JS errors${r3errs.length ? " -> " + r3errs.slice(0, 3).join(" | ") : ""}`);
+  await R3.context().close();
+
 } catch (e) {
   ok(false, "test crashed: " + (e?.stack ?? e));
 } finally {
