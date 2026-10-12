@@ -68,13 +68,16 @@ export interface MoveState {
   swarmT: number;
   /** Phase 5A: tased by a cop (can't move for ~2 s) */
   stunT: number;
+  /** R11: dancing (seconds so far; 0 = not: B starts it, any move stops it), a mocktail's dance-energy boost left */
+  danceT: number;
+  boostT: number;
 }
 
 /** Every MoveState field, split by type. The server syncs exactly these. */
 export const MOVE_NUM_KEYS = [
   "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch", "stamina", "staminaDelay",
   "slideT", "slideCd", "dodgeT", "dodgeCd", "mantleT", "mantleY", "stumbleT", "carryMul",
-  "knockT", "immuneT", "trapT", "swarmT", "stunT",
+  "knockT", "immuneT", "trapT", "swarmT", "stunT", "danceT", "boostT",
 ] as const;
 export const MOVE_BOOL_KEYS = ["grounded", "jumpLatch", "crouchLatch", "dodgeLatch", "crouching", "winded", "carryHeavy", "handsFull"] as const;
 
@@ -85,7 +88,7 @@ export function makeMoveState(x: number, z: number, yaw = 0): MoveState {
     stamina: 1, staminaDelay: 0, winded: false,
     slideT: 0, slideCd: 0, dodgeT: 0, dodgeCd: 0, mantleT: 0, mantleY: 0, stumbleT: 0,
     carryMul: 1, carryHeavy: false, handsFull: false,
-    knockT: 0, immuneT: 0, trapT: 0, swarmT: 0, stunT: 0,
+    knockT: 0, immuneT: 0, trapT: 0, swarmT: 0, stunT: 0, danceT: 0, boostT: 0,
   };
 }
 
@@ -288,6 +291,12 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   s.trapT = Math.max(0, s.trapT - dt);
   s.swarmT = Math.max(0, s.swarmT - dt);
   s.stunT = Math.max(0, s.stunT - dt);
+  s.boostT = Math.max(0, s.boostT - dt);
+  // R11: dancing: any move (or a knock) stops it; while it lasts you stay put
+  if (s.danceT > 0) {
+    if (Math.abs(input.mx) > 0.1 || Math.abs(input.mz) > 0.1 || input.jump || input.crouch || input.dodge || s.knockT > 0 || s.stunT > 0 || !s.grounded) s.danceT = 0;
+    else { s.danceT += dt; input = { ...input, sprint: false }; }
+  }
   // Knocked down, tased, or trapped in a mime's invisible box: no control at all (you still slide to a stop)
   if (s.knockT > 0 || s.trapT > 0 || s.stunT > 0) {
     input = { ...input, mx: 0, mz: 0, sprint: false, jump: false, crouch: false, dodge: false };
@@ -532,11 +541,11 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
 
 function regenStamina(s: MoveState, dt: number, sprinting: boolean) {
   if (sprinting) {
-    s.stamina = Math.max(0, s.stamina - PLAYER.staminaDrain * dt);
-    s.staminaDelay = PLAYER.staminaRegenDelay;
+    s.stamina = Math.max(0, s.stamina - PLAYER.staminaDrain * (s.boostT > 0 ? 0.5 : 1) * dt); // (R11: and half the drain)
+    s.staminaDelay = s.boostT > 0 ? PLAYER.staminaRegenDelay * 0.5 : PLAYER.staminaRegenDelay;
     if (s.stamina <= 0) s.winded = true;
   } else if (s.staminaDelay <= 0) {
-    s.stamina = Math.min(1, s.stamina + PLAYER.staminaRegen * dt);
+    s.stamina = Math.min(1, s.stamina + PLAYER.staminaRegen * (s.boostT > 0 ? 2.5 : 1) * dt); // (R11: a mocktail: 2.5x)
   }
   if (s.winded && s.stamina >= PLAYER.windedRecover) s.winded = false;
 }
@@ -547,7 +556,7 @@ export function horizontalSpeed(s: MoveState): number {
 }
 
 /** High-level pose, used by animation (hands, other players) and sounds. */
-export type MovePose = "tumble" | "knocked" | "mantle" | "stumble" | "slide" | "dodge" | "air" | "crouch" | "crouchWalk" | "sprint" | "walk" | "idle";
+export type MovePose = "dance" | "tumble" | "knocked" | "mantle" | "stumble" | "slide" | "dodge" | "air" | "crouch" | "crouchWalk" | "sprint" | "walk" | "idle";
 
 export function movePose(s: MoveState): MovePose {
   if (s.knockT > 0) return s.grounded ? "knocked" : "tumble"; // (D1: flying through the air after a car hit)
@@ -556,6 +565,7 @@ export function movePose(s: MoveState): MovePose {
   if (s.slideT > 0) return "slide";
   if (s.dodgeT > 0) return "dodge";
   if (!s.grounded) return "air";
+  if (s.danceT > 0) return "dance"; // (R11)
   const sp = horizontalSpeed(s);
   if (s.crouching) return sp > 0.4 ? "crouchWalk" : "crouch";
   if (sp > PLAYER.walkSpeed + 0.4) return "sprint";

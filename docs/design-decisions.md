@@ -819,3 +819,70 @@ Blake's brief: mirror the city left and right, make the four forts fair, clear t
   - E at the holding cell door with it: the cell door (its own section of bars now) swings open for 20 s, with a CLANK the cops can hear. The key is used up.
   - Anyone jailed who walks out while it's open is free where they stand, with 1 star (the jailbreak heat). Then the door shuts again.
   - The key stays wherever it is through the night. Pawn shops won't touch it ("A POLICE key?").
+
+## R9: doors that shut again, cops you can see, a cleaner high end (Blake, 2026-10-10)
+
+- **Station stairs:** one flight of the slate steps from the wall out (2.1 m wide). The old part next to the wall, its stringer, one slab and the second railing are gone. The handrail and its posts stand on the treads and slope with them.
+- **Station front "plain blue":** the entrance tower's glass sat inside the box's outline shell, so from the front you saw only the navy box. It's in front now.
+- **Windows sticking out (every building):** painted windows, wall skins, grime, entrances, shutters and shopfronts sit closer to the walls (windows 0.11 m out, was 0.22; skins 0.09). They still sit in front so they don't flicker.
+- **The canopy:** the two low struts are gone. Tie rods run from the canopy's front corners up to plates on the wall 1.9 m above it.
+- **Glass doors:** E shuts an open door again (the prompt says Close). Doors can't be smashed any more: the hidden door glass was being picked up as breakable shop glass.
+- **Bodyguards' "apron":** the band was a body shape too short for its own width, which turned inside out. Meat Locker and Cold Cuts (and other big NPCs) get a round belly instead.
+- **High end of town:** no shuttered shops and no grime; every ground floor there is a shop or a door.
+- **Police you can see:**
+  - 10 foot patrols by day and 14 at night, plus the 2 cruisers. A missing patrol walks in every 0.5 s from somewhere nobody's looking.
+  - The 4 station cops always go back to their beat after a chase, opening the front doors on the way. A cop who goes missing is replaced whenever his spot is out of sight.
+
+## R10: police from the start, a less bland station, signs on the walls (Blake, 2026-10-11)
+
+- **"I can't see any cops":** they only came on duty once the match started (scavenge, dusk and night), so free roam in the lobby before ENTER had none at all. They're out in every phase now except the end screen: the foot patrols, both cruisers and the station's 4.
+- **Nothing in the police station breaks:** benches, planters and glass in or on the station aren't smashable props any more. Only its door, the toilet and the cell door are props there.
+- **The chief's doorway:** the wood panelling ran straight across the door opening. It stops at the doorway now and carries on above it.
+- **Floating signs upstairs:**
+  - The office and chief's door signs were inside the walls, showing as black boxes. They're on the wall faces now.
+  - The task-force banner hung in the air over a waist-high partition; it's on the partition now.
+  - The suspects whiteboard stands on legs.
+  - The evidence signs sit on the cage and the wall.
+  - Anything closer than about 0.02 m to a surface is hidden by that surface's black outline, so everything sits 0.06 m off.
+- **Inside the station:**
+  - Big grey floor tiles (1.2 m, grout lines, a little shade per tile) on the ground floor, and carpet tiles (0.5 m) upstairs.
+  - A blue-grey band 1 m high with a dark rail round every wall on both floors.
+  - The ground floor's own floor sits on the pavement now, which used to cover it (that's why it looked lavender).
+
+## R11: NEON FEVER DREAM, the nightclub on Market Row (Blake, 2026-10-11)
+
+Blake's brief: "a really cool night club... a neon fever dream. 3 stories high. all intricate floor plans... floor 1 the bar area, booths, dancing area; floor 2 an insane dancing area; floor 3 another dancing area... really insane music... Electronic dance music... a cool DJ." Mid-build he added: "add a little shape to the building so it's not just a square." His three reference pics: a brick corner club with purple uplights and a glowing corner lamp; a bar with LED floor waves, a starry ceiling and neon rings; a club with a big light rig, an LED wall behind the DJ and LED-lit steps.
+
+- **Where (Blake's picks):** the whole Market Row block where BRICK & MORTAR and the two SEW WHATs stood (he called them "dumpling sow what and brick & mortar"), plus the three shops behind them and the alley: 29 x 26 m. He saw the marked-up aerial view and OK'd it first.
+  - The six shops are gone. Their west-side mirror twins stay (the club isn't a building box, so the mirror test skips its plot).
+  - The four alley loot spots move 18-34 m up the alley, so the east side keeps its loot.
+- **Shape (Blake: "not just a square"):**
+  - The south-west corner, at the crossroads, is cut at 45 degrees, with the front doors in the cut.
+  - Floor 2 has a glass bay out over Market Row that you can stand in.
+  - LIL PANDA's pavilion rises off the roof: a canopy on four posts and a glowing crown on top.
+- **The levels:**
+  - **Floor 1:** 6 m ceilings. The bar along the north wall, booths along the south and east walls, a dance floor under the atrium, speaker stacks.
+  - **Floor 2:** 6.3 m up, a 6.8 m hall. DJ TRASH PANDA's booth against the east wall in front of the LED equaliser wall, two stages, the LED floor round the atrium, a catwalk across it, the light rig and lasers.
+  - **The roof:** 13.5 m, open air. A glass floor over the atrium, LIL PANDA's pavilion, string lights, neon railings.
+- **Seeing through (Blake: "being able to see down or up through all the floors would be really cool"):** a 10 x 10 m atrium up the middle.
+  - From floor 1 you look up through floor 2 to the sky.
+  - Floor 2 has glass railings and the catwalk across the void.
+  - On the roof the atrium is a walkable glass floor: stand on it and look straight down two floors.
+- **Stairs (Blake's pick: glowing stairs + mezzanine):** floor 1 to 2 along the north wall, floor 2 to the roof along the south wall. An LED strip on every step.
+- **Getting in (Blake's pick: bouncer + cover):** $20 in-game cover at the rope, or walk in free as a VIP (5+ aura). The bouncer turns everyone else back at the front door and the east fire exit. The stamp lasts till dawn.
+- **Inside it's "just a vibe" (Blake's pick):** nothing to steal and nothing breakable.
+  - **B dances (Blake's pick):** any move stops it. Every 15 s dancing in the club is +1 aura, up to 3 a day.
+  - **The bar (Blake's pick: glowing cartoon mocktails):** $8 gets 40 s of dance energy (stamina refills 2.5x and sprinting drains half). The drinks have silly names and no alcohol.
+- **The music (Blake's pick: big-room house with drops):**
+  - 128 BPM, made in code, no audio files. The set loops: 16 bars of groove, an 8-bar build (snare roll, riser, the kick drops out), then 16 bars of DROP (supersaw stabs, a lead hook, rolling bass, a sub boom).
+  - It runs off the city clock, so every player hears the same bar and the lights land on the music.
+  - Volume: outside, a muffled thump (a low-pass filter) that fades over 75 m; inside it's the full mix, loudest on floor 2.
+  - On the drop: a screen shake if you're inside, confetti from the rig, smoke off the stages, and the whole crowd jumps.
+- **The DJs (Blake's pick: headliner + rooftop DJ):** DJ TRASH PANDA, a raccoon in a cyan LED helmet, on floor 2; LIL PANDA (pink helmet) on the roof. Cartoon characters, not real DJs.
+- **The crowd (Blake's pick: about 45):** about 15 on floor 1, 20 on floor 2, 10 on the roof, plus a bartender and a queue of 7 outside at night. By day only about a third are there.
+  - They're scenery: instanced figures (a few draw calls for all of them) that dance to the clock. You can walk through them.
+- **The look (Blake's pick: purple + blue, like his pics):**
+  - **Outside:** dark brick, purple uplights up every pier, pink, purple and cyan neon trims, NEON FEVER DREAM signs over the door and down both streets, the corner lamp, a red carpet, brass posts, a velvet rope.
+  - **Inside:** starry ceilings with neon rings, wall neon, LED floors redrawn about 20 times a second, the rig's chase and strobe, lasers.
+  - **Night:** two sky beams off the roof, seen right across town.
+- **Fixed on the way:** the client only took the server's movement state when the predicted position was off, so standing still it never picked up timers the server set (a mocktail's boost). It always takes it now.

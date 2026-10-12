@@ -131,7 +131,11 @@ export class NpcRenderer {
       return hip;
     };
     const legL = leg(-1), legR = leg(1);
-    const torso = part(MeshBuilder.CreateCapsule("torso", { height: 0.78, radius: 0.27 * bulk, tessellation: 8 }, sc), L.body, pivot, 0.03);
+    // (R9: a capsule shorter than its own width turns inside out, and that inverted band was the bodyguards'
+    // "apron": the big lads get a round belly instead)
+    const tr = 0.27 * bulk;
+    const torso = part(2 * tr > 0.74 ? MeshBuilder.CreateSphere("torso", { diameterX: 2 * tr, diameterY: Math.max(0.86, 1.7 * tr), diameterZ: 2 * tr, segments: 10 }, sc)
+      : MeshBuilder.CreateCapsule("torso", { height: 0.78, radius: tr, tessellation: 8 }, sc), L.body, pivot, 0.03);
     torso.position.y = 1.08;
     const head = new TransformNode("npcHead", sc); head.parent = pivot; head.position.y = 1.6;
     const skull = part(MeshBuilder.CreateSphere("head", { diameter: 0.4, segments: 8 }, sc), L.skin, head, 0.02);
@@ -205,8 +209,7 @@ export class NpcRenderer {
       const mic = part(MeshBuilder.CreateBox("headset", { width: 0.02, height: 0.02, depth: 0.16 }, sc), "#1b1420", head, 0); mic.position.set(0.18, -0.05, 0.1);
     }
     if (v.kind === "meat_locker" || v.kind === "cold_cuts") {
-      // a butcher's apron over a vest, a bald shiny head, tiny shades, a gold tooth, forearms like hams, a tattoo
-      const apron = part(MeshBuilder.CreateBox("apron", { width: 0.62, height: 0.75, depth: 0.04 }, sc), "#e8e2d4", pivot, 0.01); apron.position.set(0, 0.95, 0.5);
+      // a vest, a bald shiny head, tiny shades, a gold tooth, forearms like hams (R9: no apron)
       const shades = part(MeshBuilder.CreateBox("shades", { width: 0.2, height: 0.05, depth: 0.03 }, sc), "#1b1420", head, 0); shades.position.set(0, 0.04, 0.19);
       const shine = part(MeshBuilder.CreateSphere("shine", { diameter: 0.08, segments: 4 }, sc), "#e0a878", head, 0); shine.position.set(0.05, 0.17, 0.08);
       const tooth = part(MeshBuilder.CreateBox("goldtooth", { width: 0.05, height: 0.03, depth: 0.02 }, sc), "#ffd54a", head, 0); tooth.position.set(-0.04, -0.09, 0.19);

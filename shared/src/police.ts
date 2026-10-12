@@ -56,7 +56,7 @@ export const COPCAR = { speed: 15, halfLen: 2.2, halfWidth: 1.0, deployDist: 15 
  * day, and the station's own cops (one walking the ground floor, one guarding the evidence room). They ignore you
  * unless you're wanted (or they see a crime); then they're ordinary cops till they lose you, and go back on patrol.
  */
-export const PATROL = { foot: 6, footNight: 8, cars: 2, walk: 1.7, cruise: 9, carSight: 30, respawn: 10, hidden: 30 };
+export const PATROL = { foot: 10, footNight: 14, cars: 2, walk: 1.7, cruise: 9, carSight: 30, respawn: 10, hidden: 30 };
 
 export interface CopCarSim {
   id: string; x: number; z: number; yaw: number; v: number;
@@ -390,8 +390,9 @@ export class PoliceSystem {
     n.target = ""; n.path = []; n.lifeT = 0; n.sees = false;
     // R7: a patrol cop goes back on patrol (a station cop who's chased you out of the station walks off; another
     // one takes their place later)
-    const st = this.w.arena.station;
-    if (n.patrol || (n.beat !== undefined && st && inRect(st.rect, n.move.x, n.move.z, -0.3))) { this.resume(n); return; }
+    // (R9: station cops always head back to their beat, unless it's upstairs and they're down in the street)
+    const b = n.beat !== undefined ? this.w.arena.station?.grand?.beats[n.beat] : undefined;
+    if (n.patrol || (b && !(b.y > 2 && n.move.y < 2))) { this.resume(n); return; }
     n.state = "leave";
   }
 
@@ -438,6 +439,12 @@ export class PoliceSystem {
     const b = w.arena.station?.grand?.beats[n.beat!];
     if (!b) return { tx: n.move.x, tz: n.move.z, speed: 0, face: null };
     const q = b.pts[(n.beatI ?? 0) % b.pts.length];
+    // (R9: a long way from the beat (back from a chase): along the routes, then straight)
+    if (b.y < 2 && Math.hypot(q.x - n.move.x, q.z - n.move.z) > 4) {
+      if (!n.path.length) this.planTo(n, q.x, q.z);
+      const wp = n.path[0];
+      if (wp) { if (Math.hypot(wp.x - n.move.x, wp.z - n.move.z) < 1.1) n.path.shift(); return { tx: wp.x, tz: wp.z, speed: PATROL.walk * 1.4, face: null }; }
+    } else n.path = [];
     if (Math.hypot(q.x - n.move.x, q.z - n.move.z) < 0.6) {
       if (b.pts.length === 1) return { tx: n.move.x, tz: n.move.z, speed: 0, face: Math.PI / 2 };
       n.beatI = ((n.beatI ?? 0) + 1) % b.pts.length;
@@ -448,7 +455,7 @@ export class PoliceSystem {
   /** keep the patrols up to strength: missing ones walk in from somewhere nobody's looking */
   private keepPatrols() {
     const w = this.w;
-    if (!w.match || !["scavenge", "dusk", "night"].includes(w.match.phase)) return;
+    if (!w.match || w.match.phase === "over") return; // (R10: the lobby too: free roam before the match starts had no cops at all)
     const cops = this.cops();
     const players = [...w.players.values()].filter((p) => p.connected && p.jailT <= 0);
     const unseen = (x: number, z: number, y = 0) => players.every((p) => Math.hypot(p.move.x - x, p.move.z - z) > PATROL.hidden || !this.los(x, y + 1.6, z, p.move.x, p.move.y + 1.6, p.move.z));
@@ -459,14 +466,14 @@ export class PoliceSystem {
       if (g.length) {
         const q = g[Math.floor(w.random() * g.length)];
         const c = this.newCop(q.x, q.z, w.random() * Math.PI * 2);
-        if (c) { c.patrol = true; c.node = q.id; c.prevNode = q.id; c.state = "beat"; this.nextCop.set("patrol", w.time + 2); }
+        if (c) { c.patrol = true; c.node = q.id; c.prevNode = q.id; c.state = "beat"; this.nextCop.set("patrol", w.time + 0.5); }
       }
     }
     // the station's own
     (w.arena.station?.grand?.beats ?? []).forEach((b, i) => {
       if (cops.some((c) => c.beat === i) || (this.nextCop.get("beat" + i) ?? 0) > w.time) return;
       const q = b.pts[0];
-      if (!unseen(q.x, q.z, b.y) && players.some((p) => Math.hypot(p.move.x - q.x, p.move.z - q.z) < 12)) return;
+      if (!unseen(q.x, q.z, b.y)) return; // (R9: walks in when nobody's looking, even with you in the building)
       const c = this.newCop(q.x, q.z, b.pts.length > 1 ? Math.atan2(b.pts[1].x - q.x, b.pts[1].z - q.z) : Math.PI / 2, b.y);
       if (c) { c.beat = i; c.beatI = 0; c.state = "beat"; this.nextCop.set("beat" + i, w.time + PATROL.respawn); }
     });

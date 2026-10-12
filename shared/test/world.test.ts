@@ -1804,7 +1804,8 @@ test("R7 police presence: foot patrols walk the town and cruisers drive round al
   // a cruiser that sees you wanted turns its siren on
   const car = w.police.cars.find((c) => c.patrol)!;
   a.jailT = 0; a.lock = null; a.move.knockT = 0; // (in case that cop already got you)
-  w.debugTeleport(a.id, car.x + Math.sin(car.yaw) * 5, car.z + Math.cos(car.yaw) * 5, 0); a.notoriety = 65; settle(w, 1.2);
+  car.x = 30; car.z = -87; car.yaw = Math.PI / 2; car.v = 0; car.route = []; // (on Gahookz Ghetto Lane, looking east)
+  w.debugTeleport(a.id, 37, -87, 0); a.notoriety = 65; settle(w, 1.2);
   assert.ok(car.mode !== "cruise" && car.target === a.id, `the cruiser's after you (${car.mode})`);
 });
 
@@ -1873,4 +1874,107 @@ test("R8 four cops guard the station (front doors, the hallway, outside the cell
   const st = [...w.npc.npcs.values()].filter((n) => n.kind === "cop" && n.beat !== undefined);
   assert.equal(st.length, 4, `${st.length} station cops`);
   assert.ok(st.every((c) => inR(w.arena.station!.rect, c.move.x, c.move.z)), "all inside");
+});
+
+test("R9 a station cop who chased you out comes back to his beat afterwards (he isn't sent home)", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  onDuty(w); settle(w, 3);
+  const c = [...w.npc.npcs.values()].find((n) => n.kind === "cop" && n.beat === 0)!;
+  assert.ok(c, "the hallway cop");
+  // he chases you out into Trolley Street, then you're not wanted any more
+  c.state = "chase"; c.target = a.id; a.notoriety = 60;
+  c.move.x = 0; c.move.z = -54; c.move.y = 0; w.debugTeleport(a.id, 6, -54, 0);
+  settle(w, 0.5); a.notoriety = 0; settle(w, 25);
+  assert.ok(w.npc.npcs.has(c.id), "still on duty");
+  const st = w.arena.station!;
+  assert.ok(inR(st.rect, c.move.x, c.move.z), `back inside (${c.move.x.toFixed(1)},${c.move.z.toFixed(1)}, ${c.state})`);
+});
+
+test("R10 the police are out before the match starts too (free roam in the lobby): foot patrols, both cruisers, the station's 4", () => {
+  const { w } = hotWorld(1);
+  assert.equal(w.match.phase, "lobby");
+  settle(w, 20);
+  const cops = [...w.npc.npcs.values()].filter((n) => n.kind === "cop");
+  assert.equal(cops.filter((c) => c.beat !== undefined).length, 4, "the station's own");
+  assert.ok(cops.filter((c) => c.patrol).length >= 8, `${cops.filter((c) => c.patrol).length} town patrols`);
+  assert.equal(w.police.cars.filter((c) => c.patrol).length, 2, "two cruisers");
+});
+
+test("R10 nothing in or on the police station can be smashed (benches, planters, glass): only its door, toilet and cell door are props", () => {
+  useCity("new"); const arena = buildTrashington(); useCity("classic");
+  const st = arena.station!;
+  const inside = (arena.props ?? []).filter((p) => p.x > st.rect.minX - 0.5 && p.x < st.rect.maxX + 0.5 && p.z > st.rect.minZ - 0.5 && p.z < st.rect.maxZ + 0.5);
+  assert.deepEqual(inside.map((p) => p.kind).sort(), ["celldoor", "door", "toilet"]);
+});
+
+// ---- R11: NEON FEVER DREAM ----
+test("R11 NEON FEVER DREAM: the bouncer turns you back at the door till you pay the $20 cover (or you're a VIP); then you're in", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const f = w.arena.fever!;
+  const inside = { x: (f.door.minX + f.door.maxX) / 2 + 2, z: (f.door.minZ + f.door.maxZ) / 2 + 2 };
+  // walk at the door from outside: bounced
+  w.debugTeleport(a.id, f.out.x, f.out.z, Math.PI / 4, 0.2);
+  drive(w, a.id, 120, { mz: 1, yaw: Math.PI / 4 });
+  assert.ok(!inRect(f.rect, a.move.x, a.move.z, -0.5) || a.move.x + a.move.z < f.rect.minX + f.rect.minZ + f.cham + 1, `kept out (${a.move.x.toFixed(1)},${a.move.z.toFixed(1)})`);
+  // pay at the rope
+  a.cash = 50;
+  const rope = w.arena.props!.find((p) => p.kind === "clubrope")!;
+  w.debugTeleport(a.id, rope.x + 0.6, rope.z + 0.6, Math.atan2(rope.x - (rope.x + 0.6), rope.z - (rope.z + 0.6)), 0.2);
+  w.takeEvents(); w.props.use(a, rope.id);
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "cover" && e.paid === 20), "paid the $20 cover");
+  assert.equal(a.cash, 30);
+  w.debugTeleport(a.id, f.out.x, f.out.z, Math.PI / 4, 0.2);
+  drive(w, a.id, 150, { mz: 1, yaw: Math.PI / 4 });
+  assert.ok(Math.hypot(a.move.x - inside.x, a.move.z - inside.z) < 3.5 || a.move.x + a.move.z > f.rect.minX + f.rect.minZ + f.cham + 2, `walked in (${a.move.x.toFixed(1)},${a.move.z.toFixed(1)})`);
+});
+
+test("R11 NEON FEVER DREAM: the stairs go floor 1 -> floor 2 (6.3 m) -> the roof (13.5 m); railings round the atrium; the roof's glass floor holds you", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const f = w.arena.fever!;
+  const s1 = f.stairs1, s2 = f.stairs2;
+  w.debugTeleport(a.id, s1.minX - 0.6, (s1.minZ + s1.maxZ) / 2, Math.PI / 2, 0.2);
+  drive(w, a.id, 360, { mz: 1, yaw: Math.PI / 2 });
+  assert.ok(Math.abs(a.move.y - f.y2) < 0.15, `up on floor 2 (y ${a.move.y.toFixed(2)})`);
+  w.debugTeleport(a.id, s2.maxX + 0.6, (s2.minZ + s2.maxZ) / 2, -Math.PI / 2, f.y2);
+  drive(w, a.id, 420, { mz: 1, yaw: -Math.PI / 2 });
+  assert.ok(Math.abs(a.move.y - f.roofY) < 0.15, `up on the roof (y ${a.move.y.toFixed(2)})`);
+  // floor 2: walk north at the atrium from the south: the glass railing stops you
+  w.debugTeleport(a.id, (f.atrium.minX + f.atrium.maxX) / 2 - 2, f.atrium.minZ - 2, 0, f.y2);
+  drive(w, a.id, 180, { mz: 1, yaw: 0 });
+  assert.ok(Math.abs(a.move.y - f.y2) < 0.15 && a.move.z < f.atrium.minZ, `stopped at the atrium's rail (y ${a.move.y.toFixed(2)}, z ${a.move.z.toFixed(1)})`);
+  // the catwalk takes you across it
+  w.debugTeleport(a.id, f.catwalk.minX - 1.2, (f.catwalk.minZ + f.catwalk.maxZ) / 2, Math.PI / 2, f.y2);
+  drive(w, a.id, 240, { mz: 1, yaw: Math.PI / 2 });
+  assert.ok(a.move.x > f.catwalk.maxX && Math.abs(a.move.y - f.y2) < 0.15, `across the catwalk (x ${a.move.x.toFixed(1)}, y ${a.move.y.toFixed(2)})`);
+  // the roof: stand on the glass over the atrium
+  w.debugTeleport(a.id, (f.atrium.minX + f.atrium.maxX) / 2, (f.atrium.minZ + f.atrium.maxZ) / 2, 0, f.roofY + 0.5);
+  drive(w, a.id, 120, {});
+  assert.ok(Math.abs(a.move.y - f.roofY) < 0.15, `standing on the glass floor (y ${a.move.y.toFixed(2)})`);
+});
+
+test("R11 NEON FEVER DREAM: B dances (moving stops it); 15 s of dancing in the club is +1 aura, 3 a day at most; the bar's mocktail ($8) is 40 s of dance energy; nothing in there breaks", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const f = w.arena.fever!;
+  w.debugTeleport(a.id, (f.atrium.minX + f.atrium.maxX) / 2, (f.atrium.minZ + f.atrium.maxZ) / 2, 0, 0.2);
+  settle(w, 0.5);
+  w.action(a.id, { a: "dance" });
+  settle(w, 0.2);
+  assert.ok(a.move.danceT > 0, "dancing");
+  const aura0 = a.aura;
+  settle(w, 16);
+  assert.equal(a.aura, aura0 + 1, "+1 aura after 15 s");
+  settle(w, 60);
+  assert.equal(a.aura, aura0 + 3, "3 a day at most");
+  drive(w, a.id, 10, { mz: 1 });
+  assert.equal(a.move.danceT, 0, "moving stops it");
+  // the mocktail
+  a.cash = 10;
+  const tap = w.arena.props!.find((p) => p.kind === "mocktail")!;
+  w.debugTeleport(a.id, tap.x, tap.z - 0.8, 0, 0.2);
+  w.takeEvents(); w.props.use(a, tap.id);
+  assert.ok(w.takeEvents().some((e) => e.t === "mocktail"), "a mocktail");
+  assert.equal(a.cash, 2); assert.ok(a.move.boostT > 39, "dance energy");
+  // nothing breakable in the club
+  assert.deepEqual(w.arena.props!.filter((p) => inRect(f.rect, p.x, p.z, 1)).map((p) => p.kind).sort(), ["clubrope", "mocktail"]); // (the rope is just outside the door)
 });

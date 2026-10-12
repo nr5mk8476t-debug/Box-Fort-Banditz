@@ -31,7 +31,7 @@ const REFILL: Record<PropKind, number> = {
   vaultdoor: 1e9, depositbox: 1e9, nose: 1e9, stash: 1e9, // (C5c: once a day)
   podium: 0, cloakroom: 1e9, dessertcart: 1e9, piano: 1e9, chefstable: 1e9, kitchen: 1e9, // (C5c.2: once a day; the podium never runs out)
   // C5c.3: the rope and the counter never run out; the bar restocks; the decks cool down; the rest once a day
-  clubrope: 0, djdecks: 40, clubbar: 45, clubsafe: 1e9, rider: 1e9, lockers: 1e9, sortbin: 1e9, vipbooth: 1e9, pawncounter: 0, pawncase: 1e9,
+  clubrope: 0, mocktail: 0, djdecks: 40, clubbar: 45, clubsafe: 1e9, rider: 1e9, lockers: 1e9, sortbin: 1e9, vipbooth: 1e9, pawncounter: 0, pawncase: 1e9,
   toilet: 0, celldoor: 0, // (R6: the holding cell)
   glasscounter: 1e9, // (R7: fixed at dawn)
   door: 1e9, // (R8: a door stays how it's left; all shut at dawn)
@@ -43,7 +43,7 @@ export const PROP_RADIUS: Record<PropKind, number> = {
   dummy: 0.35, throwgame: 0.6, racegame: 0.3, steamer: 0.75, trinkets: 0.85, fishtank: 0.7, pizzacart: 0.75, gelato: 0.75, ricordi: 0.85, deli: 0.7,
   vaultdoor: 1.1, depositbox: 0.3, nose: 0.5, stash: 0.3,
   podium: 0.4, cloakroom: 0.6, dessertcart: 0.6, piano: 0.9, chefstable: 0.6, kitchen: 0.8,
-  clubrope: 0.4, djdecks: 0.9, clubbar: 1.2, clubsafe: 0.45, rider: 0.6, lockers: 0.9, sortbin: 0.9, vipbooth: 0.8, pawncounter: 0.9, pawncase: 0,
+  clubrope: 0.4, mocktail: 0.8, djdecks: 0.9, clubbar: 1.2, clubsafe: 0.45, rider: 0.6, lockers: 0.9, sortbin: 0.9, vipbooth: 0.8, pawncounter: 0.9, pawncase: 0,
   toilet: 0.45, celldoor: 0.9, glasscounter: 0, door: 0,
 };
 export const SMASHABLE = new Set<PropKind>(["phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank", "deli", "pawncase", "glasscounter"]);
@@ -70,9 +70,9 @@ export function propNearest(d: PropDef, x: number, z: number): { x: number; z: n
 export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "pizzacart", "gelato", "ricordi", "depositbox", "stash", "cloakroom", "dessertcart", "chefstable", "kitchen",
   "clubbar", "rider", "lockers", "sortbin", "vipbooth"]);
 /** C5c.3: E on these does something of its own: pay Big Crunch's cover, hijack the DJ's decks, sell to Sal, the pawn case */
-export const CLUB_USE = new Set<PropKind>(["clubrope", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door"]);
+export const CLUB_USE = new Set<PropKind>(["clubrope", "mocktail", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door"]);
 /** R8: NPCs doing these don't open doors (standing at a post, down, sitting on someone) */
-const STAY_PUT = new Set(["work", "idle", "cower", "sit", "sleep", "ko", "stunned", "gloat", "huff", "beat"]);
+const STAY_PUT = new Set(["work", "idle", "cower", "sit", "sleep", "ko", "stunned", "gloat", "huff"]);
 /** R8: the holding cell stays open this long after the chief's key is used */
 export const CELL_KEY = { open: 20, heat: 35 };
 /** C5c.2: E on these does something other than a search: book a table at the podium, play the grand piano */
@@ -287,6 +287,7 @@ export class PropSystem {
     if (d.kind === "podium") { this.w.bookTable(p); return; }
     // C5c.3: THE COMPACTOR's rope and decks, PAWN-O-RAMA's counter and case
     if (d.kind === "clubrope") { this.w.payCover(p); return; }
+    if (d.kind === "mocktail") { this.w.buyMocktail(p); return; } // (R11)
     if (d.kind === "pawncounter") { this.w.pawn.fence(p, d.shop ?? -1); return; } // (R7: which pawn shop's till)
     if (d.kind === "toilet") { this.w.flush(p); return; } // (R6)
     if (d.kind === "door") { this.toggleDoor(ps, p.id); return; }

@@ -447,3 +447,105 @@ export function stopMusic(): void {
     musicTimer = null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// R11: NEON FEVER DREAM's set: big-room house at 128 BPM, made in code. It runs off the city clock (the same moment
+// for everybody), so the floor's lights and the DROP land on the music: 16 bars of groove, an 8-bar build (snare
+// roll, riser, the kick drops out), 16 bars of DROP (supersaw stabs, a lead riff, rolling bass), round and round.
+// Through the walls it's a muffled thump (a low-pass filter); inside it's the whole thing.
+const FV_BPM = 128, FV_16 = 60 / FV_BPM / 4, FV_BAR = FV_16 * 16;
+const FV_PARTS = { groove: 16, build: 8, drop: 16 }, FV_CYCLE_BARS = FV_PARTS.groove + FV_PARTS.build + FV_PARTS.drop;
+// A minor: Am F C G (semitones from A2)
+const FV_CHORDS = [[12, 15, 19], [8, 12, 15], [3, 7, 10], [10, 14, 17]];
+const FV_ROOTS = [0, -4, 3, -2];
+const FV_LEAD = [24, null, 27, 24, null, 31, null, 29, 27, null, 24, null, 22, null, 24, null]; // (a 1-bar hook, over the chords)
+let fvBus: GainNode | null = null, fvFilter: BiquadFilterNode | null = null, fvTimer: number | null = null;
+let fvClockAt = 0, fvCtxAt = 0, fvNextStep = -1, fvIdle = 0;
+
+function fvOut(): AudioNode | null {
+  if (!ctx) return null;
+  if (!fvBus) {
+    fvFilter = ctx.createBiquadFilter(); fvFilter.type = "lowpass"; fvFilter.frequency.value = 400; fvFilter.Q.value = 0.7;
+    fvBus = ctx.createGain(); fvBus.gain.value = 0;
+    fvFilter.connect(fvBus).connect(musicBus);
+  }
+  return fvFilter;
+}
+function fvOsc(type: OscillatorType, f: number, t: number, dur: number, vol: number, out: AudioNode, slideTo?: number, detune = 0, cut?: [number, number]) {
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); o.detune.value = detune;
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  env(g, t, 0.004, vol, dur);
+  if (cut) { const fl = ctx.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.setValueAtTime(cut[0], t); fl.frequency.exponentialRampToValueAtTime(cut[1], t + dur); o.connect(fl).connect(g); } else o.connect(g);
+  g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+}
+function fvNoise(t: number, dur: number, vol: number, type: BiquadFilterType, f: number, out: AudioNode, f1?: number) {
+  if (!ctx || !noiseBuf) return;
+  const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+  const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f, t); if (f1) fl.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  const g = ctx.createGain(); env(g, t, 0.002, vol, dur);
+  src.connect(fl).connect(g).connect(out); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+}
+/** one 16th of the set (step = 16ths since the city clock's zero) at audio time t */
+function fvStep(step: number, t: number) {
+  const out = fvOut();
+  if (!out) return;
+  const s = ((step % (FV_CYCLE_BARS * 16)) + FV_CYCLE_BARS * 16) % (FV_CYCLE_BARS * 16);
+  const bar = Math.floor(s / 16), i = s % 16;
+  const part = bar < FV_PARTS.groove ? "groove" : bar < FV_PARTS.groove + FV_PARTS.build ? "build" : "drop";
+  const pb = part === "groove" ? bar : part === "build" ? bar - FV_PARTS.groove : bar - FV_PARTS.groove - FV_PARTS.build;
+  const ch = Math.floor(bar / 2) % 4;
+  const root = 55 * Math.pow(2, FV_ROOTS[ch] / 12);
+  const quarter = i % 4 === 0, off = i % 4 === 2;
+  const buildK = part === "build" ? (pb * 16 + i) / (FV_PARTS.build * 16) : 0;
+  const kickOn = part !== "build" || pb < 4;
+  // the kick: four to the floor (a fat one on the drop)
+  if (kickOn && quarter) { fvOsc("sine", part === "drop" ? 160 : 140, t, 0.22, part === "drop" ? 0.9 : 0.7, out, 42); fvNoise(t, 0.02, 0.15, "highpass", 3000, out); }
+  // the clap on 2 and 4; the build's snare roll (4ths, 8ths, 16ths, then 32nds, rising)
+  if (part !== "build" && (i === 4 || i === 12)) fvNoise(t, 0.14, 0.32, "bandpass", 1500, out);
+  if (part === "build") {
+    const every = buildK < 0.25 ? 4 : buildK < 0.5 ? 2 : 1;
+    if (i % every === 0 && !(pb === FV_PARTS.build - 1 && i >= 12)) { fvNoise(t, 0.08, 0.1 + buildK * 0.3, "bandpass", 1400 + buildK * 2200, out); if (buildK > 0.75) fvNoise(t + FV_16 / 2, 0.06, 0.1 + buildK * 0.25, "bandpass", 2600, out); }
+    if (i === 0 && pb % 2 === 0) fvNoise(t, FV_BAR * 2, 0.04 + buildK * 0.12, "bandpass", 300 + buildK * 3000, out, 1200 + buildK * 9000); // (the riser)
+    if (i === 0) fvOsc("sawtooth", 220 * Math.pow(2, buildK * 2), t, FV_BAR, 0.025 + buildK * 0.03, out, 220 * Math.pow(2, buildK * 2 + 0.25), 0, [800, 4000]);
+  }
+  // hats: closed 16ths (louder on the drop), open on the offbeats
+  if (part !== "build" || buildK < 0.9) { if (i % 2 === 1 || part === "drop") fvNoise(t, 0.02, part === "drop" ? 0.06 : 0.035, "highpass", 9000, out); if (off) fvNoise(t, 0.09, part === "groove" && pb < 4 ? 0.03 : 0.07, "highpass", 7000, out); }
+  // the bass: offbeat pump on the groove; rolling 16ths (side-chained to the kick) on the drop
+  if (part === "groove" && off) fvOsc("sawtooth", root, t, FV_16 * 1.6, 0.22, out, undefined, 0, [1200, 250]);
+  if (part === "drop" && !quarter) fvOsc("sawtooth", root * (i % 4 === 3 ? 2 : 1), t, FV_16 * 0.9, i % 4 === 2 ? 0.26 : 0.17, out, undefined, 0, [2200, 300]);
+  // chords: a soft filtered pad on the groove (once a bar), big detuned supersaw stabs on the drop's offbeats
+  const notes = FV_CHORDS[ch].map((n) => 110 * Math.pow(2, n / 12));
+  if (part === "groove" && i === 0 && pb >= 4) for (const f of notes) for (const dt of [-12, 12]) fvOsc("sawtooth", f, t, FV_BAR * 0.95, 0.018, out, undefined, dt, [700 + pb * 60, 500]);
+  if (part === "build" && i % 4 === 2) for (const f of notes) fvOsc("sawtooth", f, t, FV_16 * 1.2, 0.02 + buildK * 0.04, out, undefined, 7, [1000 + buildK * 5000, 800]);
+  if (part === "drop" && (off || (pb % 4 === 3 && i === 14))) for (const f of notes) for (const dt of [-18, -6, 6, 18]) fvOsc("sawtooth", f, t, FV_16 * 1.7, 0.026, out, undefined, dt, [6500, 1400]);
+  // the lead hook on the drop (an octave up for the last 8 bars)
+  if (part === "drop") { const n = FV_LEAD[i]; if (n !== null) fvOsc("square", 110 * Math.pow(2, (n + (pb >= 8 ? 12 : 0) + FV_ROOTS[ch] * 0) / 12), t, FV_16 * 0.9, 0.05, out, undefined, 0, [5000, 1500]); }
+  // THE DROP: a sub boom and a crash on its first beat; a gap of silence just before it
+  if (part === "drop" && pb === 0 && i === 0) { fvOsc("sine", 90, t, 1.4, 1.0, out, 28); fvNoise(t, 1.6, 0.25, "highpass", 4000, out); fvNoise(t, 0.5, 0.3, "lowpass", 300, out); }
+}
+/** R11: call every frame. clock: the city clock (s); gain 0..1 (0: far away); cutoff: Hz (muffled through walls ~350) */
+export function feverMusic(clock: number, gain: number, cutoff: number): void {
+  if (!ctx || !unlocked) return;
+  if (!noiseBuf) noise(0.001, 0.0001, 1000);
+  const out = fvOut();
+  if (!out || !fvBus || !fvFilter) return;
+  const now = ctx.currentTime;
+  fvBus.gain.setTargetAtTime(Math.max(0, gain), now, 0.15);
+  fvFilter.frequency.setTargetAtTime(Math.max(120, cutoff), now, 0.2);
+  // keep the music's clock locked to the city's (jumps when the city clock does)
+  const predicted = fvClockAt + (now - fvCtxAt);
+  if (fvNextStep < 0 || Math.abs(predicted - clock) > 0.12) { fvClockAt = clock; fvCtxAt = now; fvNextStep = Math.ceil((clock + 0.05) / FV_16); }
+  if (gain <= 0.001) { fvIdle += 1; if (fvIdle > 120 && fvTimer !== null) { clearInterval(fvTimer); fvTimer = null; fvNextStep = -1; } return; }
+  fvIdle = 0;
+  if (fvTimer === null) fvTimer = window.setInterval(() => {
+    if (!ctx) return;
+    const n2 = ctx.currentTime, clk = fvClockAt + (n2 - fvCtxAt);
+    while (fvNextStep * FV_16 < clk + 0.25) {
+      const at = fvCtxAt + (fvNextStep * FV_16 - fvClockAt);
+      if (at > n2 - 0.02) fvStep(fvNextStep, Math.max(n2, at));
+      fvNextStep++;
+    }
+  }, 40);
+}

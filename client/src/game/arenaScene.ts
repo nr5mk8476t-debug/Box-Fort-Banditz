@@ -23,12 +23,12 @@ import { LockpickUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, type PropDef,
+  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
 import { settings } from "../settings.ts";
-import { sfx, chargeTone } from "../audio.ts";
+import { sfx, chargeTone, feverMusic } from "../audio.ts";
 
 export type ServerPlayerView = RemoteInfo & { lastSeq: number };
 
@@ -54,7 +54,7 @@ const PROP_NAMES: Record<string, string> = {
   // C5a: the lobby squat
   dummy: "Practice Dummy", throwgame: "THROW-O-MATIC", racegame: "TROLLEY GRAND PRIX",
   // C5b: Chinatown's stalls
-  steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
+  mocktail: "the Mocktail Bar", steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
   // R4: Little Italy's
   pizzacart: "Pizza Cart", gelato: "Gelato Cart", ricordi: "Souvenir Stall", deli: "Deli Counter",
   // C5c: Uptown's landmarks
@@ -465,8 +465,10 @@ export class ArenaScene {
       }
       // keep interpolation consistent with the corrected state
       this.prev.x -= ex; this.prev.y -= ey; this.prev.z -= ez;
-      Object.assign(this.cur, s);
     }
+    // (R11: always take the server's state: standing still the position matches, but timers the server set
+    //  (a mocktail's boost, the dance) must still come through)
+    Object.assign(this.cur, s);
   }
 
   /**
@@ -770,8 +772,10 @@ export class ArenaScene {
         }
         // C5c.2: LE DUMPSTÈRE
         // C5c.3: THE COMPACTOR
-        case "cover": if (e.p === me) { sfx.cash(); this.onBanner?.(e.vip ? "VIP. GO ON IN." : "STAMPED!", e.vip ? "Big Crunch nods. No charge for somebody like you (until dawn)." : `$${e.paid} cover paid. You're in till dawn. (It all goes in the manager's safe...)`, "good"); } break;
-        case "coverNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"Fifteen bucks." You haven't got $${CLUB.cover}. (Money you've sold loot for counts. Or get ${CLUB.vipAura} aura and be somebody.)` : "You're already stamped. Go on in!", "info"); break;
+        case "cover": if (e.p === me && this.arena.fever) { sfx.cash(); this.onBanner?.(e.vip ? "VIP. GO ON IN." : "STAMPED!", e.vip ? "The bouncer lifts the rope. No charge for somebody like you." : `$${e.paid} cover. Welcome to NEON FEVER DREAM. You're in till dawn.`, "good"); break; }
+        if (e.p === me) { sfx.cash(); this.onBanner?.(e.vip ? "VIP. GO ON IN." : "STAMPED!", e.vip ? "Big Crunch nods. No charge for somebody like you (until dawn)." : `$${e.paid} cover paid. You're in till dawn. (It all goes in the manager's safe...)`, "good"); } break;
+        case "coverNo": if (e.p === me && this.arena.fever) { this.onFeedback?.(e.reason === "broke" ? `"Twenty bucks, pal." You haven't got $${FEVER.cover}. (Or get ${FEVER.vipAura} aura and be somebody.)` : "You're already stamped. Go on in!", "info"); break; }
+        if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"Fifteen bucks." You haven't got $${CLUB.cover}. (Money you've sold loot for counts. Or get ${CLUB.vipAura} aura and be somebody.)` : "You're already stamped. Go on in!", "info"); break;
         case "clubDrop": {
           const c = this.arena.club;
           if (c) {
@@ -846,9 +850,14 @@ export class ArenaScene {
           break;
         }
         case "bounced":
+          if (e.p === me && e.reason === "cover" && this.arena.fever) { sfx.offended(); this.onFeedback?.(`"Rope. Cover. Twenty." Pay at the rope ($${FEVER.cover}) or be a VIP (${FEVER.vipAura}+ aura).`, "bad"); break; }
           if (e.p === me && e.reason === "cover") { sfx.offended(); this.onFeedback?.(`"Fifteen bucks, or be somebody." Pay Big Crunch's cover at the rope ($${CLUB.cover}), be a VIP (${CLUB.vipAura}+ aura, or a VIP wristband)... or find another way in. Round the back, maybe.`, "bad"); break; }
           if (e.p === me) { sfx.offended(); this.onFeedback?.(`"Do you have a reservation? No? Out." Book a table ($${RESTO.fee}) at the podium, or come dressed for it (carry something designer)... or try the kitchen door round the back.`, "bad"); }
           break;
+        case "mocktail": if (e.p === me) { sfx.cash(); this.onFeedback?.(`One ${e.drink}, glowing. $${e.paid}. Dance energy for ${FEVER.boost} s!`, "good"); } break;
+        case "mocktailNo": if (e.p === me) this.onFeedback?.(`"That's $${FEVER.mocktail}, champ." You're short.`, "info"); break;
+        case "feverAura": if (e.p === me) { sfx.stash(); this.onFeedback?.(`The crowd loves your moves: +1 aura (${e.aura})`, "good"); } break;
+        case "dance": break;
         case "seated": if (e.p === me) { sfx.cash(); this.onBanner?.("RIGHT THIS WAY", `Table booked ($${e.paid}). The maitre d' will let you in until dawn.`, "good"); } break;
         case "restoNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `A table's $${RESTO.fee} and you've got less than that. (Money you've sold loot for counts.)` : "You've already got a table. Go on in!", "info"); break;
         case "piano": {
@@ -1223,6 +1232,7 @@ export class ArenaScene {
     // Left click with nothing in your hands (fists selected) = punch; with something in your hands = wind up a throw
     if (a === "chargeStart" && src === "mouse" && !this.activeItem(inv)) { this.punch(now); return; }
     if (a === "special") return; // right mouse: reserved for special items (5A.1)
+    if (a === "dance") { this.onAction?.({ a: "dance" }); return; } // (R11: B: dance / stop dancing)
     const hold = 600; // ms the optimistic guess is trusted before the server must confirm
     if (a === "grabEnd") { if (this.tagHold) { this.tagHold = null; sfx.sprayStop(); } return; }
     if (a === "grab" && this.arrestTarget && !this.pinOn) { // (C5c.1: citizen's arrest: beats grabbing whatever's lying there)
@@ -1252,7 +1262,7 @@ export class ArenaScene {
     if (a === "grab") this.updateLookTarget();
     if (a === "grab" && !this.lookTarget && this.useTarget) {
       const u = this.useTarget;
-      if (u.empty) { sfx.full(); this.onFeedback?.(u.kind === "washer" || u.kind === "dryer" ? "Already emptied today." : u.kind === "djdecks" ? "The decks are still warm. Give DJ Crunch a minute." : u.kind === "pawncase" ? "The case is smashed. Sal's boarding it up till dawn." : u.kind === "clubsafe" ? "Cleaned out. The takings start again tomorrow." : "Already searched. It'll refill later.", "info"); return; }
+      if (u.empty && u.kind !== "door") { sfx.full(); /* (R9: an open door is "empty" but E shuts it) */ this.onFeedback?.(u.kind === "washer" || u.kind === "dryer" ? "Already emptied today." : u.kind === "djdecks" ? "The decks are still warm. Give DJ Crunch a minute." : u.kind === "pawncase" ? "The case is smashed. Sal's boarding it up till dawn." : u.kind === "clubsafe" ? "Cleaned out. The takings start again tomorrow." : "Already searched. It'll refill later.", "info"); return; }
       this.openingMachine = u.kind === "washer" || u.kind === "dryer";
       const ht = HOLD_TIME[u.kind as keyof typeof HOLD_TIME];
       this.holdKind = ht !== undefined ? u.kind : "";
@@ -1501,6 +1511,35 @@ export class ArenaScene {
     if (st === "build" || st === "hold") { sfx.hat(g * 1.2); if (n % 2 === 0) sfx.hat(g); return; }
     if (n % 2 === 0) sfx.kick(g); else if (inside) sfx.hat(g * 0.8);
   }
+  private feverPart = "";
+  private feverLevel = 0;
+  /** R11: in NEON FEVER DREAM (any floor)? dancing? (for the prompt) */
+  get inFever(): boolean { return this.feverLevel > 0; }
+  get dancing(): boolean { return this.cur.danceT > 0; }
+  /** R11: NEON FEVER DREAM: the set (loud inside, a muffled thump through the walls, fading down the street), the
+   *  DROP's shake when you're in there, and everything that moves in the club */
+  private feverFrame(dt: number) {
+    const f = this.arena.fever;
+    if (!f) return;
+    const r = f.rect, x = this.cur.x, z = this.cur.z, y = this.cur.y;
+    const inPlot = x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ && x + z > r.minX + r.minZ + f.cham;
+    const level = !inPlot ? 0 : y < f.y2 - 0.5 ? 1 : y < f.roofY - 0.5 ? 2 : 3;
+    this.feverLevel = level;
+    const d = Math.hypot(Math.max(r.minX - x, 0, x - r.maxX), Math.max(r.minZ - z, 0, z - r.maxZ));
+    const night = this.night.level;
+    let gain = 0, cut = 380;
+    if (level === 2) { gain = 0.95; cut = 16000; }
+    else if (level === 1) { gain = 0.8; cut = 12000; }
+    else if (level === 3) { gain = 0.85; cut = 16000; }
+    else if (d < 75) { gain = 0.5 * (1 - d / 75) * (0.7 + 0.3 * night); cut = y > f.roofY - 1 ? 2500 : 380 + 900 * Math.max(0, 1 - d / 20); }
+    feverMusic(this.clubClock, settings.muted ? 0 : gain, cut);
+    const at = feverAt(this.clubClock);
+    if (at.part !== this.feverPart) {
+      if (at.part === "drop" && this.feverPart === "build") { if (level > 0) this.trauma = Math.max(this.trauma, 0.75); this.city.feverDrop(); }
+      this.feverPart = at.part;
+    }
+    this.city.updateFever(dt, this.clubClock, night, this.camera.position.x, this.camera.position.y, this.camera.position.z, level);
+  }
   /** C5c.3: where the DROP is right now (seconds since it started building; huge = none) */
   get clubDropT(): number { const b = this.match.clubB ?? -999; return b < -900 ? 1e9 : (((this.clubClock - b) % 600) + 600) % 600; }
   /** C5c.3: what's in the pawn case for me: my own pawned thing (buy back), else the first thing on sale */
@@ -1560,7 +1599,7 @@ export class ArenaScene {
     let best: PropDef | null = null, bestScore = Infinity;
     for (const d of this.arena.props ?? []) {
       if (!filter(d)) continue;
-      if (d.box !== undefined && this.propState.get(d.id) === false) continue; // (C4a: already smashed)
+      if (d.box !== undefined && this.propState.get(d.id) === false && d.kind !== "door" && d.kind !== "celldoor") continue; // (C4a: already smashed; R9: an open door can still be shut)
       const n = propNearest(d, me.x, me.z); // (C4a: long things: aim at the nearest bit)
       const dx = n.x - me.x, dz = n.z - me.z, dist = Math.hypot(dx, dz);
       if (propSurfaceDist(d, me.x, me.z) > reach || Math.abs(d.y - me.y) > 2.2) continue;
@@ -1695,7 +1734,8 @@ export class ArenaScene {
     const n = (f: number, o: number) => Math.sin(this.time * f + o) * Math.sin(this.time * f * 0.63 + o * 2.1);
     const shakeP = n(41, 0) * 0.035 * shakeAmt, shakeY = n(37, 3) * 0.035 * shakeAmt, shakeR = n(29, 7) * 0.05 * shakeAmt;
 
-    this.camera.position.set(px, py + this.eye + bob + (reduced ? 0 : camDip), pz);
+    const danceBob = pose === "dance" && !reduced ? Math.abs(Math.sin(this.time * Math.PI * 128 / 60)) * 0.09 : 0; // (R11: bouncing to the beat)
+    this.camera.position.set(px, py + this.eye + bob + danceBob + (reduced ? 0 : camDip), pz);
     // knocked down: you're looking up at the sky from the pavement
     const lieBack = pose === "knocked" ? -0.55 : pose === "tumble" && !reduced ? Math.sin(this.time * 11) * 0.5 : 0; // (D1: cartwheeling after a car hit)
     this.lie += (lieBack - this.lie) * ease(8);
@@ -1752,6 +1792,7 @@ export class ArenaScene {
     this.tickClubClock(dt);
     this.city.updateClub(dt, this.clubClock, this.clubDropT, this.night.level, this.camera.position.x, this.camera.position.z);
     this.clubBeat();
+    this.feverFrame(dt);
     const L = this.arena.lobby;
     this.night.setFarView(L && inLobby(this.arena, this.cur.x, this.cur.z, 3) && this.cur.y > L.y - 4 ? 2.4 : 1);
     this.city.updateLights(this.match.lightT ?? 0);

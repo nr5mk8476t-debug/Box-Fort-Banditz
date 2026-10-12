@@ -223,7 +223,8 @@ export class RemotePlayers {
       if (p === "sprint") { tLean = 0.28; }
       if (p === "walk") { tLean = 0.1; }
       if (p === "knocked") { tLean = -1.45; tArmUp = 0.9; tCrouch = 0.2; }
-      if (p === "tumble") { tArmUp = 1; } // (D1: launched by a car: arms and legs everywhere, spinning)
+      if (p === "tumble") { tArmUp = 1; }
+      if (p === "dance") { tArmUp = 0.75 + 0.25 * Math.sin(performance.now() / 1000 * Math.PI * 128 / 60); tSquash = 0.06 * Math.abs(Math.sin(performance.now() / 1000 * Math.PI * 128 / 60)); } // (R11: fist-pumping to the beat) // (D1: launched by a car: arms and legs everywhere, spinning)
       r.spin = p === "tumble" ? (r.spin ?? 0) + dt * 13 : 0;
       // D1: dizzy stars circling a flattened bandit's head
       if (p === "knocked" || p === "tumble") {
@@ -271,6 +272,8 @@ export class RemotePlayers {
         r.armR.rotation.x = r.armR.rotation.x * (1 - k) - 1.55 * k;
         r.armR.rotation.z *= 1 - k;
       }
+      if (p === "dance") { const k = performance.now() / 1000 * Math.PI * 128 / 60; r.bodyPivot.position.y = Math.abs(Math.sin(k)) * 0.14; r.bodyPivot.rotation.y = Math.sin(k * 0.5) * 0.35; r.armL.rotation.z -= Math.sin(k) * 0.4; r.armR.rotation.z += Math.cos(k) * 0.4; }
+      else r.bodyPivot.rotation.y = 0;
       r.tag.position.y = 2.1 - r.crouch * 0.5;
     }
   }

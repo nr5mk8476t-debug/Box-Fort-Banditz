@@ -411,7 +411,8 @@ test("R3 blocks: the two halves mirror each other; buildings never on a road or 
   assert.ok(blds.length > 120, `a full city (${blds.length} buildings)`);
   const sig = (b: typeof blds[number], m: number) => `${Math.round(m * b.x * 10)},${Math.round(b.z * 10)},${Math.round(b.w * 10)},${Math.round(b.d * 10)},${b.h}`;
   const mine = new Set(blds.map((b) => sig(b, 1)));
-  for (const b of blds) if (Math.abs(b.x) > 0.5) assert.ok(mine.has(sig(b, -1)), `building at ${b.x.toFixed(1)},${b.z.toFixed(1)} has a mirror twin`);
+  const fv = nc.fever!.rect; // (R11: NEON FEVER DREAM took the six shops on its plot: their west twins stand alone)
+  for (const b of blds) if (Math.abs(b.x) > 0.5 && !inRect(fv, -b.x, b.z, 0.2)) assert.ok(mine.has(sig(b, -1)), `building at ${b.x.toFixed(1)},${b.z.toFixed(1)} has a mirror twin`);
   for (const b of blds) for (let x = b.x - b.w / 2 + 0.3; x < b.x + b.w / 2; x += 1) for (let z = b.z - b.d / 2 + 0.3; z < b.z + b.d / 2; z += 1) {
     if (!inFoot(b, x, z)) continue;
     assert.ok(!onRoadAt(nc, x, z, 2.0), `building at ${b.x.toFixed(1)},${b.z.toFixed(1)} reaches the pavement or road`); // (R3: 2.5 m pavement)
@@ -605,6 +606,7 @@ test("R8 the station's real glass: ribbon windows on the ground floor's front an
   const doors = nc.props!.filter((p) => p.kind === "door");
   assert.equal(doors.length, 3, "the station's front doors and the two pawn shops' doors");
   for (const d of doors) assert.ok(d.box !== undefined && nc.boxes[d.box].kind === "glass", "each blocks while shut");
+  for (const d of doors) assert.ok(!nc.props!.some((q) => q !== d && q.box === d.box), "R9: nothing else uses a door's box (no smashing them)");
   const cd = nc.props!.find((p) => p.kind === "celldoor")!;
   assert.ok(cd.box !== undefined && nc.boxes[cd.box].kind === "bars", "the cell door is its own bars (the key opens it)");
   assert.ok(inRect(ch, g.keySpot.x, g.keySpot.z) && g.keySpot.y > g.upY, "the key's on the chief's desk");

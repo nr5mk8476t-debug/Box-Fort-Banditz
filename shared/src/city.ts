@@ -24,7 +24,7 @@
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
 import {
-  box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
+  box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind,
   CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
 } from "./arena.js";
 
@@ -2077,22 +2077,16 @@ export function buildTrashington(): ArenaLayout {
       // the front doors: two glass leaves (E: open / close; cops open them too)
       boxes.push({ ...box(0, V(0.2), 3.0, 0.12, 2.8, "glass"), hide: true });
       props.push({ id: "door1", kind: "door", x: 0, y: 1.4, z: V(0.2), yaw: 0, hw: 1.5, hd: 0.15, box: boxes.length - 1 });
-      boxes.push({ ...box(0, (P0.minZ + P0.maxZ) / 2, x1 - x0 - 0.4, D - 0.4, 0.03, "shopfloor"), color: "#d8d4cc" });
+      boxes.push({ ...box(0, (P0.minZ + P0.maxZ) / 2, x1 - x0 - 0.4, D - 0.4, 0.03, "shopfloor", 0.15), color: "#a3a6ad" }); // (R10: on the pavement, which covered it) // (R10: grey, under big floor tiles)
       // ---- the stairs: up the west side of the lobby, rising toward the back ----
-      // (R8: in off the wall, with a stringer between: it rises with the steps)
-      const SX0 = x0 + 0.8, SX1 = SX0 + 1.5, SV0 = 1.0, steps = UNIT.steps, run = UNIT.stepRun, SV1 = SV0 + steps * run;
-      for (let i = 1; i <= steps; i++) {
-        const top = 0.18 + (i * (UY - 0.18)) / steps;
-        thing((SX0 + SX1) / 2, SV0 + (i - 0.5) * run, SX1 - SX0, run, top, "step", { color: "#8a8478" });
-        thing((x0 + 0.2 + SX0) / 2, SV0 + (i - 0.5) * run, SX0 - x0 - 0.2, run, Math.min(top + 0.3, UY), "wall", { color: "#5a6070" });
-      }
+      // (R9: one flight of the slate steps right across, from the wall out; Blake liked them)
+      const SX0 = x0 + 0.2, SX1 = x0 + 2.3, SV0 = 1.0, steps = UNIT.steps, run = UNIT.stepRun, SV1 = SV0 + steps * run;
+      for (let i = 1; i <= steps; i++) thing((SX0 + SX1) / 2, SV0 + (i - 0.5) * run, SX1 - SX0, run, 0.18 + (i * (UY - 0.18)) / steps, "step", { color: "#5a6070" });
       // the ground floor's ceiling = the first floor (a hole over the stairs), the first floor's ceiling
       wall(SX1, x1 - 0.2, 0.4, D - 0.4, 0.3, H, "#b8b2a6", "roof");
       wall(SX0, SX1, SV1, D - 0.4, 0.3, H, "#b8b2a6", "roof");
-      wall(x0 + 0.2, SX0, 0.4, D - 0.4, 0.3, H, "#b8b2a6", "roof");
       wall(x0 + 0.2, x1 - 0.2, 0.4, D - 0.4, 0.3, UT, "#9a948a", "roof");
-      wall(SX1 + 0.02, SX1 + 0.12, 0.6, SV1 - 1.2, 1.0, UY, "#3a4458"); // (the railings round the stairwell upstairs)
-      wall(SX0 - 0.12, SX0 - 0.02, 0.4, SV1 - 0.2, 1.0, UY, "#3a4458");
+      wall(SX1 + 0.02, SX1 + 0.12, 0.6, SV1 - 1.2, 1.0, UY, "#3a4458"); // (the railing round the stairwell upstairs)
       // ---- the lobby: the receptionist's desk, benches, a water cooler, the wanted board ----
       const LV = 7.6;
       thing(0, 4.0, 6, 0.9, 1.1, "counter", { color: "#4a3a2c", deco: "reception" });
@@ -2502,6 +2496,179 @@ export function buildTrashington(): ArenaLayout {
     };
   }
 
+  // R11: NEON FEVER DREAM (Blake: "a neon fever dream, 3 stories high, intricate floor plans, use as much floor space as
+  // you want"). It takes the whole Market Row block where BRICK & MORTAR and the two SEW WHATs stood, the alley and the
+  // three shops behind them: 29 x 26 m. The south-west corner (the crossroads) is cut at 45 degrees and the front door
+  // is in the cut, with a bouncer and a rope outside. Floor 1: the bar, booths, a dance floor under the atrium. Floor 2
+  // (6.3 m up, 6.8 m high): the main room round the atrium (a catwalk across it, stages, DJ TRASH PANDA's booth against
+  // the east wall), a glass bay out over Market Row. The roof (13.5 m): open air, a glass floor over the atrium (you
+  // see straight down two floors), LIL PANDA's pavilion in the north-east corner. Not a building box (it's walls and
+  // floors), so it has no mirror twin; its loot spots move up the alley behind it (the west side keeps its twins).
+  let fever: FeverDef | undefined;
+  if (R2) {
+    type Pt = [number, number];
+    const F = R(73.6, 102.7, 6.3, 32.2), CH = 5, T = 0.3, Y2 = 6.3, RY = 13.5, SL = 0.4, PAR = 1.2, S2 = Math.SQRT2;
+    const BRICK = "#3b2a33", DARK = "#1b1424";
+    // ---- clear the plot (the shops on it go; prop box indexes are kept straight) ----
+    {
+      const keep = boxes.map((b) => b.kind === "sidewalk" || !inRect(F, b.x, b.z, 0.1));
+      const remap = new Map<number, number>();
+      const kept: Box[] = [];
+      boxes.forEach((b, i) => { if (keep[i]) { remap.set(i, kept.length); kept.push(b); } });
+      for (const pd of props) if (pd.box !== undefined) pd.box = remap.get(pd.box);
+      for (let q = 0; q < pumpBoxes.length; q++) pumpBoxes[q] = remap.get(pumpBoxes[q]) ?? -1;
+      boxes.length = 0; boxes.push(...kept);
+      // (the alley loot moves 26 m up the alley, past the club's back wall)
+      const clearAt = (x: number, z: number) => !inRect(F, x, z, 1) && !boxes.some((b) => (b.kind === "building" || b.kind === "tower") && footSd(b, x, z).d < 0.8);
+      for (const l of loot) if (l.y < 0.5 && inRect(F, l.x, l.z, 0.3)) {
+        const dz = [26, 24, 28, 22, 30, 20, 32, 18, 34].find((d) => clearAt(l.x, l.z + d));
+        if (dz !== undefined) { l.z += dz; l.tier = tierAt(l.z); } else { l.y = -99; } // (nowhere clear: dropped below the map, never spawns)
+      }
+    }
+    const wb = (x0: number, x1: number, z0: number, z1: number, y0: number, y1: number, kind: Box["kind"] = "wall", extra: Partial<Box> = {}) => {
+      if (x1 - x0 < 0.01 || z1 - z0 < 0.01 || y1 - y0 < 0.01) return;
+      boxes.push({ ...box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, y1 - y0, kind, y0), ...extra });
+    };
+    const top = RY + PAR;
+    // the bands up a glazed wall: solid plinth, floor 1's windows, the floor-2 band, floor 2's glass, the parapet
+    const BANDS: [number, number, boolean][] = [[0, 0.9, false], [0.9, 4.8, true], [4.8, Y2 + 0.6, false], [Y2 + 0.6, RY - 0.9, true], [RY - 0.9, top, false]];
+    /** a wall along x (at z0..z1) or along z (at x0..x1), glazed in the glass bands: piers every ~4 m */
+    const facade = (alongX: boolean, f0: number, f1: number, a0: number, a1: number, bands: [number, number, boolean][], open?: (a: number, b: number, y0: number) => boolean) => {
+      const put = (a: number, b: number, y0: number, y1: number, kind: Box["kind"], th = 1) => {
+        const m = ((f1 - f0) * (1 - th)) / 2;
+        if (alongX) wb(a, b, f0 + m, f1 - m, y0, y1, kind, kind === "wall" ? { color: BRICK, deco: "shell" } : {}); else wb(f0 + m, f1 - m, a, b, y0, y1, kind, kind === "wall" ? { color: BRICK, deco: "shell" } : {});
+      };
+      for (const [y0, y1, glass] of bands) {
+        if (!glass) { put(a0, a1, y0, y1, "wall"); continue; }
+        const n = Math.max(1, Math.round((a1 - a0) / 4.2)), step = (a1 - a0) / n, pw = 0.7;
+        for (let q = 0; q <= n; q++) { const c = a0 + q * step; put(Math.max(a0, c - pw / 2), Math.min(a1, c + pw / 2), y0, y1, "wall"); }
+        for (let q = 0; q < n; q++) {
+          const a = a0 + q * step + pw / 2, b = a0 + (q + 1) * step - pw / 2;
+          if (open?.(a, b, y0)) continue;
+          put(a, b, y0, y1, "glass", 0.4);
+        }
+      }
+    };
+    // ---- the shell ----
+    facade(true, F.minZ, F.minZ + T, F.minX + CH, F.maxX, BANDS);                                    // south (the side street)
+    const BAY = R(72.4, F.minX, 12, 26);
+    facade(false, F.minX, F.minX + T, F.minZ + CH, F.maxZ, BANDS, (a, b, y0) => y0 > Y2 && a >= BAY.minZ - 0.5 && b <= BAY.maxZ + 0.5); // west (Market Row; the bay opens off floor 2)
+    // (the bay's opening: the panes between its piers are gone, so the piers in it go too)
+    for (let q = boxes.length - 1; q >= 0; q--) { const b = boxes[q]; if (b.kind === "wall" && b.color === BRICK && b.x < F.minX + T && b.z > BAY.minZ + 0.2 && b.z < BAY.maxZ - 0.2 && b.y - b.h / 2 > Y2 && b.y + b.h / 2 < RY) boxes.splice(q, 1); }
+    wb(F.minX, F.maxX, F.maxZ - T, F.maxZ, 0, top, "wall", { color: BRICK, deco: "shell" });                          // north (the neighbours)
+    const EX = [18.2, 20.2] as const;                                                                 // east: the fire exit
+    wb(F.maxX - T, F.maxX, F.minZ, EX[0], 0, Y2 + 0.6, "wall", { color: BRICK, deco: "shell" }); wb(F.maxX - T, F.maxX, EX[1], F.maxZ, 0, Y2 + 0.6, "wall", { color: BRICK, deco: "shell" });
+    wb(F.maxX - T, F.maxX, EX[0], EX[1], 2.6, Y2 + 0.6, "wall", { color: BRICK, deco: "shell" });
+    facade(false, F.maxX - T, F.maxX, F.minZ, F.maxZ, BANDS.slice(3));
+    // the cut corner: three pieces along the diagonal, the front door (3.2 m) in the middle one
+    {
+      const P0: Pt = [F.minX, F.minZ + CH], P1: Pt = [F.minX + CH, F.minZ], d = T / S2;
+      const outer = (s: number): Pt => [P0[0] + (P1[0] - P0[0]) * s, P0[1] + (P1[1] - P0[1]) * s];
+      const inner = (s: number): Pt => s <= 0 ? [F.minX + T, F.minZ + CH + T * S2 - T] : s >= 1 ? [F.minX + CH + T * S2 - T, F.minZ + T] : [outer(s)[0] + d, outer(s)[1] + d];
+      const seg = (s0: number, s1: number, y0: number, y1: number) => boxes.push({ ...polyBox([outer(s0), outer(s1), inner(s1), inner(s0)], y1 - y0, "wall", y0), color: BRICK, deco: "shell" });
+      const L = CH * S2, sd0 = 0.5 - 1.6 / L, sd1 = 0.5 + 1.6 / L;
+      seg(0, sd0, 0, top); seg(sd1, 1, 0, top); seg(sd0, sd1, 3.2, top);
+    }
+    // ---- floors: floor 1 (on the pavement), floor 2's slab and the roof deck round their holes ----
+    const A = R(83.5, 93.5, 14.5, 24.5);                      // the atrium
+    const SW1 = R(76.0, 85.9, 29.3, F.maxZ - T);              // floor 1 -> 2: along the north wall, rising east
+    const SW2 = R(88.5, 99.9, F.minZ + T, 9.0);               // floor 2 -> roof: along the south wall, rising west
+    const CW = R(A.minX, A.maxX, 18.9, 20.1);                 // the catwalk across the atrium
+    const cornerCut = F.minX + F.minZ + CH + T * S2;          // (inside the cut corner: x + z >= this)
+    const clipCorner = (P: Pt[]): Pt[] => {
+      const out: Pt[] = [];
+      for (let q = 0; q < P.length; q++) {
+        const a = P[q], b = P[(q + 1) % P.length], da = a[0] + a[1] - cornerCut, db = b[0] + b[1] - cornerCut;
+        if (da >= 0) out.push(a);
+        if ((da >= 0) !== (db >= 0)) { const t = da / (da - db); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+      }
+      return out;
+    };
+    const slab = (holes: Rect[], y0: number, h: number, kind: Box["kind"], extra: Partial<Box> = {}) => {
+      const x0 = F.minX + T, x1 = F.maxX - T, z0 = F.minZ + T, z1 = F.maxZ - T;
+      const xs = [...new Set([x0, x1, F.minX + CH, ...holes.flatMap((q) => [q.minX, q.maxX])])].filter((x) => x >= x0 && x <= x1).sort((a, b) => a - b);
+      const zs = [...new Set([z0, z1, F.minZ + CH, ...holes.flatMap((q) => [q.minZ, q.maxZ])])].filter((z) => z >= z0 && z <= z1).sort((a, b) => a - b);
+      for (let j = 0; j + 1 < zs.length; j++) {
+        let i = 0;
+        while (i + 1 < xs.length) {
+          const free = (k: number) => !holes.some((q) => (xs[k] + xs[k + 1]) / 2 > q.minX && (xs[k] + xs[k + 1]) / 2 < q.maxX && (zs[j] + zs[j + 1]) / 2 > q.minZ && (zs[j] + zs[j + 1]) / 2 < q.maxZ);
+          if (!free(i)) { i++; continue; }
+          let k = i; while (k + 1 < xs.length - 1 && free(k + 1) && !(xs[k + 1] === F.minX + CH && zs[j] < F.minZ + CH)) k++;
+          const ra = xs[i], rb = xs[k + 1], za = zs[j], zb = zs[j + 1];
+          if (ra + za < cornerCut) {
+            const P = clipCorner([[ra, za], [rb, za], [rb, zb], [ra, zb]]);
+            if (P.length >= 3) boxes.push({ ...polyBox(P, h, kind, y0), ...extra });
+          } else boxes.push({ ...box((ra + rb) / 2, (za + zb) / 2, rb - ra, zb - za, h, kind, y0), ...extra });
+          i = k + 1;
+        }
+      }
+    };
+    slab([], 0.15, 0.04, "shopfloor", { color: "#120e1c" });
+    slab([A, SW1], Y2 - SL, SL, "roof", { color: "#241a30" });
+    slab([A, SW2], RY - SL, SL, "roof", { color: "#2a2034" });
+    boxes.push({ ...box((A.minX + A.maxX) / 2, (A.minZ + A.maxZ) / 2, A.maxX - A.minX, A.maxZ - A.minZ, 0.3, "glass", RY - 0.3), hide: true }); // (the glass floor: drawn by the renderer)
+    // the stairs (LED strips on every step, see the renderer)
+    { const n = 33, run = (SW1.maxX - SW1.minX) / n, rise = (Y2 - 0.15) / n;
+      for (let q = 1; q <= n; q++) boxes.push({ ...box(SW1.minX + (q - 0.5) * run, (SW1.minZ + SW1.maxZ) / 2, run, SW1.maxZ - SW1.minZ, 0.15 + q * rise, "step"), color: "#1f1830" }); }
+    { const n = 38, run = (SW2.maxX - SW2.minX) / n, rise = (RY - Y2) / n;
+      for (let q = 1; q <= n; q++) boxes.push({ ...box(SW2.maxX - (q - 0.5) * run, (SW2.minZ + SW2.maxZ) / 2, run, SW2.maxZ - SW2.minZ, q * rise, "step", Y2), color: "#1f1830" }); }
+    // glass railings: round the atrium (gaps for the catwalk), along the stairwells, the catwalk's sides
+    const rail = (x0: number, x1: number, z0: number, z1: number, y: number) => wb(x0, x1, z0, z1, y, y + 1.1, "glass", { hide: true, deco: "rail" });
+    rail(A.minX, A.maxX, A.minZ - 0.08, A.minZ, Y2); rail(A.minX, A.maxX, A.maxZ, A.maxZ + 0.08, Y2);
+    rail(A.minX - 0.08, A.minX, A.minZ, CW.minZ, Y2); rail(A.minX - 0.08, A.minX, CW.maxZ, A.maxZ, Y2);
+    rail(A.maxX, A.maxX + 0.08, A.minZ, CW.minZ, Y2); rail(A.maxX, A.maxX + 0.08, CW.maxZ, A.maxZ, Y2);
+    wb(CW.minX, CW.maxX, CW.minZ, CW.maxZ, Y2 - 0.25, Y2, "platform", { color: "#2b2440", deco: "catwalk" });
+    rail(CW.minX, CW.maxX, CW.minZ, CW.minZ + 0.06, Y2); rail(CW.minX, CW.maxX, CW.maxZ - 0.06, CW.maxZ, Y2);
+    rail(SW1.minX, SW1.maxX, SW1.minZ - 0.08, SW1.minZ, Y2); rail(SW1.minX - 0.08, SW1.minX, SW1.minZ, SW1.maxZ, Y2);
+    rail(SW2.minX, SW2.maxX, SW2.maxZ, SW2.maxZ + 0.08, RY); rail(SW2.maxX, SW2.maxX + 0.08, SW2.minZ, SW2.maxZ, RY);
+    rail(A.minX - 0.1, A.maxX + 0.1, A.minZ - 0.1, A.minZ, RY); rail(A.minX - 0.1, A.maxX + 0.1, A.maxZ, A.maxZ + 0.1, RY); // (the glass floor's ends: a knee rail)
+    // floor 2's glass bay out over Market Row: a floor, glass on three sides, a lid
+    wb(BAY.minX, BAY.maxX + T, BAY.minZ, BAY.maxZ, Y2 - SL, Y2, "platform", { color: "#241a30" });
+    wb(BAY.minX, BAY.minX + 0.12, BAY.minZ, BAY.maxZ, Y2, RY - 0.9, "glass", { hide: true, deco: "bay" });
+    wb(BAY.minX, BAY.maxX, BAY.minZ, BAY.minZ + 0.12, Y2, RY - 0.9, "glass", { hide: true, deco: "bay" });
+    wb(BAY.minX, BAY.maxX, BAY.maxZ - 0.12, BAY.maxZ, Y2, RY - 0.9, "glass", { hide: true, deco: "bay" });
+    wb(BAY.minX - 0.2, BAY.maxX, BAY.minZ - 0.2, BAY.maxZ + 0.2, RY - 0.9, RY - 0.5, "roof", { color: DARK });
+    // ---- floor 1: the bar (north wall, east of the stairs), booths (south wall, east wall), the DJ's speakers ----
+    const BAR = R(88.0, 100.6, 28.4, 29.3);
+    wb(BAR.minX, BAR.maxX, BAR.minZ, BAR.maxZ, 0.15, 1.25, "counter", { color: "#2a1f3a", deco: "feverbar" });
+    wb(BAR.minX, BAR.maxX, F.maxZ - T - 0.5, F.maxZ - T, 0.15, 3.4, "shelf", { color: "#1b1424", deco: "bottles" });
+    const booths: Rect[] = [];
+    for (const x of [80.5, 85.5, 90.5, 95.5]) { const r = R(x - 1.8, x + 1.8, F.minZ + T, F.minZ + T + 1.7); booths.push(r); }
+    for (const z of [11.0, 26.0]) booths.push(R(F.maxX - T - 1.7, F.maxX - T, z - 1.8, z + 1.8));
+    for (const r of booths) {
+      const alongX = r.maxX - r.minX > r.maxZ - r.minZ;
+      if (alongX) { wb(r.minX, r.maxX, r.minZ, r.minZ + 0.6, 0.15, 1.25, "sofa", { color: "#5b2a8a" }); wb(r.minX, r.maxX, r.minZ + 0.6, r.maxZ - 0.2, 0.15, 0.6, "sofa", { color: "#6b34a0" }); wb((r.minX + r.maxX) / 2 - 0.6, (r.minX + r.maxX) / 2 + 0.6, r.maxZ + 0.3, r.maxZ + 1.1, 0.15, 0.75, "table", { color: "#d8d0ff", deco: "glowtable" }); }
+      else { wb(r.maxX - 0.6, r.maxX, r.minZ, r.maxZ, 0.15, 1.25, "sofa", { color: "#5b2a8a" }); wb(r.minX + 0.2, r.maxX - 0.6, r.minZ, r.maxZ, 0.15, 0.6, "sofa", { color: "#6b34a0" }); wb(r.minX - 1.1, r.minX - 0.3, (r.minZ + r.maxZ) / 2 - 0.6, (r.minZ + r.maxZ) / 2 + 0.6, 0.15, 0.75, "table", { color: "#d8d0ff", deco: "glowtable" }); }
+    }
+    for (const [x, z] of [[A.minX - 0.9, A.minZ - 0.9], [A.maxX + 0.9, A.minZ - 0.9], [A.minX - 0.9, A.maxZ + 0.9], [A.maxX + 0.9, A.maxZ + 0.9]] as Pt[]) wb(x - 0.45, x + 0.45, z - 0.45, z + 0.45, 0.15, 2.2, "boxes", { color: "#141018", deco: "speaker" });
+    // ---- floor 2: TRASH PANDA's booth (east), two stages, the LED dance floor round the atrium ----
+    wb(F.maxX - T - 3.6, F.maxX - T, 15.0, 24.0, Y2, Y2 + 1.1, "platform", { color: "#1b1424", deco: "djbooth" });
+    wb(F.maxX - T - 4.4, F.maxX - T - 3.6, 18.6, 20.4, Y2, Y2 + 0.55, "step", { color: "#2b2440" }); // (a step up to it)
+    const stages = [R(76.6, 79.6, 10.0, 13.0), R(76.6, 79.6, 25.5, 28.5)];
+    for (const r of stages) wb(r.minX, r.maxX, r.minZ, r.maxZ, Y2, Y2 + 0.7, "platform", { color: "#2b2440", deco: "stage" });
+    // ---- the roof: LIL PANDA's pavilion (north-east): a deck, four posts, a canopy and a crown on top ----
+    const PAV = R(95.2, F.maxX - T, 24.8, F.maxZ - T);
+    wb(PAV.minX, PAV.maxX, PAV.minZ, PAV.maxZ, RY, RY + 0.6, "platform", { color: "#1b1424", deco: "pavilion" });
+    wb(PAV.minX - 0.8, PAV.minX, 27.4, 29.4, RY, RY + 0.3, "step", { color: "#2b2440" });
+    for (const [x, z] of [[PAV.minX + 0.2, PAV.minZ + 0.2], [PAV.maxX - 0.2, PAV.minZ + 0.2], [PAV.minX + 0.2, PAV.maxZ - 0.2], [PAV.maxX - 0.2, PAV.maxZ - 0.2]] as Pt[]) wb(x - 0.15, x + 0.15, z - 0.15, z + 0.15, RY + 0.6, RY + 4.0, "wall", { color: DARK });
+    wb(PAV.minX - 0.6, PAV.maxX + 0.3, PAV.minZ - 0.6, PAV.maxZ + 0.3, RY + 4.0, RY + 4.35, "roof", { color: DARK, deco: "canopy" });
+    wb(PAV.minX + 1.2, PAV.maxX - 1.0, PAV.minZ + 1.2, PAV.maxZ - 1.0, RY + 4.35, RY + 5.9, "wall", { color: DARK, deco: "crown" });
+    // ---- the door, the rope, the bouncer, the bar's mocktail tap ----
+    const M: Pt = [F.minX + CH / 2, F.minZ + CH / 2], n: Pt = [1 / S2, 1 / S2], t: Pt = [1 / S2, -1 / S2];
+    const door = R(M[0] + n[0] * 0.9 - 1.1, M[0] + n[0] * 0.9 + 1.1, M[1] + n[1] * 0.9 - 1.1, M[1] + n[1] * 0.9 + 1.1);
+    const out = { x: M[0] - n[0] * 2.4, z: M[1] - n[1] * 2.4, yaw: Math.atan2(-1, -1) };
+    prop("clubrope", M[0] - n[0] * 1.5 - t[0] * 2.3, M[1] - n[1] * 1.5 - t[1] * 2.3, Math.atan2(-1, -1), 0, 0, 0, { y: 1.0 });
+    posts.push({ kind: "bouncer", x: M[0] - n[0] * 1.7 + t[0] * 2.4, z: M[1] - n[1] * 1.7 + t[1] * 2.4, yaw: Math.atan2(-1, -1) });
+    prop("mocktail", 94.3, BAR.minZ - 0.15, Math.PI, 0, 0, 0, { y: 1.25 });
+    fever = {
+      rect: F, cham: CH, y2: Y2, roofY: RY, atrium: A, catwalk: CW, glassFloor: A, door, out,
+      exit: R(F.maxX - T - 1.2, F.maxX, EX[0], EX[1]), exitOut: { x: F.maxX + 1.3, z: (EX[0] + EX[1]) / 2, yaw: Math.PI / 2 },
+      stairs1: SW1, stairs2: SW2, dance1: A, dance2: R(F.minX + 3.2, F.maxX - T - 4.6, 9.4, 28.9), danceRoof: R(F.minX + 3.5, 94.5, 9.6, 30.5),
+      bar: BAR, booths, stages, dj: { x: F.maxX - T - 1.6, y: Y2 + 1.1, z: 19.5, yaw: -Math.PI / 2 }, dj2: { x: (PAV.minX + PAV.maxX) / 2 + 0.6, y: RY + 0.6, z: (PAV.minZ + PAV.maxZ) / 2, yaw: -Math.PI / 2 },
+      pavilion: PAV, bay: BAY,
+    };
+  }
+
   // C4a: street things you can smash, one prop per box (shop windows, bus-stop glass, hydrants, mailboxes,
   // benches, planters, café and picnic tables, pallets). Broken = the box stops blocking until dawn.
   {
@@ -2509,7 +2676,9 @@ export function buildTrashington(): ArenaLayout {
     const nb: Record<string, number> = {};
     boxes.forEach((b, i) => {
       const k = BREAK[b.kind];
-      if (!k || b.y - b.h / 2 > 0.5) return; // (ground level only)
+      if (!k || b.y - b.h / 2 > 0.5 || b.hide) return; // (ground level only; R8: not the glass doors' hidden boxes)
+      if (R2 && inRect(NEW_PRECINCT, b.x, b.z, 0.6)) return; // (R10: nothing in or on the police station breaks: benches, planters, glass)
+      if (fever && inRect(fever.rect, b.x, b.z, 2)) return; // (R11: nor in the club: it's just a vibe)
       if (b.unit !== undefined && k !== "shopglass") return; // (furniture inside shops waits for C6's interiors)
       const shop = k === "shopglass" ? (units.find((u) => inRect(u.rect, b.x, b.z, 0.6))?.shop ?? undefined) : undefined;
       nb[k] = (nb[k] ?? 0) + 1;
@@ -2563,7 +2732,7 @@ export function buildTrashington(): ArenaLayout {
   return {
     halfSize: HALF, boxes, spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
-    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop, littleItaly, stationUpper, hotShops: R2 ? hotShops : undefined,
+    roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop, littleItaly, stationUpper, hotShops: R2 ? hotShops : undefined, fever,
   };
 }
 

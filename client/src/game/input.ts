@@ -2,7 +2,7 @@
 // so WASD works on AZERTY/QWERTZ keyboards too.
 import { settings } from "../settings.ts";
 
-export type LootAction = "grab" | "grabEnd" | "drop" | "cycleNext" | "cyclePrev" | "select0" | "select1" | "select2" | "select3" | "special" | "chargeStart" | "chargeEnd" | "robStart" | "robEnd";
+export type LootAction = "grab" | "grabEnd" | "drop" | "cycleNext" | "cyclePrev" | "select0" | "select1" | "select2" | "select3" | "special" | "chargeStart" | "chargeEnd" | "robStart" | "robEnd" | "dance";
 
 export interface Axes { mx: number; mz: number; sprint: boolean; jump: boolean; crouch: boolean; dodge: boolean; }
 
@@ -132,6 +132,7 @@ export class FpInput {
     if (e.code === "KeyE") this.onAction?.("grab");
     else if (e.code === "KeyG") this.onAction?.("drop");
     else if (e.code === "KeyR") this.onAction?.("robStart"); // hold R at a shop till
+    else if (e.code === "KeyB" && !e.repeat) this.onAction?.("dance"); // (R11: B for boogie)
     else if (e.code === "Digit1" || e.code === "Numpad1") this.onAction?.("select0");
     else if (e.code === "Digit2" || e.code === "Numpad2") this.onAction?.("select1");
     else if (e.code === "Digit3" || e.code === "Numpad3") this.onAction?.("select2");

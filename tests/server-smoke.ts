@@ -61,11 +61,13 @@ await sleep(300);
 assert(evs.some((e) => e.t === "whiff" && e.p === a.sessionId), "grabbing a far item = whiff event");
 
 // Phase 2.5: pedestrians are synced
-const npcCount = (b.state as any).npcs.size;
+const npcCount = [...(b.state as any).npcs.values()].filter((n: any) => n.kind !== "cop").length; // (R10: cops patrol from the lobby on; counted apart)
+const copCount = (b.state as any).npcs.size - npcCount;
 // (R3: the server builds the new city: 20 walkers + the taco vendor, the fisherman and Uncle Dumpster; R5: + Twitchy Lou
 //  and Meat Locker at the pawn shop; R6: + the Champ in the holding cell; R7: + Sticky Fran, Cold Cuts and the station's receptionist (the patrols
 //  only come on duty once the scavenge starts); the classic city had 44 with its shops and landmarks)
-assert(npcCount === 29, `pedestrians + the taco vendor, the fisherman, Uncle Dumpster, Lou, Meat Locker, Fran, Cold Cuts, the receptionist and the Champ synced to clients: ${npcCount} (20 + 9)`);
+assert(copCount >= 4, `R10: the police are out before the match starts: ${copCount} cops`);
+assert(npcCount === 30, `pedestrians + the taco vendor, the fisherman, Uncle Dumpster, Lou, Meat Locker, Fran, Cold Cuts, the receptionist, the Champ and NEON FEVER DREAM's bouncer (R11) synced to clients: ${npcCount} (20 + 10)`);
 {
   const st2: any = a.state;
   assert(st2.cars.size === CAR_COUNT, `traffic synced: ${st2.cars.size} cars`);

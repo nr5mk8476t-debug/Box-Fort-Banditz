@@ -18,7 +18,7 @@ export const FLUSH = { cooldown: 6, push: 9, lift: 4.5, stumble: 0.8 };
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
 import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
@@ -193,6 +193,11 @@ export type WorldEvent =
   // C5c.3: THE COMPACTOR: paid the cover / the VIP nod / couldn't pay; the floor's DROP launched people; somebody hijacked the decks
   | { t: "cover"; p: string; paid: number; vip: boolean }
   | { t: "coverNo"; p: string; reason: "broke" | "have" }
+  // R11: NEON FEVER DREAM: a mocktail from the bar (or not), dancing in the club paid off (+1 aura), you started / stopped dancing
+  | { t: "mocktail"; p: string; paid: number; drink: string }
+  | { t: "mocktailNo"; p: string; reason: "broke" }
+  | { t: "feverAura"; p: string; aura: number }
+  | { t: "dance"; p: string; on: boolean }
   | { t: "clubDrop"; n: number; by: string }
   | { t: "djHijack"; p: string; prop: string }
   // C5c.3: PAWN-O-RAMA: sold to Sal / pawned / bought back (or off the sale shelf) / couldn't / the case got smashed
@@ -268,6 +273,7 @@ export type WorldAction =
   | { a: "grab"; item: string }
   // C4b: spray a tag (hold the use key on a blank wall with a can out)
   | { a: "tagStart" }
+  | { a: "dance" } // (R11: B)
   | { a: "tag"; x: number; y: number; z: number; nx: number; nz: number }
   | { a: "drop" }
   | { a: "throw"; charge: number; yaw: number; pitch: number }
@@ -495,7 +501,7 @@ export class World {
       if (keepForts && it.type === "cell_key") continue; // (R8: one key a day: wherever it is, it stays till dawn)
       this.items.delete(it.id);
     }
-    if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
+    if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.feverDance.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
     if (this.spawnLoot) { this.fillLoot(!keepForts); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only; C5c: the bank's vault refills at dawn)
     else this.props.reset(!keepForts);
     this.pawn.rollHot(); // (R5: Lou's wanted list, new every scavenge)
@@ -768,6 +774,12 @@ export class World {
     if (p.respawnT > 0) return; // wiped out: waiting to respawn
     if (p.move.stunT > 0) return; // tased
     if (act.a === "tug") { this.tugPress(p); return; }
+    if (act.a === "dance") { // (R11: B: start / stop dancing; only standing on the ground, hands free of big things)
+      const m = p.move;
+      if (m.danceT > 0) { m.danceT = 0; this.emit({ t: "dance", p: p.id, on: false }); return; }
+      if (!m.grounded || m.handsFull || p.pin) return;
+      m.danceT = 0.001; m.vx = 0; m.vz = 0; this.emit({ t: "dance", p: p.id, on: true }); return;
+    }
     if (act.a === "arrest") { this.arrest(p, String((act as any).p ?? "")); return; }
     if (act.a === "punch") { this.punch(p, Number((act as any).yaw), Number((act as any).pitch)); return; }
     if (act.a === "tagStart") { this.tagStart(p); return; }
@@ -1086,15 +1098,49 @@ export class World {
     return false;
   }
   /** VIPs walk straight in: 5+ aura, or a VIP wristband on you */
-  clubVip(p: PlayerSim): boolean { return p.aura >= CLUB.vipAura || this.carriedItems(p).some((it) => it.type === "vip_wristband"); }
+  clubVip(p: PlayerSim): boolean { return p.aura >= (this.arena.fever ? FEVER.vipAura : CLUB.vipAura) || this.carriedItems(p).some((it) => it.type === "vip_wristband"); }
   /** E at the rope: pay Big Crunch's cover ($15; it goes in the safe), or get the VIP nod */
   payCover(p: PlayerSim) {
     if (this.clubPass.has(p.id)) return this.emit({ t: "coverNo", p: p.id, reason: "have" });
     if (this.clubVip(p)) { this.clubPass.add(p.id); return this.emit({ t: "cover", p: p.id, paid: 0, vip: true }); }
-    if (p.cash < CLUB.cover) return this.emit({ t: "coverNo", p: p.id, reason: "broke" });
-    p.cash -= CLUB.cover; this.clubPot += CLUB.cover;
+    const cover = this.arena.fever ? FEVER.cover : CLUB.cover; // (R11: NEON FEVER DREAM's door: $20)
+    if (p.cash < cover) return this.emit({ t: "coverNo", p: p.id, reason: "broke" });
+    p.cash -= cover; this.clubPot += cover;
     this.clubPass.add(p.id);
-    this.emit({ t: "cover", p: p.id, paid: CLUB.cover, vip: false });
+    this.emit({ t: "cover", p: p.id, paid: cover, vip: false });
+  }
+  /** R11: E at NEON FEVER DREAM's bar: a glowing cartoon mocktail ($8): 40 s of dance energy (stamina refills 2.5x, sprint drains half) */
+  buyMocktail(p: PlayerSim) {
+    if (p.cash < FEVER.mocktail) return this.emit({ t: "mocktailNo", p: p.id, reason: "broke" });
+    p.cash -= FEVER.mocktail;
+    p.move.boostT = FEVER.boost;
+    const drinks = ["THE FEVER", "BLUE SCREEN", "PURPLE RAIN-ISH", "NEON NOODLE", "GLOWSTICK FIZZ", "THE DROP"];
+    this.emit({ t: "mocktail", p: p.id, paid: FEVER.mocktail, drink: drinks[Math.floor(this.rng() * drinks.length)] });
+  }
+  /** R11: dancing in the club: every 15 s of it, +1 aura (3 a day at most) */
+  private feverDance = new Map<string, { t: number; got: number }>();
+  /** R11: NEON FEVER DREAM's doors (the front and the fire exit): the bouncer lets in VIPs and whoever's paid today;
+   *  dancing in there builds aura */
+  private feverTick(dt: number) {
+    const f = this.arena.fever;
+    if (!f) return;
+    const up = this.bouncerUp();
+    for (const p of this.players.values()) {
+      if (!p.connected || p.jailT > 0 || p.respawnT > 0) continue;
+      const m = p.move;
+      if (m.danceT > 0 && inRect(f.rect, m.x, m.z) && m.y > 0) {
+        const d = this.feverDance.get(p.id) ?? { t: 0, got: 0 };
+        d.t += dt;
+        if (d.t >= FEVER.danceEvery) { d.t = 0; if (d.got < FEVER.danceMax) { d.got++; p.aura += 1; this.emit({ t: "feverAura", p: p.id, aura: p.aura }); } }
+        this.feverDance.set(p.id, d);
+      }
+      if (m.y > 1.5 || !up || this.clubPass.has(p.id) || this.clubVip(p)) continue;
+      for (const [r, o] of [[f.door, f.out], [f.exit, f.exitOut]] as const) {
+        if (!inRect(r, m.x, m.z)) continue;
+        m.x = o.x; m.z = o.z; m.vx = Math.sin(o.yaw) * 3; m.vz = Math.cos(o.yaw) * 3; m.slideT = 0; m.danceT = 0;
+        this.emit({ t: "bounced", p: p.id, reason: "cover" });
+      }
+    }
   }
   /** E at the DJ's decks: your track, +3 aura, a roar from the crowd (noise), and the DROP starts building right now */
   djHijack(p: PlayerSim, d: PropDef) {
@@ -1394,6 +1440,7 @@ export class World {
     this.raidWatch();
     this.restoDoor();
     this.clubTick();
+    this.feverTick(SIM_DT);
     // C1.1: fall in the canal and whatever's in your hands floats off
     for (const p of this.players.values()) {
       if (p.hand && inDeepWater(this.arena, p.move.x, p.move.z, p.move.y)) {

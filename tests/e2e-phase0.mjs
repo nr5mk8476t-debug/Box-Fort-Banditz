@@ -807,7 +807,7 @@ try {
   await A.evaluate(() => window.__bfb.bust());
   await A.waitForFunction(() => window.__bfb.jail()?.jailT > 0, null, { timeout: 10000 }).catch(() => {});
   await A.evaluate(() => window.__bfb.setJailTime(1.2));
-  ok(await A.waitForFunction(() => window.__bfb.jail()?.jailT === 0 && !window.__bfb.jail()?.open, null, { timeout: 20000 }).then(() => true, () => false), "time served: released, jail screen gone");
+  ok(await A.waitForFunction(() => window.__bfb.jail()?.jailT === 0 && !window.__bfb.jail()?.open, null, { timeout: 60000 }) /* (R9: the jail clock crawls on this CPU-only box: 1.2 s took 10-13 s with the machine idle, R8 build and R9 alike) */.then(() => true, () => false), "time served: released, jail screen gone");
   const md = await A.evaluate(() => window.__bfb.move());
   ok(Math.hypot(md.x - st.door.x, md.z - st.door.z) < 3 && (await A.evaluate(() => window.__bfb.heat())) === 0, "served: out the front door with 0 heat");
   // 3 stars: the cop car
@@ -1390,6 +1390,9 @@ try {
   await R3.click("#btn-solo", { timeout: 240000 });
   await R3.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 480000 });
   ok(/NEW CITY/.test(await R3.textContent("#mode-badge")), "the new city loads (badge says NEW CITY)");
+  // R10: the police are out in free roam, before anyone starts the match
+  ok(await R3.waitForFunction(() => window.__bfb.match().phase === "lobby" && window.__bfb.npcs().filter((n) => n.kind === "cop").length >= 8 && window.__bfb.copCars().length === 2, null, { timeout: 120000 }).then(() => true, () => false),
+    `R10: cops and both cruisers out before the match starts (${await R3.evaluate(() => window.__bfb.npcs().filter((n) => n.kind === "cop").length)} cops, ${await R3.evaluate(() => window.__bfb.copCars().length)} cars)`);
   await R3.evaluate(() => { window.__bfb.testInput(true); window.__bfb.startMatch(); });
   ok(await R3.waitForFunction(() => window.__bfb.move().y < 1 && window.__bfb.move().z < -95, null, { timeout: 120000 }).then(() => true, () => false), "the match starts in a fort down in the bowl");
   const r3start = await R3.evaluate(() => window.__bfb.move());
@@ -1449,6 +1452,11 @@ try {
       ok(await R3.waitForFunction(() => /Open/.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `door prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
       await R3.keyboard.press("e");
       ok(await R3.waitForFunction(() => window.__bfb.props().find((p) => p.id === "door1")?.ready === false, null, { timeout: 30000 }).then(() => true, () => false), "E opens it");
+      ok(await R3.waitForFunction(() => /Close/.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `R9: open, it offers to close: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
+      await R3.keyboard.press("e");
+      ok(await R3.waitForFunction(() => window.__bfb.props().find((p) => p.id === "door1")?.ready === true, null, { timeout: 30000 }).then(() => true, () => false), "R9: E shuts it again");
+      await R3.keyboard.press("e");
+      await R3.waitForFunction(() => window.__bfb.props().find((p) => p.id === "door1")?.ready === false, null, { timeout: 30000 }).catch(() => {});
       await R3.evaluate(([x, z]) => window.__bfb.camAt(x + 3, 2.2, z + 5, -2.6, 0.08), [door.x, door.z]); await sleep(2500); await hideOverlays(R3);
       await shot(R3, "r8-station-doors.png");
       await R3.evaluate(() => window.__bfb.camFree());
@@ -1486,6 +1494,59 @@ try {
     ok(await R3.waitForFunction(() => (window.__bfb.jail()?.jailT ?? 1) <= 0, null, { timeout: 60000 }).then(() => true, () => false), "released from the holding cell");
   }
   const r3errs = R3.errors.filter((e) => !/favicon|fonts\.g/.test(e));
+  // R11: NEON FEVER DREAM: the bouncer, the cover, the stairs to floor 2 and the roof, dancing, a mocktail, screenshots
+  {
+    const f = await R3.evaluate(() => window.__bfb.fever());
+    ok(!!f, "NEON FEVER DREAM is on Market Row");
+    if (f) {
+      await R3.evaluate(() => { window.__bfb.forceNight(true); window.__bfb.setCash(60); });
+      // walk at the door without paying: bounced
+      await R3.evaluate((o) => { window.__bfb.teleport(o.x, o.z, Math.PI / 4); window.__bfb.setPitch(0.05); }, f.out);
+      await R3.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 })); await sleep(2500); await R3.evaluate(() => window.__bfb.setAxes(null));
+      const m0 = await R3.evaluate(() => window.__bfb.move());
+      ok(m0.x + m0.z < f.rect.minX + f.rect.minZ + f.cham + 1.5, `the bouncer turns you back without the cover (${m0.x.toFixed(1)},${m0.z.toFixed(1)})`);
+      // pay at the rope
+      const rope = (await R3.evaluate(() => window.__bfb.props())).find((p) => p.kind === "clubrope");
+      await R3.evaluate((r) => { window.__bfb.teleport(r.x - 0.9, r.z - 0.9, Math.PI / 4); window.__bfb.setPitch(0.3); }, rope);
+      ok(await R3.waitForFunction(() => /cover/i.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `the rope's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
+      await R3.keyboard.press("e");
+      ok(await R3.waitForFunction(() => window.__bfb.myCash() === 40, null, { timeout: 30000 }).then(() => true, () => false), "paid the $20 cover");
+      await R3.evaluate((o) => { window.__bfb.teleport(o.x, o.z, Math.PI / 4); window.__bfb.setPitch(0.05); }, f.out);
+      await R3.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 })); await sleep(2500); await R3.evaluate(() => window.__bfb.setAxes(null));
+      const m1 = await R3.evaluate(() => window.__bfb.move());
+      ok(m1.x + m1.z > f.rect.minX + f.rect.minZ + f.cham + 1.5, `then you're in (${m1.x.toFixed(1)},${m1.z.toFixed(1)})`);
+      ok(await R3.waitForFunction(() => /Dance/.test(window.__bfb.promptText()), null, { timeout: 20000 }).then(() => true, () => false), "inside: the B prompt says Dance");
+      // the stairs: floor 1 -> 2 -> the roof
+      await R3.evaluate((s) => window.__bfb.teleport(s.minX - 0.6, (s.minZ + s.maxZ) / 2, Math.PI / 2), f.stairs1);
+      await R3.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+      const up2 = await R3.waitForFunction((y) => Math.abs(window.__bfb.move().y - y) < 0.2 && window.__bfb.move().grounded, f.y2, { timeout: 60000 }).then(() => true, () => false);
+      await R3.evaluate(() => window.__bfb.setAxes(null));
+      ok(up2, `up the stairs to floor 2 (y ${(await R3.evaluate(() => window.__bfb.move().y)).toFixed(2)})`);
+      await R3.evaluate((b) => { window.__bfb.camAt(b.minX + 0.5, b.y + 1.8, (b.minZ + b.maxZ) / 2, Math.PI / 2, 0.1); }, { ...f.bay, y: f.y2 }); // (from the bay over Market Row) await sleep(2500); await hideOverlays(R3);
+      await shot(R3, "r11-fever-floor2.png"); await R3.evaluate(() => window.__bfb.camFree());
+      await R3.evaluate((s) => window.__bfb.teleportY(s.maxX + 0.6, s.y, (s.minZ + s.maxZ) / 2, -Math.PI / 2), { ...f.stairs2, y: f.y2 });
+      await R3.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+      const upR = await R3.waitForFunction((y) => Math.abs(window.__bfb.move().y - y) < 0.2 && window.__bfb.move().grounded, f.roofY, { timeout: 60000 }).then(() => true, () => false);
+      await R3.evaluate(() => window.__bfb.setAxes(null));
+      ok(upR, `up to the roof (y ${(await R3.evaluate(() => window.__bfb.move().y)).toFixed(2)})`);
+      // dance on the roof
+      await sleep(500);
+      await R3.keyboard.press("b");
+      ok(await R3.waitForFunction(() => window.__bfb.move().danceT > 0, null, { timeout: 20000 }).then(() => true, () => false), "B: dancing");
+      await R3.evaluate((p) => window.__bfb.camAt(p.minX - 2, p.y + 2.2, p.minZ - 6, 0.6, 0.12), { ...f.pavilion, y: f.roofY }); await sleep(2500); await hideOverlays(R3);
+      await shot(R3, "r11-fever-roof.png"); await R3.evaluate(() => window.__bfb.camFree());
+      await R3.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 })); await sleep(800); await R3.evaluate(() => window.__bfb.setAxes(null));
+      ok((await R3.evaluate(() => window.__bfb.move().danceT)) === 0, "moving stops the dance");
+      // a mocktail at the bar
+      const tap = (await R3.evaluate(() => window.__bfb.props())).find((p) => p.kind === "mocktail");
+      await R3.evaluate((t) => { window.__bfb.teleportY(t.x, 0.25, t.z - 0.9, 0); window.__bfb.setPitch(0.35); }, tap);
+      ok(await R3.waitForFunction(() => /mocktail/i.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `the bar's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
+      await R3.keyboard.press("e");
+      ok(await R3.waitForFunction(() => window.__bfb.move().boostT > 30, null, { timeout: 30000 }).then(() => true, () => false), "a mocktail: dance energy");
+      await R3.evaluate((o) => window.__bfb.camAt(o.x - 9, 2.0, o.z - 9, Math.PI / 4, -0.08), f.out); await sleep(2500); await hideOverlays(R3);
+      await shot(R3, "r11-fever-outside.png"); await R3.evaluate(() => { window.__bfb.camFree(); window.__bfb.forceNight(false); });
+    }
+  }
   ok(r3errs.length === 0, `new city: no JS errors${r3errs.length ? " -> " + r3errs.slice(0, 3).join(" | ") : ""}`);
   await R3.context().close();
 

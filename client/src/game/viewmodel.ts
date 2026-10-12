@@ -71,6 +71,7 @@ const POSES: Record<MovePose, Pose> = {
   stumble:    { lp: V(-0.40, -0.20, 0.48), lr: V(-0.4, 0.4, -1.2), rp: V(0.40, -0.20, 0.48), rr: V(-0.4, -0.4, 1.2) },
   // flat on your back: hands flop up in front of your face
   knocked:    { lp: V(-0.50, -0.35, 0.42), lr: V(-0.7, 0.6, -1.4), rp: V(0.52, -0.37, 0.44), rr: V(-0.8, -0.5, 1.5) },
+  dance:      { lp: V(-0.34, -0.02, 0.58), lr: V(-1.3, 0.3, -0.4), rp: V(0.34, -0.02, 0.58), rr: V(-1.3, -0.3, 0.4) }, // (R11: hands up, pumping to the beat)
   tumble:     { lp: V(-0.62, 0.10, 0.36), lr: V(-1.6, 0.8, -1.2), rp: V(0.64, 0.12, 0.36), rr: V(-1.6, -0.8, 1.2) }, // (D1: arms flung up, flying after a car hit)
 };
 

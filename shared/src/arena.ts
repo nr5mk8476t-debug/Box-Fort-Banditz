@@ -102,6 +102,7 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   // C5c.3: THE COMPACTOR (the bouncer's rope, the DJ's decks in the crane cab, the conveyor bar, the cash safe, the
   // DJ's rider, the staff lockers, the sorting bin, a VIP booth) and PAWN-O-RAMA (Sal's counter, the pawn case)
   | "clubrope" | "djdecks" | "clubbar" | "clubsafe" | "rider" | "lockers" | "sortbin" | "vipbooth"
+  | "mocktail" // (R11: NEON FEVER DREAM's bar: a glowing cartoon mocktail, a dance-energy boost)
   | "pawncounter" | "pawncase"
   // R6: the new station's holding cell
   | "toilet" | "celldoor"
@@ -357,6 +358,8 @@ export interface ArenaLayout {
   stationUpper?: { rect: Rect; y0: number; y1: number; face: [number, number]; walkTop?: number };
   /** R7: the two walk-in pawn shops (the new city) */
   hotShops?: HotShop[];
+  /** R11: NEON FEVER DREAM, the nightclub on Market Row (the new city): three levels round an open atrium */
+  fever?: FeverDef;
   /** C5c.3: indexes of the boxes that pump (the dance floor) */
   pumpBoxes?: number[];
   resto?: { rect: Rect; door: Rect; out: { x: number; z: number; yaw: number }; hall: Rect; kitchen: Rect; stairs: Rect; roofY: number };
@@ -645,6 +648,39 @@ export function localArena(arena: ArenaLayout, x: number, z: number, r: number):
 /** The beat bob, and THE DROP: the floor builds up slowly, holds, then slams down and launches everyone on it. */
 export const CLUB = { base: 0.3, bob: 0.12, bpm: 124, cycle: 75, build: 6, hold: 0.9, slam: 0.3, top: 1.6, launch: 12, cover: 15, vipAura: 5, djAura: 3, djNoise: 14, djCooldown: 40, beltSpeed: 1.7 };
 /** seconds since the last build started -> where we are in the drop ("" = just the beat) */
+// ---- R11: NEON FEVER DREAM -------------------------------------------------------------------------------------
+/** The club's levels round an open atrium; the set runs off the city clock (everyone hears the same bar). */
+export interface FeverDef {
+  /** the whole plot (the walls stand on its edge; the south-west corner is cut off at 45 degrees: \`cham\` m) */
+  rect: Rect; cham: number;
+  /** floor 2's top, the roof deck's top */
+  y2: number; roofY: number;
+  /** the hole up the middle (floor 2: railings and a catwalk; the roof: a glass floor) */
+  atrium: Rect; catwalk: Rect; glassFloor: Rect;
+  /** the front door (in the cut corner; the bouncer's rope outside it), the fire exit (east): who's let through */
+  door: Rect; out: { x: number; z: number; yaw: number }; exit: Rect; exitOut: { x: number; z: number; yaw: number };
+  /** the stairs: floor 1 up to 2 (along the north wall, rising east), 2 up to the roof (along the south wall, rising west) */
+  stairs1: Rect; stairs2: Rect;
+  /** dance floors (floor 1 under the atrium, floor 2 round it, the roof), the bar, the booths, floor 2's stages */
+  dance1: Rect; dance2: Rect; danceRoof: Rect; bar: Rect; booths: Rect[]; stages: Rect[];
+  /** the DJs: TRASH PANDA on floor 2 (in front of the LED wall), LIL PANDA up on the roof (in the pavilion) */
+  dj: { x: number; y: number; z: number; yaw: number }; dj2: { x: number; y: number; z: number; yaw: number }; pavilion: Rect;
+  /** floor 2's glass bay over Market Row */
+  bay: Rect;
+}
+/** R11: the set: 128 BPM; 16 bars of groove, 8 of build, 16 of DROP (75 s), round and round */
+export const FEVER = { bpm: 128, groove: 16, build: 8, drop: 16, cover: 20, vipAura: 5, mocktail: 8, boost: 40, danceEvery: 15, danceMax: 3 };
+export const FEVER_BAR = (60 / FEVER.bpm) * 4;
+export const FEVER_CYCLE = (FEVER.groove + FEVER.build + FEVER.drop) * FEVER_BAR;
+/** where the set is at: the part, the bar number in that part, the beat (0..1 through it) */
+export function feverAt(clock: number): { part: "groove" | "build" | "drop"; bar: number; t: number; beat: number; k: number } {
+  const t = ((clock % FEVER_CYCLE) + FEVER_CYCLE) % FEVER_CYCLE;
+  const bars = t / FEVER_BAR, beat = (t / (FEVER_BAR / 4)) % 1;
+  if (bars < FEVER.groove) return { part: "groove", bar: Math.floor(bars), t, beat, k: bars / FEVER.groove };
+  if (bars < FEVER.groove + FEVER.build) return { part: "build", bar: Math.floor(bars - FEVER.groove), t, beat, k: (bars - FEVER.groove) / FEVER.build };
+  return { part: "drop", bar: Math.floor(bars - FEVER.groove - FEVER.build), t, beat, k: (bars - FEVER.groove - FEVER.build) / FEVER.drop };
+}
+
 export function clubStage(d: number): "build" | "hold" | "slam" | "" {
   if (d < 0) return "";
   if (d < CLUB.build) return "build";

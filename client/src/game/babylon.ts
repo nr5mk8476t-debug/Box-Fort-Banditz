@@ -21,5 +21,6 @@ export { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 export { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
 export { CellMaterial } from "@babylonjs/materials/cell/cellMaterial.js";
 import "@babylonjs/core/Rendering/outlineRenderer.js";
+import "@babylonjs/core/Meshes/instancedMesh.js"; // (R11: the club crowd is instanced)
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent.js";
 import "@babylonjs/core/Culling/ray.js";

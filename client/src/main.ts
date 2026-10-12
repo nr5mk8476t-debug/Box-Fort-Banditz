@@ -8,7 +8,7 @@ import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS } from "@bfb/shared";
+import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER } from "@bfb/shared";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
@@ -821,7 +821,7 @@ function updateHud(a: ArenaScene) {
   const tagT = a.tagTarget, tagHolding = a.throwCharge >= 0 && !!tagT && a.canUses > 0;
   const at = a.arrestTarget;
   const cellUse = jailed && !a.lock.open && ut && (ut.kind === "toilet" || ut.kind === "celldoor") ? ut.kind : ""; // (R6: the holding cell)
-  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : "";
+  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
     const key = document.createElement("span"); key.className = "key"; key.textContent = keyText;
@@ -856,6 +856,9 @@ function updateHud(a: ArenaScene) {
     else if (!t && ut && ut.kind === "vaultdoor") simple("E", a.carryingType("bank_keycard") ? " Swipe the keycard: " : " Drill ", ut.name, ut.empty ? "OPEN (it shuts again at dawn)" : a.carryingType("bank_keycard") ? "opens quietly in 3 s" : "20 s, LOUD: alarms, 3 stars, the guards come. (Find the manager's keycard for a quiet job)");
     else if (!t && ut && ut.kind === "nose") simple("E", " Prise off ", ut.name, ut.empty ? "already gone (glued back at dawn)" : "5 s. A golden prize (heat if anyone sees)");
     else if (!t && ut && ut.kind === "podium") simple("E", " Book a table: ", `$${RESTO.fee}`, "slip the maitre d' the fee and he lets you in until dawn");
+    // R11: NEON FEVER DREAM's rope and bar
+    else if (!t && ut && ut.kind === "clubrope" && a.arenaLayout.fever) simple("E", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? " VIP: walk in " : " Pay the cover: ", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "FREE" : `$${FEVER.cover}`, a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "the bouncer lifts the rope for you" : `a stamp on your hand till dawn (VIPs free: ${FEVER.vipAura}+ aura)`);
+    else if (!t && ut && ut.kind === "mocktail") simple("E", " Order a mocktail: ", `$${FEVER.mocktail}`, `glowing, silly, totally alcohol-free: ${FEVER.boost} s of dance energy (stamina refills fast)`);
     // C5c.3: THE COMPACTOR
     else if (!t && ut && ut.kind === "clubrope") simple("E", a.myAura >= CLUB.vipAura || a.carryingType("vip_wristband") ? " VIP: walk in " : " Pay the cover: ", a.myAura >= CLUB.vipAura || a.carryingType("vip_wristband") ? "FREE" : `$${CLUB.cover}`, a.myAura >= CLUB.vipAura || a.carryingType("vip_wristband") ? "Big Crunch knows a somebody when he sees one" : `Big Crunch stamps your hand till dawn. (VIPs free: ${CLUB.vipAura}+ aura or a VIP wristband)`);
     else if (!t && ut && ut.kind === "djdecks") simple("E", " Hijack ", ut.name, ut.empty ? "still warm... give it a minute" : `+${CLUB.djAura} aura, the crowd roars, and the DROP starts NOW (everyone on the crusher goes flying)`);
@@ -893,6 +896,7 @@ function updateHud(a: ArenaScene) {
       // "[CLICK] Bonk Gym Bro  - fights back!"
       simple("CLICK", " Bonk ", pt.name, pt.kind === "bodyguard" ? "protects the boss: hits hard" : pt.kind === "cashier" ? "drops the float... and sets off the alarm" : pt.kind === "cop" ? "RESISTING ARREST: huge heat, 3 hits to drop them" : pt.fighter ? "FIGHTS BACK - land 2 hits before they do" : "might drop something");
     } else if (!t && tagT) simple("HOLD E", tagHolding ? " Tagging... " : " Tag ", tagHolding ? "" : "this wall", `${a.canUses} tag${a.canUses === 1 ? "" : "s"} left in the can: +1 aura each (heat if anyone sees)`);
+    else if (!t && a.inFever) simple("B", a.dancing ? " Stop dancing " : " Dance ", "", a.dancing ? "(or just move)" : "every 15 s on the floor: +1 aura (3 a day)"); // (R11)
     else if (!t) prompt.classList.add("hidden");
     else {
       const d = t.def;
@@ -1112,6 +1116,7 @@ enterTitle();
     // C5c.3: THE COMPACTOR and PAWN-O-RAMA
     club: () => CITY.club ?? null,
     hotShops: () => CITY.hotShops ?? [],
+    fever: () => CITY.fever ?? null, // (R11)
     pawnShop: () => { const ps = CITY.pawnShop; if (!ps) return null; const u = CITY.units![ps.unit]; return { ...ps, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, rect: u.rect }; },
     clubDrop: () => { if (local) local.world.clubB = local.world.traffic.clock; else room?.send("dbg", { op: "clubDrop" }); },
     clubFloor: () => { const a2 = (arena as any)?.arena; const i = a2?.pumpBoxes?.[0]; if (i === undefined) return null; const b = a2.boxes[i]; return b.y + b.h / 2; },

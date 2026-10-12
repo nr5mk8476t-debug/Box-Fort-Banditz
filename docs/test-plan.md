@@ -546,6 +546,77 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R11: NEON FEVER DREAM (2026-10-11)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Layout | the club takes the Market Row block (the six shops gone, their west twins kept); its loot moved up the alley, never inside a building; the other R3 rules (no buildings on the pavement) still hold | unit (layout) | pass |
+| Door | walk at the front door unpaid: turned back; pay $20 at the rope: walk in | unit (world) + e2e | pass |
+| Floors | stairs reach floor 2 (y 6.30) and the roof (y 13.50); the atrium's railing stops you; the catwalk crosses it; the roof's glass floor holds you | unit (world) + e2e | pass |
+| Dancing | B dances, moving stops it; +1 aura per 15 s in the club, 3 a day at most | unit (world) + e2e (B, the prompt) | pass |
+| Bar | the mocktail: $8, 40 s of dance energy | unit (world) + e2e | pass. The e2e first failed: the client never picked up the boost while standing still. Fixed (it always takes the server's state now). |
+| Nothing breaks | the only props in or by the club are the rope and the bar | unit | pass |
+| Loading | the game loads with the club in (the LED floor's texture is drawn once at build) | e2e | pass. Before the fix the game hung on the loading screen. |
+| Looks | outside by day and night (the cut corner, the bay, uplights, signs, the lamp, the queue, the bouncer); floor 1 looking up the atrium; floor 2 (LED floor, rig, lasers, DJ TRASH PANDA, the equaliser wall); the roof (glass floor, the pavilion, LIL PANDA); straight down through the glass; the sky beams from across town | screenshots | pass (reviewed) |
+| Frame rate | the club's cost on the CPU-only test box | camera swapped street/club back to back | About 10% inside, against the trend. NOTE: on this box the frame rate falls steadily with time (38 to 12 in 90 s) wherever the camera is, with the R8 build too. The page's main thread is ~95% idle at 11 fps, so it's the software GPU. Not chased this slice. |
+| Browser | new-city block on its own | e2e, normal and 110 ms lag | pass 41/41 both |
+| | full browser e2e, normal | e2e | **pass 346/346** |
+| | full browser e2e, 110 ms lag | e2e | **pass 346/346** |
+| Everything | 229 shared + 3 client unit; matchmaking + server smoke (the bouncer counted: 30 NPCs); typecheck | full suite | pass |
+
+## Manual checklist for Blake (R11)
+
+- [ ] Walk up to the club at night from Market Row: the corner, the queue, the music getting louder.
+- [ ] Pay the cover, get a mocktail, dance (B) on floor 1, then up the stairs to floor 2 and the roof. Wait for a drop.
+- [ ] Stand on the roof's glass floor and look down. Stand in floor 2's bay over the street.
+- [ ] Does it run smoothly inside on your computer? (Tell me your fps in there.)
+- [ ] The music: too loud or quiet? Should it be audible further away?
+
+## R10: police from the start, a less bland station, signs on the walls (2026-10-11)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Police | in the lobby (before the match starts): the station's 4, 8+ foot patrols, both cruisers | unit (world) | pass |
+| | browser: cops and both cruisers are out before the match starts | e2e (new-city block) | pass |
+| | server: cops are out in the lobby (counted apart from the other NPCs) | server smoke | pass (9 cops) |
+| Station | nothing in or on it can be smashed: only the door, the toilet and the cell door are props | unit (layout) | pass |
+| Visuals | the chief's doorway is clear; the door signs, task-force banner, whiteboard and evidence signs are on their walls; floor tiles both floors; the wall band | screenshots | pass (reviewed) |
+| Browser | new-city block on its own | e2e, normal and 110 ms lag | pass 29/29 both |
+| | full browser e2e, normal | e2e | **pass 334/334**: the first full pass since R4. It got past the multi-window friends-join step that had crashed every slice since R4.1. The time-served check passed with its 60 s timeout. |
+| | full browser e2e, 110 ms lag | e2e | NOT passed: 333/334. One check failed: "5A.1: mouse wheel selects pocket 1" missed its 5 s window. That's the classic city's inventory, which R10 didn't touch, and it passed in the normal run. |
+| Everything | 226 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass |
+
+## Manual checklist for Blake (R10)
+
+- [ ] Load in and don't start the match: can you see cops on the streets and in the station, and the cruisers driving round?
+- [ ] Walk through the station: do the floor tiles and the wall band look better? Anything still floating?
+
+## R9: doors that shut again, cops you can see, a cleaner high end (2026-10-11)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Doors | no prop shares a door's box (doors can't be smashed) | unit (layout) | pass |
+| | browser: E opens the station's doors, the prompt says Close, E shuts them, E opens them again | e2e (new-city block) | pass. It failed on the first run: the client treated an open door as "used up" and refused. Fixed. |
+| Police | a station cop who chased you out walks back to his beat (through the front doors); 4 station cops; the cruiser test made deterministic | unit (world) | pass |
+| | browser: 10 town patrols plus 4 station cops on the map; a cop on the pavement in the street; cops in the lobby | screenshots + the NPC list | pass (14 cops counted) |
+| Stairs | one flight of the slate steps from the wall out; the handrail and posts on the treads, sloping with them | screenshots | pass (reviewed) |
+| Station front | the entrance tower shows its glass, not a plain navy panel; the windows show from far away | screenshots | pass (reviewed) |
+| Canopy | tie rods from the canopy's front corners to the wall | screenshots | pass (reviewed) |
+| Windows | painted windows and wall skins sit closer to the walls on every building | screenshots | pass (reviewed) |
+| Bodyguards | no band round the middle (a round belly instead) | screenshots | pass (reviewed) |
+| High end | no shutters or grime | code + screenshots | pass (reviewed) |
+| Browser | new-city block on its own | e2e, normal and 110 ms lag | pass 28/28 both |
+| | full browser e2e, normal | e2e | NOT passed: 230/235. It crashed at the same multi-window join point as R4.1-R8. Also failed: "time served: released" and "served: out the front door" (the jail clock), and "loot in your yard banks after 10 s" plus the scoreboard check after it (the game clock; these passed in the lag run). |
+| | full browser e2e, 110 ms lag | e2e | NOT passed: 233/235. It crashed at the same join point. Also failed: "time served: released". |
+| | the jail clock, measured on its own with the machine idle | scratch script, R8 build vs R9 build | Both builds were slow. 1.2 s of jail time took about 10 s (R8) and 12.5 s (R9) of wall time, at about 20-38 fps. The check's timeout went from 20 s to 60 s; the full e2e has not been re-run since. |
+| Everything | 224 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass |
+
+## Manual checklist for Blake (R9)
+
+- [ ] Open the station's front doors, then shut them again; try a shop door too.
+- [ ] Walk round town for a minute: do you see cops on the pavements now? Is it too many?
+- [ ] Look at the station from the front, and walk up the stairs.
+
 ## R8: glass doors, real windows, the chief's key, visual fixes (2026-10-10)
 
 | Area | Check | How | Result |

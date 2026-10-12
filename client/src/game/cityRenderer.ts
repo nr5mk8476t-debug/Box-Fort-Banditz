@@ -7,7 +7,7 @@ import {
   type ShadowGenerator,
 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
-import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, footFaces, HOT_PLOT, type ArenaLayout, type Box } from "@bfb/shared";
+import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, type ArenaLayout, type Box } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
 
@@ -152,6 +152,17 @@ function tileTexture(scene: Scene) {
       c.fillStyle = "rgba(255,255,255,0.22)"; c.fillRect(x + 5, y + 5, 10, 3);
     }
     c.fillStyle = "rgba(30,26,34,0.45)"; for (let k = 0; k < 256; k += 32) { c.fillRect(k, 0, 2, 256); c.fillRect(0, k, 256, 2); }
+  });
+}
+/** R10: big floor tiles, 2 x 2 per texture: a little shade per tile, a soft sheen, dark grout */
+function floorTileTexture(scene: Scene) {
+  return canvasTexture(scene, 256, (c, r) => {
+    for (let y = 0; y < 256; y += 128) for (let x = 0; x < 256; x += 128) {
+      const v = r(); c.fillStyle = v < 0.35 ? "rgba(0,0,0,0.07)" : v > 0.7 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0)"; c.fillRect(x, y, 128, 128);
+      c.fillStyle = "rgba(255,255,255,0.07)"; c.beginPath(); c.moveTo(x + 14, y + 128); c.lineTo(x + 54, y + 128); c.lineTo(x + 128, y + 54); c.lineTo(x + 128, y + 14); c.fill();
+      for (let k = 0; k < 18; k++) { c.fillStyle = r() < 0.5 ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.1)"; c.fillRect(x + r() * 124, y + r() * 124, 2, 2); }
+    }
+    c.fillStyle = "rgba(38,36,46,0.55)"; for (const k of [0, 128]) { c.fillRect(k, 0, 3, 256); c.fillRect(0, k, 256, 3); }
   });
 }
 /** corrugated metal, rusting at the seams (1 tile = 2 x 2 m) */
@@ -337,7 +348,7 @@ function windowTexture(scene: Scene): Texture {
  * 0.05-0.08 m bigger into the depth buffer, so windows must sit well clear of that shell or they
  * z-fight with it at a distance (the "flickering windows" bug). The material also gets a depth bias.
  */
-const WIN_OFF = 0.22;
+const WIN_OFF = 0.11; // (R9: was 0.22, which stood out from the walls; 0.1 still clears the 0.05-0.08 m outline shell)
 
 function scaleUVs(m: Mesh, su: number, sv: number) {
   const uv = m.getVerticesData(VertexBuffer.UVKind);
@@ -353,12 +364,12 @@ export class CityRenderer {
   private group = -1;
   private unitMeshes = new Map<number, Mesh[]>();
   /** R7: interiors that aren't units (the station's two floors, the pawn shops): drawn only near the camera too */
-  private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number }[] = [];
+  private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number; dist?: number }[] = [];
   private groupOfBox(b: Box): number {
     if (b.unit !== undefined) return b.unit;
     for (const g of this.extraGroups) {
       const r = g.rect;
-      if (b.x > r.minX && b.x < r.maxX && b.z > r.minZ && b.z < r.maxZ && b.y > g.y0 && b.y < g.y1 && b.kind !== "roof" && b.kind !== "glass" && b.kind !== "sidewalk" && b.kind !== "curb" && b.kind !== "plaza") return g.id; // (R8: never the pavement);
+      if (b.x > r.minX && b.x < r.maxX && b.z > r.minZ && b.z < r.maxZ && b.y > g.y0 && b.y < g.y1 && b.kind !== "roof" && b.kind !== "glass" && b.kind !== "sidewalk" && b.kind !== "curb" && b.kind !== "plaza" && b.deco !== "shell") return g.id; // (R8: never the pavement);
     }
     return -1;
   }
@@ -370,7 +381,7 @@ export class CityRenderer {
   private planes = { windows: [] as Mesh[], curtain: [] as Mesh[], brick: [] as Mesh[], render: [] as Mesh[], stone: [] as Mesh[], front: [] as Mesh[],
     // R5: more walls, grime, roofs, shutters, window styles
     paint: [] as Mesh[], concrete: [] as Mesh[], tile: [] as Mesh[], corrugated: [] as Mesh[], clapboard: [] as Mesh[], grime: [] as Mesh[], roof: [] as Mesh[], roofLight: [] as Mesh[], wallpaper: [] as Mesh[], subway: [] as Mesh[], shutter: [] as Mesh[],
-    winShutter: [] as Mesh[], winArched: [] as Mesh[], winBlinds: [] as Mesh[], winCurtain: [] as Mesh[], winBoarded: [] as Mesh[] };
+    floorTile: [] as Mesh[], winShutter: [] as Mesh[], winArched: [] as Mesh[], winBlinds: [] as Mesh[], winCurtain: [] as Mesh[], winBoarded: [] as Mesh[] };
   /** C2: shop signs share a few big textures (one draw call per sheet instead of one per sign) */
   private atlasSigns: { mesh: Mesh; text: string; bg: string; fg?: string }[] = [];
   /** C2: small modelled façade detail (sills, fire escapes, awning stripes...); off in Performance mode */
@@ -403,9 +414,11 @@ export class CityRenderer {
       const st = arena.station, g = st?.grand, ins = (r: { minX: number; maxX: number; minZ: number; maxZ: number }, m: number) => ({ minX: r.minX + m, maxX: r.maxX - m, minZ: r.minZ + m, maxZ: r.maxZ - m });
       if (st && g) {
         const r = ins(st.rect, 0.65), cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
-        this.extraGroups.push({ id: 9001, x: cx, z: cz, rect: r, y0: 0, y1: g.upY }, { id: 9002, x: cx, z: cz, rect: r, y0: g.upY, y1: 9.2 });
+        // (R9: you see into the station through its glass from right across the street: drawn from further off)
+        this.extraGroups.push({ id: 9001, x: cx, z: cz, rect: r, y0: 0, y1: g.upY, dist: 95 }, { id: 9002, x: cx, z: cz, rect: r, y0: g.upY, y1: 9.2, dist: 95 });
       }
-      for (const h of arena.hotShops ?? []) this.extraGroups.push({ id: 9101 + h.idx, x: (h.rect.minX + h.rect.maxX) / 2, z: (h.rect.minZ + h.rect.maxZ) / 2, rect: ins(h.rect, 0.35), y0: 0, y1: 4.3 });
+      if (arena.fever) { const f = arena.fever, r = ins(f.rect, 0.6), cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2; this.extraGroups.push({ id: 9201, x: cx, z: cz, rect: r, y0: -1, y1: f.y2 - 0.2, dist: 100 }, { id: 9202, x: cx, z: cz, rect: r, y0: f.y2 - 0.2, y1: f.roofY - 0.2, dist: 100 }); } // (R11: NEON FEVER DREAM's floors)
+      for (const h of arena.hotShops ?? []) this.extraGroups.push({ id: 9101 + h.idx, x: (h.rect.minX + h.rect.maxX) / 2, z: (h.rect.minZ + h.rect.maxZ) / 2, rect: ins(h.rect, 0.35), y0: 0, y1: 4.3, dist: 60 });
     }
     for (let bi = 0; bi < arena.boxes.length; bi++) {
       const b = arena.boxes[bi];
@@ -469,6 +482,7 @@ export class CityRenderer {
     this.buildStatue();
     this.buildResto();
     this.buildClub();
+    this.buildFever();
     this.buildPawnShop();
     if (arena.hotShops?.length) { this.buildPawnShops(); this.buildStationUpper(); } // (R7: the new city's two pawn shops, the grand station)
     this.planes.windows.push(...windowPlanes);
@@ -490,7 +504,7 @@ export class CityRenderer {
       brick: planeMat("brickWall", brickTexture(scene), -1), render: planeMat("renderWall", renderTexture(scene), -1), stone: planeMat("stoneWall", stoneTexture(scene), -1),
       paint: planeMat("paintWall", paintedBrickTexture(scene), -1), concrete: planeMat("concreteWall", concreteTexture(scene), -1), tile: planeMat("tileWall", tileTexture(scene), -1),
       corrugated: planeMat("corrWall", corrugatedTexture(scene), -1), clapboard: planeMat("clapWall", clapboardTexture(scene), -1), grime: planeMat("grime", grimeTexture(scene), -1.5),
-      roof: planeMat("roofTar", roofTexture(scene), -4), roofLight: planeMat("roofGravel", roofTexture(scene, true), -4), wallpaper: planeMat("wallpaper", wallpaperTexture(scene), -1), subway: planeMat("subway", subwayTexture(scene), -1), shutter: planeMat("shutter", shutterTexture(scene), -2),
+      roof: planeMat("roofTar", roofTexture(scene), -4), roofLight: planeMat("roofGravel", roofTexture(scene, true), -4), wallpaper: planeMat("wallpaper", wallpaperTexture(scene), -1), subway: planeMat("subway", subwayTexture(scene), -1), floorTile: planeMat("floorTile", floorTileTexture(scene), -1), shutter: planeMat("shutter", shutterTexture(scene), -2),
       winShutter: winStyleMat("shutter"), winArched: winStyleMat("arched"), winBlinds: winStyleMat("blinds"), winCurtain: winStyleMat("curtain"), winBoarded: winStyleMat("boarded"),
     };
     for (const k of Object.keys(this.planes) as (keyof CityRenderer["planes"])[]) {
@@ -618,7 +632,7 @@ export class CityRenderer {
     if (this.neon.length || this.stationLights) this.updateNeon();
     this.updateHeli(Math.min(0.1, (performance.now() - this.lastUpd) / 1000)); this.lastUpd = performance.now();
     for (const u of [...(this.arena.units ?? []), ...this.extraGroups]) {
-      const on = Math.hypot(u.x - camX, u.z - camZ) < INTERIOR_DRAW_DIST;
+      const on = Math.hypot(u.x - camX, u.z - camZ) < ((u as { dist?: number }).dist ?? INTERIOR_DRAW_DIST);
       if (this.unitOn.get(u.id) === on) continue;
       this.unitOn.set(u.id, on);
       for (const m of this.unitMeshes.get(u.id) ?? []) m.setEnabled(on);
@@ -731,7 +745,7 @@ export class CityRenderer {
       const entrance = street && grounded && !b.front && !!b.sign && b.h >= 6 && fw >= 6;
       // R5: every other ground floor on a street gets something: a little shop, a roller shutter, boards, a front door
       const gf = street && grounded && !shop && !lobby && !entrance && !tower && !thin && fw >= 4 && b.h >= 3.5 && !b.china
-        ? pickMix<"shop" | "shutter" | "boarded" | "door">([["shop", 0.45], ["shutter", 0.28], ["boarded", 0.1], ["door", 0.17]], H(72 + faceN)) : null;
+        ? pickMix<"shop" | "shutter" | "boarded" | "door">(tier === 2 ? [["shop", 0.65], ["door", 0.35]] : [["shop", 0.45], ["shutter", 0.28], ["boarded", 0.1], ["door", 0.17]], H(72 + faceN)) : null; // (R9: nothing shut or boarded in the high end)
       const gShop = gf === "shop" || gf === "shutter" || gf === "boarded";
       // ---- wall material ----
       if (!thin && !glass) {
@@ -740,12 +754,14 @@ export class CityRenderer {
         const base = shop || entrance || lobby || gShop ? Math.min(bottom + (lobby ? 4.2 : 3.3), top) : bottom;
         const wh = top - base;
         if (wh > 0.2) {
-          const p = at(MeshBuilder.CreatePlane("wallmat", { width: fw, height: wh }, sc), 0, base + wh / 2, 0.12);
+          const p = at(MeshBuilder.CreatePlane("wallmat", { width: fw, height: wh }, sc), 0, base + wh / 2, 0.09); // (R9: tighter to the wall)
           scaleUVs(p, fw / tile, wh / tile);
           this.planes[wk].push(p);
-          const gr = at(MeshBuilder.CreatePlane("grime", { width: fw, height: wh }, sc), 0, base + wh / 2, 0.13);
-          scaleUVs(gr, Math.max(1, Math.round(fw / 4)), 1);
-          this.planes.grime.push(gr);
+          if (tier < 2) { // (R9: the high end is clean: no soot, no streaks)
+            const gr = at(MeshBuilder.CreatePlane("grime", { width: fw, height: wh }, sc), 0, base + wh / 2, 0.095);
+            scaleUVs(gr, Math.max(1, Math.round(fw / 4)), 1);
+            this.planes.grime.push(gr);
+          }
         }
       }
       // ---- windows ----
@@ -763,15 +779,15 @@ export class CityRenderer {
       // ---- shopfront / lobby glazing ----
       if (entrance) {
         const ew = Math.min(fw - 2, 8);
-        const p = at(MeshBuilder.CreatePlane("entrance", { width: ew, height: 3 }, sc), 0, 1.75, 0.2);
+        const p = at(MeshBuilder.CreatePlane("entrance", { width: ew, height: 3 }, sc), 0, 1.75, 0.13);
         scaleUVs(p, Math.max(1, Math.round(ew / 4)), 0.75);
         this.planes.front.push(p);
       }
-      const shutShop = shop && b.unit === undefined && fw >= 3 && H(73 + faceN) < 0.18; // (R5: some shops are shut: the shutter's down, tagged)
-      if (shutShop) { const p = at(MeshBuilder.CreatePlane("shutter", { width: fw - 0.8, height: 2.9 }, sc), 0, 1.6, 0.22); scaleUVs(p, Math.max(1, Math.round((fw - 0.8) / 4)), 1); this.planes.shutter.push(p); }
+      const shutShop = shop && b.unit === undefined && fw >= 3 && tier < 2 && H(73 + faceN) < 0.18; // (R5: some shops are shut: the shutter's down, tagged)
+      if (shutShop) { const p = at(MeshBuilder.CreatePlane("shutter", { width: fw - 0.8, height: 2.9 }, sc), 0, 1.6, 0.14); scaleUVs(p, Math.max(1, Math.round((fw - 0.8) / 4)), 1); this.planes.shutter.push(p); }
       if ((shop || lobby) && fw >= 3 && !shutShop) {
         const bays = Math.max(1, Math.round((fw - 0.8) / 4));
-        const p = at(MeshBuilder.CreatePlane("front", { width: fw - 0.8, height: 3 }, sc), 0, 1.75, lobby ? 0.27 : 0.2);
+        const p = at(MeshBuilder.CreatePlane("front", { width: fw - 0.8, height: 3 }, sc), 0, 1.75, lobby ? 0.17 : 0.13);
         scaleUVs(p, bays, 0.75);
         this.planes.front.push(p);
       }
@@ -2551,6 +2567,472 @@ export class CityRenderer {
     dyn.setEnabled(false);
   }
 
+  // =================================================================================================
+  // R11: NEON FEVER DREAM (Blake: "a neon fever dream", his three pics: purple uplights up the brick, a glowing
+  // corner lamp, a starry ceiling with neon rings, a glowing bar with bottle shelves, LED floor waves, a giant light
+  // rig and an LED equaliser wall behind the DJ). The walls and floors are boxes (shared layout); here: the brick
+  // skin, all the neon, the LED floors, the rig and lasers, the two DJs and the crowd (looks only, cheap instanced
+  // figures), the drop's smoke and confetti, the sky beams off the roof at night.
+  // =================================================================================================
+  private feverDyn: TransformNode | null = null;
+  private feverNear = false;
+  private feverT = 0;
+  private feverLed: { tex: DynamicTexture; t: number; ctx: CanvasRenderingContext2D } | null = null;
+  private feverEq: { tex: DynamicTexture; t: number; ctx: CanvasRenderingContext2D } | null = null;
+  private feverRig: StandardMaterial[] = [];
+  private feverStrips: { mat: StandardMaterial; col: Color3; ph: number }[] = [];
+  private feverLasers: { pivot: TransformNode; mat: StandardMaterial; ph: number; spd: number }[] = [];
+  private feverBeams: { pivot: TransformNode; mat: StandardMaterial; ph: number }[] = [];
+  private feverPeople: { n: TransformNode; armL: TransformNode; armR: TransformNode; ph: number; y: number; night: boolean; dj?: boolean; air: number; vy: number }[] = [];
+  private feverPlatters: TransformNode[] = [];
+  private feverFx: { m: Mesh; vx: number; vy: number; vz: number; t: number; t0: number; spin: number; smoke: boolean; floorY: number }[] = [];
+  private feverFxMats: StandardMaterial[] = [];
+  private feverSmokeMat: StandardMaterial | null = null;
+  private buildFever() {
+    const F = this.arena.fever;
+    if (!F) return;
+    const sc = this.scene, MB = MeshBuilder, r = F.rect, Y2 = F.y2, RY = F.roofY, A = F.atrium, S2 = Math.SQRT2;
+    this.group = -1; this.brk = "";
+    const dyn = new TransformNode("feverDyn", sc); dyn.parent = this.root; this.feverDyn = dyn;
+    const glowCache = new Map<string, StandardMaterial>();
+    const glow = (col: string, alpha = 1) => {
+      const key = col + alpha;
+      let m = glowCache.get(key);
+      if (!m) { m = new StandardMaterial("fvGlow" + key, sc); m.disableLighting = true; m.emissiveColor = Color3.FromHexString(col); m.diffuseColor = Color3.Black(); if (alpha < 1) { m.alpha = alpha; m.backFaceCulling = false; } glowCache.set(key, m); }
+      return m;
+    };
+    // static glowing pieces, merged per colour; inside ones toggle with the club (outside ones always drawn)
+    const statics = new Map<string, Mesh[]>();
+    const gl = (m: Mesh, col: string, inside: boolean) => { const key = col + "|" + (inside ? 1 : 0); (statics.get(key) ?? statics.set(key, []).get(key)!).push(m); m.isPickable = false; return m; };
+    const gbox = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, inside = true, ry = 0) => { const m = MB.CreateBox("fvg", { width: w, height: h, depth: d }, sc); m.position.set(x, y, z); m.rotation.y = ry; return gl(m, col, inside); };
+    const cyl = (d: number, h: number, x: number, y: number, z: number, col: string, o = 0.02, t = 12, top?: number) => { const m = MB.CreateCylinder("fvc", { diameter: d, diameterTop: top ?? d, height: h, tessellation: t }, sc); m.position.set(x, y, z); this.add(m, col, o, false); return m; };
+    const plane = (w: number, h: number, x: number, y: number, z: number, nx: number, nz: number, mat: StandardMaterial, parent: TransformNode = this.root) => {
+      const p = MB.CreatePlane("fvp", { width: w, height: h }, sc); p.position.set(x, y, z); p.rotation.y = Math.atan2(-nx, -nz); p.material = mat; p.parent = parent; p.isPickable = false; return p;
+    };
+    const flat = (x0: number, x1: number, z0: number, z1: number, y: number, mat: StandardMaterial, parent: TransformNode = dyn, uv = 0) => {
+      const p = MB.CreateGround("fvf", { width: x1 - x0, height: z1 - z0 }, sc); p.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); p.material = mat; p.parent = parent; p.isPickable = false;
+      if (uv) scaleUVs(p, (x1 - x0) / uv, (z1 - z0) / uv);
+      return p;
+    };
+    /** a neon sign: glowing letters on a see-through sheet (they pulse with the music) */
+    const neon = (text: string, col: string, w: number, h: number) => {
+      const W = 1024, H = Math.max(64, Math.round(1024 * h / w));
+      const t = new DynamicTexture("fvNeon-" + text + col, { width: W, height: H }, sc, true);
+      const c = t.getContext() as unknown as CanvasRenderingContext2D;
+      c.clearRect(0, 0, W, H);
+      let size = H * 0.72; c.font = `bold ${size}px "Bungee", "Arial Black", sans-serif`;
+      while (size > 12 && c.measureText(text).width > W * 0.92) { size -= 4; c.font = `bold ${size}px "Bungee", "Arial Black", sans-serif`; }
+      c.textAlign = "center"; c.textBaseline = "middle"; c.lineJoin = "round";
+      c.strokeStyle = col; c.globalAlpha = 0.35; c.lineWidth = H * 0.18; c.strokeText(text, W / 2, H / 2);
+      c.globalAlpha = 1; c.lineWidth = H * 0.06; c.strokeText(text, W / 2, H / 2);
+      c.fillStyle = "#ffffff"; c.fillText(text, W / 2, H / 2);
+      t.hasAlpha = true; t.update();
+      const m = unlitTextured(sc, t, "fvNeonMat-" + text + col);
+      this.feverStrips.push({ mat: m, col: Color3.White(), ph: text.length * 0.7 });
+      return m;
+    };
+    /** a strip of neon whose glow pulses (its own material) */
+    const strip = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, parent: TransformNode, ph = 0, ry = 0) => {
+      const m = MB.CreateBox("fvStrip", { width: w, height: h, depth: d }, sc); m.position.set(x, y, z); m.rotation.y = ry; m.parent = parent; m.isPickable = false;
+      const mat = new StandardMaterial("fvStripMat", sc); mat.disableLighting = true; const c3 = Color3.FromHexString(col); mat.emissiveColor = c3.clone(); mat.diffuseColor = Color3.Black(); m.material = mat;
+      this.feverStrips.push({ mat, col: c3, ph }); return m;
+    };
+    const PURPLE = "#b04dff", BLUE = "#3d7bff", PINK = "#ff3cd2", CYAN = "#3df0ff";
+    const MX = r.minX + F.cham / 2, MZ = r.minZ + F.cham / 2; // (the cut corner's middle: the front door)
+    // ---------------------------------------------------------------- outside: the brick, the uplights, the sign, the lamp
+    {
+      for (const b of this.arena.boxes) {
+        if (b.deco !== "shell") continue;
+        const y0 = b.y - b.h / 2, h = b.h;
+        if (b.poly) { // (the cut corner: brick on its outer face)
+          let best = 0, bv = Infinity;
+          for (let q = 0; q < b.poly.length; q++) { const [ax, az] = b.poly[q], [cx, cz] = b.poly[(q + 1) % b.poly.length]; const v = ax + az + cx + cz; if (v < bv) { bv = v; best = q; } }
+          const [ax, az] = b.poly[best], [cx, cz] = b.poly[(best + 1) % b.poly.length], len = Math.hypot(cx - ax, cz - az);
+          const p = MB.CreatePlane("fvBrick", { width: len, height: h }, sc); p.position.set((ax + cx) / 2 - 0.1 / S2, y0 + h / 2, (az + cz) / 2 - 0.1 / S2); p.rotation.y = Math.atan2(1, 1); scaleUVs(p, len / 2, h / 2); this.planes.brick.push(p);
+          continue;
+        }
+        const faces: [number, number, number, number, number][] = []; // (centre x, z, width, normal x, z)
+        if (b.x - b.w / 2 <= r.minX + 0.02) faces.push([b.x - b.w / 2 - 0.09, b.z, b.d, -1, 0]);
+        if (b.x + b.w / 2 >= r.maxX - 0.02) faces.push([b.x + b.w / 2 + 0.09, b.z, b.d, 1, 0]);
+        if (b.z - b.d / 2 <= r.minZ + 0.02) faces.push([b.x, b.z - b.d / 2 - 0.09, b.w, 0, -1]);
+        if (b.z + b.d / 2 >= r.maxZ - 0.02 && y0 + h > 11) faces.push([b.x, b.z + b.d / 2 + 0.09, b.w, 0, 1]);
+        for (const [x, z, w, nx, nz] of faces) { const p = MB.CreatePlane("fvBrick", { width: w, height: h }, sc); p.position.set(x, y0 + h / 2, z); p.rotation.y = Math.atan2(-nx, -nz); scaleUVs(p, w / 2, h / 2); this.planes.brick.push(p); }
+        // (purple uplights up every pier at street level: a glowing slot and a wash of light up the brick)
+        if (y0 > 0.85 && y0 < 0.95 && b.h < 4.1 && (b.w < 0.8 || b.d < 0.8)) for (const [x, z, , nx, nz] of faces) {
+          gbox(nx ? 0.06 : 0.5, 0.12, nz ? 0.06 : 0.5, x + nx * 0.08, 0.32, z + nz * 0.08, PURPLE, false);
+          plane(0.9, 4.6, x + nx * 0.05, 2.6, z + nz * 0.05, nx, nz, glow(PURPLE, 0.22));
+        }
+      }
+      // the floor-2 band and the parapet: neon trim right round the street sides (and the cut corner)
+      const trim = (y: number, col: string) => {
+        strip(0.08, 0.1, r.maxZ - r.minZ - F.cham, r.minX - 0.12, y, (r.minZ + F.cham + r.maxZ) / 2, col, this.root, 0.2);
+        strip(r.maxX - r.minX - F.cham, 0.1, 0.08, (r.minX + F.cham + r.maxX) / 2, y, r.minZ - 0.12, col, this.root, 0.5);
+        strip(F.cham * S2, 0.1, 0.08, MX - 0.12 / S2, y, MZ - 0.12 / S2, col, this.root, 0.8, Math.PI / 4);
+        strip(0.08, 0.1, r.maxZ - r.minZ, r.maxX + 0.12, y, (r.minZ + r.maxZ) / 2, col, this.root, 1.1);
+      };
+      trim(5.0, PINK); trim(Y2 + 0.5, PURPLE); trim(RY + 1.15, CYAN);
+      // the sign: over the door in the cut corner, along Market Row and the side street
+      plane(6.4, 1.3, MX - 0.25 / S2, 4.15, MZ - 0.25 / S2, -1 / S2, -1 / S2, neon("NEON FEVER DREAM", PINK, 6.4, 1.3));
+      plane(12, 1.0, r.minX - 0.2, 5.4, 19.5, -1, 0, neon("NEON FEVER DREAM", PURPLE, 12, 1.0));
+      plane(12, 1.0, 90, 5.4, r.minZ - 0.2, 0, -1, neon("NEON FEVER DREAM", PURPLE, 12, 1.0));
+      plane(3.0, 0.5, MX - 0.25 / S2, 3.45, MZ - 0.25 / S2, -1 / S2, -1 / S2, neon("ALL NIGHT. EVERY NIGHT.", CYAN, 3.0, 0.5));
+      // the corner lamp (pic 1): a black post, a glowing purple lantern
+      const lx = MX - 2.6 / S2, lz = MZ - 2.6 / S2;
+      cyl(0.16, 4.6, lx, 0.15 + 2.3, lz, "#1b1420", 0.02, 8);
+      cyl(0.5, 0.18, lx, 4.6, lz, "#1b1420", 0.01, 8);
+      gl(MB.CreateCylinder("fvLamp", { diameterTop: 0.75, diameterBottom: 0.4, height: 0.85, tessellation: 8 }, sc), "#e9a8ff", false).position.set(lx, 5.15, lz);
+      cyl(0.82, 0.12, lx, 5.62, lz, "#1b1420", 0.01, 8);
+      plane(3.2, 3.2, lx, 5.1, lz, -1 / S2, -1 / S2, glow(PURPLE, 0.12)).billboardMode = Mesh.BILLBOARDMODE_ALL;
+      // the door: a red carpet, brass posts and a velvet rope
+      { const c = MB.CreateGround("fvCarpet", { width: 2.4, height: 4.2 }, sc); c.position.set(MX - 1.6 / S2, 0.17, MZ - 1.6 / S2); c.rotation.y = Math.PI / 4; this.add(c, "#8e1f3a", 0, false); }
+      for (const s of [-1, 1]) for (let k = 0; k < 3; k++) {
+        const px = MX - (1.0 + k * 1.3) / S2 + s * 1.5 / S2, pz = MZ - (1.0 + k * 1.3) / S2 - s * 1.5 / S2;
+        cyl(0.09, 1.0, px, 0.65, pz, "#d9a632", 0.01, 8); cyl(0.2, 0.06, px, 0.18, pz, "#d9a632", 0.01, 8);
+        if (k < 2) { const ro = MB.CreateCylinder("fvRope", { diameter: 0.06, height: 1.3, tessellation: 6 }, sc); ro.position.set(px - 0.65 / S2, 0.95, pz - 0.65 / S2); ro.rotation.set(Math.PI / 2, Math.PI / 4, 0); this.add(ro, "#7a1030", 0, false); }
+      }
+      // the bay's glass and frame; floor 2's ribbon of glass is in the shell (see-through panes)
+      const B = F.bay;
+      const gmat = new StandardMaterial("fvBayGlass", sc); gmat.diffuseColor = Color3.FromHexString("#3a2a6a"); gmat.emissiveColor = Color3.FromHexString("#2a1a4a"); gmat.alpha = 0.28; gmat.backFaceCulling = false; gmat.specularColor = Color3.White();
+      for (const b of this.arena.boxes) if (b.deco === "bay") { const m = MB.CreateBox("fvBay", { width: b.w, height: b.h, depth: b.d }, sc); m.position.set(b.x, b.y, b.z); m.material = gmat; m.parent = this.root; m.isPickable = false; }
+      for (const [x, z] of [[B.minX, B.minZ], [B.minX, B.maxZ]] as [number, number][]) gbox(0.1, RY - 0.9 - Y2, 0.1, x + 0.05, (Y2 + RY - 0.9) / 2, z, PINK, false);
+      gbox(0.08, 0.08, B.maxZ - B.minZ, B.minX + 0.04, Y2 + 0.02, (B.minZ + B.maxZ) / 2, PINK, false);
+      gbox(0.08, 0.08, B.maxZ - B.minZ, B.minX - 0.16, RY - 0.52, (B.minZ + B.maxZ) / 2, PINK, false);
+    }
+    // ---------------------------------------------------------------- glass railings (both floors and the roof), the roof's glass floor
+    {
+      const rmat = new StandardMaterial("fvRailGlass", sc); rmat.diffuseColor = Color3.FromHexString("#6a5aff"); rmat.emissiveColor = Color3.FromHexString("#2a2060"); rmat.alpha = 0.25; rmat.backFaceCulling = false;
+      for (const b of this.arena.boxes) if (b.deco === "rail") {
+        const m = MB.CreateBox("fvRail", { width: b.w, height: b.h, depth: b.d }, sc); m.position.set(b.x, b.y, b.z); m.material = rmat; m.isPickable = false;
+        const top = b.y + b.h / 2 > RY + 0.5;
+        m.parent = top ? this.root : dyn;
+        gbox(b.w + 0.02, 0.05, b.d + 0.02, b.x, b.y + b.h / 2, b.z, top ? CYAN : BLUE, !top);
+      }
+      const gf = F.glassFloor;
+      const fmat = new StandardMaterial("fvGlassFloor", sc); fmat.diffuseColor = Color3.FromHexString("#9ad8ff"); fmat.emissiveColor = Color3.FromHexString("#1a2a50"); fmat.alpha = 0.22; fmat.backFaceCulling = false; fmat.specularColor = Color3.White();
+      const g = MB.CreateBox("fvGlassFloorPane", { width: gf.maxX - gf.minX, height: 0.08, depth: gf.maxZ - gf.minZ }, sc); g.position.set((gf.minX + gf.maxX) / 2, RY - 0.05, (gf.minZ + gf.maxZ) / 2); g.material = fmat; g.parent = this.root; g.isPickable = false;
+      for (let x = gf.minX; x <= gf.maxX + 0.01; x += (gf.maxX - gf.minX) / 4) gbox(0.08, 0.06, gf.maxZ - gf.minZ, x, RY + 0.01, (gf.minZ + gf.maxZ) / 2, PINK, false);
+      for (const z of [gf.minZ, gf.maxZ]) gbox(gf.maxX - gf.minX, 0.06, 0.08, (gf.minX + gf.maxX) / 2, RY + 0.01, z, PINK, false);
+    }
+    // ---------------------------------------------------------------- the LED floor (floor 1 under the atrium, floor 2 round it, the roof)
+    {
+      const tex = new DynamicTexture("fvLed", { width: 256, height: 256 }, sc, false);
+      tex.wrapU = Texture.WRAP_ADDRESSMODE; tex.wrapV = Texture.WRAP_ADDRESSMODE;
+      const mat = new StandardMaterial("fvLedMat", sc); mat.disableLighting = true; mat.emissiveTexture = tex; mat.diffuseColor = Color3.Black();
+      this.feverLed = { tex, t: 0, ctx: tex.getContext() as unknown as CanvasRenderingContext2D };
+      this.feverLed.ctx.fillStyle = "#05030c"; this.feverLed.ctx.fillRect(0, 0, 256, 256); tex.update(false); // (drawn once now: a texture never drawn is never "ready")
+      const roofMat = new StandardMaterial("fvLedRoof", sc); roofMat.disableLighting = true; roofMat.emissiveTexture = tex; roofMat.diffuseColor = Color3.Black();
+      flat(A.minX, A.maxX, A.minZ, A.maxZ, 0.215, mat, dyn, 12);
+      const d2 = F.dance2, yy = Y2 + 0.065; // (clear of the slab's outline)
+      flat(d2.minX, d2.maxX, d2.minZ, A.minZ - 0.1, yy, mat, dyn, 12); flat(d2.minX, d2.maxX, A.maxZ + 0.1, d2.maxZ, yy, mat, dyn, 12);
+      flat(d2.minX, A.minX - 0.1, A.minZ - 0.1, A.maxZ + 0.1, yy, mat, dyn, 12); flat(A.maxX + 0.1, d2.maxX, A.minZ - 0.1, A.maxZ + 0.1, yy, mat, dyn, 12);
+      const dr = F.danceRoof, ry = RY + 0.065, s2 = F.stairs2;
+      flat(dr.minX, dr.maxX, s2.maxZ + 0.2, A.minZ - 0.15, ry, roofMat, this.root, 12); flat(dr.minX, dr.maxX, A.maxZ + 0.15, dr.maxZ, ry, roofMat, this.root, 12);
+      flat(dr.minX, A.minX - 0.15, A.minZ - 0.15, A.maxZ + 0.15, ry, roofMat, this.root, 12);
+    }
+    // ---------------------------------------------------------------- inside: the starry ceilings and neon rings, wall neon, the stairs' LED
+    {
+      const stars = new DynamicTexture("fvStars", { width: 512, height: 512 }, sc, false);
+      const c = stars.getContext() as unknown as CanvasRenderingContext2D;
+      c.fillStyle = "#07051a"; c.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < 900; i++) { const v = hash(i, 3.3); c.fillStyle = v < 0.55 ? "#ffffff" : v < 0.8 ? "#9ad8ff" : "#e9a8ff"; c.globalAlpha = 0.4 + hash(i, 7.1) * 0.6; const s = hash(i, 1.9) < 0.9 ? 1.6 : 3; c.fillRect(hash(i, 5.5) * 512, hash(9.1, i) * 512, s, s); }
+      c.globalAlpha = 1; stars.update();
+      stars.wrapU = Texture.WRAP_ADDRESSMODE; stars.wrapV = Texture.WRAP_ADDRESSMODE;
+      const smat = new StandardMaterial("fvStarsMat", sc); smat.disableLighting = true; smat.emissiveTexture = stars; smat.diffuseColor = Color3.Black(); smat.backFaceCulling = false;
+      const ceil = (y: number, holes: { minX: number; maxX: number; minZ: number; maxZ: number }[]) => {
+        const x0 = r.minX + 0.3, x1 = r.maxX - 0.3, z0 = r.minZ + 0.3, z1 = r.maxZ - 0.3;
+        const h = holes[0];
+        for (const [a, b2, c2, d] of [[r.minX + F.cham, x1, z0, h.minZ], [x0, x1, h.maxZ, z1], [x0, h.minX, h.minZ, h.maxZ], [h.maxX, x1, h.minZ, h.maxZ]] as [number, number, number, number][]) {
+          const p = flat(a, b2, c2, d, y, smat, dyn, 8); p.rotation.x = Math.PI; // (facing down)
+        }
+      };
+      ceil(Y2 - 0.42, [A]); ceil(RY - 0.42, [A]);
+      // neon rings on the ceilings (pic 2) round the atrium, and over the bar
+      const ring = (x: number, y: number, z: number, d: number, col: string, ph: number) => { const t = MB.CreateTorus("fvRing", { diameter: d, thickness: 0.07, tessellation: 40 }, sc); t.position.set(x, y, z); t.parent = dyn; t.isPickable = false; const mat = new StandardMaterial("fvRingMat", sc); mat.disableLighting = true; const c3 = Color3.FromHexString(col); mat.emissiveColor = c3.clone(); t.material = mat; this.feverStrips.push({ mat, col: c3, ph }); };
+      const ax = (A.minX + A.maxX) / 2, az = (A.minZ + A.maxZ) / 2;
+      ring(ax, Y2 - 0.5, az, 14.5, PURPLE, 0); ring(ax, Y2 - 0.55, az, 17.5, BLUE, 1.3);
+      ring(94.3, Y2 - 0.5, 27.6, 4.5, PINK, 2.1); ring(81, Y2 - 0.5, 12, 4, CYAN, 3.3); ring(81, Y2 - 0.55, 25, 3.2, PURPLE, 4.1);
+      // wall neon (floor 1: low and high; floor 2: low, and a line under the rig)
+      const wallLines = (y: number, col: string, ph: number) => {
+        strip(0.05, 0.06, r.maxZ - r.minZ - F.cham - 0.6, r.minX + 0.36, y, (r.minZ + F.cham + r.maxZ) / 2, col, dyn, ph); // (from the cut corner on)
+        strip(0.05, 0.06, r.maxZ - r.minZ - 0.8, r.maxX - 0.36, y, (r.minZ + r.maxZ) / 2, col, dyn, ph + 0.5);
+        strip(r.maxX - r.minX - F.cham - 0.4, 0.06, 0.05, (r.minX + F.cham + r.maxX) / 2, y, r.minZ + 0.36, col, dyn, ph + 1);
+        strip(r.maxX - r.minX - 0.8, 0.06, 0.05, (r.minX + r.maxX) / 2, y, r.maxZ - 0.36, col, dyn, ph + 1.5);
+      };
+      wallLines(0.45, PURPLE, 0); wallLines(5.2, BLUE, 0.7); wallLines(Y2 + 0.4, PINK, 1.4); wallLines(RY - 1.6, PURPLE, 2.1);
+      // every step's nose: an LED strip (purple and blue, alternately)
+      for (const b of this.arena.boxes) if (b.kind === "step" && inRectXZ(r, b.x, b.z)) {
+        const along = b.d > b.w; const top = b.y + b.h / 2;
+        gbox(along ? 0.04 : b.w, 0.03, along ? b.d : 0.04, b.x - (along ? b.w / 2 : 0) * (b.x > 95 ? -1 : 1), top + 0.005, b.z, Math.round(top * 5) % 2 ? PURPLE : BLUE, true);
+      }
+      // the stages and the catwalk: LED edges
+      for (const s of F.stages) { const sx = (s.minX + s.maxX) / 2, sz = (s.minZ + s.maxZ) / 2; for (const dz of [-1, 1]) gbox(s.maxX - s.minX + 0.04, 0.06, 0.04, sx, Y2 + 0.68, sz + dz * (s.maxZ - s.minZ) / 2, CYAN); for (const dx of [-1, 1]) gbox(0.04, 0.06, s.maxZ - s.minZ, sx + dx * (s.maxX - s.minX) / 2, Y2 + 0.68, sz, CYAN); }
+      const cw = F.catwalk; for (const z of [cw.minZ, cw.maxZ]) gbox(cw.maxX - cw.minX, 0.05, 0.05, (cw.minX + cw.maxX) / 2, Y2 - 0.27, z, PINK);
+    }
+    // ---------------------------------------------------------------- floor 1: the bar (glowing bottles), the booths' tables, the speakers
+    {
+      const B = F.bar, bz = r.maxZ - 0.55;
+      strip(B.maxX - B.minX, 0.08, 0.04, (B.minX + B.maxX) / 2, 1.0, B.minZ - 0.02, BLUE, dyn, 0.3);
+      strip(B.maxX - B.minX, 0.05, 0.04, (B.minX + B.maxX) / 2, 0.3, B.minZ - 0.02, PURPLE, dyn, 0.9);
+      gbox(B.maxX - B.minX, 0.03, 0.9, (B.minX + B.maxX) / 2, 1.27, (B.minZ + B.maxZ) / 2, "#e8e2ff");
+      for (const y of [1.45, 2.15, 2.85]) {
+        gbox(B.maxX - B.minX, 0.03, 0.5, (B.minX + B.maxX) / 2, y - 0.04, bz + 0.05, CYAN); // (the lit shelf)
+        for (let x = B.minX + 0.2; x < B.maxX - 0.1; x += 0.22) { const k = Math.floor(hash(x * 3, y * 7) * 4); const b = MB.CreateCylinder("fvBottle", { diameter: 0.09, diameterTop: 0.04, height: 0.3 + (k % 2) * 0.08, tessellation: 6 }, sc); b.position.set(x, y + 0.17, bz); gl(b, ["#ff3cd2", "#3df0ff", "#b04dff", "#ffd54a"][k], true); }
+      }
+      for (const b of this.arena.boxes) if (b.deco === "glowtable") gl(MB.CreateCylinder("fvTableGlow", { diameter: Math.min(b.w, b.d) * 1.1, height: 0.03, tessellation: 16 }, sc), "#d8b0ff", true).position.set(b.x, b.y + b.h / 2 + 0.02, b.z);
+      for (const b of this.arena.boxes) if (b.deco === "speaker") { const ax = (A.minX + A.maxX) / 2, az = (A.minZ + A.maxZ) / 2, yaw = Math.atan2(ax - b.x, az - b.z); for (const y of [0.9, 1.75]) { const cone = MB.CreateCylinder("fvCone", { diameter: 0.55, diameterTop: 0.3, height: 0.08, tessellation: 12 }, sc); cone.rotation.set(Math.PI / 2, yaw, 0); cone.position.set(b.x + Math.sin(yaw) * 0.46, y, b.z + Math.cos(yaw) * 0.46); this.group = 9201; this.add(cone, "#2b2433", 0.01, false); this.group = -1; } gbox(0.6, 0.04, 0.6, b.x, 2.33, b.z, PINK); }
+      // the bar's sign, a menu
+      plane(4.0, 0.7, 94.3, 3.9, bz - 0.25, 0, -1, neon("MOCKTAILS", CYAN, 4.0, 0.7), dyn);
+      plane(5.0, 0.5, 94.3, 3.3, bz - 0.25, 0, -1, neon("THE FEVER  -  BLUE SCREEN  -  THE DROP  $8", PINK, 5.0, 0.5), dyn);
+    }
+    // ---------------------------------------------------------------- floor 2: the light rig, lasers, the LED equaliser wall, TRASH PANDA's decks
+    const ax = (A.minX + A.maxX) / 2, az = (A.minZ + A.maxZ) / 2;
+    {
+      const rigY = RY - 1.15, x0 = A.minX - 3, x1 = A.maxX + 3, z0 = A.minZ - 3, z1 = A.maxZ + 3;
+      const truss = (w: number, d: number, x: number, z: number) => { const m = MB.CreateBox("fvTruss", { width: w, height: 0.3, depth: d }, sc); m.position.set(x, rigY, z); this.group = 9202; this.add(m, "#2b2a33", 0.015, false); this.group = -1; };
+      truss(x1 - x0, 0.3, ax, z0); truss(x1 - x0, 0.3, ax, z1); truss(0.3, z1 - z0, x0, az); truss(0.3, z1 - z0, x1, az);
+      for (const x of [x0, x1]) for (const z of [z0, z1]) { const m = MB.CreateBox("fvHang", { width: 0.06, height: RY - 0.4 - rigY, depth: 0.06 }, sc); m.position.set(x, (rigY + RY - 0.4) / 2, z); this.group = 9202; this.add(m, "#1b1420", 0, false); this.group = -1; }
+      for (let g = 0; g < 3; g++) { const mat = new StandardMaterial("fvRig" + g, sc); mat.disableLighting = true; mat.emissiveColor = Color3.FromHexString([PINK, CYAN, "#ffffff"][g]); this.feverRig.push(mat); }
+      let k = 0;
+      const bar = (x: number, z: number, alongX: boolean) => { const m = MB.CreateBox("fvRigBar", { width: alongX ? 1.1 : 0.12, height: 0.1, depth: alongX ? 0.12 : 1.1 }, sc); m.position.set(x, rigY - 0.22, z); m.material = this.feverRig[k++ % 3]; m.parent = dyn; m.isPickable = false; };
+      for (let x = x0 + 0.8; x < x1 - 0.5; x += 1.4) { bar(x, z0, true); bar(x, z1, true); }
+      for (let z = z0 + 0.8; z < z1 - 0.5; z += 1.4) { bar(x0, z, false); bar(x1, z, false); }
+      // lasers: thin beams from the rig's corners and the DJ's wall
+      const cols = ["#3dff7a", "#3df0ff", "#ff3cd2", "#b04dff"];
+      const laser = (x: number, y: number, z: number, i: number, len: number) => {
+        const pv = new TransformNode("fvLaserPivot", sc); pv.parent = dyn; pv.position.set(x, y, z);
+        const m = MB.CreateBox("fvLaser", { width: 0.03, height: 0.03, depth: len }, sc); m.position.z = len / 2; m.parent = pv; m.isPickable = false;
+        const mat = new StandardMaterial("fvLaserMat", sc); mat.disableLighting = true; mat.emissiveColor = Color3.FromHexString(cols[i % 4]); mat.alpha = 0.55; mat.backFaceCulling = false; m.material = mat;
+        this.feverLasers.push({ pivot: pv, mat, ph: i * 1.7, spd: 0.4 + (i % 3) * 0.25 });
+      };
+      let li = 0;
+      for (const x of [x0, x1]) for (const z of [z0, z1]) for (let q = 0; q < 2; q++) laser(x, rigY - 0.3, z, li++, 16);
+      for (let q = 0; q < 4; q++) laser(r.maxX - 0.6, Y2 + 4.8, 15.5 + q * 2.6, li++, 22);
+      for (let q = 0; q < 3; q++) laser(ax - 3 + q * 3, Y2 - 0.6, az + (q - 1) * 5.5, li++, 9); // (floor 1: from under the floor-2 slab)
+      // the LED equaliser wall behind the decks (pic 3's pink bars)
+      const tex = new DynamicTexture("fvEq", { width: 512, height: 256 }, sc, false);
+      const mat = new StandardMaterial("fvEqMat", sc); mat.disableLighting = true; mat.emissiveTexture = tex; mat.diffuseColor = Color3.Black();
+      this.feverEq = { tex, t: 0, ctx: tex.getContext() as unknown as CanvasRenderingContext2D };
+      this.feverEq.ctx.fillStyle = "#07030e"; this.feverEq.ctx.fillRect(0, 0, 512, 256); tex.update(false);
+      plane(9.0, 4.4, r.maxX - 0.34, Y2 + 3.4, 19.5, -1, 0, mat, dyn);
+      plane(5.5, 1.0, r.maxX - 0.36, Y2 + 6.0, 19.5, -1, 0, neon("DJ TRASH PANDA", PINK, 5.5, 1.0), dyn);
+      // the decks: a desk on the booth, two spinning platters, a mixer
+      const dj = F.dj, deskX = dj.x - 1.0;
+      const desk = MB.CreateBox("fvDesk", { width: 0.8, height: 1.0, depth: 3.2 }, sc); desk.position.set(deskX, dj.y + 0.5, dj.z); this.group = 9202; this.add(desk, "#141018", 0.015, false); this.group = -1;
+      strip(0.04, 0.06, 3.2, deskX - 0.42, dj.y + 0.95, dj.z, CYAN, dyn, 0.4); strip(0.04, 0.06, 3.2, deskX - 0.42, dj.y + 0.1, dj.z, PINK, dyn, 1.0);
+      for (const s of [-1, 1]) { const pv = new TransformNode("fvPlatter", sc); pv.parent = dyn; pv.position.set(deskX, dj.y + 1.03, dj.z + s * 0.9); const pl = MB.CreateCylinder("fvPl", { diameter: 0.6, height: 0.04, tessellation: 18 }, sc); pl.parent = pv; pl.material = toon(sc, "#1b1420"); pl.isPickable = false; const lab = MB.CreateBox("fvLab", { width: 0.25, height: 0.05, depth: 0.04 }, sc); lab.parent = pv; lab.position.y = 0.01; lab.material = glow(PINK); lab.isPickable = false; this.feverPlatters.push(pv); }
+      gbox(0.4, 0.08, 0.5, deskX, dj.y + 1.04, dj.z, "#3dff7a");
+      // LIL PANDA's decks on the roof, his pavilion's neon
+      const d2 = F.dj2, P = F.pavilion;
+      const desk2 = MB.CreateBox("fvDesk2", { width: 0.7, height: 1.0, depth: 2.4 }, sc); desk2.position.set(d2.x - 0.9, d2.y + 0.5, d2.z); this.add(desk2, "#141018", 0.015, false);
+      strip(0.04, 0.06, 2.4, d2.x - 1.27, d2.y + 0.95, d2.z, PINK, this.root, 0.6);
+      for (const s of [-1, 1]) { const pv = new TransformNode("fvPlatter2", sc); pv.parent = this.root; pv.position.set(d2.x - 0.9, d2.y + 1.03, d2.z + s * 0.65); const pl = MB.CreateCylinder("fvPl2", { diameter: 0.5, height: 0.04, tessellation: 16 }, sc); pl.parent = pv; pl.material = toon(sc, "#1b1420"); pl.isPickable = false; this.feverPlatters.push(pv); }
+      for (const b of this.arena.boxes) if (b.deco === "canopy") { strip(b.w + 0.04, 0.12, 0.06, b.x, b.y - 0.1, b.z - b.d / 2, PINK, this.root, 0.3); strip(b.w + 0.04, 0.12, 0.06, b.x, b.y - 0.1, b.z + b.d / 2, PINK, this.root, 0.9); strip(0.06, 0.12, b.d, b.x - b.w / 2, b.y - 0.1, b.z, PINK, this.root, 1.5); }
+      for (const b of this.arena.boxes) if (b.deco === "crown") {
+        const nm = neon("NEON FEVER DREAM", CYAN, 6, 0.8);
+        plane(Math.min(6, b.w - 0.1), 0.8, b.x, b.y, b.z - b.d / 2 - 0.05, 0, -1, nm); plane(Math.min(6, b.d - 0.1), 0.8, b.x - b.w / 2 - 0.05, b.y, b.z, -1, 0, nm);
+        strip(b.w + 0.06, 0.08, b.d + 0.06, b.x, b.y + b.h / 2 + 0.02, b.z, PURPLE, this.root, 2.2);
+      }
+      plane(3.6, 0.7, P.minX - 0.05, RY + 3.4, (P.minZ + P.maxZ) / 2, -1, 0, neon("LIL PANDA", PURPLE, 3.6, 0.7));
+      // string lights over the roof's dance floor
+      { const bulbs: Mesh[] = []; for (const z of [12, 17, 22, 27]) for (let i = 0; i <= 12; i++) { const x = r.minX + 3 + i * (P.minX - r.minX - 4) / 12, sag = Math.sin(i / 12 * Math.PI) * 0.4; const b = MB.CreateSphere("fvBulb", { diameter: 0.14, segments: 4 }, sc); b.position.set(x, RY + 3.2 - sag, z); bulbs.push(b); }
+        const mb = Mesh.MergeMeshes(bulbs, true); if (mb) { mb.material = glow("#ffd8ff"); mb.parent = this.root; mb.isPickable = false; }
+        for (const z of [12, 17, 22, 27]) { cyl(0.08, 3.4, r.minX + 2.6, RY + 1.7, z, "#1b1420", 0.01, 6); const w = MB.CreateBox("fvCable", { width: P.minX - r.minX - 2.6, height: 0.02, depth: 0.02 }, sc); w.position.set((r.minX + 2.6 + P.minX) / 2, RY + 3.3, z); this.add(w, "#1b1420", 0, false); } }
+      // the sky beams (night): two big searchlights off the pavilion, seen right across town
+      for (let q = 0; q < 2; q++) {
+        const pv = new TransformNode("fvBeamPivot", sc); pv.parent = this.root; pv.position.set(P.minX + 1 + q * (P.maxX - P.minX - 2), RY + 4.4, P.minZ + 0.6);
+        const m = MB.CreateCylinder("fvBeam", { diameterTop: 5, diameterBottom: 0.4, height: 70, tessellation: 12 }, sc); m.position.y = 35; m.parent = pv; m.isPickable = false;
+        const mat = new StandardMaterial("fvBeamMat", sc); mat.disableLighting = true; mat.emissiveColor = Color3.FromHexString(q ? "#b04dff" : "#3d7bff"); mat.alpha = 0.08; mat.backFaceCulling = false; m.material = mat;
+        this.feverBeams.push({ pivot: pv, mat, ph: q * 2.4 });
+      }
+    }
+    // ---------------------------------------------------------------- the people (looks only): instanced, so 45 cost a few draw calls
+    {
+      const detail = this.detail;
+      const shirts = ["#ff3cd2", "#3df0ff", "#ffd54a", "#b04dff", "#f4f1ea", "#5aff7a"];
+      const skins = ["#f0c8a0", "#c98a5a", "#8a5a3a", "#f7d9b8"];
+      const src = (mk: () => Mesh, col: string, emis = 0.25) => { const m = mk(); const mat = new StandardMaterial("fvPpl" + col, sc); mat.diffuseColor = Color3.FromHexString(col); mat.emissiveColor = Color3.FromHexString(col).scale(emis); mat.specularColor = Color3.Black(); m.material = mat; m.parent = dyn; m.position.y = -500; m.isPickable = false; return m; };
+      const bodies = shirts.map((c) => src(() => MB.CreateCylinder("fvBody", { diameterTop: 0.36, diameterBottom: 0.44, height: 0.8, tessellation: 8 }, sc), c));
+      const arms = shirts.map((c) => src(() => MB.CreateCylinder("fvArm", { diameter: 0.1, height: 0.55, tessellation: 5 }, sc), c));
+      const heads = skins.map((c) => src(() => MB.CreateSphere("fvHead", { diameter: 0.34, segments: 6 }, sc), c, 0.15));
+      const legs = src(() => MB.CreateBox("fvLegs", { width: 0.34, height: 0.55, depth: 0.22 }, sc), "#1b1a2a", 0.1);
+      const hair = ["#1b1420", "#ffd54a", "#ff3cd2", "#5a3a24"].map((c) => src(() => MB.CreateSphere("fvHair", { diameter: 0.36, segments: 5, slice: 0.5 }, sc), c, 0.2));
+      const sticks = ["#5aff7a", "#ff3cd2", "#3df0ff"].map((c) => { const m = MB.CreateCylinder("fvStick", { diameter: 0.04, height: 0.3, tessellation: 4 }, sc); m.material = glow(c); m.parent = dyn; m.position.y = -500; m.isPickable = false; return m; });
+      let id = 0;
+      const person = (x: number, y: number, z: number, yaw: number, night: boolean, scale = 1) => {
+        const i = id++;
+        const n = new TransformNode("fvPerson", sc); n.parent = dyn; n.position.set(x, y, z); n.rotation.y = yaw; n.scaling.setAll(scale);
+        const inst = (s: Mesh, px: number, py: number, pz: number, parent: TransformNode = n) => { const m = s.createInstance("fvI"); m.parent = parent; m.position.set(px, py, pz); m.isPickable = false; return m; };
+        inst(bodies[i % shirts.length], 0, 0.95, 0); inst(legs, 0, 0.3, 0); inst(heads[i % skins.length], 0, 1.55, 0); inst(hair[(i * 7) % 4], 0, 1.58, 0);
+        const sh: TransformNode[] = [];
+        for (const s of [-1, 1]) { const p = new TransformNode("fvShoulder", sc); p.parent = n; p.position.set(s * 0.24, 1.28, 0); inst(arms[i % shirts.length], 0, -0.27, 0, p); sh.push(p); }
+        if (i % 3 === 0) inst(sticks[i % 3], 0, -0.55, 0, sh[1]);
+        this.feverPeople.push({ n, armL: sh[0], armR: sh[1], ph: hash(i, 5) * 6, y, night, air: 0, vy: 0 });
+        return { n, armL: sh[0], armR: sh[1] };
+      };
+      const pick = (rect: { minX: number; maxX: number; minZ: number; maxZ: number }, n: number, y: number, seed: number, ok: (x: number, z: number) => boolean, faceTo?: [number, number]) => {
+        let made = 0;
+        for (let q = 0; q < 400 && made < n; q++) {
+          const x = rect.minX + 0.5 + hash(q, seed) * (rect.maxX - rect.minX - 1), z = rect.minZ + 0.5 + hash(seed, q) * (rect.maxZ - rect.minZ - 1);
+          if (!ok(x, z) || this.feverPeople.some((p) => Math.abs(p.y - y) < 1 && Math.hypot(p.n.position.x - x, p.n.position.z - z) < 0.9)) continue;
+          person(x, y, z, faceTo ? Math.atan2(faceTo[0] - x, faceTo[1] - z) + (hash(q, 2) - 0.5) : hash(q, 9) * 6.28, made >= Math.ceil(n / 3));
+          made++;
+        }
+      };
+      const notIn = (q: { minX: number; maxX: number; minZ: number; maxZ: number }, m: number) => (x: number, z: number) => !(x > q.minX - m && x < q.maxX + m && z > q.minZ - m && z < q.maxZ + m);
+      const f1 = detail ? 1 : 0.55;
+      // floor 1: under the atrium, at the bar
+      pick(A, Math.round(10 * f1), 0.2, 11, () => true, [ax, az]);
+      pick({ minX: F.bar.minX, maxX: F.bar.maxX, minZ: F.bar.minZ - 1.4, maxZ: F.bar.minZ - 0.3 }, Math.round(5 * f1), 0.2, 13, () => true, [94, r.maxZ]);
+      // floor 2: round the atrium (facing the DJ), on the stages, on the catwalk
+      const dj = F.dj;
+      pick(F.dance2, Math.round(14 * f1), Y2, 17, (x, z) => notIn(A, 0.4)(x, z) && notIn(F.stages[0], 0.3)(x, z) && notIn(F.stages[1], 0.3)(x, z), [dj.x, dj.z]);
+      for (const s of F.stages) pick(s, 2, Y2 + 0.7, 19 + s.minZ, () => true, [dj.x, dj.z]);
+      pick(F.catwalk, detail ? 2 : 1, Y2, 23, () => true, [dj.x, dj.z]);
+      // the roof: round the glass floor (facing LIL PANDA)
+      pick(F.danceRoof, Math.round(10 * f1), RY, 29, (x, z) => notIn(A, 0.4)(x, z) && notIn(F.stairs2, 0.6)(x, z), [F.dj2.x, F.dj2.z]);
+      // the two DJs: raccoons in LED helmets
+      const raccoon = (x: number, y: number, z: number, yaw: number, scale: number, helmet: string) => {
+        const n = new TransformNode("fvPanda", sc); n.parent = dyn; n.position.set(x, y, z); n.rotation.y = yaw; n.scaling.setAll(scale);
+        const p = (m: Mesh, col: string | StandardMaterial, px: number, py: number, pz: number, parent: TransformNode = n) => { m.parent = parent; m.position.set(px, py, pz); m.material = typeof col === "string" ? toon(sc, col) : col; ink(m, 0.02); m.isPickable = false; return m; };
+        p(MB.CreateCapsule("pBody", { height: 1.1, radius: 0.34, tessellation: 8 }, sc), "#8a8a96", 0, 0.75, 0);
+        p(MB.CreateSphere("pBelly", { diameter: 0.5, segments: 8 }, sc), "#c8c8d0", 0, 0.75, 0.15).scaling.set(1, 1.2, 0.6);
+        const head = new TransformNode("pHead", sc); head.parent = n; head.position.y = 1.5;
+        p(MB.CreateSphere("pSkull", { diameter: 0.58, segments: 10 }, sc), "#8a8a96", 0, 0, 0, head);
+        p(MB.CreateBox("pMask", { width: 0.56, height: 0.14, depth: 0.1 }, sc), "#1b1420", 0, 0.02, 0.24, head);
+        p(MB.CreateSphere("pSnout", { diameter: 0.22, segments: 6 }, sc), "#e8e8ee", 0, -0.1, 0.26, head);
+        p(MB.CreateSphere("pNose", { diameter: 0.08, segments: 4 }, sc), "#1b1420", 0, -0.08, 0.37, head);
+        for (const s of [-1, 1]) p(MB.CreateCylinder("pEar", { diameterTop: 0, diameterBottom: 0.18, height: 0.2, tessellation: 4 }, sc), "#6a6a76", s * 0.2, 0.3, 0, head);
+        // the LED helmet: a glowing dome and a visor strip
+        const dome = MB.CreateSphere("pHelmet", { diameter: 0.68, segments: 10, slice: 0.55 }, sc); dome.parent = head; dome.position.y = 0.04; dome.material = glow(helmet, 0.55); dome.isPickable = false;
+        strip(0.5, 0.07, 0.06, 0, 0.02, 0.31, helmet, head, 0.2);
+        for (let q = 0; q < 5; q++) p(MB.CreateCylinder("pTail", { diameter: 0.2 - q * 0.02, height: 0.18, tessellation: 8 }, sc), q % 2 ? "#1b1420" : "#a8a8b4", 0, 0.45 + q * 0.03, -0.38 - q * 0.16).rotation.x = 1.1;
+        const sh: TransformNode[] = [];
+        for (const s of [-1, 1]) { const so = new TransformNode("pShoulder", sc); so.parent = n; so.position.set(s * 0.36, 1.12, 0.05); p(MB.CreateCylinder("pArm", { diameter: 0.14, height: 0.6, tessellation: 6 }, sc), "#8a8a96", 0, -0.3, 0, so); p(MB.CreateSphere("pPaw", { diameter: 0.17, segments: 5 }, sc), "#1b1420", 0, -0.62, 0, so); sh.push(so); }
+        this.feverPeople.push({ n, armL: sh[0], armR: sh[1], ph: 0, y, night: false, dj: true, air: 0, vy: 0 });
+      };
+      raccoon(dj.x, dj.y, dj.z, dj.yaw, 1.25, CYAN);
+      raccoon(F.dj2.x, F.dj2.y, F.dj2.z, F.dj2.yaw, 0.95, PINK);
+      // the queue outside (night): up Market Row's pavement from the rope
+      if (detail) for (let q = 0; q < 7; q++) person(r.minX - 1.2 + (q % 2) * 0.35, 0.15, MZ + 2.5 + q * 1.15, Math.PI, true);
+      // a bartender (behind the bar, shaking)
+      person(92.5, 0.2, F.bar.maxZ + 0.6, Math.PI, false);
+    }
+    // ---------------------------------------------------------------- merge the static glow
+    for (const [key, list] of statics) {
+      const [col, ins] = key.split("|");
+      for (let i = 0; i < list.length; i += 800) {
+        const m = Mesh.MergeMeshes(list.slice(i, i + 800), true, true);
+        if (!m) continue;
+        m.material = glow(col); m.isPickable = false; m.parent = ins === "1" ? dyn : this.root;
+      }
+    }
+    dyn.setEnabled(false);
+  }
+
+  /** R11: the DROP: confetti from the rig, smoke off the stages, everybody jumps */
+  feverDrop() {
+    const F = this.arena.fever;
+    if (!F || !this.feverNear) return;
+    const A = F.atrium, cols = ["#ff3cd2", "#3df0ff", "#ffd54a", "#b04dff", "#5aff7a", "#f4f1ea"];
+    if (!this.feverFxMats.length) for (const c of cols) { const m = new StandardMaterial("fvConf" + c, this.scene); m.disableLighting = true; m.emissiveColor = Color3.FromHexString(c); m.backFaceCulling = false; this.feverFxMats.push(m); }
+    if (!this.feverSmokeMat) { const m = new StandardMaterial("fvSmoke", this.scene); m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#c8b8ff"); m.alpha = 0.18; this.feverSmokeMat = m; }
+    const n = this.detail ? 80 : 30;
+    for (let i = 0; i < n; i++) {
+      const m = MeshBuilder.CreatePlane("fvConfetti", { width: 0.12, height: 0.08 }, this.scene); m.material = this.feverFxMats[i % cols.length]; m.isPickable = false; m.parent = this.feverDyn;
+      const x = A.minX - 3 + Math.random() * (A.maxX - A.minX + 6), z = A.minZ - 3 + Math.random() * (A.maxZ - A.minZ + 6);
+      m.position.set(x, F.roofY - 1.4, z);
+      this.feverFx.push({ m, vx: (Math.random() - 0.5) * 2, vy: -0.5 - Math.random(), vz: (Math.random() - 0.5) * 2, t: 6 + Math.random() * 3, t0: 9, spin: (Math.random() - 0.5) * 14, smoke: false, floorY: x > A.minX && x < A.maxX && z > A.minZ && z < A.maxZ ? 0.25 : F.y2 + 0.03 });
+    }
+    for (const s of F.stages) for (let i = 0; i < (this.detail ? 6 : 3); i++) {
+      const m = MeshBuilder.CreateSphere("fvSmokePuff", { diameter: 1, segments: 5 }, this.scene); m.material = this.feverSmokeMat; m.isPickable = false; m.parent = this.feverDyn;
+      m.position.set((s.minX + s.maxX) / 2 + (Math.random() - 0.5), F.y2 + 0.8, (s.minZ + s.maxZ) / 2 + (Math.random() - 0.5));
+      this.feverFx.push({ m, vx: (Math.random() - 0.5) * 1.5, vy: 2 + Math.random() * 2, vz: (Math.random() - 0.5) * 1.5, t: 3.5, t0: 3.5, spin: 0, smoke: true, floorY: 0 });
+    }
+    for (const p of this.feverPeople) if (!p.dj && p.air <= 0) { p.vy = 3 + Math.random() * 1.5; p.air = 1; }
+  }
+
+  /** R11: everything that moves at NEON FEVER DREAM (inside: only worked out when you're near). level: 0 outside,
+   *  1-2 the floors, 3 the roof (the camera's) */
+  updateFever(dt: number, clock: number, night: number, camX: number, camY: number, camZ: number, level: number) {
+    const F = this.arena.fever, dyn = this.feverDyn;
+    if (!F || !dyn) return;
+    void camY; void level;
+    const r = F.rect, cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
+    const near = Math.hypot(camX - cx, camZ - cz) < 100;
+    if (near !== this.feverNear) { this.feverNear = near; dyn.setEnabled(near); }
+    this.feverT += dt;
+    const t = this.feverT, at = feverAt(clock), beat = at.beat, pulse = Math.pow(1 - beat, 2.2);
+    const drop = at.part === "drop", build = at.part === "build";
+    const energy = drop ? 1 : build ? 0.55 + at.k * 0.45 : 0.45 + 0.1 * Math.sin(t);
+    // the neon breathes with the kick (brighter at night)
+    const nk = 0.55 + night * 0.45;
+    for (const s of this.feverStrips) { const fl = nk * (0.75 + 0.25 * (drop ? pulse : 0.5 + 0.5 * Math.sin(t * 1.3 + s.ph))); s.mat.emissiveColor = s.col.scale(fl); }
+    // the sky beams (night only), swaying
+    for (const b of this.feverBeams) { b.pivot.setEnabled(night > 0.3); b.pivot.rotation.z = Math.sin(t * 0.25 + b.ph) * 0.5; b.pivot.rotation.x = Math.cos(t * 0.19 + b.ph) * 0.35; b.mat.alpha = 0.05 + 0.05 * night + (drop ? 0.04 * pulse : 0); }
+    for (const pv of this.feverPlatters) pv.rotation.y += dt * 3.5;
+    // the people (the roof's and the queue are drawn with the rest: all under dyn)
+    if (!near) return;
+    for (const p of this.feverPeople) {
+      if (!p.dj) p.n.setEnabled(!p.night || night > 0.35);
+      if (p.air > 0) { p.vy -= 14 * dt; p.n.position.y += p.vy * dt; if (p.n.position.y <= p.y) { p.n.position.y = p.y; p.air = 0; } p.armL.rotation.z = 2.7; p.armR.rotation.z = -2.7; continue; }
+      const ph = p.ph, bob = Math.abs(Math.sin(Math.PI * (clock * 128 / 60) + ph * 0.2)) * (p.dj ? 0.06 : 0.1 + energy * 0.12);
+      p.n.position.y = p.y + bob + (drop && !p.dj ? Math.max(0, Math.sin(Math.PI * clock * 128 / 60 + ph)) * 0.18 : 0);
+      if (p.dj) { const up = drop ? 2.6 + Math.sin(t * 8) * 0.3 : build ? 0.8 + at.k * 1.9 : 0.5 + Math.abs(Math.sin(t * 3)) * 0.5; p.armL.rotation.z = up; p.armR.rotation.z = -(drop ? up : 0.6 + Math.abs(Math.sin(t * 4.1)) * 0.3); continue; }
+      const up = drop ? 2.5 + Math.sin(t * 9 + ph) * 0.3 : build ? 0.6 + at.k * 2.1 + Math.sin(t * 16 + ph) * 0.15 * at.k : 0.4 + Math.abs(Math.sin(t * 2.07 + ph)) * 1.4;
+      p.armL.rotation.z = up; p.armR.rotation.z = -(drop || build ? up : 0.4 + Math.abs(Math.cos(t * 1.9 + ph)) * 1.7);
+      p.n.rotation.y += Math.sin(t * 0.5 + ph) * dt * 0.5;
+    }
+    // the rig: chase on the groove, strobe on the drop, everything white at the top of the build
+    this.feverRig.forEach((m, g) => {
+      const on = drop ? (Math.floor(beat * 4) % 3 === g ? 1 : 0.15) * (0.4 + pulse * 0.8) : build ? (at.k > 0.9 ? 1 : (Math.floor(t * (4 + at.k * 20)) % 3 === g ? 1 : 0.1)) : (Math.floor(t * 2) % 3 === g ? 0.8 : 0.15);
+      const base = g === 2 ? [1, 1, 1] : g === 0 ? [1, 0.24, 0.82] : [0.24, 0.94, 1];
+      m.emissiveColor = new Color3(base[0] * on, base[1] * on, base[2] * on);
+    });
+    // lasers: slow sweeps on the groove, fast on the build, a fan on the drop
+    const wild = drop ? 1.6 : build ? 0.6 + at.k * 3 : 0.5;
+    for (const l of this.feverLasers) {
+      l.pivot.rotation.y = Math.sin(t * l.spd * wild + l.ph) * 1.3 + l.ph;
+      l.pivot.rotation.x = 0.6 + Math.sin(t * l.spd * 0.7 * wild + l.ph * 1.3) * 0.45;
+      l.mat.alpha = (drop ? 0.35 + 0.5 * pulse : build ? 0.25 + 0.3 * at.k : 0.22) * (0.7 + night * 0.3);
+    }
+    // the LED floor and the equaliser wall (redrawn ~20 times a second)
+    const led = this.feverLed;
+    if (led && (led.t += dt) > 0.05) {
+      led.t = 0;
+      const c = led.ctx, N = 16, S = 256 / N, k = clock * 128 / 60;
+      c.fillStyle = "#05030c"; c.fillRect(0, 0, 256, 256);
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const dx = i - N / 2 + 0.5, dz = j - N / 2 + 0.5, d = Math.sqrt(dx * dx + dz * dz);
+        const w = drop ? 0.5 + 0.5 * Math.sin(d * 0.9 - k * Math.PI) : build ? 0.5 + 0.5 * Math.sin((i + j) * 0.6 - t * (3 + at.k * 14)) : 0.5 + 0.5 * Math.sin(i * 0.5 + t * 1.2) * Math.sin(j * 0.45 - t * 0.9);
+        const v = Math.min(1, w * (drop ? 0.55 + pulse * 0.6 : 0.65));
+        const hue = drop ? (d * 18 + k * 30) % 360 : build ? 270 + 40 * Math.sin(t + i * 0.2) : 230 + 50 * Math.sin(t * 0.3 + j * 0.15);
+        c.fillStyle = `hsl(${hue.toFixed(0)}, 95%, ${(8 + v * 55).toFixed(0)}%)`;
+        c.fillRect(i * S + 1, j * S + 1, S - 2, S - 2);
+      }
+      led.tex.update(false);
+      const eq = this.feverEq;
+      if (eq) {
+        const e = eq.ctx; e.fillStyle = "#07030e"; e.fillRect(0, 0, 512, 256);
+        for (let q = 0; q < 32; q++) {
+          const h = (0.25 + 0.75 * Math.abs(Math.sin(q * 0.7 + t * (2 + (q % 5)) + Math.sin(t * 0.7 + q)))) * (drop ? 0.55 + pulse * 0.45 : build ? 0.3 + at.k * 0.6 : 0.35 + 0.15 * pulse);
+          const g = e.createLinearGradient(0, 256, 0, 256 - h * 240); g.addColorStop(0, "#ff3cd2"); g.addColorStop(1, drop ? "#ffffff" : "#b04dff");
+          e.fillStyle = g; e.fillRect(q * 16 + 2, 256 - h * 240, 12, h * 240);
+        }
+        eq.tex.update(false);
+      }
+    }
+    // confetti and smoke
+    for (let i = this.feverFx.length - 1; i >= 0; i--) {
+      const c = this.feverFx[i];
+      c.t -= dt;
+      if (c.t <= 0) { c.m.dispose(); this.feverFx.splice(i, 1); continue; }
+      if (c.smoke) { c.vy *= 1 - dt * 0.8; c.m.scaling.setAll(1 + (1 - c.t / c.t0) * 3); c.m.position.x += c.vx * dt; c.m.position.y += c.vy * dt; c.m.position.z += c.vz * dt; continue; }
+      c.vy = Math.max(-0.9, c.vy - 3 * dt);
+      c.m.position.x += c.vx * dt; c.m.position.z += c.vz * dt; c.m.position.y = Math.max(c.floorY, c.m.position.y + c.vy * dt);
+      if (c.m.position.y > c.floorY) { c.m.rotation.x += c.spin * dt; c.m.rotation.y += c.spin * 0.6 * dt; }
+    }
+  }
+
   /** C5c.3: the DROP just happened: confetti cannons */
   clubBurst() {
     const C = this.arena.club;
@@ -3684,7 +4166,13 @@ export class CityRenderer {
       const cw = 9, cd = 3.4, cy = 3.25;
       bx(cw, 0.32, cd, 0, cy, fz + cd / 2, "#3a4558", 0.03, true);
       bx(cw + 0.1, 0.12, cd + 0.1, 0, cy - 0.2, fz + cd / 2, "#2f5a9a", 0.015);
-      for (const sx of [-1, 1]) { const s = bx(0.16, 2.2, 0.16, sx * 2.6, cy - 1.0, fz + 1.6, "#3a4558", 0.012); s.rotation.x = -0.6; }
+      // (R9: two tie rods from the canopy's front corners up to the wall above it, with a plate where each meets the wall)
+      for (const sx of [-1, 1]) {
+        const ax = sx * 3.9, A = new Vector3(ax, cy + 0.12, fz + cd - 0.25), Bp = new Vector3(ax, cy + 1.9, fz + 0.04), len = Vector3.Distance(A, Bp);
+        const rod = MB.CreateBox("pdTie", { width: 0.1, height: 0.1, depth: len }, sc); rod.position.copyFrom(A.add(Bp).scale(0.5)); rod.lookAt(Bp); this.add(rod, "#3a4558", 0.008, false);
+        bx(0.32, 0.32, 0.06, ax, cy + 1.9, fz + 0.03, "#3a4558", 0.006);
+        bx(0.2, 0.2, 0.2, ax, cy + 0.2, fz + cd - 0.25, "#3a4558", 0.006);
+      }
       const t = textTexture(sc, "POLICE", { w: 1024, h: 220, fg: "#f4f1ea", stroke: "#3a4558" });
       const m = new StandardMaterial("pdPolice", sc); m.diffuseTexture = t; m.emissiveTexture = t; m.useAlphaFromDiffuseTexture = true; m.disableLighting = true; m.emissiveColor = new Color3(1, 1, 1); m.backFaceCulling = false;
       plane(6.4, 1.2, 0, cy + 0.78, fz + cd - 0.35, 0, 1, m);
@@ -3712,7 +4200,7 @@ export class CityRenderer {
     {
       const gw = 4.4, gz = fz + 0.3, top = y1 + 2.2;
       bx(gw, top - GH, 1.0, 0, GH + (top - GH) / 2, gz - 0.2, "#2b3a55", 0.03, true);
-      const cw2 = MB.CreatePlane("curt", { width: gw - 0.4, height: top - GH - 0.6 }, sc); cw2.position.set(0, GH + (top - GH) / 2, gz + 0.32); cw2.rotation.y = Math.PI; scaleUVs(cw2, 2, Math.round((top - GH) / 2.2)); this.planes.curtain.push(cw2);
+      const cw2 = MB.CreatePlane("curt", { width: gw - 0.4, height: top - GH - 0.6 }, sc); cw2.position.set(0, GH + (top - GH) / 2, gz + 0.42); cw2.rotation.y = Math.PI; scaleUVs(cw2, 2, Math.round((top - GH) / 2.2)); this.planes.curtain.push(cw2);
       for (const sx of [-1, 1]) bx(0.7, top - GH + 0.6, 1.2, sx * (gw / 2 + 0.3), GH + (top - GH) / 2 + 0.3, gz - 0.2, "#e8e2d4", 0.03, true);
       bx(gw + 2.2, 0.5, 1.8, 0, top + 0.6, gz - 0.2, "#2f5a9a", 0.03);
       const star = MB.CreateCylinder("pdStar", { diameter: 1.4, height: 0.14, tessellation: 6 }, sc); star.rotation.x = Math.PI / 2; star.position.set(0, top - 1.0, gz + 0.45); this.add(star, "#d9a632", 0.02, false);
@@ -3792,12 +4280,27 @@ export class CityRenderer {
       const glowBox = (w: number, hh: number, d: number, x: number, y: number, z: number, col: string) => { const m = MB.CreateBox("pdGlow", { width: w, height: hh, depth: d }, sc); m.position.set(x, y, z); m.material = this.glowMat(col); m.parent = this.root; m.isPickable = false; return inG(m); };
       const sph = (dia: number, x: number, y: number, z: number, col: string, outline = 0.01) => { const m = MB.CreateSphere("pds", { diameter: dia, segments: 6 }, sc); m.position.set(x, y, z); this.add(m, col, outline, false); return m; };
       const tile = (list: Mesh[], w: number, hh: number, x: number, y: number, z: number, nx: number, nz: number, t = 1.2) => { const p = MB.CreatePlane("pdt", { width: w, height: hh }, sc); p.position.set(x + nx * 0.1, y, z + nz * 0.1); p.rotation.y = Math.atan2(-nx, -nz); scaleUVs(p, w / t, hh / t); list.push(p); return p; };
+      // R10: big grey floor tiles, and a two-tone band with a rail round the walls (the station was too bland)
+      const floorTiles = (r: { minX: number; maxX: number; minZ: number; maxZ: number }, y: number, t: number) => {
+        const p = MB.CreatePlane("pdFloor", { width: r.maxX - r.minX, height: r.maxZ - r.minZ }, sc);
+        p.position.set((r.minX + r.maxX) / 2, y, (r.minZ + r.maxZ) / 2); p.rotation.x = Math.PI / 2;
+        scaleUVs(p, (r.maxX - r.minX) / t, (r.maxZ - r.minZ) / t); this.planes.floorTile.push(p);
+      };
+      const wallBands = (floorY: number) => {
+        for (const b of this.arena.boxes) {
+          const base = b.y - b.h / 2;
+          if (b.kind !== "wall" || !(Math.abs(base - floorY) < 0.1 ? b.h >= 2.4 : floorY > 0 && base < 0.1 && b.y + b.h / 2 > floorY + 2.4) || !(b.x > R0.minX && b.x < R0.maxX && b.z > R0.minZ && b.z < R0.maxZ)) continue;
+          bx(b.w + 0.12, 1.0, b.d + 0.12, b.x, floorY + 0.5, b.z, "#8a97ab", 0); // (clear of the wall's outline)
+          bx(b.w + 0.17, 0.07, b.d + 0.17, b.x, floorY + 1.02, b.z, "#4a5568", 0);
+        }
+      };
       // ======== GROUND FLOOR ========
       this.group = 9001;
-      const L = g.lobby, Hl = g.hall;
+      floorTiles({ minX: x0, maxX: x1, minZ: R0.minZ + 0.4, maxZ: R0.maxZ - 0.4 }, 0.22, 2.4); // (clear of the floor's outline)
+      wallBands(0);
+      const Hl = g.hall;
       // the lobby: polished floor bands, the front desk's monitor and bell and sign, the crest over the hallway door,
       // wanted posters, a flag, ceiling lights
-      for (let i = 0; i < 6; i++) bx(L.maxX - L.minX - 0.2, 0.012, 0.18, (L.minX + L.maxX) / 2, 0.04, L.maxZ - 0.6 - i * 1.2, "#b8b2a6", 0);
       const deskZ = V(4.0);
       bx(0.5, 0.36, 0.05, -1.2, 1.38, deskZ - 0.3, "#1b1420", 0.01); bx(0.1, 0.2, 0.1, -1.2, 1.18, deskZ - 0.3, "#3a3444", 0);
       bx(0.5, 0.36, 0.05, 1.4, 1.38, deskZ - 0.3, "#1b1420", 0.01); bx(0.1, 0.2, 0.1, 1.4, 1.18, deskZ - 0.3, "#3a3444", 0);
@@ -3810,8 +4313,8 @@ export class CityRenderer {
       sign("PLEASE TAKE A NUMBER (THERE ARE NO NUMBERS)", 2.6, 0.4, -4.6, 2.6, V(7.6) + 0.02, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
       for (const [x, v] of [[-4, 2.5], [4, 2.5], [-4, 6], [4, 6], [0, 6.5]] as [number, number][]) glowBox(1.2, 0.06, 0.3, x, 4.44, V(v), "#f4f6ff");
       // the stairs: a handrail, a sign
-      { const st0 = g.stairs; const hx = st0.maxX + 0.05; for (const k of [0, 0.25, 0.5, 0.75, 1]) bx(0.05, 1.0, 0.05, hx, 0.5 + UY * k * 0.95, st0.maxZ - (st0.maxZ - st0.minZ) * k, "#c8c4cc", 0.004);
-        const hr = bx(0.06, 0.06, Math.hypot(st0.maxZ - st0.minZ, UY) + 0.2, hx, 1.0 + UY / 2, (st0.minZ + st0.maxZ) / 2, "#c8c4cc", 0.006); hr.rotation.x = -Math.atan2(UY, st0.maxZ - st0.minZ); }
+      { const st0 = g.stairs; const hx = st0.maxX - 0.08; /* (R9: on the treads, not hanging off the side) */ for (const k of [0.04, 0.27, 0.5, 0.73, 0.96]) bx(0.05, 1.0, 0.05, hx, 0.5 + 0.18 + (UY - 0.18) * k, st0.maxZ - (st0.maxZ - st0.minZ) * k, "#c8c4cc", 0.004);
+        const hr = bx(0.06, 0.06, Math.hypot(st0.maxZ - st0.minZ, UY - 0.18) + 0.2, hx, 1.06 + UY / 2, (st0.minZ + st0.maxZ) / 2, "#c8c4cc", 0.006); hr.rotation.x = Math.atan2(UY - 0.18, st0.maxZ - st0.minZ); /* (R9: the +z end is the bottom) */ }
       sign("UPSTAIRS: STAFF ONLY. EVIDENCE: DEFINITELY STAFF ONLY.", 1.8, 0.5, x0 + 0.6, 2.6, V(0.45), 0, -1, { bg: "#c41e3a", fg: "#f4f1ea" });
       // the hallway: lights, signs over the doors, a notice board, a water fountain, a mop and bucket
       for (let v = 9.0; v < 22; v += 2.6) glowBox(0.9, 0.06, 0.3, 0, 4.44, V(v), "#f4f6ff");
@@ -3881,28 +4384,34 @@ export class CityRenderer {
       { const sw = g.stairs; // (R8: the carpet goes round the stairwell, not over it)
         bx(up.maxX - sw.maxX - 0.05, 0.02, up.maxZ - up.minZ - 0.1, (sw.maxX + up.maxX) / 2, UY + 0.012, (up.minZ + up.maxZ) / 2, "#5a6478", 0);
         bx(sw.maxX - up.minX - 0.05, 0.02, sw.minZ - up.minZ - 0.1, (up.minX + sw.maxX) / 2, UY + 0.012, (up.minZ + sw.minZ) / 2, "#5a6478", 0);
-        bx(sw.minX - up.minX - 0.08, 0.02, up.maxZ - sw.minZ, (up.minX + sw.minX) / 2, UY + 0.012, (sw.minZ + up.maxZ) / 2, "#5a6478", 0); }
+        // (R10: carpet tiles you can see, and the wall band up here too)
+        floorTiles({ minX: sw.maxX + 0.03, maxX: up.maxX - 0.03, minZ: up.minZ + 0.05, maxZ: up.maxZ - 0.05 }, UY + 0.07, 1.0);
+        floorTiles({ minX: up.minX + 0.03, maxX: sw.maxX - 0.03, minZ: up.minZ + 0.05, maxZ: sw.minZ - 0.05 }, UY + 0.07, 1.0);
+        wallBands(UY);
+ }
       for (let v = 2; v < 22; v += 3.2) for (const x of [-6.5, 0, 6.5]) glowBox(1.2, 0.06, 0.3, x, 8.95, V(v), "#f4f6ff");
       // the chief's corner office: a big desk (nameplate, a lamp, a golf putter), a trophy fish, a flag, blinds
       const ch = g.chief, cmx = (ch.minX + ch.maxX) / 2;
       sign("CHIEF O'NOTHING", 0.8, 0.2, 7.4, UY + 0.92, V(3.0) - 0.47, 0, -1, { bg: "#d9a632", fg: "#1b1420" });
       cyl(0.04, 0.5, 8.3, UY + 1.05, V(3.0), "#1b1420", 0); glowBox(0.25, 0.15, 0.25, 8.3, UY + 1.35, V(3.0), "#fff2c8");
-      { const fish = sph(0.5, cmx, UY + 2.4, ch.minZ + 0.3, "#5a9e8a", 0.012); fish.scaling.set(1.8, 0.7, 0.2); }
-      bx(1.0, 0.6, 0.05, cmx, UY + 2.4, ch.minZ + 0.2, "#5a3a24", 0.01);
-      sign("WORLD'S OKAYEST CHIEF", 1.4, 0.3, cmx, UY + 3.1, ch.minZ + 0.15, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
+      { const fish = sph(0.5, cmx, UY + 2.4, ch.minZ + 0.36, "#5a9e8a", 0.012); fish.scaling.set(1.8, 0.7, 0.2); }
+      bx(1.0, 0.6, 0.05, cmx, UY + 2.4, ch.minZ + 0.27, "#5a3a24", 0.01);
+      sign("WORLD'S OKAYEST CHIEF", 1.4, 0.3, cmx, UY + 3.1, ch.minZ + 0.14, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
       // wood panelling, a rug, a bookcase, a bowling trophy
-      tile(this.planes.clapboard, ch.maxX - ch.minX - 0.3, 3.9, cmx, UY + 2.05, ch.minZ + 0.15, 0, 1, 1.4);
-      tile(this.planes.clapboard, ch.maxZ - ch.minZ - 0.3, 3.9, ch.minX + 0.15, UY + 2.05, (ch.minZ + ch.maxZ) / 2, 1, 0, 1.4);
-      bx(3.0, 0.015, 2.6, 7.4, UY + 0.03, V(3.4), "#7a1a2a", 0); bx(2.6, 0.016, 2.2, 7.4, UY + 0.035, V(3.4), "#c9a227", 0);
+      // (R10: on the walls' faces; the west wall's panelling stops at the doorway and carries on over it)
+      tile(this.planes.clapboard, ch.maxX - ch.minX - 0.3, 3.9, cmx, UY + 2.05, ch.minZ + 0.11, 0, 1, 1.4);
+      for (const [va, vb, y0, y1] of [[0.45, 4.5, 0.1, 4.0], [4.5, 6.0, 2.6, 4.0], [6.0, 6.25, 0.1, 4.0]] as [number, number, number, number][])
+        tile(this.planes.clapboard, vb - va, y1 - y0, ch.minX - 0.04, UY + (y0 + y1) / 2, V((va + vb) / 2), 1, 0, 1.4);
+      bx(3.0, 0.015, 2.6, 7.4, UY + 0.085, V(3.4), "#7a1a2a", 0); bx(2.6, 0.016, 2.2, 7.4, UY + 0.09, V(3.4), "#c9a227", 0); // (R10: on top of the carpet tiles)
       bx(0.4, 2.0, 1.4, x1 - 0.25, UY + 1.0, V(2.0), "#5a3a24", 0.015);
       for (let k = 0; k < 4; k++) for (let j = 0; j < 6; j++) bx(0.25, 0.32, 0.12, x1 - 0.32, UY + 0.4 + k * 0.45, V(2.0) - 0.55 + j * 0.2, ["#8e1f2e", "#1f3a78", "#3a7a3a", "#c9a227"][(k + j) % 4], 0);
       cyl(0.12, 0.3, 6.4, UY + 0.95, V(3.0), "#e8b83a", 0.006); sph(0.16, 6.4, UY + 1.18, V(3.0), "#1b1420", 0.006);
-      sign("CHIEF O'NOTHING - KNOCK. THEN GO AWAY.", 1.4, 0.35, ch.minX - 0.17, UY + 2.75, V(5.25), -1, 0, { bg: "#1f3a78", fg: "#f4f1ea" });
+      sign("CHIEF O'NOTHING - KNOCK. THEN GO AWAY.", 1.4, 0.35, ch.minX - 0.26, UY + 2.75, V(5.25), -1, 0, { bg: "#1f3a78", fg: "#f4f1ea" });
       bx(0.03, 0.03, 1.2, 7.8, UY + 0.4, V(4.6), "#c8c4cc", 0).rotation.x = 0.3; // (the putter)
       // the offices down the east side: names on the doors, piles of paper, a plant each
       g.offices.forEach((r, i) => {
         const mz = (r.minZ + r.maxZ) / 2;
-        sign(["DETECTIVES (ASLEEP)", "RECORDS (MISPLACED)", "INTERNAL AFFAIRS: DO NOT KNOCK"][i] ?? "OFFICE", 1.5, 0.32, r.minX - 0.2, UY + 2.8, r.maxZ - 1.95, -1, 0, { bg: "#3a4558", fg: "#f4f1ea" });
+        sign(["DETECTIVES (ASLEEP)", "RECORDS (MISPLACED)", "INTERNAL AFFAIRS: DO NOT KNOCK"][i] ?? "OFFICE", 1.5, 0.32, r.minX - 0.26, UY + 2.8, r.maxZ - 1.95, -1, 0, { bg: "#3a4558", fg: "#f4f1ea" });
         for (let k = 0; k < 4; k++) bx(0.3, 0.05 + k * 0.03, 0.22, 7.0 + k * 0.25, UY + 0.81 + k * 0.02, mz - 0.2, "#f4f1ea", 0.004);
         bx(0.4, 0.4, 0.4, r.maxX - 0.4, UY + 0.2, r.minZ + 0.4, "#8b5a2b", 0.01); sph(0.55, r.maxX - 0.4, UY + 0.7, r.minZ + 0.4, "#3a7a3a", 0.012);
       });
@@ -3914,14 +4423,15 @@ export class CityRenderer {
         cyl(0.08, 0.1, b.x + 0.42, top + 0.05, b.z - 0.15, ["#d6264a", "#3d6fb5", "#ffd54a"][Math.floor(hash(b.x, b.z) * 3)], 0.004);
         bx(0.12, 0.15, 0.02, b.x + 0.2, top + 0.08, b.z + 0.2, "#c9a227", 0);
       }
-      sign("BANDITZ TASK FORCE (THAT'S 2 GUYS)", 2.4, 0.4, 0, UY + 2.3, V(7.95), 0, 1, { bg: "#c41e3a", fg: "#f4f1ea" });
+      sign("BANDITZ TASK FORCE (THAT'S 2 GUYS)", 2.4, 0.36, 0, UY + 1.05, V(7.95) - 0.04, 0, 1, /* (R10: on the partition, not floating over it) */ { bg: "#c41e3a", fg: "#f4f1ea" });
       // the squad room: a whiteboard of suspects, lockers' vents
       bx(2.6, 1.3, 0.05, -6.6, UY + 1.9, V(7.9) - 0.02, "#f4f1ea", 0.01);
-      sign("SUSPECTS: 1) A BOX  2) ANOTHER BOX  3) ??? ", 2.4, 1.1, -6.6, UY + 1.9, V(7.9) - 0.06, 0, -1, { fg: "#1f3a78" });
+      for (const sx of [-1.25, 1.25]) { bx(0.06, 2.55, 0.06, -6.6 + sx, UY + 1.275, V(7.9) - 0.02, "#8e96a8", 0.006); bx(0.08, 0.05, 0.7, -6.6 + sx, UY + 0.025, V(7.9) - 0.02, "#8e96a8", 0.006); } // (R10: the whiteboard stands on legs)
+      sign("SUSPECTS: 1) A BOX  2) ANOTHER BOX  3) ??? ", 2.4, 1.1, -6.6, UY + 1.9, V(7.9) + 0.035, 0, -1, { fg: "#1f3a78" });
       // the evidence room: the cage, boxes and bags on the racks, a sign, a sign-out clipboard nobody uses
       const ev = g.evidence;
-      sign("EVIDENCE  -  DO NOT TOUCH. WE MEAN IT. (WE COUNT.)", 3.2, 0.45, (ev.minX + ev.maxX) / 2, UY + 2.9, ev.maxZ + 0.08, 0, 1, { bg: "#ffd54a", fg: "#1b1420" });
-      sign("LOST & FOUND (MOSTLY FOUND)", 1.8, 0.35, (ev.minX + ev.maxX) / 2, UY + 2.3, ev.minZ + 0.15, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
+      sign("EVIDENCE  -  DO NOT TOUCH. WE MEAN IT. (WE COUNT.)", 3.2, 0.45, (ev.minX + ev.maxX) / 2, UY + 2.9, ev.maxZ + 0.0, 0, 1, { bg: "#ffd54a", fg: "#1b1420" });
+      sign("LOST & FOUND (MOSTLY FOUND)", 1.8, 0.35, (ev.minX + ev.maxX) / 2, UY + 2.3, ev.minZ - 0.04, 0, 1, { bg: "#f4f1ea", fg: "#1f3a78" });
       for (const b of this.arena.boxes) {
         if (b.deco !== "evidence" || b.y < UY) continue;
         const top = b.y + b.h / 2;
