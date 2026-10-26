@@ -8,7 +8,7 @@ import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, CEILI, MAMMY } from "@bfb/shared";
+import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, MAMMY, JUKEBOX } from "@bfb/shared";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
@@ -821,7 +821,7 @@ function updateHud(a: ArenaScene) {
   const tagT = a.tagTarget, tagHolding = a.throwCharge >= 0 && !!tagT && a.canUses > 0;
   const at = a.arrestTarget;
   const cellUse = jailed && !a.lock.open && ut && (ut.kind === "toilet" || ut.kind === "celldoor") ? ut.kind : ""; // (R6: the holding cell)
-  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") : rt ? "till" + rt.id + rt.empty : a.onCeiliFloor || a.ceili.dancing ? "ce" + (a.ceili.dancing ? 1 : 0) : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
+  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
     const key = document.createElement("span"); key.className = "key"; key.textContent = keyText; if (!keyText) key.style.display = "none";
@@ -862,6 +862,7 @@ function updateHud(a: ArenaScene) {
     // R11: NEON FEVER DREAM's rope and bar
     else if (!t && ut && ut.kind === "clubrope" && a.arenaLayout.fever) simple("E", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? " VIP: walk in " : " Pay the cover: ", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "FREE" : `$${FEVER.cover}`, a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "the bouncer lifts the rope for you" : `a stamp on your hand till dawn (VIPs free: ${FEVER.vipAura}+ aura)`);
     else if (!t && ut && ut.kind === "pinttap") simple("E", " A pint of GUZZLE'S: ", `$${PUB.price}`, a.pubInfo().pints >= PUB.cutoff ? "Fergal's cut you off till you sober up" : `then split the G: $${PUB.prize} if you nail it`); // (R12.1)
+    else if (!t && ut && ut.kind === "jukebox") simple("E", " Next tune on ", "the Jukebox", `now playing "${JUKEBOX.tunes[a.jukeTune] ?? ""}" (it's free: the coin slot's been broken for years)`); // (R12.2b)
     else if (!t && ut && ut.kind === "mammy") simple("E", " Have a word with ", "Mammy Moloney", `she owns the place. Bring her what she's after (double what it's worth); rate high enough (${MAMMY.tipAura}+ aura) and she'll give you tips. No rough stuff.`); // (R12.2)
     else if (!t && ut && ut.kind === "mocktail") simple("E", " Order a mocktail: ", `$${FEVER.mocktail}`, `glowing, silly, totally alcohol-free: ${FEVER.boost} s of dance energy (stamina refills fast)`);
     // C5c.3: THE COMPACTOR
@@ -895,8 +896,6 @@ function updateHud(a: ArenaScene) {
     else if (!t && ut && (ut.kind === "washer" || ut.kind === "dryer")) simple("E", " Open ", ut.name, ut.empty ? "EMPTIED - new loads tomorrow" : "quietly (2 s) - or PUNCH it open: fast but loud");
     else if (!t && ut) simple("E", " Search ", ut.name, ut.empty ? "EMPTY - refills later" : "random junk inside (maybe treasure, maybe a raccoon)");
     else if (!t && rt) simple("HOLD R", " Rob ", "the till", rt.empty ? "EMPTY right now (refills later)" : "3 s hold-up: sets off the alarm");
-    else if (!t && a.ceili.open && a.ceili.dancing) simple("B", " Stop dancing ", "", "← ↓ ↑ → or D F J K on the shamrocks; five misses in a row and you trip"); // (R12.2)
-    else if (!t && a.onCeiliFloor) simple("B", " Join the céilí ", "", `dance the reel with the girls and lads: a great dance pays $${CEILI.cashGreat} (+1 aura, 3 a day). It's tough.`);
     else if (!t && pt?.prop) {
       simple("CLICK", pt.kind === "washer" || pt.kind === "dryer" ? " Force open " : " Smash ", pt.name, pt.empty ? "already smashed - comes back later" : pt.kind === "car" ? "grab what's on the seat (car alarm!)" : pt.kind === "dummy" ? "practice your punches (nothing counts up here)" : pt.kind === "fishtank" ? "SPLASH: live crabs inside (loud!)" : pt.kind === "washer" || pt.kind === "dryer" ? "LOUD: wakes the old lady upstairs" : "loot inside");
     } else if (!t && pt) {
@@ -1128,8 +1127,6 @@ enterTitle();
     pub: () => CITY.pub ?? null, // (R12.1)
     pubInfo: () => arena?.pubInfo() ?? null,
     pintPress: (down: boolean) => arena?.pint.press(down),
-    ceiliStep: (lane: number) => arena?.ceili.step(lane), // (R12.2)
-    ceiliAuto: (on: boolean) => { if (arena) arena.ceili.auto = on; },
     pawnShop: () => { const ps = CITY.pawnShop; if (!ps) return null; const u = CITY.units![ps.unit]; return { ...ps, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, rect: u.rect }; },
     clubDrop: () => { if (local) local.world.clubB = local.world.traffic.clock; else room?.send("dbg", { op: "clubDrop" }); },
     clubFloor: () => { const a2 = (arena as any)?.arena; const i = a2?.pumpBoxes?.[0]; if (i === undefined) return null; const b = a2.boxes[i]; return b.y + b.h / 2; },

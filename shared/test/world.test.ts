@@ -1796,7 +1796,7 @@ test("R7 police presence: foot patrols walk the town and cruisers drive round al
   w.debugTeleport(a.id, p0.move.x + 2, p0.move.z, 0); settle(w, 2);
   assert.equal(p0.state, "beat", "a clean bandit is left alone");
   // wanted, in plain sight: they're on you
-  w.debugTeleport(a.id, p0.move.x + 3, p0.move.z, 0); a.notoriety = 40; a.seenT = w.time; settle(w, 0.6);
+  w.debugTeleport(a.id, p0.move.x + Math.sin(p0.move.yaw) * 3, p0.move.z + Math.cos(p0.move.yaw) * 3, 0); a.notoriety = 40; a.seenT = w.time; settle(w, 0.6); // (right in front of them)
   assert.ok(((p0.state as string) === "chase" || (p0.state as string) === "windup") && p0.target === a.id, `chased (${p0.state})`);
   // heat gone: back on patrol, not sent home
   a.notoriety = 0; settle(w, 3);
@@ -2267,8 +2267,8 @@ test("R12.1 the pub's people: Fergal behind the bar, the regulars on their stool
   const pub = w.arena.pub!;
   settle(w, 5);
   const at = (k: string) => [...w.npc.npcs.values()].filter((n) => n.kind === k);
-  assert.equal(at("barman").length, 1); assert.equal(at("regular").length, 2); assert.equal(at("trad_band").length, 4); assert.equal(at("patron").length, 8);
-  for (const n of [...at("barman"), ...at("regular"), ...at("trad_band"), ...at("patron")]) assert.ok(n.post && Math.hypot(n.move.x - n.post.x, n.move.z - n.post.z) < 0.35 && inRect(pub.rect, n.move.x, n.move.z, 3), `${n.kind} stays put (${Math.hypot(n.move.x - (n.post?.x ?? 0), n.move.z - (n.post?.z ?? 0)).toFixed(2)} m off)`);
+  assert.equal(at("barman").length, 1); assert.equal(at("regular").length, 2); assert.equal(at("trad_band").length, 4); assert.equal(at("patron").length, 12); assert.equal(at("barmaid").length, 1); // (R12.2b: 4 more drinkers and Róisín upstairs)
+  for (const n of [...at("barman"), ...at("regular"), ...at("trad_band"), ...at("patron"), ...at("barmaid")]) assert.ok(n.post && Math.hypot(n.move.x - n.post.x, n.move.z - n.post.z) < 0.35 && inRect(pub.rect, n.move.x, n.move.z, 3), `${n.kind} stays put (${Math.hypot(n.move.x - (n.post?.x ?? 0), n.move.z - (n.post?.z ?? 0)).toFixed(2)} m off)`);
   assert.ok(inRect(pub.lane, at("barman")[0].move.x, at("barman")[0].move.z), "Fergal inside the horseshoe");
 });
 test("R12.1 the sober-up timer and the pint count ride in the packed buffs too (0.1 s)", () => {
@@ -2279,66 +2279,43 @@ test("R12.1 the sober-up timer and the pint count ride in the packed buffs too (
   assert.ok(Number.isSafeInteger(packBuffs(s)));
 });
 
-// ---- R12.2: upstairs, the céilí, MAMMY MOLONEY ----
-import { CEILI, CEILI_CYCLE, ceiliChart, ceiliStart, ceiliJudge, MAMMY } from "../src/index.js";
-test("R12.2 the céilí's reel goes round the city clock's 10 minutes exactly; a dance is 32 bars of about 5-6 steps a bar, lanes 0-3, in time order; a press within 70 ms is perfect, 140 ms good, further a miss", () => {
-  assert.ok(Math.abs(600 / CEILI_CYCLE - Math.round(600 / CEILI_CYCLE)) < 1e-9, `${CEILI_CYCLE.toFixed(2)} s a time round`);
-  const t0 = ceiliStart(123.4), ch = ceiliChart(t0);
-  assert.ok(t0 > 124.4 && Math.abs((t0 / (8 * 60 / CEILI.bpm / 2)) % 1) < 1e-6, "it starts on a bar line, a beat or more away");
-  assert.ok(ch.length >= 32 * 5 && ch.length <= 32 * 6, `${ch.length} steps`);
-  assert.ok(ch.every((n, i) => n.lane >= 0 && n.lane < 4 && (i === 0 || n.t > ch[i - 1].t)), "in order, 4 lanes");
-  assert.ok(new Set(ch.map((n) => n.lane)).size === 4, "all four lanes get used");
-  const n = ch[10];
-  assert.equal(ceiliJudge(ch, new Set(), n.lane, n.t + 0.05)?.grade, "perfect");
-  assert.equal(ceiliJudge(ch, new Set(), n.lane, n.t - 0.12)?.grade, "good");
-  assert.equal(ceiliJudge(ch, new Set(), (n.lane + 1) % 4, n.t), ch.some((m) => m.lane === (n.lane + 1) % 4 && Math.abs(m.t - n.t) <= CEILI.good) ? ceiliJudge(ch, new Set(), (n.lane + 1) % 4, n.t) : null, "the wrong lane isn't that step");
-  assert.ok(ceiliJudge(ch, new Set([n.i]), n.lane, n.t) === null || ceiliJudge(ch, new Set([n.i]), n.lane, n.t)!.note !== n.i, "a step only counts once");
-});
-test("R12.2 up THE SOGGY SHAMROCK's stairs to floor 2; B on the céilí floor joins the dance; step it perfectly: $25 and +1 aura; 3 a day at most; miss 5 in a row and you trip; walking off quits", () => {
+// ---- R12.2: MAMMY MOLONEY; R12.2b: the laid-back upstairs (the céilí's gone), the island bar, the jukebox ----
+import { MAMMY, JUKEBOX } from "../src/index.js";
+test("R12.2b up THE SOGGY SHAMROCK's stairs to floor 2; a pint at the island bar (Róisín pours it, split the G up here too); B upstairs is just the ordinary dance (no céilí)", () => {
   const { w, ps: [a] } = hotWorld(1);
   const pb = w.arena.pub!;
-  // the stairs (along the north wall, rising west)
   w.debugTeleport(a.id, pb.stairs.maxX + 0.7, (pb.stairs.minZ + pb.stairs.maxZ) / 2, -Math.PI / 2, pb.y1); settle(w, 0.2);
   drive(w, a.id, 300, { mz: 1, yaw: -Math.PI / 2 });
   assert.ok(Math.abs(a.move.y - pb.y2) < 0.2, `up on floor 2 (y ${a.move.y.toFixed(2)})`);
-  // the dance
-  const onFloor = () => { w.debugTeleport(a.id, (pb.ceili.minX + pb.ceili.maxX) / 2 - 2, (pb.ceili.minZ + pb.ceili.maxZ) / 2, 0, pb.y2 + 0.05); drive(w, a.id, 30, {}); };
-  const dance = (hit: boolean) => {
-    onFloor(); w.takeEvents();
-    w.action(a.id, { a: "dance" });
-    const ev = w.takeEvents().find((e) => e.t === "ceili") as any;
-    assert.ok(ev && ev.on, "joined the dance");
-    const c = w.ceiliOf(a.id)!;
-    let k = 0, out: any = null;
-    for (let i = 0; i < 90 * 60 && !out; i++) {
-      const now = w.traffic.clock;
-      const hits: [number, number][] = [];
-      while (hit && k < c.notes.length && c.notes[k].t <= now) { hits.push([c.notes[k].lane, c.notes[k].t % 600]); k++; }
-      if (hits.length) w.action(a.id, { a: "ceiliHit", h: hits });
-      w.pushInputs(a.id, [inp(a.lastSeq + 1, {})]); w.tick();
-      out = w.takeEvents().find((e) => e.t === "ceiliDone" || e.t === "ceiliTrip");
-    }
-    return out;
-  };
-  a.cash = 0; const aura0 = a.aura;
-  const d1 = dance(true);
-  assert.ok(d1 && d1.t === "ceiliDone" && d1.grade === "great" && d1.score === d1.max && !d1.quit, `a perfect dance (${JSON.stringify(d1)})`);
-  assert.equal(a.cash, CEILI.cashGreat); assert.equal(a.aura, aura0 + 1);
-  (w as any).ceiliAura.set(a.id, CEILI.auraMax);
-  const d2 = dance(true);
-  assert.ok(d2.grade === "great" && d2.aura === 0 && d2.cash === CEILI.cashGreat, "3 aura a day at most (still the cash)");
-  // trip: five steps go by without a press
-  const d3 = dance(false);
-  assert.ok(d3 && d3.t === "ceiliTrip" && a.move.knockT > 0, "five misses in a row: you trip");
-  // walking off quits
-  drive(w, a.id, 200, {}); onFloor(); w.action(a.id, { a: "dance" }); w.takeEvents();
-  drive(w, a.id, 20, { mz: 1 });
-  const ev4 = w.takeEvents().find((e) => e.t === "ceiliDone") as any;
-  assert.ok(ev4 && ev4.quit, "moving off: you've quit");
-  // off the floor, B is just the ordinary dance
-  w.debugTeleport(a.id, pb.ceili.minX - 2, pb.ceili.minZ - 1.5, 0, pb.y2 + 0.05); drive(w, a.id, 20, {}); w.takeEvents();
-  w.action(a.id, { a: "dance" });
-  assert.ok(!w.takeEvents().some((e) => e.t === "ceili"), "off the floor: no céilí");
+  const tap = w.arena.props!.find((q) => q.kind === "pinttap" && q.y > pb.y2)!, t = pb.taps.find((q) => q.y > pb.y2 && Math.hypot(q.x - tap.x, q.z - tap.z) < 0.01)!;
+  w.debugTeleport(a.id, tap.x + t.face[0] * 0.85, tap.z + t.face[1] * 0.85, Math.atan2(-t.face[0], -t.face[1]), pb.y2 + 0.05); settle(w, 0.2);
+  a.cash = 50; w.takeEvents(); w.props.use(a, tap.id);
+  const ev = w.takeEvents();
+  assert.ok(ev.some((e) => e.t === "pint"), "a pint upstairs");
+  const rosin = [...w.npc.npcs.values()].find((n) => n.kind === "barmaid")!;
+  assert.ok(rosin && inRect(pb.lane2, rosin.move.x, rosin.move.z), "Róisín's behind the island bar");
+  assert.ok(ev.some((e) => e.t === "npcSay" && (e as any).npc === rosin.id), "Róisín pours it (she says so)");
+  w.action(a.id, { a: "gulp", hold: 2.5 });
+  assert.ok(w.takeEvents().some((e) => e.t === "pintDone"), "split the G up here too");
+  // B: the ordinary dance; no céilí any more
+  settle(w, 0.5); w.takeEvents(); w.action(a.id, { a: "dance" });
+  const ev2 = w.takeEvents();
+  assert.ok(ev2.some((e) => e.t === "dance" && (e as any).on) && !ev2.some((e) => (e.t as string).startsWith("ceili")), "just a dance");
+  assert.ok(![...w.npc.npcs.values()].some((n) => (n.kind as string).startsWith("ceili")), "the céilí band and dancers are gone");
+});
+test("R12.2b the jukebox: E puts on the next tune (round the three), everyone hears the same (its prop note), not more than once every 3 s", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const pb = w.arena.pub!, jb = w.arena.props!.find((q) => q.kind === "jukebox")!;
+  w.debugTeleport(a.id, jb.x, jb.z - 0.9, 0, pb.y2 + 0.05); settle(w, 0.3);
+  assert.equal(w.props.stateOf(jb.id).note, "0");
+  w.takeEvents(); w.props.use(a, jb.id);
+  const ev = w.takeEvents().find((e) => e.t === "jukebox") as any;
+  assert.ok(ev && ev.tune === 1, "the next tune");
+  assert.equal(w.props.stateOf(jb.id).note, "1");
+  w.props.use(a, jb.id);
+  assert.equal(w.jukeTune, 1, "not again straight away");
+  settle(w, JUKEBOX.cd + 0.2); w.props.use(a, jb.id); settle(w, JUKEBOX.cd + 0.2); w.props.use(a, jb.id);
+  assert.equal(w.jukeTune, 0, "round the three and back to the first");
 });
 test("R12.2 MAMMY MOLONEY: a job (bring her something), \"still waiting\", then paid double for it; a tip about today's city once you've a name (3+ aura); start trouble in her pub and her stick sends you out the front door", () => {
   const { w, ps: [a] } = hotWorld(1);

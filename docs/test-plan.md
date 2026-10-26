@@ -546,6 +546,30 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.2b: THE SOGGY SHAMROCK upstairs reworked (the céilí's gone; the island bar, the darts, the pool, the lounge, the jukebox) (2026-10-26)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Layout | from the top of the stairs you can walk to every side of the island bar and in through its flap, both oches and podiums, all round both pool tables, to the chesterfields, the round booths, every high table, the fire and its wing chairs, the jukebox, up to Mammy and out on the balcony; no walking off the balcony; nobody posted inside anything solid; Róisín, 4 drinkers upstairs, 2 darts booths, 2 pool tables, 3 taps on the island bar, 1 jukebox; the céilí's stage is gone. Downstairs counts unchanged (8 drinkers, 3 taps on floor 1) | unit (layout) | pass. It first failed three times: the drinker leaning on the bar's east side stood in a stool (the stool's gone), and two reach points were too close to a high table and a wing chair (moved out). |
+| Upstairs bar | up the stairs; a pint at the island bar; Róisín's behind it and says the pour line; split the G up there; B upstairs is just the ordinary dance; no céilí NPCs | unit (world) | pass |
+| Jukebox | E: the next tune; its prop note says which; not again within 3 s; round the three and back | unit (world) | pass |
+| People | the pub's people stay put (12 drinkers, Fergal, Róisín, the regulars, the band) | unit (world) | pass |
+| | 55 NPCs | server smoke | pass |
+| Police (R7) | a wanted bandit right in front of a patrolling cop gets chased (the stand-in point moved after the new NPCs shifted the seed) | unit (world) | pass |
+| Browser | up the stairs, level 2; Róisín, Mammy, 12 drinkers, no céilí folk; the island bar's tap prompt; a pint upstairs and the verdict; the jukebox's prompt; E changes the tune; the jukebox loud upstairs (0.67) and the jig through the floor (0.30); standing on both oches; beside both pool tables; Mammy's prompt and her answer; the balcony; no céilí prompt | e2e (pub part of the new-city block) | first run 30/32: the upstairs pint said "finish the one you've got first" (one pint per 30 s, and the downstairs one had just been poured). The test now tries again until the pour's done. Then 32/32. |
+| | full browser e2e, normal | e2e | pass 389/389 (with the preinstalled Chromium) |
+| | full browser e2e, 110 ms lag | e2e | pass 389/389 |
+| Looks | the island bar and canopy (day, night), the darts booths (against Blake's photo), the pool area, the lounge, the fire, the jukebox, Róisín close up (no chest squares), Mammy's snug, the balcony at night | screenshots | reviewed. Fixed: the screens over the boards drew black (the picture was flush with its frame), and the jukebox's tubes were candy colours (now orange, gold and green, thinner). |
+| Everything | 253 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass |
+
+## Manual checklist for Blake (R12.2b)
+
+- [ ] Stand by the island bar. Is it "sick" enough? Too many bulbs, or too few?
+- [ ] The darts booths next to your Flight Club photo: close enough? Big enough?
+- [ ] The pool area: room to play round both tables?
+- [ ] Sit-down spots: the chesterfields, round booths, high tables, fire. Enough? Too much?
+- [ ] The jukebox: do the three tunes fit the vibe? Want more tunes?
+
 ## R12.2: THE SOGGY SHAMROCK upstairs (the function room, the céilí, MAMMY MOLONEY, the corner balcony; no chest squares) (2026-10-24)
 
 | Area | Check | How | Result |

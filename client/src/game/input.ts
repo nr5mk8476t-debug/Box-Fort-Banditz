@@ -7,7 +7,6 @@ export type LootAction = "grab" | "grabEnd" | "drop" | "cycleNext" | "cyclePrev"
 export interface Axes { mx: number; mz: number; sprint: boolean; jump: boolean; crouch: boolean; dodge: boolean; }
 
 // Crouch is C (NOT Ctrl): browsers reserve Ctrl+W to close the tab and games can't block it.
-const STEP_LANE: Record<string, number> = { ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3, KeyD: 0, KeyF: 1, KeyJ: 2, KeyK: 3 };
 export class FpInput {
   yaw = 0;
   pitch = 0;
@@ -36,8 +35,6 @@ export class FpInput {
   jailMouse: ((dx: number, dy: number) => void) | null = null;
   /** R12.1: splitting the G: while a pint's up, the left mouse button / SPACE are the gulp (held down = gulping) */
   gulp: ((down: boolean) => void) | null = null;
-  /** R12.2: the céilí: while you're dancing, ← ↓ ↑ → (and D F J K) are steps (lanes 0..3), not walking */
-  steps: ((lane: number) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -134,7 +131,6 @@ export class FpInput {
       return;
     }
     if (this.gulp && e.code === "Space") { e.preventDefault(); if (!e.repeat) this.gulp(true); return; }
-    if (this.steps) { const lane = STEP_LANE[e.code]; if (lane !== undefined) { e.preventDefault(); if (!e.repeat) this.steps(lane); return; } }
     this.keys.add(e.code);
     if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
     if (e.repeat) return;

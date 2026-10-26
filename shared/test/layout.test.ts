@@ -717,7 +717,7 @@ test("R12.1b THE SOGGY SHAMROCK: the whole block (the alley between goes); in th
   for (const door of [p.out, p.out2]) {
     const D = walkFrom(ng, (x, z) => Math.hypot(x - door.x, z - door.z) < 0.6);
     const walk = (x: number, z: number) => D[ng.at(x, z)];
-    for (const t of p.taps) assert.ok(walk(t.x + t.face[0] * 1.0, t.z + t.face[1] * 1.0) < 45, `the tap at ${t.x},${t.z} (${walk(t.x + t.face[0] * 1.0, t.z + t.face[1] * 1.0).toFixed(1)} m)`);
+    for (const t of p.taps.filter((t) => t.y < p.y2)) assert.ok(walk(t.x + t.face[0] * 1.0, t.z + t.face[1] * 1.0) < 45, `the tap at ${t.x},${t.z} (${walk(t.x + t.face[0] * 1.0, t.z + t.face[1] * 1.0).toFixed(1)} m)`);
     for (const [x, z] of [[p.bar.minX - 1.2, (p.bar.minZ + p.bar.maxZ) / 2], [p.bar.maxX + 1.2, (p.bar.minZ + p.bar.maxZ) / 2], [(p.bar.minX + p.bar.maxX) / 2, p.bar.maxZ + 1.2]]) assert.ok(walk(x, z) < 50, `round the horseshoe at ${x.toFixed(1)},${z.toFixed(1)}`);
     for (const s of p.snugs) assert.ok(walk(s.maxX - 0.4, (s.minZ + s.maxZ) / 2) < 50, `the snug at z ${s.minZ.toFixed(1)}`);
     assert.ok(walk(p.fire.x, p.fire.z - 2.6) < 50, "the fire");
@@ -741,9 +741,9 @@ test("R12.1b THE SOGGY SHAMROCK: the whole block (the alley between goes); in th
   assert.equal(posts.filter((q) => q.kind === "regular" && q.sit).length, 2);
   assert.deepEqual(posts.filter((q) => q.kind === "trad_band").map((q) => q.v).sort(), [0, 1, 2, 3]);
   assert.ok(posts.filter((q) => q.kind === "trad_band").every((q) => inRect(p.stage, q.x, q.z)), "the band's on the stage");
-  assert.equal(posts.filter((q) => q.kind === "patron").length, 8);
+  assert.equal(posts.filter((q) => q.kind === "patron" && (q.y ?? 0) < p.y2 - 0.5).length, 8);
   assert.equal(posts.filter((q) => q.kind === "patron" && !inRect(p.rect, q.x, q.z)).length, 2, "two drinkers out on the pavement");
-  assert.equal(nc.props!.filter((q) => q.kind === "pinttap").length, 3);
+  assert.equal(nc.props!.filter((q) => q.kind === "pinttap" && q.y < p.y2).length, 3);
   assert.equal(nc.props!.filter((q) => q.kind === "pubboard").length, 1);
   // nobody's standing or sitting inside something solid (a posted person in a box gets shoved about)
   for (const q of posts) assert.ok(!nc.boxes.some((b) => b.y + b.h / 2 > (q.y ?? 0) + 0.12 && b.y - b.h / 2 < (q.y ?? 0) + 1.5 && inFoot(b, q.x, q.z, 0.22)), `${q.kind} ${q.v ?? ""} at ${q.x.toFixed(1)},${q.z.toFixed(1)} is clear`);
@@ -751,7 +751,7 @@ test("R12.1b THE SOGGY SHAMROCK: the whole block (the alley between goes); in th
   for (const t of p.outside) assert.ok(t.x + 0.4 < -70.33 - 0.6, "the parasol tables leave the kerb clear");
 });
 
-test("R12.2 upstairs at THE SOGGY SHAMROCK: from the top of the stairs you can walk to the céilí floor, the céilí band's stage, every table, into MAMMY MOLONEY's snug (up to her), the games room (round the pool table) and out the French doors onto the corner balcony; the balcony's railings hold you; nobody posted inside anything solid", () => {
+test("R12.2b upstairs at THE SOGGY SHAMROCK: from the top of the stairs you can walk to every side of the island bar (and in through its flap), both darts booths (the oche, the podium), round both pool tables, to the chesterfields, the round booths, every high table, the fire and its wing chairs, the jukebox, into MAMMY MOLONEY's snug (up to her) and out onto the corner balcony; the railings hold you; nobody posted inside anything solid; the céilí's gone", () => {
   const p = nc.pub!, Y = p.y2, C = 0.25, r = p.rect;
   const X0 = r.minX - 1, Z0 = r.minZ - 2.5, NX = Math.round((r.maxX + 3 - X0) / C), NZ = Math.round((r.maxZ + 1 - Z0) / C);
   const rad = PLAYER.radius;
@@ -771,18 +771,29 @@ test("R12.2 upstairs at THE SOGGY SHAMROCK: from the top of the stairs you can w
   seen[start] = 1; q.push(start);
   while (q.length) { const c = q.pop()!, ci = c % NX, cj = (c - ci) / NX; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = ci + di, b = cj + dj; if (a < 0 || b < 0 || a >= NX || b >= NZ) continue; const m = b * NX + a; if (free[m] && !seen[m]) { seen[m] = 1; q.push(m); } } }
   const reach = (x: number, z: number, what: string) => assert.ok(seen[at(x, z)], `${what} (${x.toFixed(1)}, ${z.toFixed(1)})`);
-  reach((p.ceili.minX + p.ceili.maxX) / 2, (p.ceili.minZ + p.ceili.maxZ) / 2, "the céilí floor");
-  reach(p.stage2.maxX + 1.0, (p.stage2.minZ + p.stage2.maxZ) / 2, "in front of the céilí band's stage");
-  for (const t of p.tables2) reach(t.x + (t.x < -78 ? 0 : -0.9), t.z + (t.x < -78 ? 0.9 : 0), "by a function room table");
+  const b = p.bar2;
+  reach((b.minX + b.maxX) / 2 + 0.4, b.minZ - 1.0, "in front of the island bar (its taps)"); reach(b.maxX + 1.1, (b.minZ + b.maxZ) / 2, "the bar's east side");
+  reach(b.minX - 1.1, (b.minZ + b.maxZ) / 2, "the bar's west side"); reach((b.minX + b.maxX) / 2, b.maxZ + 1.0, "behind the bar (by the flap)");
+  reach((p.flap2.minX + p.flap2.maxX) / 2, (p.lane2.minZ + p.lane2.maxZ) / 2 - 1.1, "inside the bar (through the flap)");
+  for (const d of p.darts) { reach(d.oche + 0.3, d.board.z, "on the oche, facing a dartboard"); reach(d.podium.x + 0.6, d.podium.z + 0.2, "at the scoring podium"); }
+  for (const q of p.pools) { reach(q.x - q.w / 2 - 0.7, q.z, "beside a pool table (west)"); reach(q.x + q.w / 2 + 0.7, q.z, "beside a pool table (east)"); reach(q.x, q.z - q.d / 2 - 0.7, "at a pool table's end (south)"); reach(q.x, q.z + q.d / 2 + 0.7, "at a pool table's end (north)"); }
+  for (const f of p.sofas) reach(f.x - f.w / 2 - 0.6, f.z, "beside a chesterfield");
+  for (const rb of p.roundBooths) reach(rb.x - rb.r - 0.6, rb.z, "in front of a round booth");
+  for (const t of p.highTables) reach(t.x + (t.x < -90 ? 0.95 : 0), t.z + (t.x < -90 ? 0 : -0.95), "at a high table");
+  for (const w of p.wings) reach(w.x, w.z - 1.1, "by a wing chair");
+  reach(p.fire2.x, p.fire2.z - 1.1, "at the fire (between the wing chairs)");
+  reach(p.jukebox.x, p.jukebox.z - 1.0, "at the jukebox");
   reach(p.mammy.x + Math.sin(p.mammy.yaw) * 1.1, p.mammy.z + Math.cos(p.mammy.yaw) * 1.1, "in front of Mammy");
-  reach(p.pool.x, p.pool.z - p.pool.d / 2 - 0.6, "beside the pool table"); reach(p.pool.x - p.pool.w / 2 - 0.6, p.pool.z, "at the pool table's end");
-  reach(p.dart.x - 2.4, p.dart.z, "the oche, facing the dartboard");
   reach(-76.0, 5.5, "out on the balcony (the corner)"); reach(-72.8, 13.5, "out on the balcony (along the east front)");
   for (const [x, z] of [[-76.0, 4.4], [-71.7, 10.0]]) assert.ok(!seen[at(x, z)], `no walking off the balcony at ${x},${z}`);
   // the posted people upstairs are clear of anything solid
   for (const q2 of nc.posts!.filter((o) => (o.y ?? 0) > Y - 0.5 && inRect(r, o.x, o.z, 3))) assert.ok(!nc.boxes.some((b) => b.y + b.h / 2 > (q2.y ?? 0) + 0.12 && b.y - b.h / 2 < (q2.y ?? 0) + 1.5 && inFoot(b, q2.x, q2.z, 0.22)), `${q2.kind} ${q2.v ?? ""} clear`);
-  assert.equal(nc.posts!.filter((o) => o.kind === "ceili_band").length, 4);
-  assert.equal(nc.posts!.filter((o) => o.kind === "ceili_dancer").length, 6);
+  assert.equal(nc.posts!.filter((o) => o.kind === "barmaid").length, 1);
+  assert.equal(nc.posts!.filter((o) => o.kind === "patron" && (o.y ?? 0) > Y - 0.5).length, 4, "four drinkers upstairs");
+  assert.equal(p.darts.length, 2); assert.equal(p.pools.length, 2);
+  assert.equal(nc.props!.filter((o) => o.kind === "pinttap" && o.y > Y).length, 3, "three taps on the island bar");
+  assert.equal(nc.props!.filter((o) => o.kind === "jukebox").length, 1, "the jukebox (E)");
+  assert.ok(!nc.boxes.some((b) => b.deco === "pubstage2"), "the céilí band's stage is gone");
   assert.equal(nc.posts!.filter((o) => o.kind === "mammy").length, 1);
   assert.ok(nc.props!.some((o) => o.kind === "mammy"), "a word with Mammy (E)");
   assert.ok(!nc.boxes.some((b) => b.deco === "pubrope"), "the rope's off the stairs");

@@ -19,16 +19,16 @@ import { EventRenderer, DragonRenderer, FestaRenderer } from "./eventRenderer.ts
 import { PropRenderer } from "./propRenderer.ts";
 import { CarRenderer } from "./carRenderer.ts";
 import { CopCarRenderer } from "./copCarRenderer.ts";
-import { LockpickUI, PintUI, CeiliUI } from "./lockpickUI.ts";
+import { LockpickUI, PintUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, BUFFS, PUB, tipsyAmount, inRect, type PropDef,
+  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, BUFFS, PUB, tipsyAmount, JUKEBOX, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
 import { settings } from "../settings.ts";
-import { sfx, chargeTone, feverMusic, pubMusic, pubFlourish, pubMusicOn, ceiliMusic, ceiliMusicOn } from "../audio.ts";
+import { sfx, chargeTone, feverMusic, pubMusic, pubFlourish, pubMusicOn, jukeboxMusic, jukeboxMusicOn } from "../audio.ts";
 
 export type ServerPlayerView = RemoteInfo & { lastSeq: number };
 
@@ -54,7 +54,7 @@ const PROP_NAMES: Record<string, string> = {
   // C5a: the lobby squat
   dummy: "Practice Dummy", throwgame: "THROW-O-MATIC", racegame: "TROLLEY GRAND PRIX",
   // C5b: Chinatown's stalls
-  mocktail: "the Mocktail Bar", pinttap: "the GUZZLE'S Tap", pubboard: "the Chalkboard", mammy: "Mammy Moloney", steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
+  mocktail: "the Mocktail Bar", pinttap: "the GUZZLE'S Tap", pubboard: "the Chalkboard", mammy: "Mammy Moloney", jukebox: "the Jukebox", steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
   // R4: Little Italy's
   pizzacart: "Pizza Cart", gelato: "Gelato Cart", ricordi: "Souvenir Stall", deli: "Deli Counter",
   // C5c: Uptown's landmarks
@@ -278,8 +278,6 @@ export class ArenaScene {
   readonly lock: LockpickUI;
   /** R12.1: SPLIT THE G (the pint close-up) */
   readonly pint: PintUI;
-  /** R12.2: the céilí rhythm game */
-  readonly ceili: CeiliUI;
   jailT = 0;
   /** Phase 5A: my pawn shop offers (JSON), READY pressed */
   shopJson = "";
@@ -401,10 +399,8 @@ export class ArenaScene {
     input.jailKeys = (code) => this.lock.key(code);
     input.jailMouse = (dx, dy) => this.lock.mouse(dx, dy);
     this.pint = new PintUI(document.getElementById("hud") ?? document.body);
-    this.ceili = new CeiliUI(document.getElementById("hud") ?? document.body, () => this.clubClock);
-    this.ceili.onStep = (lane, t600) => this.onAction?.({ a: "ceiliHit", h: [[lane, Math.round(t600 * 1000) / 1000]] });
     this.pint.onGulp = (hold) => this.onAction?.({ a: "gulp", hold });
-    this.npcs.pubPosts = (arena.posts ?? []).filter((q) => ["regular", "trad_band", "barman", "patron", "ceili_band", "ceili_dancer", "mammy"].includes(q.kind)); // (R12.1; R12.2: upstairs too)
+    this.npcs.pubPosts = (arena.posts ?? []).filter((q) => ["regular", "trad_band", "barman", "patron", "barmaid", "mammy"].includes(q.kind)); // (R12.1; R12.2: upstairs too)
 
     this.remotes = new RemotePlayers(scene);
     const color = PLAYER_COLORS[spawnIndex % PLAYER_COLORS.length];
@@ -555,6 +551,7 @@ export class ArenaScene {
     view.props?.forEach((pv, id) => {
       this.propsR.sync(id, pv); this.propState.set(id, pv.ready);
       if (pv.note !== undefined && id.startsWith("pubboard")) this.city.setPubBoard(pv.note); // (R12.1: the chalkboard)
+      if (pv.note !== undefined && id.startsWith("jukebox")) { const k = Number(pv.note) || 0; if (k !== this.jukeTune) { this.jukeTune = k; this.city.setJukebox(k); } } // (R12.2b)
       if (pv.note !== undefined && id.startsWith("pawncase")) { try { this.pawnCase = pv.note ? JSON.parse(pv.note) : []; } catch { this.pawnCase = []; } } // (C5c.3)
       // C4a: smashed things vanish and stop blocking (repaired at dawn)
       const bd = this.brkBox.get(id);
@@ -589,7 +586,7 @@ export class ArenaScene {
     const cam = this.camera.position;
     const gainAt = (x: number, y: number, z: number) => 1 / (1 + Math.hypot(x - cam.x, y - cam.y, z - cam.z) / 8);
     for (const e of events) {
-      if (e.t.startsWith("ceili") || e.t === "dance" || e.t.startsWith("mammy")) { this.evTail.push(e.t + ((e as any).p === me ? "*" : "")); if (this.evTail.length > 30) this.evTail.shift(); } // (for tests)
+      if (e.t === "jukebox" || e.t === "dance" || e.t.startsWith("mammy")) { this.evTail.push(e.t + ((e as any).p === me ? "*" : "")); if (this.evTail.length > 30) this.evTail.shift(); } // (for tests)
       switch (e.t) {
         case "grab":
           if (e.p !== me) { const a = this.remotes.anchor(e.p); if (a && gainAt(a.x, a.y, a.z) > 0.25) sfx.grab(); }
@@ -878,13 +875,14 @@ export class ArenaScene {
           if (e.grade === "perfect" && near) { sfx.cheer(e.p === me ? 1 : 0.6); pubFlourish(); }
           break;
         }
-        // R12.2: the céilí, MAMMY MOLONEY
-        case "ceili": if (e.p === me && e.on) { this.ceili.start(e.t0); this.onFeedback?.("Into the line! Steps on the shamrocks: ← ↓ ↑ → (or D F J K).", "good"); } break;
-        case "ceiliTrip": if (e.p === me) { this.ceili.trip(); this.onFeedback?.("Over you go! Five steps missed in a row.", "bad"); } break;
-        case "ceiliDone": if (e.p === me) {
-          this.ceili.result(e.grade, e.score, e.max, e.cash, e.aura, e.quit);
-          if (!e.quit) { if (e.cash) sfx.cash(); if (e.grade === "great") sfx.cheer(1); this.onFeedback?.(e.grade === "great" ? `A show-stopper! +$${e.cash}${e.aura ? ", +1 aura" : ""}` : e.grade === "ok" ? `Not bad at all. +$${e.cash}${e.aura ? ", +1 aura" : ""}` : "Two left feet. Nothing for that one.", e.grade === "meh" ? "info" : "good"); }
-        } break;
+        // R12.2: MAMMY MOLONEY; R12.2b: the jukebox
+        case "jukebox": {
+          this.jukeTune = e.tune; this.city.setJukebox(e.tune);
+          const jb = this.arena.pub?.jukebox, near = !!jb && Math.hypot(this.cur.x - jb.x, this.cur.z - jb.z) < 14 && this.pubLevel === 2;
+          if (near || e.p === me) sfx.juke();
+          if (e.p === me) this.onFeedback?.(`On the jukebox: "${JUKEBOX.tunes[e.tune]}"`, "good");
+          break;
+        }
         case "mammy": if (e.p === me) {
           if (e.reward) sfx.cash();
           this.onFeedback?.(`MAMMY MOLONEY: ${e.line}${e.reward ? ` (+$${e.reward})` : ""}`, e.kind === "jobWait" ? "info" : "good");
@@ -1608,38 +1606,31 @@ export class ArenaScene {
     this.pubLevel = !inPlot ? 0 : this.cur.y < p.y2 - 0.5 ? 1 : 2;
     const d = Math.hypot(Math.max(r.minX - x, 0, x - r.maxX), Math.max(r.minZ - z, 0, z - r.maxZ));
     const ses = p.stage, sd = Math.hypot(x - (ses.minX + ses.maxX) / 2, z - (ses.minZ + ses.maxZ) / 2);
-    // R12.2: two bands: downstairs the session's jig, upstairs the céilí's reel; each muffled through the floor
-    let gain = 0, cut = 450, rg = 0, rcut = 400;
+    // R12.2b: downstairs the session's jig, upstairs the jukebox; each muffled through the floor
+    let gain = 0, cut = 450, jg = 0, jcut = 400;
     const out = d < 45 ? 1 - d / 45 : 0;
-    if (this.pubLevel === 1) { gain = 0.8 * Math.max(0.6, 1 - sd / 45); cut = 9000; rg = 0.25; rcut = 380; }
-    else if (this.pubLevel === 2) { gain = 0.3; cut = 420; const fl = p.ceili, cd = Math.hypot(x - (fl.minX + fl.maxX) / 2, z - (fl.minZ + fl.maxZ) / 2); rg = 0.85 * Math.max(0.55, 1 - cd / 30); rcut = 9000; }
-    else if (out > 0) { gain = 0.45 * out; cut = 450 + 800 * Math.max(0, 1 - d / 12); rg = 0.2 * out; rcut = 350; }
+    if (this.pubLevel === 1) { gain = 0.8 * Math.max(0.6, 1 - sd / 45); cut = 9000; jg = 0.18; jcut = 380; }
+    else if (this.pubLevel === 2) { gain = 0.3; cut = 420; const jb = p.jukebox, jd = Math.hypot(x - jb.x, z - jb.z); jg = 0.7 * Math.max(0.6, 1 - jd / 30); jcut = 9000; }
+    else if (out > 0) { gain = 0.45 * out; cut = 450 + 800 * Math.max(0, 1 - d / 12); jg = 0.12 * out; jcut = 350; }
     pubMusic(this.clubClock, settings.muted ? 0 : gain, cut);
-    ceiliMusic(this.clubClock, settings.muted ? 0 : rg, rcut);
-    this.pubGain = gain; this.reelGain = rg;
-    // the céilí: steps, not walking, while you're in the line
-    if (this.ceili.open) {
-      this.input.steps = this.ceili.dancing ? (lane) => this.ceili.step(lane) : null;
-      this.ceili.wobble = tipsyAmount(this.cur);
-      this.ceili.update(dt);
-    } else if (this.input.steps) this.input.steps = null;
+    jukeboxMusic(this.clubClock, this.jukeTune, settings.muted ? 0 : jg, jcut);
+    this.pubGain = gain; this.jukeGain = jg;
     // the pint: step away from the bar and it's left there
     if (this.pint.open) {
       this.input.gulp = (down) => this.pint.press(down);
       this.pint.wobble = tipsyAmount(this.cur);
       this.pint.update(dt);
-      if (!this.pint.open || !p.taps.some((t) => Math.hypot(t.x - x, t.z - z) < 3.2)) { this.pint.close(); this.input.gulp = null; }
+      if (!this.pint.open || !p.taps.some((t) => Math.hypot(t.x - x, t.z - z) < 3.2 && Math.abs(t.y - this.cur.y) < 2.5)) { this.pint.close(); this.input.gulp = null; }
     } else if (this.input.gulp) this.input.gulp = null;
     this.city.updatePub(dt, this.night.level, this.camera.position.x, this.camera.position.z);
   }
   /** R12.1: for tests: the pint close-up, the session */
-  /** R12.2: standing on the céilí floor upstairs (B joins the dance) */
-  get onCeiliFloor(): boolean { const p = this.arena.pub; return !!p && this.pubLevel === 2 && Math.abs(this.cur.y - p.y2) < 0.6 && inRect(p.ceili, this.cur.x, this.cur.z); }
-  /** R12.2: how loud the céilí's reel is asked to be here (for tests) */
-  reelGain = 0;
+  /** R12.2b: the jukebox's tune (from its prop note), how loud it's asked to be here (for tests) */
+  jukeTune = 0;
+  jukeGain = 0;
   /** for tests: the last few pub events (mine starred) */
   evTail: string[] = [];
-  pubInfo() { return { evTail: this.evTail.join(","), clock: this.clubClock, ceiliT0: this.ceili.t0, reel: ceiliMusicOn(), reelGain: this.reelGain, ceili: this.ceili.open, dancing: this.ceili.dancing, ceiliScore: this.ceili.score, ceiliHits: this.ceili.hits, open: this.pint.open, rate: this.pint.rate, level: this.pint.open ? this.pint.level : -1, holding: this.pint.holding, music: pubMusicOn(), gain: this.pubGain, level2: this.pubLevel, pints: this.cur.pints, tipsyT: this.cur.tipsyT }; }
+  pubInfo() { return { evTail: this.evTail.join(","), clock: this.clubClock, juke: jukeboxMusicOn(), jukeGain: this.jukeGain, jukeTune: this.jukeTune, open: this.pint.open, rate: this.pint.rate, level: this.pint.open ? this.pint.level : -1, holding: this.pint.holding, music: pubMusicOn(), gain: this.pubGain, level2: this.pubLevel, pints: this.cur.pints, tipsyT: this.cur.tipsyT }; }
 
   /** R11.4: SKETCHY STEVE's goods on the HUD (what's left), the comedown's wobble */
   private buffEl: HTMLDivElement | null = null;

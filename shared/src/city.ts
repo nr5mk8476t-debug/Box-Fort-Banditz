@@ -3088,25 +3088,72 @@ export function buildTrashington(): ArenaLayout {
     // ---- out on the pavement: two barrel tables under GUZZLE'S parasols ----
     const outside = [{ x: P.maxX + 1.4, z: 22.1 }, { x: P.maxX + 1.9, z: 26.9 }];
     for (const t of outside) disc(t.x, t.z, 0.4, 0.1, 1.05, "table", { hide: true, deco: "outbarrel" });
-    // ================================================================ R12.2: UPSTAIRS (Blake's answers: the function room
-    // along the street fronts with the céilí floor and the céilí band's stage, the balcony off it round the corner; at the
-    // back, off the landing, Mammy Moloney's whiskey snug, and the games room (pool and darts: R12.3 / R12.4))
+    // ================================================================ R12.2: UPSTAIRS. R12.2b (Blake: "I'm not a fan of the
+    // ceili... more of a laid back area where you can have fun with your friends. A pool table area section. A darts
+    // section. A sick looking bar area... keep the dark mahogany Irish look"): the front room has an island bar in the
+    // middle under a carved canopy ringed with bulbs; two Flight-Club-style darts booths down the west wall; the lounge
+    // (chesterfields, round booths, high tables, a second fire with wing chairs) and the jukebox; the pool area at the
+    // back right, open to the front room (two tables). Off the landing at the back: Mammy Moloney's whiskey snug (kept).
+    // The balcony round the corner (kept).
     const U = Y2, UC = RY - SL, BW = 23.4, WT2 = 0.12, wc = { color: "#4a1612", deco: "pubwall2" };
-    // the back rooms' walls: the snug (x -93.0..-84.6) and the games room (east of it), each with an open doorway
-    const SNUG2 = R(-93.0 + WT2, -84.6, BW + WT2, IN.maxZ), GAMES = R(-84.6 + WT2, IN.maxX, BW + WT2, IN.maxZ), HALL = R(IN.minX, -93.0, BW, IN.maxZ);
+    // the snug's walls (x -93.0..-84.6), with its doorway off the landing; the pool area east of it is open to the front
+    const SNUG2 = R(-93.0 + WT2, -84.6, BW + WT2, IN.maxZ), POOLA = R(-84.6 + WT2, IN.maxX, BW, IN.maxZ), HALL = R(IN.minX, -93.0, BW, IN.maxZ);
     wb(-93.0, -93.0 + WT2, BW, 25.2, U, UC, "wall", wc); wb(-93.0, -93.0 + WT2, 26.7, IN.maxZ, U, UC, "wall", wc); wb(-93.0, -93.0 + WT2, 25.2, 26.7, U + 2.4, UC, "wall", wc); // (the snug's door, off the landing)
     wb(-93.0, -84.6, BW, BW + WT2, U, UC, "wall", wc);
     wb(-84.6, -84.6 + WT2, BW, IN.maxZ, U, UC, "wall", wc);
-    wb(-84.6, -80.6, BW, BW + WT2, U, UC, "wall", wc); wb(-79.1, IN.maxX, BW, BW + WT2, U, UC, "wall", wc); wb(-80.6, -79.1, BW, BW + WT2, U + 2.4, UC, "wall", wc); // (the games room's door, off the function room)
-    // the function room: the céilí floor in the middle, the céilí band's stage on the west wall, tables round it
-    const CEILI_FLOOR = R(-96.0, -83.0, 10.2, 21.0), STAGE2 = R(IN.minX, -98.6, 11.5, 19.5), SY2 = U + 0.4;
-    wb(STAGE2.minX, STAGE2.maxX, STAGE2.minZ, STAGE2.maxZ, U, SY2, "platform", { hide: true, deco: "pubstage2" });
-    wb(STAGE2.maxX, STAGE2.maxX + 0.5, 14.8, 16.2, U, U + 0.2, "step", { hide: true, deco: "pubstage2step" });
-    [[-100.9, 12.7], [-99.6, 14.4], [-99.6, 16.6], [-100.9, 18.3]].forEach(([x, z], v) => posts.push({ kind: "ceili_band", x, z, yaw: PI / 2, y: SY2, v, sit: 0.62 }));
-    // the six dancers, two lines facing each other across the floor
-    [[-92.5, 13.6], [-89.5, 13.6], [-86.5, 13.6], [-92.5, 17.6], [-89.5, 17.6], [-86.5, 17.6]].forEach(([x, z], v) => posts.push({ kind: "ceili_dancer", x, z, yaw: v < 3 ? 0 : PI, y: U, v }));
-    const tables2 = [[-95.5, 8.3], [-89.0, 8.3], [-82.5, 8.3], [-76.6, 12.6], [-76.6, 17.2], [-76.6, 21.4], [-98.0, 22.0]].map(([x, z]) => ({ x, z, r: 0.45 }));
-    for (const t of tables2) disc(t.x, t.z, t.r, U, 0.76, "table", { hide: true, deco: "table2" });
+    // ---- the island bar (a ring of counter with rounded corners, the staff's flap at the back) round a back bar ----
+    const HB2 = R(-93.0, -85.0, 11.5, 17.5), FLAP2 = R(-89.75, -88.25, HB2.maxZ - CD, HB2.maxZ), BH2 = 1.1;
+    wb(HB2.minX + CR, HB2.maxX - CR, HB2.minZ, HB2.minZ + CD, U, U + BH2, "counter", bx);
+    wb(HB2.minX, HB2.minX + CD, HB2.minZ + CR, HB2.maxZ - CR, U, U + BH2, "counter", bx);
+    wb(HB2.maxX - CD, HB2.maxX, HB2.minZ + CR, HB2.maxZ - CR, U, U + BH2, "counter", bx);
+    wb(HB2.minX + CR, FLAP2.minX, HB2.maxZ - CD, HB2.maxZ, U, U + BH2, "counter", bx); wb(FLAP2.maxX, HB2.maxX - CR, HB2.maxZ - CD, HB2.maxZ, U, U + BH2, "counter", bx);
+    for (const [cx, cz, a0] of [[HB2.minX + CR, HB2.minZ + CR, PI], [HB2.maxX - CR, HB2.minZ + CR, 1.5 * PI], [HB2.maxX - CR, HB2.maxZ - CR, 0], [HB2.minX + CR, HB2.maxZ - CR, PI / 2]] as [number, number, number][]) ring(cx, cz, CR - CD, CR, a0, a0 + PI / 2, U, BH2, "counter", bx);
+    const GT2 = R(-90.6, -87.4, 14.05, 14.95);
+    wb(GT2.minX, GT2.maxX, GT2.minZ, GT2.maxZ, U, U + 2.5, "shelf", { color: "#2a0e06", deco: "pubgantry2", hide: true });
+    const LANE2 = R(HB2.minX + CD, HB2.maxX - CD, HB2.minZ + CD, HB2.maxZ - CD);
+    const taps2 = [{ x: -90.9, y: U + 1.12, z: HB2.minZ + 0.25, face: [0, -1] as [number, number] }, { x: -87.1, y: U + 1.12, z: HB2.minZ + 0.25, face: [0, -1] as [number, number] }, { x: HB2.maxX - 0.25, y: U + 1.12, z: 14.5, face: [1, 0] as [number, number] }];
+    taps2.forEach((t, i) => props.push({ id: `pinttap${taps.length + i + 1}`, kind: "pinttap", x: t.x, y: t.y, z: t.z, yaw: Math.atan2(t.face[0], t.face[1]) }));
+    taps.push(...taps2);
+    const barmaid = { x: -89.0, z: 13.1, yaw: PI };
+    posts.push({ kind: "barmaid", x: barmaid.x, z: barmaid.z, yaw: barmaid.yaw, y: U });
+    for (let x = HB2.minX + 1.1; x < HB2.maxX - 1.0; x += 0.9) if (!taps2.some((t) => t.face[1] && Math.abs(t.x - x) < 0.85)) disc(x, HB2.minZ - 0.5, 0.2, U, 0.72, "table", { hide: true, deco: "barstool2" });
+    for (let z = HB2.minZ + 1.2; z < HB2.maxZ - 1.0; z += 0.9) { disc(HB2.minX - 0.5, z, 0.2, U, 0.72, "table", { hide: true, deco: "barstool2" }); if (Math.abs(z - 14.5) > 0.6 && Math.abs(z - 15.2) > 0.6) disc(HB2.maxX + 0.5, z, 0.2, U, 0.72, "table", { hide: true, deco: "barstool2" }); }
+    // ---- the darts: two booths down the west wall, like Flight Club: the board on the wall, stained-glass screens
+    //      either side, the oche 2.37 m out, a scoring podium, a long glowing ledge behind the thrower ----
+    const darts = [R(IN.minX, IN.minX + 3.0, 8.4, 14.2), R(IN.minX, IN.minX + 3.0, 15.4, 21.2)].map((b) => {
+      const zc = (b.minZ + b.maxZ) / 2;
+      for (const z of [b.minZ, b.maxZ]) wb(b.minX, b.maxX, z - 0.05, z + 0.05, U, U + 2.6, "wall", { hide: true, deco: "dartscreen" });
+      const ledge = R(IN.minX + 4.3, IN.minX + 4.9, b.minZ + 1.0, b.maxZ - 1.0);
+      wb(ledge.minX, ledge.maxX, ledge.minZ, ledge.maxZ, U, U + 1.05, "table", { hide: true, deco: "dartledge" });
+      const podium = { x: IN.minX + 2.9, z: b.minZ + 0.6 };
+      wb(podium.x - 0.25, podium.x + 0.25, podium.z - 0.2, podium.z + 0.2, U, U + 1.1, "table", { hide: true, deco: "dartpodium" });
+      return { board: { x: IN.minX, y: U + 1.73, z: zc }, face: [1, 0] as [number, number], oche: IN.minX + 2.37, booth: b, podium, ledge };
+    });
+    // ---- the pool area (back right, open to the front room): two tables, long along z ----
+    const pools = [{ x: -81.3, z: 27.9, w: 1.2, d: 2.2 }, { x: -77.0, z: 27.9, w: 1.2, d: 2.2 }];
+    for (const q of pools) wb(q.x - q.w / 2, q.x + q.w / 2, q.z - q.d / 2, q.z + q.d / 2, U, U + 0.82, "table", { hide: true, deco: "pooltable" });
+    // ---- the lounge: two pairs of chesterfields round low tables; two round high-backed booths on the east wall; high
+    //      tables by the darts and the pool; the second fire (on the snug's front wall) and its wing chairs; the jukebox ----
+    const sofas: { x: number; z: number; w: number; d: number; yaw: number }[] = [], lowTables: { x: number; z: number; r: number }[] = [];
+    for (const c of [13.4, 19.4]) {
+      lowTables.push({ x: -80.0, z: c, r: 0.45 });
+      sofas.push({ x: -80.0, z: c - 1.25, w: 2.0, d: 0.85, yaw: 0 }, { x: -80.0, z: c + 1.25, w: 2.0, d: 0.85, yaw: PI });
+    }
+    for (const t of lowTables) disc(t.x, t.z, t.r, U, 0.45, "table", { hide: true, deco: "lowtable" });
+    for (const f of sofas) wb(f.x - f.w / 2, f.x + f.w / 2, f.z - f.d / 2, f.z + f.d / 2, U, U + 0.5, "sofa", { hide: true, deco: "chesterfield" });
+    const roundBooths = [13.6, 20.0].map((z) => ({ x: IN.maxX, z, r: 1.6, a0: PI / 2, a1: 1.5 * PI }));
+    for (const b of roundBooths) { ring(b.x, b.z, b.r - 0.55, b.r, b.a0, b.a0 + PI / 2, U, 0.46, "sofa", { hide: true, deco: "roundbooth" }); ring(b.x, b.z, b.r - 0.55, b.r, b.a0 + PI / 2, b.a1, U, 0.46, "sofa", { hide: true, deco: "roundbooth" }); disc(b.x - 0.6, b.z, 0.45, U, 0.76, "table", { hide: true, deco: "boothtable" }); }
+    const highTables = [{ x: -96.0, z: 9.6 }, { x: -96.0, z: 14.8 }, { x: -96.0, z: 20.0 }, { x: -83.4, z: 24.4 }, { x: -75.0, z: 24.4 }];
+    for (const t of highTables) disc(t.x, t.z, 0.32, U, 1.1, "table", { hide: true, deco: "hightable" });
+    const FIRE2 = { x: -88.8, z: BW - 0.3 };
+    wb(FIRE2.x - 1.4, FIRE2.x + 1.4, BW - 0.55, BW, U, UC, "wall", { hide: true, deco: "chimney3" });
+    const wings = [[-90.6, 21.5], [-87.0, 21.5]].map(([x, z]) => ({ x, z, yaw: Math.atan2(FIRE2.x - x, FIRE2.z - z) }));
+    for (const w of wings) wb(w.x - 0.45, w.x + 0.45, w.z - 0.45, w.z + 0.45, U, U + 0.95, "sofa", { hide: true, deco: "armchair2" });
+    const JUKE = { x: -85.5, z: BW - 0.35, yaw: PI };
+    wb(JUKE.x - 0.45, JUKE.x + 0.45, BW - 0.62, BW, U, U + 1.6, "shelf", { hide: true, deco: "jukebox" });
+    props.push({ id: "jukebox1", kind: "jukebox", x: JUKE.x, y: U + 1.0, z: JUKE.z - 0.3, yaw: JUKE.yaw });
+    // a few drinkers up here too: at the darts' high tables, leaning on the bar, watching the pool
+    [{ x: -96.0, z: 10.3, yaw: -PI / 2 }, { x: -95.4, z: 20.4, yaw: -PI / 2 }, { x: -84.3, z: 15.2, yaw: -PI / 2 }, { x: -75.0, z: 25.1, yaw: PI }].forEach((q, k) => posts.push({ kind: "patron", x: q.x, z: q.z, yaw: q.yaw, y: U, v: [2, 4, 5, 7][k] }));
     // the balcony: French doors in the cut corner, a wrought-iron balcony round the corner and along both fronts a bit
     {
       const L = CH * S2, sd0 = 0.5 - 1.1 / L, sd1 = 0.5 + 1.1 / L;
@@ -3135,16 +3182,13 @@ export function buildTrashington(): ArenaLayout {
     const readers = [{ x: -86.2, z: 26.0, yaw: -PI / 2 }, { x: -86.2, z: 28.4, yaw: -PI / 2 }];
     for (const rd of readers) wb(rd.x - 0.45, rd.x + 0.45, rd.z - 0.45, rd.z + 0.45, U, U + 0.95, "sofa", { hide: true, deco: "readerchair" });
     wb(-92.8, -92.3, 27.4, 30.4, U, U + 2.2, "shelf", { hide: true, deco: "whiskeyshelf" });
-    // the games room: the pool table (R12.3) and the dartboard (R12.4)
-    const POOL = { x: -79.2, z: 28.2, w: 2.2, d: 1.2 };
-    wb(POOL.x - POOL.w / 2, POOL.x + POOL.w / 2, POOL.z - POOL.d / 2, POOL.z + POOL.d / 2, U, U + 0.82, "table", { hide: true, deco: "pooltable" });
-    const DART = { x: IN.maxX, y: U + 1.73, z: 25.4 };
     const door = R(M[0] + nIn[0] * 0.6 - 1.0, M[0] + nIn[0] * 0.6 + 1.0, M[1] + nIn[1] * 0.6 - 1.0, M[1] + nIn[1] * 0.6 + 1.0);
     pub = {
       rect: P, cham: CH, y1: Y1, y2: Y2, roofY: RY, door, out: { x: M[0] - nIn[0] * 2.2, z: M[1] - nIn[1] * 2.2, yaw: Math.atan2(nIn[0], nIn[1]) },
       door2: SD, out2: { x: (SD.minX + SD.maxX) / 2, z: P.minZ - 1.3, yaw: 0 },
       bar: HB, flap: FLAP, gantry: GT, lane: LANE, taps, stairs: ST, snugs, fire: FIRE, stage: STAGE, tables, rounds, windowSeat: WS, outside, stools, barman, bays,
-      ceili: CEILI_FLOOR, stage2: STAGE2, tables2, balcony: BAL.parts, balTables, snug2: SNUG2, games: GAMES, hall: HALL, mammy: MAMMY, snugFire: SNUGFIRE, readers, pool: POOL, dart: DART,
+      balcony: BAL.parts, balTables, snug2: SNUG2, hall: HALL, mammy: MAMMY, snugFire: SNUGFIRE, readers,
+      bar2: HB2, lane2: LANE2, flap2: FLAP2, gantry2: GT2, barmaid, darts, poolArea: POOLA, pools, sofas, lowTables, roundBooths, highTables, fire2: FIRE2, wings, jukebox: JUKE,
     };
   }
 

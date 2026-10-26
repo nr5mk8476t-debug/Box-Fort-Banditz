@@ -3,7 +3,6 @@
 // we never want to blast sound at someone who just opened a link.
 
 import { settings, onSettingsChange } from "./settings.ts";
-import { CEILI_TUNE, CEILI_CHORDS, CEILI_8 } from "@bfb/shared";
 
 let ctx: AudioContext | null = null;
 let master: GainNode;
@@ -189,10 +188,8 @@ export const sfx = {
   pour() { noise(0.9, 0.05, 900, 0, 0.8); blip(180, 0.5, "sine", 0.04, 120, 0.1); },
   gulp(on: boolean) { if (on) for (let i = 0; i < 4; i++) blip(150 + i * 12, 0.09, "sine", 0.12, 90, i * 0.32); else blip(320, 0.08, "sine", 0.06, 500); },
   cheer(g = 1) { noise(1.4, 0.16 * g, 1200, 0, 0.5); noise(1.0, 0.1 * g, 2400, 0.15, 0.7); for (let i = 0; i < 5; i++) blip(380 + i * 70, 0.2, "triangle", 0.05 * g, 520 + i * 90, 0.05 + i * 0.12); },
-  /** R12.2: the céilí: your shoe on the boards (a perfect's a crisp click), and a trip */
-  ceiliStep(perfect: boolean) { noise(0.03, perfect ? 0.16 : 0.1, perfect ? 3400 : 1800); blip(perfect ? 1760 : 1320, 0.05, "square", 0.04); },
-  ceiliMiss() { blip(180, 0.1, "square", 0.05, 140); },
-  ceiliTrip() { noise(0.25, 0.2, 400, 0, 0.7); blip(500, 0.4, "triangle", 0.09, 140); },
+  /** R12.2b: the jukebox: a clunk and a needle drop */
+  juke() { blip(120, 0.12, "square", 0.08, 80); noise(0.08, 0.08, 2400, 0.1); blip(880, 0.08, "triangle", 0.05, 1320, 0.2); },
   cash() { blip(1568, 0.06, "square", 0.08); blip(2093, 0.18, "square", 0.08, undefined, 0.06); noise(0.08, 0.06, 5000, 0.02); },
   lost() { [392, 330, 262].forEach((f, i) => blip(f, 0.22, "triangle", 0.1, f * 0.9, i * 0.18)); },
   truckHorn() { blip(233, 0.5, "sawtooth", 0.1); blip(277, 0.5, "sawtooth", 0.08); blip(233, 0.6, "sawtooth", 0.1, undefined, 0.65); blip(277, 0.6, "sawtooth", 0.08, undefined, 0.65); },
@@ -662,68 +659,94 @@ export function pubMusicOn(): boolean { return pbTimer !== null && !!pbBus && pb
 void PB_BAR;
 
 // ---------------------------------------------------------------------------
-// R12.2: upstairs, the céilí band (THE SHAMROCK SHUFFLERS) playing an original reel ("The Mopping-Up Reel") in D, 4/4 at
-// 115.2 crotchets a minute: accordion (two reeds a hair apart: the musette wobble) and flute on the tune, the fiddle an
-// octave under the flute, the accordion's bass buttons going oom-pah, the bodhrán on the beats. The very same notes the dancers'
-// chart is made of (shared CEILI_TUNE), off the very same city clock, so the arrows land on the music.
-let rlBus: GainNode | null = null, rlFilter: BiquadFilterNode | null = null, rlTimer: number | null = null;
-let rlClockAt = 0, rlCtxAt = 0, rlNext = -1, rlIdle = 0;
-function rlOut(): AudioNode | null {
+// R12.2b: upstairs, THE JUKEBOX: three originals, laid back, round and round off the city clock (so every window hears
+// the same bar); E on the jukebox puts on the next one. "Soggy Sunday": a slow waltz in G on fiddle and guitar; "Last
+// Bus Home": a late-night ballad in D on electric piano and low whistle; "Puddle Stomp": a stompy folk-rock thing in A
+// with bass and drums. Through the floor (downstairs, outside) it's muffled.
+type JbBar = (number | null)[];
+interface JbTune { bpm: number; per: number; root: number; mel: JbBar[]; ch: number[]; style: "waltz" | "ballad" | "stomp" }
+const _ = null;
+const JB: JbTune[] = [
+  { bpm: 84, per: 6, root: 392.0, style: "waltz",
+    mel: [[0, _, 4, _, 7, _], [9, _, 7, _, 4, _], [5, _, 4, _, 2, _], [0, _, _, _, -1, _], [0, _, 4, _, 7, _], [12, _, 11, _, 9, _], [7, _, 9, _, 5, _], [4, _, _, _, _, _],
+      [7, _, 9, _, 11, _], [12, _, _, _, 11, 9], [7, _, 4, _, 5, _], [7, _, _, _, _, _], [9, _, 7, _, 5, _], [4, _, 2, _, 4, _], [2, _, -1, _, 2, _], [0, _, _, _, _, _]],
+    ch: [0, 5, 2, 0, 0, 5, 7, 0, 5, 0, 7, 0, 9, 0, 7, 0] },
+  { bpm: 72, per: 8, root: 293.66, style: "ballad",
+    mel: [[0, _, _, 2, 4, _, _, _], [7, _, 4, _, 2, _, _, _], [9, _, _, 7, 4, _, 2, _], [0, _, _, _, _, _, _, _], [4, _, _, 5, 7, _, _, _], [9, _, 7, _, 5, _, 4, _], [2, _, _, 4, 2, _, 0, _], [-3, _, _, _, _, _, _, _],
+      [0, _, _, 2, 4, _, _, _], [7, _, 9, _, 11, _, _, _], [12, _, _, 11, 9, _, 7, _], [9, _, _, _, _, _, _, _], [7, _, _, 5, 4, _, _, _], [5, _, 4, _, 2, _, _, _], [4, _, _, 2, -1, _, _, _], [0, _, _, _, _, _, _, _]],
+    ch: [0, 9, 5, 7, 0, 9, 5, 7, 0, 7, 5, 2, 5, 2, 7, 0] },
+  { bpm: 108, per: 8, root: 220.0, style: "stomp",
+    mel: [[0, _, 0, 3, 5, _, 3, 0], [7, _, 5, _, 3, _, 0, _], [0, _, 0, 3, 5, _, 7, _], [10, _, 7, _, 5, _, _, _], [0, _, 0, 3, 5, _, 3, 0], [7, _, 5, _, 3, _, 0, _], [0, _, 0, 3, 5, _, 7, 5], [0, _, _, _, _, _, _, _],
+      [12, _, 10, _, 7, _, 5, _], [7, _, 5, 3, 0, _, _, _], [12, _, 10, _, 7, _, 10, 12], [7, _, _, _, _, _, _, _], [12, _, 10, _, 7, _, 5, _], [7, _, 5, 3, 0, _, 3, 5], [7, _, 10, _, 12, _, 10, 7], [0, _, _, _, _, _, _, _]],
+    ch: [0, 0, 10, 5, 0, 0, 10, 0, 5, 0, 10, 0, 5, 0, 10, 0] },
+];
+const jbStep = (k: number) => 60 / JB[k].bpm / 2;
+const minorAt = (c: number) => c === 9 || c === 2 || c === 4;
+let jbBus: GainNode | null = null, jbFilter: BiquadFilterNode | null = null, jbTimer: number | null = null;
+let jbClockAt = 0, jbCtxAt = 0, jbNext = -1, jbIdle = 0, jbTune = 0;
+function jbOut(): AudioNode | null {
   if (!ctx) return null;
-  if (!rlBus) {
-    rlFilter = ctx.createBiquadFilter(); rlFilter.type = "lowpass"; rlFilter.frequency.value = 500; rlFilter.Q.value = 0.6;
-    rlBus = ctx.createGain(); rlBus.gain.value = 0;
-    rlFilter.connect(rlBus).connect(musicBus);
+  if (!jbBus) {
+    jbFilter = ctx.createBiquadFilter(); jbFilter.type = "lowpass"; jbFilter.frequency.value = 500; jbFilter.Q.value = 0.6;
+    jbBus = ctx.createGain(); jbBus.gain.value = 0;
+    jbFilter.connect(jbBus).connect(musicBus);
   }
-  return rlFilter;
+  return jbFilter;
 }
-function rlStep(step: number, t: number) {
-  const out = rlOut();
+function jbPlay(k: number, step: number, t: number) {
+  const out = jbOut();
   if (!out) return;
-  const N = CEILI_TUNE.length * 8, s = ((step % N) + N) % N, bar = Math.floor(s / 8), i = s % 8;
-  const tune = CEILI_TUNE[bar];
-  const end = bar % 8 === 7; // (each strain's last bar: three notes and a long held D)
-  let n: number | null = tune[i], len = 1;
-  if (end && i > 4) n = null; else if (end && i === 4) len = 4;
-  const swing = i % 2 === 0 ? 1.08 : 0.92;
+  const T = JB[k], N = T.mel.length * T.per, s = ((step % N) + N) % N, bar = Math.floor(s / T.per), i = s % T.per, d8 = jbStep(k);
+  const tune = T.mel[bar], n = tune[i];
+  let len = 1; while (i + len < T.per && tune[i + len] === null) len++;
+  const c = T.ch[bar], root = (T.root / 2) * Math.pow(2, c / 12), tri = [0, minorAt(c) ? 3 : 4, 7];
   if (n !== null) {
-    const f = D4 * Math.pow(2, n / 12), dur = CEILI_8 * len * 0.94 * swing;
-    pbVoice("square", f, t, dur, 0.035, out, 2400, 0.0015); // the accordion: two reeds...
-    pbVoice("square", f * 1.006, t, dur, 0.03, out, 2400, 0); // ...a hair apart
-    pbVoice("sine", f * 2, t + 0.008, dur, 0.09, out, 6000, 0.005); // the flute
-    pbVoice("sawtooth", f, t + 0.015, dur * 0.95, 0.035, out, 2800, 0.006); // the fiddle (an octave under the flute)
-    if (i % 4 === 0 && len === 1 && (bar * 5 + i) % 3 === 0) pbVoice("sine", f * 2 * Math.pow(2, 2 / 12), t - 0.03, 0.03, 0.06, out, 6000, 0); // (a cut)
-    fvNoise(t, 0.025, 0.01, "bandpass", 2500, out); // (breath on the flute)
+    const f = T.root * Math.pow(2, n / 12), dur = d8 * len * 0.95;
+    if (T.style === "waltz") { pbVoice("sawtooth", f, t, dur, 0.05, out, 2400, 0.007); pbVoice("triangle", f * 2, t + 0.01, dur, 0.03, out, 4000, 0.003); }
+    else if (T.style === "ballad") { pbVoice("sine", f, t, dur, 0.09, out, 3000, 0.004); fvNoise(t, 0.03, 0.008, "bandpass", 2200, out); }
+    else { pbVoice("square", f, t, dur * 0.85, 0.035, out, 2200, 0.002); pbVoice("sawtooth", f / 2, t, dur * 0.85, 0.025, out, 1500, 0); }
   }
-  // the accordion's left hand: the bass on 1 and 3, the chord on the off-beats
-  const root = D4 / 4 * Math.pow(2, CEILI_CHORDS[bar] / 12);
-  if (i === 0 || i === 4) pbVoice("square", root, t, CEILI_8 * 0.8, 0.05, out, 700, 0);
-  else if (i === 2 || i === 6) for (const k of [12, 16, 19]) pbVoice("square", root * Math.pow(2, k / 12), t, CEILI_8 * 0.6, 0.018, out, 1600, 0);
-  // the bodhrán: thumps on the beats (the big one on 1), a tap on every quaver between
-  if (i % 2 === 0) { fvOsc("sine", i === 0 ? 120 : 108, t, 0.18, i === 0 ? 0.42 : 0.28, out, 50); fvNoise(t, 0.05, 0.07, "lowpass", 400, out); }
-  else fvNoise(t, 0.035, 0.04, "bandpass", 800, out);
+  if (T.style === "waltz") {
+    // the guitar: the bass on 1, a strum on 2 and 3
+    if (i === 0) pbPluck(root, t, 0.05, out);
+    else if (i === 2 || i === 4) for (const q of tri) pbPluck(root * 2 * Math.pow(2, q / 12), t + q * 0.003, 0.022, out);
+    if (i === 0) { fvOsc("sine", 110, t, 0.2, 0.25, out, 50); }
+  } else if (T.style === "ballad") {
+    // electric piano: the chord rolled up across the bar, a soft low root
+    const q = tri[i % 3] + (i >= 3 ? 12 : 0);
+    pbVoice("triangle", root * 2 * Math.pow(2, q / 12), t, d8 * 1.8, 0.03, out, 1800, 0.002);
+    if (i === 0) pbVoice("sine", root / 2, t, d8 * 7, 0.07, out, 600, 0);
+    if (i === 4) fvNoise(t, 0.06, 0.03, "bandpass", 1500, out); // (a brush on the snare)
+  } else {
+    // bass and drums: kick on 1 and 3, snare on 2 and 4, hats on the eighths; the bass on 1 and the "and" of 2
+    if (i === 0 || i === 3) pbVoice("square", root / 2, t, d8 * 0.9, 0.06, out, 600, 0);
+    if (i === 2 || i === 6) for (const q of tri) pbPluck(root * 2 * Math.pow(2, q / 12), t + q * 0.002, 0.02, out);
+    if (i === 0 || i === 4) fvOsc("sine", 100, t, 0.18, 0.4, out, 45);
+    if (i === 2 || i === 6) fvNoise(t, 0.12, 0.09, "bandpass", 1800, out);
+    fvNoise(t, 0.03, 0.025, "highpass", 7000, out);
+  }
 }
-/** R12.2: call every frame. clock: the city clock (s); gain 0..1; cutoff Hz (muffled through the floor) */
-export function ceiliMusic(clock: number, gain: number, cutoff: number): void {
+/** R12.2b: call every frame. clock: the city clock (s); tune: the jukebox's (0..2); gain 0..1; cutoff Hz (through the floor) */
+export function jukeboxMusic(clock: number, tune: number, gain: number, cutoff: number): void {
   if (!ctx || !unlocked) return;
   if (!noiseBuf) noise(0.001, 0.0001, 1000);
-  const out = rlOut();
-  if (!out || !rlBus || !rlFilter) return;
-  const now = ctx.currentTime;
-  rlBus.gain.setTargetAtTime(Math.max(0, gain), now, 0.15);
-  rlFilter.frequency.setTargetAtTime(Math.max(120, cutoff), now, 0.2);
-  const predicted = rlClockAt + (now - rlCtxAt);
-  if (rlNext < 0 || Math.abs(predicted - clock) > 0.12) { rlClockAt = clock; rlCtxAt = now; rlNext = Math.ceil((clock + 0.05) / CEILI_8); }
-  if (gain <= 0.001) { rlIdle += 1; if (rlIdle > 120 && rlTimer !== null) { clearInterval(rlTimer); rlTimer = null; rlNext = -1; } return; }
-  rlIdle = 0;
-  if (rlTimer === null) rlTimer = window.setInterval(() => {
+  const out = jbOut();
+  if (!out || !jbBus || !jbFilter) return;
+  const now = ctx.currentTime, k = Math.max(0, Math.min(JB.length - 1, tune | 0)), d8 = jbStep(k);
+  jbBus.gain.setTargetAtTime(Math.max(0, gain), now, 0.15);
+  jbFilter.frequency.setTargetAtTime(Math.max(120, cutoff), now, 0.2);
+  const predicted = jbClockAt + (now - jbCtxAt);
+  if (k !== jbTune || jbNext < 0 || Math.abs(predicted - clock) > 0.12) { jbTune = k; jbClockAt = clock; jbCtxAt = now; jbNext = Math.ceil((clock + 0.05) / d8); }
+  if (gain <= 0.001) { jbIdle += 1; if (jbIdle > 120 && jbTimer !== null) { clearInterval(jbTimer); jbTimer = null; jbNext = -1; } return; }
+  jbIdle = 0;
+  if (jbTimer === null) jbTimer = window.setInterval(() => {
     if (!ctx) return;
-    const n2 = ctx.currentTime, clk = rlClockAt + (n2 - rlCtxAt);
-    while (rlNext * CEILI_8 < clk + 0.25) {
-      const at = rlCtxAt + (rlNext * CEILI_8 - rlClockAt);
-      if (at > n2 - 0.02) rlStep(rlNext, Math.max(n2, at));
-      rlNext++;
+    const n2 = ctx.currentTime, clk = jbClockAt + (n2 - jbCtxAt), e8 = jbStep(jbTune);
+    while (jbNext * e8 < clk + 0.25) {
+      const at = jbCtxAt + (jbNext * e8 - jbClockAt);
+      if (at > n2 - 0.02) jbPlay(jbTune, jbNext, Math.max(n2, at));
+      jbNext++;
     }
   }, 40);
 }
-export function ceiliMusicOn(): boolean { return rlTimer !== null && !!rlBus && rlBus.gain.value > 0.01; }
+export function jukeboxMusicOn(): boolean { return jbTimer !== null && !!jbBus && jbBus.gain.value > 0.01; }

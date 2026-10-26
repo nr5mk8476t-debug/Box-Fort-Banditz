@@ -15,7 +15,10 @@ const ok = (cond, msg) => { results.push({ ok: !!cond, msg }); console.log(cond 
 const rampDist = (t, vmax, a = 48) => { const tr = vmax / a; return t < tr ? 0.5 * a * t * t : 0.5 * a * tr * tr + vmax * (t - tr); }; // (D1: groundAccel 48)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// (R12.2b: on a box whose preinstalled Chromium is newer than this Playwright's own, use that one)
+const CHROME = process.env.PW_CHROME || (fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
 const browser = await chromium.launch({
+  ...(CHROME ? { executablePath: CHROME } : {}),
   args: ["--disable-features=WebRtcHideLocalIpsWithMdns", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"],
 });
 
@@ -1657,7 +1660,8 @@ try {
       await shot(R3, "r121-pub-session.png");
       await R3.evaluate((o) => window.__bfb.camAt(o.x + 7, 2.3, o.z - 7, -Math.PI / 4, 0.0), pb.out); await sleep(2500); await hideOverlays(R3);
       await shot(R3, "r121-pub-outside.png"); await R3.evaluate(() => window.__bfb.camFree());
-      // R12.2: upstairs: up the stairs, the céilí (B, the steps, a trip), MAMMY MOLONEY, the balcony; nobody's got a chest square
+      // R12.2b: upstairs: up the stairs, a pint at the island bar (Róisín), the jukebox (E: the next tune), the darts booths
+      // and the pool tables you can walk up to, MAMMY MOLONEY, the balcony; the céilí's gone; nobody's got a chest square
       {
         const st2 = pb.stairs, y2 = pb.y2;
         await R3.evaluate((s) => { window.__bfb.teleportY(s.maxX + 0.6, 0.25, (s.minZ + s.maxZ) / 2, -Math.PI / 2); window.__bfb.setPitch(0.1); }, st2);
@@ -1666,57 +1670,80 @@ try {
         const upOk = await R3.waitForFunction((y) => window.__bfb.move().y > y - 0.3, y2, { timeout: 40000 }).then(() => true, () => false);
         await R3.evaluate(() => window.__bfb.setAxes(null));
         ok(upOk, `walked up the stairs (y ${(await R3.evaluate(() => window.__bfb.move().y)).toFixed(2)}, the floor's at ${y2})`);
-        const fl = pb.ceili, fx = (fl.minX + fl.maxX) / 2, fz = (fl.minZ + fl.maxZ) / 2;
-        await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, Math.PI / 2); window.__bfb.setPitch(0.05); }, { x: fx, y: y2, z: fz });
-        ok(await R3.waitForFunction(() => window.__bfb.pubInfo()?.level2 === 2, null, { timeout: 20000 }).then(() => true, () => false), "upstairs (level 2): the function room");
-        ok(await R3.waitForFunction(() => /c[ée]il[ií]/i.test(window.__bfb.promptText()), null, { timeout: 20000 }).then(() => true, () => false), `the céilí floor's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
-        { const pi = await R3.evaluate(() => window.__bfb.pubInfo()); ok(pi.reelGain > 0.5 && pi.gain < 0.4, `upstairs the reel's loud (${pi.reelGain.toFixed(2)}), the jig's through the floor (${pi.gain.toFixed(2)}; audio running: ${pi.reel})`); }
+        ok(await R3.waitForFunction(() => window.__bfb.pubInfo()?.level2 === 2, null, { timeout: 20000 }).then(() => true, () => false), "upstairs (level 2)");
         const npc2 = await R3.evaluate(() => { const out = {}; for (const n of window.__bfb.npcs()) out[n.kind] = (out[n.kind] ?? 0) + 1; return out; });
-        ok(npc2.ceili_band === 4 && npc2.ceili_dancer === 6 && npc2.mammy === 1, `the céilí band (4), six dancers, Mammy Moloney (${JSON.stringify({ b: npc2.ceili_band, d: npc2.ceili_dancer, m: npc2.mammy })})`);
-        await R3.keyboard.press("b");
-        ok(await R3.waitForFunction(() => window.__bfb.pubInfo()?.dancing, null, { timeout: 20000 }).then(() => true, () => false), "B: into the line (the steps come down)");
-        await R3.evaluate(() => window.__bfb.ceiliAuto(true));
-        ok(await R3.waitForFunction(() => (window.__bfb.pubInfo()?.ceiliHits ?? 0) >= 6, null, { timeout: 30000 }).then(() => true, () => false), `steps on the beat (${await R3.evaluate(() => window.__bfb.pubInfo()?.ceiliHits)} hit, score ${await R3.evaluate(() => window.__bfb.pubInfo()?.ceiliScore)}; ${await R3.evaluate(() => { const i = window.__bfb.pubInfo(); return `clock ${i.clock.toFixed(2)} t0 ${i.ceiliT0} events ${i.evTail}`; })})`);
-        await R3.keyboard.press("ArrowLeft"); await R3.keyboard.press("k"); // (real keys: steps, not walking)
-        const still = await R3.evaluate(() => window.__bfb.pubInfo()?.dancing);
-        ok(still, "the arrow keys are steps while you dance (still dancing after a couple of key presses)");
-        await hideOverlays(R3); await R3.evaluate(() => { const c = document.getElementById("ceili"); if (c) c.style.display = ""; });
-        await shot(R3, "r122-ceili.png");
-        await R3.evaluate(() => window.__bfb.ceiliAuto(false));
-        await R3.keyboard.press("b");
-        ok(await R3.waitForFunction(() => /YOU STOPPED|Off the floor/.test(document.body.innerText) || !window.__bfb.pubInfo()?.dancing, null, { timeout: 20000 }).then(() => true, () => false), "B again: off the floor");
-        await sleep(2000);
-        // a trip: join and don't step
-        await R3.keyboard.press("b");
-        await R3.waitForFunction(() => window.__bfb.pubInfo()?.dancing, null, { timeout: 20000 }).catch(() => {});
-        // (solo: the World runs in this window, and on this CPU-only box at ~2 fps its clock can fall 10x behind; ~7 s of sim time)
-        ok(await R3.waitForFunction(() => /OVER YOU GO|Over you go/.test(document.body.innerText) || /ceiliTrip\*$/.test(window.__bfb.pubInfo()?.evTail ?? ""), null, { timeout: 150000 }).then(() => true, () => false), `miss five in a row: over you go (${await R3.evaluate(() => window.__bfb.pubInfo()?.evTail)})`);
+        ok(npc2.barmaid === 1 && npc2.mammy === 1 && !npc2.ceili_band && !npc2.ceili_dancer && npc2.patron === 12, `Róisín, Mammy, 12 drinkers (4 upstairs), no céilí folk (${JSON.stringify({ r: npc2.barmaid, m: npc2.mammy, p: npc2.patron, cb: npc2.ceili_band ?? 0, cd: npc2.ceili_dancer ?? 0 })})`);
+        // a pint at the island bar
+        const tap2 = pb.taps.find((t) => t.y > y2);
+        await R3.evaluate((t) => { window.__bfb.teleportY(t.x + t.face[0] * 0.85, t.y - 1.1 + 0.25, t.z + t.face[1] * 0.85, Math.atan2(-t.face[0], -t.face[1])); window.__bfb.setPitch(0.45); }, tap2);
+        ok(await R3.waitForFunction(() => /GUZZLE/.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `the island bar's tap: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
+        await R3.evaluate(() => window.__bfb.setCash(40));
+        let open2 = false; // (one pint at a time: the one downstairs was poured under 30 s ago, so it may say "finish that first")
+        for (let k = 0; k < 6 && !open2; k++) { await R3.keyboard.press("e"); open2 = await R3.waitForFunction(() => window.__bfb.pubInfo()?.open, null, { timeout: 8000 }).then(() => true, () => false); }
+        ok(open2, "a pint upstairs: the close-up's up");
+        await R3.evaluate(() => window.__bfb.pintPress(true)); await sleep(1500); await R3.evaluate(() => window.__bfb.pintPress(false));
+        ok(await R3.waitForFunction(() => /G!|Close|Missed/.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false), "split the G upstairs: the verdict comes back");
         await sleep(3000);
+        // the jukebox
+        const jb = pb.jukebox;
+        await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z - 1.1, 0); window.__bfb.setPitch(0.2); }, { ...jb, y: y2 });
+        ok(await R3.waitForFunction(() => /Jukebox/.test(window.__bfb.promptText()), null, { timeout: 20000 }).then(() => true, () => false), `the jukebox's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 50)}"`);
+        const t0 = await R3.evaluate(() => window.__bfb.pubInfo().jukeTune);
+        await R3.keyboard.press("e");
+        ok(await R3.waitForFunction((k) => window.__bfb.pubInfo().jukeTune !== k, t0, { timeout: 20000 }).then(() => true, () => false), `E: the next tune (${t0} -> ${await R3.evaluate(() => window.__bfb.pubInfo().jukeTune)}; ${await R3.evaluate(() => window.__bfb.pubInfo().evTail)})`);
+        { const pi = await R3.evaluate(() => window.__bfb.pubInfo()); ok(pi.jukeGain > 0.5 && pi.gain < 0.4, `upstairs the jukebox is loud (${pi.jukeGain.toFixed(2)}), the jig's through the floor (${pi.gain.toFixed(2)}; audio running: ${pi.juke})`); }
+        await hideOverlays(R3); await shot(R3, "r122b-jukebox.png");
+        // the darts booths and the pool tables: walk up to them (on the oche, beside each table)
+        for (const [i, d] of pb.darts.entries()) {
+          await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, -Math.PI / 2); window.__bfb.setPitch(0.0); }, { x: d.oche + 0.4, y: y2, z: d.board.z });
+          await sleep(1500);
+          const mv = await R3.evaluate(() => window.__bfb.move());
+          ok(Math.abs(mv.y - y2) < 0.4 && Math.abs(mv.x - (d.oche + 0.4)) < 0.5, `standing on oche ${i + 1} (${mv.x.toFixed(1)}, ${mv.y.toFixed(2)}, ${mv.z.toFixed(1)})`);
+        }
+        await hideOverlays(R3); await shot(R3, "r122b-oche-view.png");
+        for (const [i, q] of pb.pools.entries()) {
+          await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, Math.PI / 2); }, { x: q.x - q.w / 2 - 0.7, y: y2, z: q.z });
+          await sleep(1200);
+          const mv = await R3.evaluate(() => window.__bfb.move());
+          ok(Math.abs(mv.y - y2) < 0.4 && Math.abs(mv.x - (q.x - q.w / 2 - 0.7)) < 0.5, `beside pool table ${i + 1} (${mv.x.toFixed(1)}, ${mv.z.toFixed(1)})`);
+        }
         // MAMMY MOLONEY
         const m = pb.mammy, mx = m.x + Math.sin(m.yaw) * 1.5, mz = m.z + Math.cos(m.yaw) * 1.5;
         await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, o.yaw + Math.PI); window.__bfb.setPitch(0.25); }, { x: mx, y: y2, z: mz, yaw: m.yaw });
         ok(await R3.waitForFunction(() => /Mammy/.test(window.__bfb.promptText()), null, { timeout: 20000 }).then(() => true, () => false), `Mammy's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
         await R3.keyboard.press("e");
         ok(await R3.waitForFunction(() => /MAMMY MOLONEY:/.test(document.body.innerText), null, { timeout: 20000 }).then(() => true, () => false), "a word with Mammy (she's after something)");
-        await R3.evaluate((o) => window.__bfb.camAt(o.x + Math.sin(o.yaw) * 2.6, o.y + 1.5, o.z + Math.cos(o.yaw) * 2.6, o.yaw + Math.PI, 0.12), { ...m, y: y2 }); await sleep(2500); await hideOverlays(R3);
-        await shot(R3, "r122-mammy-snug.png");
         // the balcony: stand on it
         const bal = pb.balcony[1], bx = (bal.minX + bal.maxX) / 2, bz = (bal.minZ + bal.maxZ) / 2;
         await R3.evaluate((o) => window.__bfb.teleportY(o.x, o.y + 0.3, o.z, 0), { x: bx, y: y2, z: bz });
         await sleep(2500);
         { const mv = await R3.evaluate(() => window.__bfb.move()); ok(Math.abs(mv.y - y2) < 0.5, `standing on the balcony (y ${mv.y.toFixed(2)})`); }
-        // the shots: the function room (day, night), the dancers close up, the games room, the balcony from the street
-        await R3.evaluate((o) => window.__bfb.camAt(o.x + 7.5, o.y + 2.0, o.z - 6.5, -0.95, 0.12), { x: fx, y: y2, z: fz }); await sleep(2500); await hideOverlays(R3);
-        await shot(R3, "r122-function-room.png");
-        await R3.evaluate((o) => window.__bfb.camAt(o.x + 3.0, o.y + 1.4, o.z - 2.6, -0.85, 0.05), { x: fx, y: y2, z: fz }); await sleep(2000); await hideOverlays(R3);
-        await shot(R3, "r122-dancers.png");
-        await R3.evaluate((o) => window.__bfb.camAt(o.x - 3.2, o.y + 1.8, o.z - 3.0, 0.8, 0.3), { x: pb.pool.x, y: y2, z: pb.pool.z }); await sleep(2000); await hideOverlays(R3);
-        await shot(R3, "r122-games-room.png");
+        // B upstairs: just the ordinary dance now
+        await R3.evaluate((o) => window.__bfb.teleportY(o.x, o.y + 0.25, o.z, 0), { x: -80.0, y: y2, z: 16.4 });
+        await sleep(1500);
+        ok(!/c[ée]il[ií]/i.test(await R3.evaluate(() => window.__bfb.promptText())), "no céilí prompt anywhere upstairs");
+        // the shots: the island bar (day, night), the darts booths, the pool area, the lounge, Mammy's snug, the balcony
+        const B2 = pb.bar2, bxm = (B2.minX + B2.maxX) / 2, bzm = (B2.minZ + B2.maxZ) / 2;
+        const shots2 = [
+          ["r122b-bar.png", { x: bxm + 6.5, y: y2 + 2.0, z: bzm - 5.5, yaw: -0.85, pitch: 0.12 }],
+          ["r122b-darts.png", { x: pb.darts[0].oche + 4.6, y: y2 + 1.75, z: pb.darts[0].board.z + 2.2, yaw: -Math.PI / 2 - 0.35, pitch: 0.05 }],
+          ["r122b-darts-booth.png", { x: pb.darts[1].oche + 2.6, y: y2 + 1.6, z: pb.darts[1].board.z, yaw: -Math.PI / 2, pitch: 0.0 }],
+          ["r122b-pool.png", { x: -79.2, y: y2 + 2.1, z: 23.0, yaw: 0, pitch: 0.32 }],
+          ["r122b-lounge.png", { x: -84.0, y: y2 + 1.7, z: 9.5, yaw: 0.7, pitch: 0.1 }],
+          ["r122b-fire.png", { x: pb.fire2.x + 0.3, y: y2 + 1.6, z: pb.fire2.z - 5.0, yaw: 0, pitch: 0.05 }],
+          ["r122b-mammy-snug.png", { x: m.x + Math.sin(m.yaw) * 2.6, y: y2 + 1.5, z: m.z + Math.cos(m.yaw) * 2.6, yaw: m.yaw + Math.PI, pitch: 0.12 }],
+        ];
+        for (const [name, c] of shots2) { await R3.evaluate((o) => window.__bfb.camAt(o.x, o.y, o.z, o.yaw, o.pitch), c); await sleep(2500); await hideOverlays(R3); await shot(R3, name); }
+        // the drinkers and Róisín close up (no chest squares)
+        await R3.evaluate((o) => window.__bfb.camAt(o.x, o.y + 1.5, o.z - 2.2, 0, 0.12), { x: pb.barmaid.x, y: y2, z: pb.barmaid.z - 1.2 }); await sleep(2000); await hideOverlays(R3);
+        await shot(R3, "r122b-roisin.png");
         await R3.evaluate(() => window.__bfb.forceNight(true));
-        await R3.evaluate((o) => window.__bfb.camAt(o.x + 7.5, o.y + 2.0, o.z - 6.5, -0.95, 0.12), { x: fx, y: y2, z: fz }); await sleep(3000); await hideOverlays(R3);
-        await shot(R3, "r122-function-room-night.png");
+        await R3.evaluate((c) => window.__bfb.camAt(c.x, c.y, c.z, c.yaw, c.pitch), shots2[0][1]); await sleep(3000); await hideOverlays(R3);
+        await shot(R3, "r122b-bar-night.png");
+        await R3.evaluate((c) => window.__bfb.camAt(c.x, c.y, c.z, c.yaw, c.pitch), shots2[1][1]); await sleep(2500); await hideOverlays(R3);
+        await shot(R3, "r122b-darts-night.png");
         await R3.evaluate((o) => window.__bfb.camAt(o.x + 9, 2.0, o.z - 9, -Math.PI / 4, -0.2), pb.out); await sleep(3000); await hideOverlays(R3);
-        await shot(R3, "r122-balcony-night.png");
+        await shot(R3, "r122b-balcony-night.png");
         await R3.evaluate(() => { window.__bfb.forceNight(false); window.__bfb.camFree(); });
       }
     }

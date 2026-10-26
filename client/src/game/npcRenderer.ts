@@ -63,9 +63,8 @@ const LOOKS: Record<string, Look> = {
   regular: { body: "#6b5a3a", legs: "#4a4038", skin: "#e8b090", hatShape: "none", prop: "none", bulk: 1.15 },
   trad_band: { body: "#2f6b3a", legs: "#2b2433", skin: "#f0c09a", hatShape: "none", prop: "none", bulk: 1.05 },
   patron: { body: "#3a4a6a", legs: "#2b2433", skin: "#f0c09a", hatShape: "none", prop: "none", bulk: 1.1 },
-  // R12.2: upstairs: the céilí band, the costumed dancers, MAMMY MOLONEY (tiny, fierce, in pearls)
-  ceili_band: { body: "#1f4a2e", legs: "#2b2433", skin: "#f0c09a", hatShape: "none", prop: "none", bulk: 1.1 },
-  ceili_dancer: { body: "#2f6ac8", legs: "#f4f1ea", skin: "#f0c8a8", hatShape: "none", prop: "none", bulk: 0.95 },
+  // R12.2: MAMMY MOLONEY (tiny, fierce, in pearls); R12.2b: RÓISÍN behind the island bar (red hair up, a bottle-green top)
+  barmaid: { body: "#1f4a2e", legs: "#1b1420", skin: "#f5c8a8", hat: "#b8441a", hatShape: "none", prop: "none", bulk: 1.0 },
   mammy: { body: "#5a2a6a", legs: "#3a2a3a", skin: "#f0c8a8", hat: "#f4f1ea", hatShape: "none", prop: "cane", bulk: 1.0 },
   pigeon_lady: { body: "#6b8f5a", legs: "#5a4d6e", skin: "#e0a67c", hat: "#b5653b", hatShape: "scarf", prop: "crumbs" },
 };
@@ -86,21 +85,6 @@ const PUB_LOOKS: Record<string, Look[]> = {
   // R12.1b: the eight drinkers: a lad in a green-and-white hooped jersey, a woman in a red coat, a big fella in a
   // cable-knit jumper, a student in a beanie, an old boy in a flat cap and tweed, a woman in a denim jacket, and the
   // two out on the pavement (a suit with his tie loose, a woman in a yellow raincoat)
-  ceili_band: [
-    { body: "#1f4a2e", legs: "#2b2433", skin: "#f0c09a", hat: "#5a3a24", hatShape: "none", prop: "none", bulk: 1.2 },
-    { body: "#7a1f1a", legs: "#2b2433", skin: "#e8b48a", hat: "#c86a2a", hatShape: "none", prop: "none", bulk: 1.0 },
-    { body: "#2a3a6a", legs: "#3a3444", skin: "#f5c29a", hat: "#1b1420", hatShape: "cap", prop: "none", bulk: 1.0 },
-    { body: "#e8dcc4", legs: "#4a3a2a", skin: "#d99a6c", hat: "#3a2418", hatShape: "none", prop: "none", bulk: 1.3 },
-  ],
-  // R12.2: the dancers' costumes: embroidered dresses (the girls), waistcoat colours and sashes (the lads)
-  ceili_dancer: [
-    { body: "#1f5ab8", legs: "#f4f1ea", skin: "#f0c8a8", hat: "#8a3a1a", hatShape: "none", prop: "none", bulk: 0.95 },
-    { body: "#1b1420", legs: "#1b1420", skin: "#e8b48a", hat: "#3a2418", hatShape: "none", prop: "none", bulk: 1.05 },
-    { body: "#2f8a4a", legs: "#f4f1ea", skin: "#f5c29a", hat: "#e0b040", hatShape: "none", prop: "none", bulk: 0.95 },
-    { body: "#8e1f2e", legs: "#f4f1ea", skin: "#f0c09a", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 0.95 },
-    { body: "#1f4a2e", legs: "#1b1420", skin: "#d99a6c", hat: "#5a3a24", hatShape: "none", prop: "none", bulk: 1.05 },
-    { body: "#6a3a9a", legs: "#f4f1ea", skin: "#f0c8a8", hat: "#c86a2a", hatShape: "none", prop: "none", bulk: 0.95 },
-  ],
   patron: [
     { body: "#2f8a4a", legs: "#2b3350", skin: "#f0c09a", hat: "#8a5a2a", hatShape: "none", prop: "none", bulk: 1.15 },
     { body: "#b8262a", legs: "#2b2433", skin: "#e8b48a", hat: "#3a1a0a", hatShape: "none", prop: "none", bulk: 1.0 },
@@ -114,7 +98,7 @@ const PUB_LOOKS: Record<string, Look[]> = {
 };
 
 /** R12.1-R12.2: THE SOGGY SHAMROCK's people (which one; sitting; playing; dancing) */
-const PUB_KINDS = new Set(["regular", "trad_band", "barman", "patron", "ceili_band", "ceili_dancer", "mammy"]);
+const PUB_KINDS = new Set(["regular", "trad_band", "barman", "patron", "barmaid", "mammy"]);
 /** R12.2: the chest squares (see build's part()): never built */
 const NO_CHEST = new Set(["lapel", "tee", "suspender", "badge", "donShirt", "steveLining", "steveGoods", "steveFlap", "vgTie", "bowtie", "shirtfront", "vest", "armor", "copbadge", "apron", "tag", "tie", "fgVest", "fgBtn", "fgApron", "patShirt", "patTie", "cable", "tbVest", "inmatenum", "btn", "coinpin", "buckle", "donMedal"]);
 
@@ -413,20 +397,11 @@ export class NpcRenderer {
       if (vv === 6) { const shirt = part(MeshBuilder.CreateBox("patShirt", { width: 0.16, height: 0.34, depth: 0.03 }, sc), "#f4f1ea", pivot, 0); shirt.position.set(0, 1.22, 0.3 * bulk); const tie = part(MeshBuilder.CreateBox("patTie", { width: 0.07, height: 0.3, depth: 0.02 }, sc), "#8e1f2e", pivot, 0); tie.position.set(0.03, 1.18, 0.31 * bulk); tie.rotation.z = 0.25; }
       if (vv === 1 || vv === 3) { const sc2 = part(MeshBuilder.CreateTorus("patScarf", { diameter: 0.34, thickness: 0.1, tessellation: 10 }, sc), vv === 1 ? "#f4f1ea" : "#2f8a4a", pivot, 0.01); sc2.position.y = 1.42; }
     }
-    if (v.kind === "ceili_dancer") {
-      // R12.2: the girls: a stiff embroidered skirt (a bright border), big curly wigs, white socks; the lads: a sash
-      const vv = pubV?.v ?? 0, girl = vv % 3 !== 1;
-      if (girl) {
-        const sk = part(MeshBuilder.CreateCylinder("dancerSkirt", { diameterTop: 0.5, diameterBottom: 0.95, height: 0.42, tessellation: 16 }, sc), L.body, pivot, 0.015); sk.position.y = 0.78;
-        const rim = part(MeshBuilder.CreateTorus("dancerHem", { diameter: 0.95, thickness: 0.05, tessellation: 20 }, sc), "#ffd54a", pivot, 0); rim.position.y = 0.58;
-        const rim2 = part(MeshBuilder.CreateTorus("dancerHem2", { diameter: 0.8, thickness: 0.035, tessellation: 20 }, sc), "#f4f1ea", pivot, 0); rim2.position.y = 0.7;
-        for (let q = 0; q < 9; q++) { const u = (q / 9) * Math.PI * 2; const c = part(MeshBuilder.CreateSphere("dancerCurl", { diameter: 0.16, segments: 5 }, sc), L.hat ?? "#8a3a1a", head, 0.008); c.position.set(Math.cos(u) * 0.17, 0.06 - (q % 3) * 0.07, Math.sin(u) * 0.15 - 0.04); }
-        const top = part(MeshBuilder.CreateSphere("dancerWig", { diameter: 0.44, segments: 8 }, sc), L.hat ?? "#8a3a1a", head, 0.01); top.position.set(0, 0.08, -0.03);
-        const band = part(MeshBuilder.CreateTorus("dancerBand", { diameter: 0.4, thickness: 0.035, tessellation: 12 }, sc), "#ffd54a", head, 0); band.position.y = 0.14;
-      } else {
-        const sash = part(MeshBuilder.CreateTorus("dancerSash", { diameter: 0.62, thickness: 0.05, tessellation: 14 }, sc), "#2f8a4a", pivot, 0); sash.position.y = 1.15; sash.rotation.z = 0.7;
-        const hair = part(MeshBuilder.CreateSphere("dancerHair", { diameter: 0.42, segments: 8, slice: 0.5 }, sc), L.hat ?? "#3a2418", head, 0.01); hair.position.set(0, 0.05, -0.03);
-      }
+    if (v.kind === "barmaid") {
+      // R12.2b: RÓISÍN: red hair up in a bun, a fringe, little gold hoops, rolled-up sleeves (no chest squares)
+      const hair = part(MeshBuilder.CreateSphere("rosHair", { diameter: 0.45, segments: 8, slice: 0.55 }, sc), L.hat!, head, 0.01); hair.position.set(0, 0.05, -0.03);
+      const bun = part(MeshBuilder.CreateSphere("rosBun", { diameter: 0.2, segments: 6 }, sc), L.hat!, head, 0.01); bun.position.set(0, 0.21, -0.12);
+      for (const sx of [-1, 1]) { const e = part(MeshBuilder.CreateTorus("rosHoop", { diameter: 0.06, thickness: 0.012, tessellation: 10 }, sc), "#e8c050", head, 0); e.position.set(sx * 0.2, -0.06, 0); e.rotation.z = Math.PI / 2; }
     }
     if (v.kind === "mammy") {
       // R12.2: MAMMY MOLONEY: a white bun, big round glasses, pearls, a shawl, a stick
@@ -437,11 +412,6 @@ export class NpcRenderer {
       const shawl = part(MeshBuilder.CreateTorus("mamShawl", { diameter: 0.5, thickness: 0.14, tessellation: 14 }, sc), "#2f6a3a", pivot, 0.01); shawl.position.y = 1.38;
       const skirt = part(MeshBuilder.CreateCylinder("mamSkirt", { diameterTop: 0.5, diameterBottom: 0.62, height: 0.5, tessellation: 14 }, sc), L.body, pivot, 0.012); skirt.position.y = 0.6;
       root.scaling.setAll(0.82);
-    }
-    if (v.kind === "ceili_band") {
-      const vv = pubV?.v ?? 0;
-      if (vv === 0) { const beard = part(MeshBuilder.CreateSphere("cbBeard", { diameter: 0.3, segments: 6 }, sc), "#8a5a3a", head, 0.01); beard.position.set(0, -0.13, 0.1); beard.scaling.set(1, 0.8, 0.7); }
-      if (vv === 1) { const hair = part(MeshBuilder.CreateSphere("cbHair", { diameter: 0.46, segments: 8 }, sc), "#c86a2a", head, 0.01); hair.position.set(0, 0.02, -0.08); hair.scaling.set(1, 1.25, 0.95); }
     }
     if (v.kind === "trad_band") {
       const vv = pubV?.v ?? 0;
@@ -463,14 +433,6 @@ export class NpcRenderer {
     if (v.kind === "regular" || v.kind === "patron") {
       const g = part(MeshBuilder.CreateCylinder("pint", { diameterTop: 0.1, diameterBottom: 0.08, height: 0.17, tessellation: 10 }, sc), "#1b0d08", armR, 0.008); g.position.set(0, -0.6, 0.1);
       const h = part(MeshBuilder.CreateCylinder("pintHead", { diameter: 0.1, height: 0.03, tessellation: 10 }, sc), "#f4e8c8", armR, 0); h.position.set(0, -0.505, 0.1);
-    }
-    if (v.kind === "ceili_band") {
-      // R12.2: accordion (two end boards and the bellows, held at the waist), fiddle, flute, bodhrán
-      const vv = pubV?.v ?? 0, wood = "#8a4a1a", dark = "#3a1a0a";
-      if (vv === 0) { for (const sx of [-0.2, 0.2]) { const e = part(MeshBuilder.CreateCylinder("accEnd", { diameter: 0.3, height: 0.05, tessellation: 6 }, sc), "#c41e1e", pivot, 0.008); e.rotation.z = Math.PI / 2; e.position.set(sx, 0.95, 0.34); } for (let k = 0; k < 5; k++) { const b = part(MeshBuilder.CreateTorus("accBellows", { diameter: 0.26, thickness: 0.035, tessellation: 6 }, sc), k % 2 ? "#1b1420" : "#f4f1ea", pivot, 0); b.rotation.z = Math.PI / 2; b.position.set(-0.13 + k * 0.065, 0.95, 0.34); } }
-      if (vv === 1) { const fid = part(MeshBuilder.CreateBox("fiddle", { width: 0.2, height: 0.07, depth: 0.4 }, sc), wood, pivot, 0.01); fid.position.set(-0.2, 1.42, 0.28); fid.rotation.set(0.15, -0.45, -0.35); const bow = part(MeshBuilder.CreateBox("bow", { width: 0.62, height: 0.012, depth: 0.012 }, sc), "#e8d7a8", armR, 0); bow.position.set(-0.22, -0.6, 0.12); }
-      if (vv === 2) { const fl = part(MeshBuilder.CreateCylinder("flute", { diameter: 0.035, height: 0.6, tessellation: 8 }, sc), dark, head, 0.006); fl.rotation.z = Math.PI / 2; fl.position.set(0.28, -0.1, 0.2); }
-      if (vv === 3) { const dr = part(MeshBuilder.CreateCylinder("bodhran", { diameter: 0.5, height: 0.09, tessellation: 18 }, sc), "#e8dcbc", armL, 0.012); dr.position.set(0.14, -0.5, 0.18); dr.rotation.z = Math.PI / 2; dr.rotation.y = 0.5; const tip = part(MeshBuilder.CreateCylinder("tipper", { diameter: 0.025, height: 0.22, tessellation: 6 }, sc), dark, armR, 0); tip.position.set(0, -0.62, 0.08); tip.rotation.x = Math.PI / 2; }
     }
     if (v.kind === "trad_band") {
       const vv = pubV?.v ?? 0, wood = "#8a4a1a", dark = "#3a1a0a";
@@ -733,27 +695,12 @@ export class NpcRenderer {
           else if (vv === 2) { n.armL.rotation.x = -0.9; n.armL.rotation.z = -0.3; n.armR.rotation.x = -1.0 + Math.abs(Math.sin(beat * 1.5)) * 0.55; }
           else { n.armR.rotation.x = -0.75 + Math.sin(beat * 3) * 0.12; n.armL.rotation.x = -1.0; n.armL.rotation.z = -0.9; }
           n.pivot.position.y += Math.abs(Math.sin(beat)) * 0.02;
-        } else if (n.view.kind === "ceili_band") {
-          const vv = n.pub.v, rb = t * (115.2 / 60) * Math.PI; // (the reel: 115.2 crotchets a minute)
-          if (vv === 0) { n.armL.rotation.x = n.armR.rotation.x = -0.9; n.armL.rotation.z = 0.5 + Math.sin(rb * 0.5) * 0.25; n.armR.rotation.z = -0.5 - Math.sin(rb * 0.5) * 0.25; }
-          else if (vv === 1) { n.armL.rotation.x = -1.45; n.armL.rotation.z = 0.15; n.armR.rotation.x = -1.1 + Math.sin(rb * 2) * 0.28; n.armR.rotation.z = 0.5 + Math.sin(rb * 2) * 0.25; }
-          else if (vv === 2) { n.armL.rotation.x = n.armR.rotation.x = -1.7; n.armL.rotation.z = -0.6; n.armR.rotation.z = -0.9; }
-          else { n.armL.rotation.x = -0.9; n.armL.rotation.z = -0.3; n.armR.rotation.x = -1.0 + Math.abs(Math.sin(rb * 2)) * 0.55; }
-          n.pivot.position.y += Math.abs(Math.sin(rb)) * 0.02;
-        } else if (n.view.kind === "ceili_dancer") {
-          // Irish dancing: arms held straight down, a hop on every beat, a high kick, side steps along the line
-          const rb = t * (115.2 / 60) * Math.PI, hop = Math.abs(Math.sin(rb));
-          n.armL.rotation.x = n.armR.rotation.x = 0; n.armL.rotation.z = 0.05; n.armR.rotation.z = -0.05;
-          n.pivot.position.y = hop * 0.16;
-          const k = Math.sin(rb * 0.5);
-          n.legL.rotation.x = k > 0 ? -k * 1.3 : 0; n.legR.rotation.x = k < 0 ? k * 1.3 : 0;
-          n.pivot.position.x = Math.sin(rb * 0.125 + n.phase0) * 0.25;
         } else if (n.view.kind === "mammy") {
           n.armR.rotation.x = -0.6 + Math.max(0, Math.sin(t * 0.7) - 0.9) * 4; n.armL.rotation.x = -0.4;
         } else if (n.view.kind === "regular" || n.view.kind === "patron") {
           const sip = Math.max(0, Math.sin(t * 0.9) - 0.85) / 0.15;
           n.armR.rotation.x = -0.9 - sip * 1.3; n.armL.rotation.x = -0.5;
-        } else if (n.view.kind === "barman") {
+        } else if (n.view.kind === "barman" || n.view.kind === "barmaid") {
           n.armR.rotation.x = -1.0 + Math.sin(t * 5) * 0.12; n.armR.rotation.z = Math.cos(t * 5) * 0.12; n.armL.rotation.x = -0.9;
         }
       }

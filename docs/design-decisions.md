@@ -1395,3 +1395,80 @@ R12.3 is proper pub 8-ball:
 - NPC or friends, with an optional $5-50 bet.
 
 R12.4 is 501 darts: steady the sway and click. Then the brawl, quiz and G-split champ; then R13, the alleys and fire escapes.
+
+## R12.2b: THE SOGGY SHAMROCK upstairs, reworked: laid back, darts, pool, a sick bar; the céilí's gone (Blake, 2026-10-26)
+
+Blake: "I'm not a fan of the ceili. Get rid of that. I think I want more of a laid back area where you can have fun with your friends. A pool table area section. A darts sections. A sick looking bar area. Etc." He sent a Flight Club Darts photo for the darts area: "Keep the dark mahogany Irish look though."
+
+### What's gone
+
+- The céilí floor and its stage, the rhythm game and its screen, the reel ("The Mopping-Up Reel"), and the céilí band and the six dancers, all taken out.
+- Everything to do with them in the code: the céilí constants, chart and judge in shared, the World's céilí state, events and actions, the step keys, and the NPC kinds, looks and animations.
+- The old "games room" walls. The pool area is open to the front room now.
+
+### What stays
+
+- Mammy Moloney's whiskey snug: her jobs, tips and throwing troublemakers out.
+- The corner balcony.
+- The landing, the stairs, and the tin ceiling with its beams.
+- The standing rule: no chest squares.
+
+### The new upstairs (Blake's answers)
+
+**Layout:** the bar in the middle of the front room, with the zones round it.
+
+**The island bar.** A mahogany ring with rounded corners and the staff's flap at the back, round a back bar. It's drawn exactly like the horseshoe downstairs (the horseshoe's drawing code is now shared, `drawBar`). Over it hangs the canopy:
+- a red fascia with a gold line, ringed top and bottom with warm marquee bulbs;
+- a cream crown above it with its own ring of bulbs, hung on brass rods;
+- THE SOGGY SHAMROCK in gold on green along the long sides, GUZZLE'S on the ends;
+- green pendant lamps over the counter;
+- three taps.
+
+**Róisín** is the barmaid: red hair in a bun, gold hoops, a bottle-green top. She pours GUZZLE'S and you can split the G up here too. She has her own lines, and the World picks her rather than Fergal for anyone upstairs.
+
+**Two darts booths** down the west wall, Flight Club style:
+- panelled mahogany with oxblood above;
+- a red-and-cream ringed surround round a regulation board, 1.73 m to the bull, with a ring of bulbs round it;
+- a screen over it on a bracket. It shows a parody "BULLSEYE BAR" logo for now, and the live 501 score comes in R12.4;
+- lit amber stained-glass screens either side ("Three Darts ~ good luck ~", stars in the leading), with a turned post and a column of bulbs down its front;
+- a dark runner, and the oche 2.37 m out (a brass bar with a glowing strip);
+- a scoring podium with a glowing tablet;
+- a long ledge behind with a glowing edge, a brass foot rail, pints and a cup of darts;
+- "OCHE 1" and "OCHE 2" on the cornices.
+
+**The pool area** (back right): two tables in mahogany and green baize with six pockets each.
+- A rack of reds and yellows sits ready on each table (pub 8-ball, R12.3), with the black in the middle and the white.
+- A green lamp hangs over each table.
+- There's a cue rack and a chalkboard ("winner stays on · 8-ball: coming soon"), plus frames.
+
+**The lounge.** It has all four kinds of seating Blake asked for:
+- **Chesterfields:** two pairs of deep-buttoned oxblood leather sofas with rolled arms, round low tables on rugs.
+- **Round booths:** two round high-backed buttoned booths on the east wall, each with a table, pints, a candle and a wall lamp.
+- **High tables:** five, with stools, by the darts and the pool.
+- **The fire:** a second fireplace on the snug's front wall (stone, a mahogany mantel, a gilt mirror, real flames, a coal scuttle), with two green velvet wing chairs angled to it, a rug and a tea table.
+
+**The jukebox:**
+- **The cabinet:** mahogany with an arched top and glowing tubes round the arch (orange, gold, green), a brass grille, and a little screen showing what's playing.
+- **The tunes:** three originals, generated in audio.ts. "Soggy Sunday" is a slow waltz in G (fiddle and guitar). "Last Bus Home" is a late-night ballad in D (electric piano and low whistle). "Puddle Stomp" is stompy folk-rock in A (bass and drums).
+- **Controls:** E puts on the next tune. It's free (the coin slot's broken), and you can change it once every 3 s.
+- **Sync:** every window hears the same bar, because the tune comes from the prop's note and the timing from the city clock.
+- **Volume:** upstairs the jukebox is loud and the session downstairs is muffled through the floor; downstairs it's the other way round.
+
+**People:** four more drinkers upstairs (at the darts' high tables, leaning on the bar, watching the pool) and Róisín. The city now has 55 NPCs (it had 60 with the céilí folk).
+
+**Lighting:** warm accents only. Bulbs on the bar canopy, round the boards and down the darts screens; the stained glass and the oche strips glow. Everything else is milk globes and mahogany.
+
+### Notes
+
+- Upstairs taps are part of `pub.taps` (each tap has its own height). The pint close-up now only stays open within reach of a tap on your own floor.
+- The R7 police test now stands the wanted bandit right in front of the cop. Adding the upstairs NPCs shifted the random seed, and the cop's view had happened to work from beside him before.
+- The browser e2e now uses the preinstalled Chromium when Playwright's own build isn't there (`PW_CHROME`, or /opt/pw-browsers/chromium). The scratch new-city recipe's header is now lines 1-50 (was 1-47).
+
+### Next
+
+R12.3 is proper pub 8-ball on these tables:
+- reds vs yellows (the first potted picks), then the black;
+- a foul gives two visits; black early, or white with the black, loses;
+- NPC or friends, with an optional $5-50 bet.
+
+R12.4 is 501 darts on these oches, with the screens showing the score. Then the brawl, quiz and G-split champ; then R13, the alleys and fire escapes.

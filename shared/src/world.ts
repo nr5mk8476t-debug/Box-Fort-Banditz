@@ -20,7 +20,7 @@ export const FLUSH = { cooldown: 6, push: 9, lift: 4.5, stumble: 0.8 };
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, PUB, pintMissMm, pintGrade, CEILI, MAMMY, ceiliChart, ceiliStart, ceiliJudge, type CeiliNote } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, PUB, pintMissMm, pintGrade, MAMMY, JUKEBOX } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
 import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
@@ -209,9 +209,7 @@ export type WorldEvent =
   | { t: "pintDone"; p: string; mm: number; grade: "perfect" | "close" | "miss"; won: number; pints: number; best: boolean }
   // R12.2: the céilí (you joined the dance: when it starts on the city clock (mod 600); you tripped; how you did) and
   // MAMMY MOLONEY (a tip, a job, a job done, still waiting; she threw you out)
-  | { t: "ceili"; p: string; on: boolean; t0: number }
-  | { t: "ceiliTrip"; p: string }
-  | { t: "ceiliDone"; p: string; score: number; max: number; grade: "great" | "ok" | "meh"; cash: number; aura: number; quit: boolean }
+  | { t: "jukebox"; p: string; tune: number }
   | { t: "mammy"; p: string; kind: "tip" | "job" | "jobDone" | "jobWait"; line: string; reward?: number }
   | { t: "mammyOut"; p: string }
   | { t: "feverAura"; p: string; aura: number }
@@ -306,7 +304,6 @@ export type WorldAction =
   | { a: "robStop" }
   | { a: "pick"; pin: number; t: number } // jail lock-pick press (t = seconds since locked up)
   | { a: "gulp"; hold: number } // R12.1: let go of the gulp after `hold` seconds (splitting the G)
-  | { a: "ceiliHit"; h: [number, number][] } // R12.2: céilí steps: [lane, city clock time (mod 600)]
   // Phase 5A
   | { a: "tug" } // mash E in a tug of war
   | { a: "arrest"; p: string } | { a: "struggle" } // C5c.1: pin a knocked-down wanted bandit for the cops / wriggle free
@@ -524,7 +521,7 @@ export class World {
       if (keepForts && it.type === "cell_key") continue; // (R8: one key a day: wherever it is, it stays till dawn)
       this.items.delete(it.id);
     }
-    if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.feverDance.clear(); this.ceiliAura.clear(); this.mammyJobs.clear(); this.mammyTip.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
+    if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.feverDance.clear(); this.mammyJobs.clear(); this.mammyTip.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
     if (this.spawnLoot) { this.fillLoot(!keepForts); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only; C5c: the bank's vault refills at dawn)
     else this.props.reset(!keepForts);
     this.pawn.rollHot(); // (R5: Lou's wanted list, new every scavenge)
@@ -806,12 +803,10 @@ export class World {
     if (p.move.stunT > 0) return; // tased
     if (act.a === "tug") { this.tugPress(p); return; }
     if (act.a === "gulp") { this.gulpPint(p, Number((act as any).hold)); return; } // (R12.1)
-    if (act.a === "ceiliHit") { this.ceiliHits(p, (act as any).h); return; } // (R12.2)
     if (act.a === "dance") { // (R11: B: start / stop dancing; only standing on the ground, hands free of big things)
       const m = p.move;
       if (m.danceT > 0) { m.danceT = 0; this.emit({ t: "dance", p: p.id, on: false }); return; }
       if (!m.grounded || m.handsFull || p.pin) return;
-      if (this.onCeiliFloor(p)) { this.startCeili(p); return; } // (R12.2: on the céilí floor, B joins the dance)
       m.danceT = 0.001; m.vx = 0; m.vz = 0; this.emit({ t: "dance", p: p.id, on: true }); return;
     }
     if (act.a === "arrest") { this.arrest(p, String((act as any).p ?? "")); return; }
@@ -1181,15 +1176,17 @@ export class World {
   readonly pubBoard: { name: string; mm: number }[] = [];
   pubBoardNote(): string { return this.pubBoard.map((b) => `${b.name.replace(/[|;]/g, "")}|${b.mm.toFixed(1)}`).join(";"); }
   /** E at a GUZZLE'S tap: $6 a pint (Fergal won't serve you after 6 till you've sobered up) */
+  /** R12.2b: who pours your pint: Fergal downstairs, Róisín up at the island bar */
+  private serverOf(p: PlayerSim): "barman" | "barmaid" { const pb = this.arena.pub; return pb && p.move.y > pb.y2 - 0.5 ? "barmaid" : "barman"; }
   buyPint(p: PlayerSim) {
     const cur = this.pints.get(p.id);
     if (cur && this.time - cur.at < PUB.pour) return this.emit({ t: "pintNo", p: p.id, reason: "busy" });
-    if (p.move.pints >= PUB.cutoff) { this.npc.pubSay("barman", "cutoff"); return this.emit({ t: "pintNo", p: p.id, reason: "cutoff" }); }
+    if (p.move.pints >= PUB.cutoff) { this.npc.pubSay(this.serverOf(p), "cutoff"); return this.emit({ t: "pintNo", p: p.id, reason: "cutoff" }); }
     if (p.cash < PUB.price) return this.emit({ t: "pintNo", p: p.id, reason: "broke" });
     p.cash -= PUB.price;
     const rate = Math.round((PUB.rateMin + this.rng() * (PUB.rateMax - PUB.rateMin)) * 1000) / 1000;
     this.pints.set(p.id, { rate, at: this.time });
-    this.npc.pubSay("barman", "pour");
+    this.npc.pubSay(this.serverOf(p), "pour");
     this.emit({ t: "pint", p: p.id, paid: PUB.price, rate });
   }
   /** let go of the gulp: how close to the G's bar? */
@@ -1208,71 +1205,23 @@ export class World {
       const b = this.pubBoard;
       if (b.length < PUB.boardN || mm < b[b.length - 1].mm) { b.push({ name: p.name || "?", mm }); b.sort((x, y) => x.mm - y.mm); b.length = Math.min(b.length, PUB.boardN); best = b[0].mm === mm; }
     }
-    this.npc.pubSay("barman", grade);
+    this.npc.pubSay(this.serverOf(p), grade);
     if (grade === "perfect") { this.npc.pubSay("patron", "perfect", true); this.npc.pubSay("regular", "perfect", true); } // (R12.1b: the whole pub cheers)
     this.emit({ t: "pintDone", p: p.id, mm, grade, won, pints: m.pints, best });
   }
-  // ---------------------------------------------------------------- R12.2: THE CÉILÍ and MAMMY MOLONEY
-  /** each dancer's dance: the chart, what's been judged, the score, the run of misses */
-  private ceilis = new Map<string, { t0: number; notes: CeiliNote[]; done: Set<number>; score: number; miss: number }>();
-  /** céilí aura got today, by player (3 a day at most) */
-  private ceiliAura = new Map<string, number>();
+  // ---------------------------------------------------------------- R12.2: MAMMY MOLONEY; R12.2b: the jukebox
+  /** R12.2b: the upstairs jukebox's tune (0..JUKEBOX.tunes-1); E on it puts on the next one */
+  jukeTune = 0;
+  private jukeCd = 0;
+  jukeboxNext(p: PlayerSim) {
+    if (this.time < this.jukeCd) return;
+    this.jukeCd = this.time + JUKEBOX.cd;
+    this.jukeTune = (this.jukeTune + 1) % JUKEBOX.tunes.length;
+    this.emit({ t: "jukebox", p: p.id, tune: this.jukeTune });
+  }
+  jukeNote(): string { return String(this.jukeTune); }
   private mammyJobs = new Map<string, string>();
   private mammyTip = new Map<string, number>();
-  onCeiliFloor(p: PlayerSim): boolean { const pb = this.arena.pub; return !!pb && Math.abs(p.move.y - pb.y2) < 0.6 && inRect(pb.ceili, p.move.x, p.move.z); }
-  /** B on the céilí floor: you're in the line; the dance starts on the next bar */
-  startCeili(p: PlayerSim) {
-    const m = p.move, now = this.traffic.clock, t0 = ceiliStart(now);
-    m.danceT = 0.001; m.vx = 0; m.vz = 0;
-    this.ceilis.set(p.id, { t0, notes: ceiliChart(t0), done: new Set(), score: 0, miss: 0 });
-    this.emit({ t: "dance", p: p.id, on: true });
-    this.emit({ t: "ceili", p: p.id, on: true, t0: Math.round((t0 % 600) * 1000) / 1000 });
-  }
-  /** steps from the client: [lane, its city clock (mod 600)]; judged against the same chart */
-  ceiliHits(p: PlayerSim, raw: unknown) {
-    const c = this.ceilis.get(p.id);
-    if (!c || !Array.isArray(raw)) return;
-    const now = this.traffic.clock, base = now - (now % 600);
-    for (const h of raw.slice(0, 32)) {
-      if (!Array.isArray(h)) continue;
-      const lane = Math.floor(Number(h[0])), t6 = Number(h[1]);
-      if (!(lane >= 0 && lane < CEILI.lanes) || !Number.isFinite(t6)) continue;
-      let t = base + t6; if (t > now + 300) t -= 600; else if (t < now - 300) t += 600;
-      if (t > now + 0.3 || t < now - 3) continue; // (not from the future; not ancient)
-      const j = ceiliJudge(c.notes, c.done, lane, t);
-      if (j) { c.done.add(j.note); c.score += j.grade === "perfect" ? 2 : 1; c.miss = 0; }
-      else this.ceiliMiss(p, c);
-      if (!this.ceilis.has(p.id)) return;
-    }
-  }
-  private ceiliMiss(p: PlayerSim, c: { miss: number }) {
-    if (++c.miss < CEILI.trip) return;
-    // five in a row: over you go
-    this.ceilis.delete(p.id);
-    const m = p.move; m.danceT = 0; m.knockT = Math.max(m.knockT, CEILI.tripT);
-    this.emit({ t: "ceiliTrip", p: p.id });
-  }
-  private ceiliTick() {
-    const now = this.traffic.clock;
-    for (const [id, c] of [...this.ceilis]) {
-      const p = this.players.get(id);
-      if (!p) { this.ceilis.delete(id); continue; }
-      if (p.move.danceT <= 0 || !this.onCeiliFloor(p)) { this.ceilis.delete(id); this.emit({ t: "ceiliDone", p: id, score: c.score, max: c.notes.length * 2, grade: "meh", cash: 0, aura: 0, quit: true }); continue; }
-      for (const n of c.notes) { if (n.t > now - CEILI.late) break; if (!c.done.has(n.i)) { c.done.add(n.i); this.ceiliMiss(p, c); if (!this.ceilis.has(id)) break; } }
-      if (!this.ceilis.has(id)) continue;
-      if (c.done.size >= c.notes.length) {
-        this.ceilis.delete(id);
-        const max = c.notes.length * 2, k = c.score / max, grade = k >= CEILI.great ? "great" : k >= CEILI.ok ? "ok" : "meh";
-        const cash = grade === "great" ? CEILI.cashGreat : grade === "ok" ? CEILI.cashOk : 0;
-        const got = this.ceiliAura.get(id) ?? 0, aura = grade !== "meh" && got < CEILI.auraMax ? 1 : 0;
-        p.cash += cash; p.aura += aura; this.ceiliAura.set(id, got + aura);
-        p.move.danceT = 0;
-        this.emit({ t: "ceiliDone", p: id, score: c.score, max, grade, cash, aura, quit: false });
-      }
-    }
-  }
-  /** for tests: a dancer's chart and score */
-  ceiliOf(id: string) { return this.ceilis.get(id); }
   /** E at MAMMY MOLONEY: a job done, a tip (if she rates you: 3+ aura), a job, or "still waiting" */
   talkMammy(p: PlayerSim) {
     const pb = this.arena.pub;
@@ -1320,7 +1269,6 @@ export class World {
     if (!p || !pb || p.jailT > 0) return;
     const mam = [...this.npc.npcs.values()].find((n) => n.kind === "mammy");
     if (!mam || mam.state === "ko") return;
-    this.ceilis.delete(pid);
     this.debugTeleport(pid, pb.out.x, pb.out.z, pb.out.yaw, 0.2);
     const m = p.move; m.vx = -Math.sin(pb.out.yaw) * 5; m.vz = -Math.cos(pb.out.yaw) * 5; m.knockT = Math.max(m.knockT, 1.6);
     this.npc.mammySay(pickLine(NPC_DEFS.mammy.lines.yell, () => this.rng()) ?? "OUT!");
@@ -1676,7 +1624,6 @@ export class World {
     this.restoDoor();
     this.clubTick();
     this.feverTick(SIM_DT);
-    this.ceiliTick(); // (R12.2)
     // C1.1: fall in the canal and whatever's in your hands floats off
     for (const p of this.players.values()) {
       if (p.hand && inDeepWater(this.arena, p.move.x, p.move.z, p.move.y)) {

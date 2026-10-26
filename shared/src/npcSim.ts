@@ -7,7 +7,7 @@ import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, MEAT_LOCKER, C
 import { buildNavGraph, type NavNode } from "./navgraph.js";
 import { nearBoxes, onRoadAt, inFoot, inRect, DEAL, type ArenaLayout } from "./arena.js";
 /** R12.2: THE SOGGY SHAMROCK's people (hit one and Mammy throws you out) */
-const PUB_FOLK = new Set<string>(["barman", "regular", "trad_band", "patron", "ceili_band", "ceili_dancer", "mammy"]);
+const PUB_FOLK = new Set<string>(["barman", "regular", "trad_band", "patron", "barmaid", "mammy"]);
 
 export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup" | "gloat" | "ko" | "film" | "huff"
   // C4b: the old lady: asleep upstairs (not drawn), then yelling out of her window
@@ -198,7 +198,7 @@ export class NpcSystem {
   /** R12.2: MAMMY MOLONEY says something (a line of her own) */
   mammySay(line: string) { for (const n of this.npcs.values()) if (n.kind === "mammy") { n.sayCd = 4; this.host.npcEvent({ t: "npcSay", npc: n.id, line }); return; } }
   /** R12.1: THE SOGGY SHAMROCK: Fergal (or the regulars) chime in */
-  pubSay(kind: "barman" | "regular" | "patron", what: "pour" | "cutoff" | "perfect" | "close" | "miss", all = false) {
+  pubSay(kind: "barman" | "barmaid" | "regular" | "patron", what: "pour" | "cutoff" | "perfect" | "close" | "miss", all = false) {
     for (const n of this.npcs.values()) if (n.kind === kind && n.state !== "ko") { const l = NPC_DEFS[kind].lines[what]; if (l) this.say(n, l, true); if (!all) return; }
   }
   steveSay(what: "sold" | "idle") { for (const n of this.npcs.values()) if (n.kind === "sketchy_steve") this.say(n, NPC_DEFS.sketchy_steve.lines[what]!, true); }

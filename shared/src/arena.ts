@@ -115,7 +115,7 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   // R12.1: THE SOGGY SHAMROCK: the GUZZLE'S taps (E: a pint, then split the G) and the chalkboard of the best splits
   | "pinttap" | "pubboard"
   // R12.2: MAMMY MOLONEY (E: a word with her: a tip, a job)
-  | "mammy";
+  | "mammy" | "jukebox";
 export interface PropDef {
   id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
   /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
@@ -344,7 +344,7 @@ export interface ArenaLayout {
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
   /** C1.1: people who stand at a spot (the apartment tower's doorman) */
-  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "ceili_band" | "ceili_dancer" | "mammy"; x: number; z: number; yaw: number;
+  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "barmaid" | "mammy"; x: number; z: number; yaw: number;
     /** R12.1: which one (the regulars, the band's four), and sitting down (stool, bench) */
     v?: number; sit?: number;
     /** C5a: standing height (Uncle Dumpster lives on a rooftop) */
@@ -773,12 +773,22 @@ export interface PubDef {
   barman: { x: number; z: number; yaw: number };
   /** the bay windows jutting out over the pavement */
   bays: Rect[];
-  /** R12.2 upstairs: the céilí floor, the céilí band's stage, the function room's tables, the balcony (its parts; the
-   *  corner triangle joins them) and its standing tables, MAMMY MOLONEY's whiskey snug, the games room, the landing,
-   *  where Mammy sits, the snug's fire, the two old fellas reading the paper, the pool table, the dartboard */
-  ceili: Rect; stage2: Rect; tables2: { x: number; z: number; r: number }[]; balcony: Rect[]; balTables: { x: number; z: number }[];
-  snug2: Rect; games: Rect; hall: Rect; mammy: { x: number; z: number; yaw: number }; snugFire: { x: number; z: number };
-  readers: { x: number; z: number; yaw: number }[]; pool: { x: number; z: number; w: number; d: number }; dart: { x: number; y: number; z: number };
+  /** R12.2 upstairs: the balcony (its parts; the corner triangle joins them) and its standing tables, MAMMY MOLONEY's
+   *  whiskey snug, the landing, where Mammy sits, the snug's fire, the two old fellas reading the paper */
+  balcony: Rect[]; balTables: { x: number; z: number }[];
+  snug2: Rect; hall: Rect; mammy: { x: number; z: number; yaw: number }; snugFire: { x: number; z: number };
+  readers: { x: number; z: number; yaw: number }[];
+  /** R12.2b (Blake: "a laid back area where you can have fun with your friends"): the island bar under its canopy (its
+   *  outer edge, the staff's lane and flap, the back bar in the middle) and the barmaid; the two darts booths (the
+   *  board on the west wall, which way it faces, the oche's x, the booth, the scoring podium, the glowing ledge); the
+   *  pool area (open to the front room) and its two tables (long along z); the lounge: chesterfields and low tables,
+   *  round booths, high tables, the second fire and its wing chairs; the jukebox */
+  bar2: Rect; lane2: Rect; flap2: Rect; gantry2: Rect; barmaid: { x: number; z: number; yaw: number };
+  darts: { board: { x: number; y: number; z: number }; face: [number, number]; oche: number; booth: Rect; podium: { x: number; z: number }; ledge: Rect }[];
+  poolArea: Rect; pools: { x: number; z: number; w: number; d: number }[];
+  sofas: { x: number; z: number; w: number; d: number; yaw: number }[]; lowTables: { x: number; z: number; r: number }[];
+  roundBooths: { x: number; z: number; r: number; a0: number; a1: number }[]; highTables: { x: number; z: number }[];
+  fire2: { x: number; z: number }; wings: { x: number; z: number; yaw: number }[]; jukebox: { x: number; z: number; yaw: number };
 }
 /** R12.1: a pint of GUZZLE'S and splitting the G. The glass is 160 mm tall; the line (where the black meets the
  *  cream) starts at 0.86 of it; the G's bar is at 0.62. Hold to gulp: the line drops faster the longer you hold
@@ -793,39 +803,9 @@ export function pintLevel(t: number, rate: number): number { return Math.max(0, 
 export function pintMissMm(t: number, rate: number): number { return Math.abs(pintLevel(t, rate) - PUB.g) * PUB.glassMm; }
 export function pintGrade(mm: number): "perfect" | "close" | "miss" { return mm <= PUB.perfectMm ? "perfect" : mm <= PUB.closeMm ? "close" : "miss"; }
 
-// ---- R12.2: THE CÉILÍ (upstairs at THE SOGGY SHAMROCK) -----------------------------------------------------------
-/** The céilí band's reel ("The Mopping-Up Reel", an original), 4/4 at 115.2 crotchets a minute: 32 bars of 8 quavers
- *  (AABB), so 66.7 s a time round, 9 times round the city clock's 10 minutes exactly. Notes: semitones over D4. */
-export const CEILI = { bpm: 115.2, bars: 32, lanes: 4, perfect: 0.07, good: 0.14, late: 1.5, trip: 5, tripT: 2.4, auraMax: 3, great: 0.85, ok: 0.6, cashGreat: 25, cashOk: 10 };
-export const CEILI_8 = 60 / CEILI.bpm / 2;
-export const CEILI_CYCLE = CEILI.bars * 8 * CEILI_8;
-const RA: number[][] = [[0, 4, 7, 4, 9, 7, 4, 2], [0, 2, 4, 5, 7, 5, 4, 2], [0, 4, 7, 12, 11, 9, 7, 5], [4, 2, 0, -1, 0, 2, 4, 2], [0, 4, 7, 4, 9, 7, 4, 2], [0, 2, 4, 5, 7, 9, 11, 12], [14, 12, 11, 9, 7, 5, 4, 2], [0, 4, 2, -1, 0, 0, 0, 0]];
-const RB: number[][] = [[12, 11, 12, 14, 16, 14, 12, 11], [9, 11, 12, 9, 7, 9, 11, 7], [12, 11, 12, 14, 16, 17, 16, 14], [12, 9, 7, 9, 11, 12, 14, 11], [12, 11, 12, 14, 16, 14, 12, 11], [9, 11, 12, 14, 16, 12, 9, 7], [5, 7, 9, 7, 5, 4, 2, 4], [0, 4, 2, -1, 0, 0, 0, 0]];
-export const CEILI_TUNE: number[][] = [...RA, ...RA, ...RB, ...RB];
-/** chords per bar (semitones over D): D G D A / D G A D, then B: G D G A / G D A D */
-export const CEILI_CHORDS: number[] = [...[0, 5, 0, 7, 0, 5, 7, 0], ...[0, 5, 0, 7, 0, 5, 7, 0], ...[5, 0, 5, 7, 5, 0, 7, 0], ...[5, 0, 5, 7, 5, 0, 7, 0]];
-/** which quavers in each bar are notes to dance (tough: about 5-6 a bar), and the lane each one goes in (from its pitch) */
-const STEPS = [[0, 2, 3, 4, 6], [0, 2, 4, 5, 6, 7]];
-export interface CeiliNote { i: number; t: number; lane: number }
-/** the chart for a dance that starts at song time `t0` (a bar line; seconds on the city clock): 32 bars from there */
-export function ceiliChart(t0: number): CeiliNote[] {
-  const out: CeiliNote[] = [];
-  const bar0 = Math.round((((t0 % CEILI_CYCLE) + CEILI_CYCLE) % CEILI_CYCLE) / (8 * CEILI_8)) % CEILI.bars;
-  for (let b = 0; b < CEILI.bars; b++) {
-    const tb = CEILI_TUNE[(bar0 + b) % CEILI.bars], steps = STEPS[b % 2];
-    for (const q of steps) { const n = tb[q]; out.push({ i: out.length, t: t0 + (b * 8 + q) * CEILI_8, lane: ((Math.floor((n + 14) / 2) % 4) + 4) % 4 }); }
-  }
-  return out;
-}
-/** the next bar line after `now` (+ a beat to get ready) */
-export function ceiliStart(now: number): number { const bar = 8 * CEILI_8; return Math.ceil((now + 1.0) / bar) * bar; }
-/** judge a press against a chart's notes (the nearest unjudged one in that lane): "perfect" | "good" | null (a miss) */
-export function ceiliJudge(notes: CeiliNote[], done: Set<number>, lane: number, t: number): { note: number; grade: "perfect" | "good" } | null {
-  let best = -1, bd = Infinity;
-  for (const n of notes) { if (n.lane !== lane || done.has(n.i)) continue; const d = Math.abs(n.t - t); if (d < bd) { bd = d; best = n.i; } if (n.t > t + CEILI.good) break; }
-  if (best < 0 || bd > CEILI.good) return null;
-  return { note: best, grade: bd <= CEILI.perfect ? "perfect" : "good" };
-}
+/** R12.2b: the upstairs JUKEBOX: E puts on the next tune (a few seconds between changes); every window plays it in time
+ *  off the city clock. Three originals. */
+export const JUKEBOX = { cd: 3, tunes: ["Soggy Sunday", "Last Bus Home", "Puddle Stomp"] };
 /** R12.2: MAMMY MOLONEY: a tip if she rates you (3+ aura, one every 45 s), else a little job: bring her one of these
  *  (double what it's worth, $20 at least) */
 export const MAMMY = { tipAura: 3, tipCd: 45, minPay: 20, jobs: ["rubber_chicken", "mixtape", "newspaper", "canned_beans", "baguette", "smelly_fish", "bagel", "disposable_camera", "fancy_cheese", "half_sandwich"] };

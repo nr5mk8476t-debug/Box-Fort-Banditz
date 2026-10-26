@@ -361,5 +361,3 @@ body.night .match-hud .mh-time { color: #bfd0ff; }
 .pint canvas { width: min(220px, 30vw); height: auto; border-radius: 22px; background: radial-gradient(ellipse at 50% 70%, rgba(80,40,20,0.55), rgba(20,14,10,0.7)); box-shadow: 0 8px 0 rgba(27, 20, 32, 0.6); }
 .pint-help { font: 700 15px "Nunito", sans-serif; color: #f3e2b8; text-shadow: 1px 1px 0 var(--ink); text-align: center; max-width: min(320px, 80vw); }
 .pint-help b { color: #ffe14a; }
-.pint.ceili canvas { width: min(210px, 27vw); max-height: 62vh; object-fit: contain; background: radial-gradient(ellipse at 50% 80%, rgba(20,70,40,0.6), rgba(10,18,14,0.75)); }
-.pint.ceili .pint-help:empty { display: none; }

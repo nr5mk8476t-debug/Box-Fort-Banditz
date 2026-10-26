@@ -34,7 +34,7 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   // R12.1b: the drinkers who live at THE SOGGY SHAMROCK
   | "patron"
   // R12.2: upstairs: the céilí band (accordion, fiddle, flute, bodhrán), six costumed dancers, MAMMY MOLONEY who owns the place
-  | "ceili_band" | "ceili_dancer" | "mammy";
+  | "barmaid" | "mammy";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -201,21 +201,18 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       miss: ["Ha! Unlucky!", "Back of the class!"],
     },
   },
-  ceili_band: {
-    kind: "ceili_band", name: "The Shamrock Shufflers", walk: 0.8, flee: 1.0, fighter: false, hp: 1, dodge: 0, notoriety: 8, spawnWeight: 0,
+  barmaid: {
+    kind: "barmaid", name: "Róisín", walk: 1.0, flee: 1.0, fighter: false, hp: 1, dodge: 0, notoriety: 10, spawnWeight: 0,
     loot: [["coin_pile", 1]],
     lines: {
-      idle: ["Take your partners!", "Faster? Grand. FASTER.", "*squeezes the accordion*", "One more time round!", "Mind your feet now!"],
-      hit: ["Not the box!", "Ah, you've me out of tune now!", "Heckler!"],
-    },
-  },
-  ceili_dancer: {
-    kind: "ceili_dancer", name: "A Céilí Dancer", walk: 1.0, flee: 3.5, fighter: false, hp: 1, dodge: 0, notoriety: 6, spawnWeight: 0,
-    loot: [["coin_pile", 1]],
-    lines: {
-      idle: ["Hup! Come on, join in!", "Arms DOWN, that's the trick.", "Hop, two, three!", "Swing your partner!", "You've two left feet. Perfect!"],
-      hit: ["Ow! Mind the shoes!", "That's not a step!", "Rude!"],
-      perfect: ["Woo! Lovely!", "Hup hup!"],
+      idle: ["What are you having, love?", "*flips a beer mat and catches it*", "Darts are on the left, pool's out the back. Behave.", "Jukebox takes no coins. It's broken. Lucky you.", "Mind the bulbs, they're older than me.", "*wipes the bar in big slow circles*"],
+      hit: ["Do that again. I dare you.", "MAMMY!", "Out of my bar!"],
+      yell: ["Settle down!", "Not up here, pal!"],
+      pour: ["Let it settle now.", "One GUZZLE'S coming up.", "There you go, gorgeous pint."],
+      cutoff: ["You're done, love. Water.", "Not a chance. Sober up first."],
+      perfect: ["Ah, you split it! Fair play!", "Dead centre! Legend!"],
+      close: ["So close!", "Nearly had it."],
+      miss: ["Ah, you missed it.", "Way off, love."],
     },
   },
   mammy: {
