@@ -546,6 +546,32 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.2c: THE SOGGY SHAMROCK fixes (the front door, clipping, the booths), a hard Split the G, Big Dessie, Seamus O'Shortly and the swarm (2026-10-28)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Front door | the red line and the black bar through the doorway are gone; the name over the door reads clear; the A-board is the right way up; the clock's on the east front | screenshots (first person from the pavement) | pass. The cause: pieces turned 90° the wrong way. |
+| Clipping | every pair of pub collision boxes that overlap in 3D | script (scratch) | only wall corners, and the old booth tables (rebuilt). Visual: the upstairs back bar's crown, the canopy crown, and the pendants through the glass rack were fixed. |
+| Booths | you can walk into each round booth, up to its table and round it | unit (layout) | pass. Took three goes: first the ring faced the wall, then the aisle was too thin for a player (0.38 m radius); now a 2.1 m booth with a 0.35 m table. |
+| Seamus | Mammy's gone; Seamus, his six lads round the snug, Big Dessie in front of the band; nobody posted inside anything solid; you can reach Big Dessie and Seamus | unit (layout) | pass |
+| Hard G | the line always goes down; the hold that lands on the G is perfect; 1.5 mm past is perfect, 4 mm close, 8 mm a miss; the perfect window is 50–400 ms; two rhythms at the same rate need different holds; a pint carries its own surges; the chalkboard and close grades still work | unit (world) | pass |
+| Jobs | a job, "still waiting", paid in gold (double); a big job (lucky things) for the big pot (×4, $80 at least) seen inside 40 tries; tips at 3+ aura | unit (world) | pass |
+| Swarm | punch a drinker downstairs: the swarm's on, the lads pop out round you on your floor (4+ pops), all six chase you; 6 s standing still: 4+ nips, hp down but never below 20, no knockdown; over at 8 s; 4 s later they're back in the snug; hitting Seamus sets them off and he stays up | unit (world) | pass first time |
+| People | 62 NPCs | server smoke | pass |
+| Browser | drinking: no G showing; after the verdict the glass turns and shows the G; Seamus, his 6 lads, Big Dessie, no Mammy; Seamus's prompt and his answer; walked into a round booth up to its table; facing Big Dessie, a punch: the swarm's on, the lads round you downstairs, the swarm ends | e2e (pub part of the new-city block) | pass 39/39 |
+| | full browser e2e, normal | e2e | pass 396/396 |
+| | full browser e2e, 110 ms lag | e2e | pass 396/396. The first lag run was cut off at 234 checks (no failures so far) when the test machine restarted; the second ran clean. |
+| Looks | the front door (far, mid, near, the A-board, the clock), the hard G (drinking, the reveal), Seamus in his chair with a lad, Big Dessie mid-move, the swarm | screenshots | reviewed |
+| Everything | 254 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass |
+
+## Manual checklist for Blake (R12.2c)
+
+- [ ] The front door from the street: clean now? Anything else clipping that you can see?
+- [ ] Split the G: hard enough? Too hard? (2 mm perfect, and the gulp surges.)
+- [ ] Big Dessie: unpredictable enough? Funny?
+- [ ] Walk into a round booth: enough room?
+- [ ] Punch someone in the pub: does the swarm feel like a swarm? Too much damage, or too little?
+
 ## R12.2b: THE SOGGY SHAMROCK upstairs reworked (the céilí's gone; the island bar, the darts, the pool, the lounge, the jukebox) (2026-10-26)
 
 | Area | Check | How | Result |

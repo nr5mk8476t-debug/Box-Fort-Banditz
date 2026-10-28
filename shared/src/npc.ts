@@ -34,7 +34,10 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   // R12.1b: the drinkers who live at THE SOGGY SHAMROCK
   | "patron"
   // R12.2: upstairs: the céilí band (accordion, fiddle, flute, bodhrán), six costumed dancers, MAMMY MOLONEY who owns the place
-  | "barmaid" | "mammy";
+  | "barmaid"
+  // R12.2c: SEAMUS O'SHORTLY (a wee leprechaun of a man) runs the place now, with six wee buddies who swarm troublemakers;
+  // BIG DESSIE dancing (badly) in front of the band
+  | "leprechaun" | "lep_buddy" | "drunk_dancer";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -215,13 +218,31 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       miss: ["Ah, you missed it.", "Way off, love."],
     },
   },
-  mammy: {
-    kind: "mammy", name: "Mammy Moloney", walk: 0.6, flee: 0.6, fighter: false, hp: 1, dodge: 0, notoriety: 12, spawnWeight: 0,
+  leprechaun: {
+    kind: "leprechaun", name: "Seamus O'Shortly", walk: 0.8, flee: 1.0, fighter: false, hp: 1, dodge: 0, notoriety: 12, spawnWeight: 0,
     loot: [["coin_pile", 1]],
     lines: {
-      idle: ["Sit up straight.", "*taps her stick*", "Fergal! Pints!", "I've buried two husbands and a landlord.", "Nobody fights in MY pub.", "You've a look of my third cousin. Shifty."],
-      hit: ["You'll regret that, pet.", "OUT!", "How DARE you."],
-      yell: ["OUT! And don't come back till you've manners!", "Not in MY pub!", "Fergal, get the door."],
+      idle: ["*puffs his pipe*", "Mind your manners in MY pub.", "Every pot of gold in this city? Mine. Eventually.", "Lads. Look sharp.", "I'm not small, I'm concentrated.", "Róisín! Another!"],
+      hit: ["LADS!", "GET HIM, BOYS!", "Oh, you've done it now.", "You'll be sorry, sunshine!"],
+      yell: ["GET HIM, LADS!", "Teach him some manners, boys!", "Nobody starts trouble in MY pub!"],
+    },
+  },
+  lep_buddy: {
+    kind: "lep_buddy", name: "A Wee Fella", walk: 1.2, flee: 4.0, chase: 7.4, fighter: true, hp: 2, dodge: 0.25, notoriety: 4, spawnWeight: 0,
+    loot: [["coin_pile", 1]],
+    lines: {
+      idle: ["Top o' the mornin'. Or whatever.", "*whistles*", "Boss says hello. Boss says nothing, actually.", "Got any gold?", "*counts his coins again*"],
+      hit: ["OI!", "He hit me! Lads!", "Ya big lump!"],
+      fight: ["SWARM HIM!", "Ankles! Go for the ankles!", "Get him, lads!", "Nip nip nip!", "Pile on!"],
+      win: ["And STAY down!", "That's what you get!"],
+    },
+  },
+  drunk_dancer: {
+    kind: "drunk_dancer", name: "Big Dessie", walk: 0.9, flee: 1.5, fighter: false, hp: 1, dodge: 0, notoriety: 6, spawnWeight: 0,
+    loot: [["coin_pile", 1]],
+    lines: {
+      idle: ["WOOOOOO!", "This is me SONG!", "*hic*", "I love yous all! I MEAN it!", "Watch this. WATCH this.", "Who's buying?!", "*sings the wrong words loudly*"],
+      hit: ["Ah here!", "*spills his pint*", "Ya ruined me move!"],
     },
   },
   trad_band: {

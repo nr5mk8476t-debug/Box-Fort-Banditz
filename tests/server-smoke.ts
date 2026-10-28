@@ -67,7 +67,7 @@ const copCount = (b.state as any).npcs.size - npcCount;
 //  and Meat Locker at the pawn shop; R6: + the Champ in the holding cell; R7: + Sticky Fran, Cold Cuts and the station's receptionist (the patrols
 //  only come on duty once the scavenge starts); the classic city had 44 with its shops and landmarks)
 assert(copCount >= 4, `R10: the police are out before the match starts: ${copCount} cops`);
-assert(npcCount === 55, `pedestrians + the taco vendor, the fisherman, Uncle Dumpster, Lou, Meat Locker, Fran, Cold Cuts, the receptionist, the Champ, NEON FEVER DREAM's bouncer (R11) and DON BINNIE with his two bodyguards (R11.1), SKETCHY STEVE (R11.4), THE SOGGY SHAMROCK's Fergal, two regulars, the four-piece band (R12.1) eight drinkers (R12.1b), MAMMY MOLONEY (R12.2), upstairs Róisín and four more drinkers (R12.2b) synced to clients: ${npcCount} (20 + 35)`);
+assert(npcCount === 62, `pedestrians + the taco vendor, the fisherman, Uncle Dumpster, Lou, Meat Locker, Fran, Cold Cuts, the receptionist, the Champ, NEON FEVER DREAM's bouncer (R11) and DON BINNIE with his two bodyguards (R11.1), SKETCHY STEVE (R11.4), THE SOGGY SHAMROCK's Fergal, two regulars, the four-piece band (R12.1) eight drinkers (R12.1b), MAMMY MOLONEY (R12.2), upstairs Róisín and four more drinkers (R12.2b), SEAMUS O'SHORTLY (in Mammy's place), his six wee buddies and BIG DESSIE (R12.2c) synced to clients: ${npcCount} (20 + 42)`);
 {
   const st2: any = a.state;
   assert(st2.cars.size === CAR_COUNT, `traffic synced: ${st2.cars.size} cars`);

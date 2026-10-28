@@ -20,7 +20,7 @@ export const FLUSH = { cooldown: 6, push: 9, lift: 4.5, stumble: 0.8 };
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, PUB, pintMissMm, pintGrade, MAMMY, JUKEBOX } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, PUB, pintMissMm, pintGrade, SEAMUS, SWARM, JUKEBOX } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
 import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
@@ -204,14 +204,14 @@ export type WorldEvent =
   | { t: "mocktailNo"; p: string; reason: "broke" }
   // R12.1: THE SOGGY SHAMROCK: a pint poured (its gulp rate: the client draws the same line the World checks), no
   // pint (broke, cut off, one on the go already), the gulp's verdict (how far off the G's bar, mm)
-  | { t: "pint"; p: string; paid: number; rate: number }
+  | { t: "pint"; p: string; paid: number; rate: number; w: number; ph: number }
   | { t: "pintNo"; p: string; reason: "broke" | "cutoff" | "busy" }
   | { t: "pintDone"; p: string; mm: number; grade: "perfect" | "close" | "miss"; won: number; pints: number; best: boolean }
   // R12.2: the céilí (you joined the dance: when it starts on the city clock (mod 600); you tripped; how you did) and
-  // MAMMY MOLONEY (a tip, a job, a job done, still waiting; she threw you out)
+  // R12.2c: SEAMUS O'SHORTLY (a tip, a job, a big job, a job done, still waiting); his buddies swarm you (on) / let you be
   | { t: "jukebox"; p: string; tune: number }
-  | { t: "mammy"; p: string; kind: "tip" | "job" | "jobDone" | "jobWait"; line: string; reward?: number }
-  | { t: "mammyOut"; p: string }
+  | { t: "seamus"; p: string; kind: "tip" | "job" | "bigJob" | "jobDone" | "jobWait"; line: string; reward?: number }
+  | { t: "lepSwarm"; p: string; on: boolean }
   | { t: "feverAura"; p: string; aura: number }
   | { t: "dance"; p: string; on: boolean }
   // R11: DON BINNIE got punched (his boys are coming); one of them threw you out of the club
@@ -255,6 +255,7 @@ export type WorldEvent =
   | { t: "hurt"; p: string; by: string; dmg: number; hp: number }
   | { t: "npcHit"; npc: string; by: string; how: "punch" | "throw" }
   | { t: "npcSay"; npc: string; line: string }
+  | { t: "npcPop"; npc: string; x: number; y: number; z: number } // (R12.2c: a wee fella pops out of nowhere)
   | { t: "npcAttack"; npc: string; p: string; hit: boolean }
   | { t: "npcDodge"; npc: string; p: string }
   | { t: "npcKo"; npc: string; by: string }
@@ -521,7 +522,7 @@ export class World {
       if (keepForts && it.type === "cell_key") continue; // (R8: one key a day: wherever it is, it stays till dawn)
       this.items.delete(it.id);
     }
-    if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.feverDance.clear(); this.mammyJobs.clear(); this.mammyTip.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
+    if (!keepForts) { this.tags.clear(); this.restoPass.clear(); this.clubPass.clear(); this.feverDance.clear(); this.seamusJobs.clear(); this.seamusTip.clear(); this.clubPot = 0; this.pawn.dawn(); } // (C5c.3: cover stamps for one day; the takings go to the bank; unclaimed pawns go on sale)
     if (this.spawnLoot) { this.fillLoot(!keepForts); this.props.reset(!keepForts); this.stockShops(true); } // (C4a: repairs at dawn only; C5c: the bank's vault refills at dawn)
     else this.props.reset(!keepForts);
     this.pawn.rollHot(); // (R5: Lou's wanted list, new every scavenge)
@@ -627,11 +628,17 @@ export class World {
           }
           return;
         }
+        if (n?.kind === "lep_buddy") {
+          // R12.2c: a wee fella's nip: a little damage (never below SWARM.floor), and now and then a stagger
+          if (p.hp > SWARM.floor) w.hurt(p, Math.min(SWARM.nip, p.hp - SWARM.floor), npcId, { canKO: false });
+          if (w.rng() < SWARM.stagger) { p.move.vx *= 1.6; p.move.vz *= 1.6; }
+          return;
+        }
         if (w.hurt(p, HEALTH.npcHit, npcId, { dropHand: true })) w.npc.gloat(npcId);
       },
       npcDropLoot: (_npcId, type, x, y, z, ax, az) => { w.popLoot(type, x, y, z, ax, az); },
       shopAlarm: (shopId) => { const t = [...w.props.props.values()].find((x) => x.def.kind === "till" && x.def.shop === shopId); if (t) { t.alarmT = 6; w.emit({ t: "alarm", kind: "shop", prop: t.def.id, x: t.def.x, z: t.def.z }); } },
-      npcEvent: (e) => { if (e.t === "pubRowdy") { w.mammyOut(e.p); return; } w.emit(e); if (e.t === "louHit") { const p = w.players.get(e.p); if (p) w.pawn.trouble(p, "punch", e.shop ?? 0); } if (e.t === "donHit") w.npc.guardsAlert(e.p, "velvet_guard"); },
+      npcEvent: (e) => { if (e.t === "pubRowdy") { w.swarm(e.p); return; } w.emit(e); if (e.t === "louHit") { const p = w.players.get(e.p); if (p) w.pawn.trouble(p, "punch", e.shop ?? 0); } if (e.t === "donHit") w.npc.guardsAlert(e.p, "velvet_guard"); },
       addNotoriety: (pid, n) => { const p = w.players.get(pid); if (p) w.addHeat(p, n); },
       copBrain: (n, dt) => w.police.brain(n, dt),
       cars: () => [...(w.traffic?.cars ?? []), ...(w.police?.cars ?? [])],
@@ -1171,7 +1178,7 @@ export class World {
   }
   // ---------------------------------------------------------------- R12.1: THE SOGGY SHAMROCK
   /** a pint on the go: its gulp rate, when it was poured (it goes flat after PUB.pour s) */
-  private pints = new Map<string, { rate: number; at: number }>();
+  private pints = new Map<string, { rate: number; w: number; ph: number; at: number }>();
   /** the chalkboard: the best splits of the match (closest first) */
   readonly pubBoard: { name: string; mm: number }[] = [];
   pubBoardNote(): string { return this.pubBoard.map((b) => `${b.name.replace(/[|;]/g, "")}|${b.mm.toFixed(1)}`).join(";"); }
@@ -1185,9 +1192,10 @@ export class World {
     if (p.cash < PUB.price) return this.emit({ t: "pintNo", p: p.id, reason: "broke" });
     p.cash -= PUB.price;
     const rate = Math.round((PUB.rateMin + this.rng() * (PUB.rateMax - PUB.rateMin)) * 1000) / 1000;
-    this.pints.set(p.id, { rate, at: this.time });
+    const w = Math.round((PUB.wMin + this.rng() * (PUB.wMax - PUB.wMin)) * 1000) / 1000, ph = Math.round(this.rng() * 2 * Math.PI * 1000) / 1000; // (R12.2c: this pint's surges)
+    this.pints.set(p.id, { rate, w, ph, at: this.time });
     this.npc.pubSay(this.serverOf(p), "pour");
-    this.emit({ t: "pint", p: p.id, paid: PUB.price, rate });
+    this.emit({ t: "pint", p: p.id, paid: PUB.price, rate, w, ph });
   }
   /** let go of the gulp: how close to the G's bar? */
   gulpPint(p: PlayerSim, hold: number) {
@@ -1195,7 +1203,7 @@ export class World {
     if (!cur || !Number.isFinite(hold)) return;
     this.pints.delete(p.id);
     if (this.time - cur.at > PUB.pour) return; // (gone flat)
-    const mm = Math.round(pintMissMm(Math.max(0, Math.min(60, hold)), cur.rate) * 10) / 10, grade = pintGrade(mm);
+    const mm = Math.round(pintMissMm(Math.max(0, Math.min(60, hold)), cur.rate, cur.w, cur.ph) * 10) / 10, grade = pintGrade(mm);
     const won = grade === "perfect" ? PUB.prize : grade === "close" ? PUB.price : 0;
     p.cash += won;
     const m = p.move;
@@ -1220,59 +1228,70 @@ export class World {
     this.emit({ t: "jukebox", p: p.id, tune: this.jukeTune });
   }
   jukeNote(): string { return String(this.jukeTune); }
-  private mammyJobs = new Map<string, string>();
-  private mammyTip = new Map<string, number>();
-  /** E at MAMMY MOLONEY: a job done, a tip (if she rates you: 3+ aura), a job, or "still waiting" */
-  talkMammy(p: PlayerSim) {
+  private seamusJobs = new Map<string, { type: string; big: boolean }>();
+  private seamusTip = new Map<string, number>();
+  /** E at SEAMUS O'SHORTLY: a job done (a pot of gold), a tip (if he rates you: 3+ aura), a job (now and then a big one), or
+   *  "still waiting" */
+  talkSeamus(p: PlayerSim) {
     const pb = this.arena.pub;
     if (!pb) return;
-    const say = (kind: "tip" | "job" | "jobDone" | "jobWait", line: string, reward?: number) => { this.npc.mammySay(line); this.emit({ t: "mammy", p: p.id, kind, line, ...(reward !== undefined ? { reward } : {}) }); };
-    const job = this.mammyJobs.get(p.id);
+    const say = (kind: "tip" | "job" | "bigJob" | "jobDone" | "jobWait", line: string, reward?: number) => { this.npc.seamusSay(line); this.emit({ t: "seamus", p: p.id, kind, line, ...(reward !== undefined ? { reward } : {}) }); };
+    const job = this.seamusJobs.get(p.id);
     const held = this.activeItem(p)?.item; // (in your hands, or the pocket you've got out)
     const nm = (t: string) => articled(lootDef(t)?.name ?? t);
-    if (job && held && held.type === job) {
-      const reward = Math.max(MAMMY.minPay, held.value * 2);
-      this.consumeItem(p, held.id); p.cash += reward; this.mammyJobs.delete(p.id);
-      return say("jobDone", `Good lad. ${nm(job)}, just how I like it. Here's $${reward}.`, reward);
+    if (job && held && held.type === job.type) {
+      const reward = job.big ? Math.max(SEAMUS.bonusMin, held.value * SEAMUS.bonusMult) : Math.max(SEAMUS.minPay, held.value * 2);
+      this.consumeItem(p, held.id); p.cash += reward; this.seamusJobs.delete(p.id);
+      return say("jobDone", job.big ? `Ohhh, would you LOOK at that. ${nm(job.type)}! The big pot for you: $${reward} in gold.` : `${nm(job.type)}. Grand job. A pot of gold for your trouble: $${reward}.`, reward);
     }
-    const tipAt = this.mammyTip.get(p.id) ?? -1e9;
-    if (p.aura >= MAMMY.tipAura && this.time - tipAt > MAMMY.tipCd) { this.mammyTip.set(p.id, this.time); return say("tip", this.mammyTipLine(pb)); }
+    const tipAt = this.seamusTip.get(p.id) ?? -1e9;
+    if (p.aura >= SEAMUS.tipAura && this.time - tipAt > SEAMUS.tipCd) { this.seamusTip.set(p.id, this.time); return say("tip", this.seamusTipLine(pb)); }
     if (!job) {
-      const type = MAMMY.jobs[Math.floor(this.rng() * MAMMY.jobs.length)];
-      this.mammyJobs.set(p.id, type);
-      return say("job", `Bring me ${nm(type)}, pet. There's double in it for you.`);
+      const big = this.rng() < SEAMUS.bonusChance, list = big ? SEAMUS.bonusJobs : SEAMUS.jobs;
+      const type = list[Math.floor(this.rng() * list.length)];
+      this.seamusJobs.set(p.id, { type, big });
+      return big ? say("bigJob", `Psst. A big one. Bring me ${nm(type)} and there's the BIG pot of gold in it for you.`) : say("job", `Bring me ${nm(type)}, sunshine. There's a pot of gold in it for you.`);
     }
-    return say("jobWait", `Still waiting on ${nm(job)}. ${p.aura < MAMMY.tipAura ? "And make a bit of a name for yourself. Then we'll talk." : "Chop chop."}`);
+    return say("jobWait", `Still waiting on ${nm(job.type)}. ${p.aura < SEAMUS.tipAura ? "And make a bit of a name for yourself. Then we'll talk." : "Hop to it."}`);
   }
-  /** something true about today's city, from where she sits */
-  private mammyTipLine(pb: NonNullable<ArenaLayout["pub"]>): string {
+  /** something true about today's city, from where he sits */
+  private seamusTipLine(pb: NonNullable<ArenaLayout["pub"]>): string {
     const cx = (pb.rect.minX + pb.rect.maxX) / 2, cz = (pb.rect.minZ + pb.rect.maxZ) / 2;
     const where = (x: number, z: number) => { const d = Math.hypot(x - cx, z - cz), a = Math.atan2(x - cx, z - cz); const dir = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]; return d < 25 ? "right on our doorstep" : `about ${Math.round(d / 10) * 10} m ${dir} of here`; };
     const kind = Math.floor(this.rng() * 3);
     if (kind === 0) {
       let best: ItemSim | null = null;
       for (const it of this.items.values()) if (it.mode === "free" && !it.locked && it.fort < 0 && (!best || it.value > best.value)) best = it;
-      if (best) return `Word is there's ${articled(lootDef(best.type)?.name ?? best.type)} worth a pretty penny lying ${where(best.body.x, best.body.z)}.`;
+      if (best) return `My lads tell me there's ${articled(lootDef(best.type)?.name ?? best.type)} worth a pretty penny lying ${where(best.body.x, best.body.z)}.`;
     }
     if (kind <= 1) {
       const cops = [...this.npc.npcs.values()].filter((n) => n.kind === "cop" && n.state !== "ko");
       if (cops.length) { const c = cops.reduce((a, b) => (Math.hypot(a.move.x - cx, a.move.z - cz) < Math.hypot(b.move.x - cx, b.move.z - cz) ? a : b)); return `There's ${cops.length} bluebottle${cops.length > 1 ? "s" : ""} about. The nearest is ${where(c.move.x, c.move.z)}. Mind yourself.`; }
-      return "Not a copper in sight, pet. Make hay.";
+      return "Not a copper in sight, sunshine. Make hay.";
     }
     const big = [...this.npc.npcs.values()].find((n) => NPC_DEFS[n.kind].bigShot && n.state !== "ko");
     if (big) return `A fancy ${NPC_DEFS[big.kind].name.toLowerCase()} is swanning about ${where(big.move.x, big.move.z)}. Pockets like a bank.`;
     return "Quiet day. The good stuff turns up at night, in the forts. You didn't hear it from me.";
   }
-  /** trouble in her pub: her stick sends you out the front door */
-  mammyOut(pid: string) {
+  /** R12.2c: trouble in his pub: Seamus sends the lads. They pop out round you and nip at you for SWARM.t seconds */
+  private swarms = new Map<string, number>();
+  swarm(pid: string) {
     const p = this.players.get(pid), pb = this.arena.pub;
     if (!p || !pb || p.jailT > 0) return;
-    const mam = [...this.npc.npcs.values()].find((n) => n.kind === "mammy");
-    if (!mam || mam.state === "ko") return;
-    this.debugTeleport(pid, pb.out.x, pb.out.z, pb.out.yaw, 0.2);
-    const m = p.move; m.vx = -Math.sin(pb.out.yaw) * 5; m.vz = -Math.cos(pb.out.yaw) * 5; m.knockT = Math.max(m.knockT, 1.6);
-    this.npc.mammySay(pickLine(NPC_DEFS.mammy.lines.yell, () => this.rng()) ?? "OUT!");
-    this.emit({ t: "mammyOut", p: pid });
+    const boss = [...this.npc.npcs.values()].find((n) => n.kind === "leprechaun");
+    if (!boss || boss.state === "ko") return;
+    const was = this.swarms.has(pid);
+    this.swarms.set(pid, this.time + SWARM.t);
+    this.npc.swarm(pid, p.move.x, p.move.y, p.move.z, SWARM.t, !was);
+    if (!was) { this.npc.seamusSay(pickLine(NPC_DEFS.leprechaun.lines.yell, () => this.rng()) ?? "GET HIM, LADS!"); this.emit({ t: "lepSwarm", p: pid, on: true }); }
+  }
+  /** is this player being swarmed? (for the nips, and tests) */
+  swarmOn(pid: string) { return (this.swarms.get(pid) ?? 0) > this.time; }
+  private swarmTick() {
+    for (const [pid, until] of [...this.swarms]) {
+      const p = this.players.get(pid);
+      if (!p || this.time >= until || p.jailT > 0) { this.swarms.delete(pid); this.npc.swarmOff(pid); this.emit({ t: "lepSwarm", p: pid, on: false }); }
+    }
   }
   /** R11.4: who's come out the back EXIT (they can't go back in that way) */
   private backOut = new Set<string>();
@@ -1624,6 +1643,7 @@ export class World {
     this.restoDoor();
     this.clubTick();
     this.feverTick(SIM_DT);
+    this.swarmTick(); // (R12.2c)
     // C1.1: fall in the canal and whatever's in your hands floats off
     for (const p of this.players.values()) {
       if (p.hand && inDeepWater(this.arena, p.move.x, p.move.z, p.move.y)) {

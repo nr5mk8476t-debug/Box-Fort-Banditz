@@ -3078,6 +3078,9 @@ export function buildTrashington(): ArenaLayout {
     const STAGE = R(-80.6, IN.maxX, 26.2, IN.maxZ), SY = Y1 + 0.3;
     wb(STAGE.minX, STAGE.maxX, STAGE.minZ, STAGE.maxZ, Y1, SY, "platform", { hide: true, deco: "pubstage" });
     [[-79.3, 28.6], [-77.7, 29.6], [-76.0, 29.8], [-75.0, 28.0]].forEach(([x, z], v) => posts.push({ kind: "trad_band", x, z, yaw: Math.atan2(-88 - x, 20 - z), y: SY, v, sit: 0.62 }));
+    // R12.2c: BIG DESSIE, dancing (badly) in front of the band
+    const DANCER = { x: -77.6, z: 24.4 };
+    posts.push({ kind: "drunk_dancer", x: DANCER.x, z: DANCER.z, yaw: Math.atan2(-77.0 - DANCER.x, 29.0 - DANCER.z), y: Y1 });
     // ---- tables: barrels (stand at them) by the doors and round the room, little round ones in the window seat ----
     const tables = [[-91.5, 9.5], [-86.0, 9.5], [-80.5, 16.0], [-80.0, 21.5], [-95.5, 26.0], [-84.0, 26.0]].map(([x, z]) => ({ x, z, r: 0.42 }));
     for (const t of tables) disc(t.x, t.z, t.r, Y1, 1.05, "table", { hide: true, deco: "barrel" });
@@ -3093,7 +3096,7 @@ export function buildTrashington(): ArenaLayout {
     // section. A sick looking bar area... keep the dark mahogany Irish look"): the front room has an island bar in the
     // middle under a carved canopy ringed with bulbs; two Flight-Club-style darts booths down the west wall; the lounge
     // (chesterfields, round booths, high tables, a second fire with wing chairs) and the jukebox; the pool area at the
-    // back right, open to the front room (two tables). Off the landing at the back: Mammy Moloney's whiskey snug (kept).
+    // back right, open to the front room (two tables). Off the landing at the back: the whiskey snug (R12.2c: Seamus O'Shortly's now).
     // The balcony round the corner (kept).
     const U = Y2, UC = RY - SL, BW = 23.4, WT2 = 0.12, wc = { color: "#4a1612", deco: "pubwall2" };
     // the snug's walls (x -93.0..-84.6), with its doorway off the landing; the pool area east of it is open to the front
@@ -3141,8 +3144,10 @@ export function buildTrashington(): ArenaLayout {
     }
     for (const t of lowTables) disc(t.x, t.z, t.r, U, 0.45, "table", { hide: true, deco: "lowtable" });
     for (const f of sofas) wb(f.x - f.w / 2, f.x + f.w / 2, f.z - f.d / 2, f.z + f.d / 2, U, U + 0.5, "sofa", { hide: true, deco: "chesterfield" });
-    const roundBooths = [13.6, 20.0].map((z) => ({ x: IN.maxX, z, r: 1.6, a0: PI / 2, a1: 1.5 * PI }));
-    for (const b of roundBooths) { ring(b.x, b.z, b.r - 0.55, b.r, b.a0, b.a0 + PI / 2, U, 0.46, "sofa", { hide: true, deco: "roundbooth" }); ring(b.x, b.z, b.r - 0.55, b.r, b.a0 + PI / 2, b.a1, U, 0.46, "sofa", { hide: true, deco: "roundbooth" }); disc(b.x - 0.6, b.z, 0.45, U, 0.76, "table", { hide: true, deco: "boothtable" }); }
+    // (R12.2c: Blake: "the booths you cannot enter". The ring was bowed the wrong way (open to the wall); now its back's
+    //  to the wall and it opens to the room, bigger, with a small table in the middle and room to walk in round it)
+    const roundBooths = [13.6, 20.0].map((z) => ({ x: IN.maxX - 2.15, z, r: 2.1, a0: -2.0, a1: 2.0 }));
+    for (const b of roundBooths) { for (let q = 0; q < 4; q++) ring(b.x, b.z, b.r - 0.55, b.r, b.a0 + q * ((b.a1 - b.a0) / 4), b.a0 + (q + 1) * ((b.a1 - b.a0) / 4), U, 0.46, "sofa", { hide: true, deco: "roundbooth" }); disc(b.x, b.z, 0.35, U, 0.76, "table", { hide: true, deco: "boothtable" }); }
     const highTables = [{ x: -96.0, z: 9.6 }, { x: -96.0, z: 14.8 }, { x: -96.0, z: 20.0 }, { x: -83.4, z: 24.4 }, { x: -75.0, z: 24.4 }];
     for (const t of highTables) disc(t.x, t.z, 0.32, U, 1.1, "table", { hide: true, deco: "hightable" });
     const FIRE2 = { x: -88.8, z: BW - 0.3 };
@@ -3172,11 +3177,16 @@ export function buildTrashington(): ArenaLayout {
     rail2(-82.3, -72.0, 4.7, 4.78); rail2(-72.08, -72.0, 4.7, 15.0); rail2(-82.3, -82.22, 4.78, P.minZ); rail2(P.maxX, -72.0, 14.92, 15.0);
     const balTables = [{ x: -73.0, z: 5.6 }, { x: -80.4, z: 5.5 }];
     for (const t of balTables) disc(t.x, t.z, 0.3, U, 1.05, "table", { hide: true, deco: "baltable" });
-    // MAMMY MOLONEY's whiskey snug: her chair by the fire (north wall), two old fellas reading the paper (drawn), a
+    // the whiskey snug (Seamus O'Shortly's since R12.2c; Mammy's before): the big chair by the fire (north wall), two old fellas reading the paper (drawn), a
     // talk spot in front of her (E)
-    const MAMMY = { x: -90.4, z: 29.6, yaw: Math.atan2(-88.8 - -90.4, 25.0 - 29.6) };
-    posts.push({ kind: "mammy", x: MAMMY.x, z: MAMMY.z, yaw: MAMMY.yaw, y: U, sit: 0.5 });
-    props.push({ id: "mammy1", kind: "mammy", x: MAMMY.x + Math.sin(MAMMY.yaw) * 0.55, y: U + 0.8, z: MAMMY.z + Math.cos(MAMMY.yaw) * 0.55, yaw: MAMMY.yaw });
+    // R12.2c (Blake: "where the boss is upstairs, I want her gone and replaced with a different boss, a small leprechaun
+    // type, and he's got lots of little buddies with him"): SEAMUS O'SHORTLY in the big velvet chair, six wee buddies
+    // lounging round the snug
+    const SEAMUS = { x: -90.4, z: 29.6, yaw: Math.atan2(-88.8 - -90.4, 25.0 - 29.6) };
+    posts.push({ kind: "leprechaun", x: SEAMUS.x, z: SEAMUS.z, yaw: SEAMUS.yaw, y: U, sit: 0.5 });
+    props.push({ id: "seamus1", kind: "seamus", x: SEAMUS.x + Math.sin(SEAMUS.yaw) * 0.55, y: U + 0.6, z: SEAMUS.z + Math.cos(SEAMUS.yaw) * 0.55, yaw: SEAMUS.yaw });
+    const buddies = [{ x: -89.0, z: 30.7 }, { x: -91.7, z: 27.0 }, { x: -88.4, z: 27.3 }, { x: -90.2, z: 25.3 }, { x: -87.7, z: 24.4 }, { x: -85.6, z: 30.2 }];
+    buddies.forEach((b, v) => posts.push({ kind: "lep_buddy", x: b.x, z: b.z, yaw: Math.atan2(SEAMUS.x - b.x, SEAMUS.z - b.z), y: U, v }));
     const SNUGFIRE = { x: -88.6, z: IN.maxZ - 0.3 };
     wb(SNUGFIRE.x - 1.4, SNUGFIRE.x + 1.4, IN.maxZ - 0.55, IN.maxZ, U, UC, "wall", { hide: true, deco: "chimney2" });
     const readers = [{ x: -86.2, z: 26.0, yaw: -PI / 2 }, { x: -86.2, z: 28.4, yaw: -PI / 2 }];
@@ -3187,7 +3197,7 @@ export function buildTrashington(): ArenaLayout {
       rect: P, cham: CH, y1: Y1, y2: Y2, roofY: RY, door, out: { x: M[0] - nIn[0] * 2.2, z: M[1] - nIn[1] * 2.2, yaw: Math.atan2(nIn[0], nIn[1]) },
       door2: SD, out2: { x: (SD.minX + SD.maxX) / 2, z: P.minZ - 1.3, yaw: 0 },
       bar: HB, flap: FLAP, gantry: GT, lane: LANE, taps, stairs: ST, snugs, fire: FIRE, stage: STAGE, tables, rounds, windowSeat: WS, outside, stools, barman, bays,
-      balcony: BAL.parts, balTables, snug2: SNUG2, hall: HALL, mammy: MAMMY, snugFire: SNUGFIRE, readers,
+      balcony: BAL.parts, balTables, snug2: SNUG2, hall: HALL, seamus: SEAMUS, buddies, dancer: DANCER, snugFire: SNUGFIRE, readers,
       bar2: HB2, lane2: LANE2, flap2: FLAP2, gantry2: GT2, barmaid, darts, poolArea: POOLA, pools, sofas, lowTables, roundBooths, highTables, fire2: FIRE2, wings, jukebox: JUKE,
     };
   }

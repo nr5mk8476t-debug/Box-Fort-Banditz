@@ -8,7 +8,7 @@ import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, MAMMY, JUKEBOX } from "@bfb/shared";
+import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, SEAMUS, JUKEBOX } from "@bfb/shared";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
@@ -863,7 +863,7 @@ function updateHud(a: ArenaScene) {
     else if (!t && ut && ut.kind === "clubrope" && a.arenaLayout.fever) simple("E", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? " VIP: walk in " : " Pay the cover: ", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "FREE" : `$${FEVER.cover}`, a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "the bouncer lifts the rope for you" : `a stamp on your hand till dawn (VIPs free: ${FEVER.vipAura}+ aura)`);
     else if (!t && ut && ut.kind === "pinttap") simple("E", " A pint of GUZZLE'S: ", `$${PUB.price}`, a.pubInfo().pints >= PUB.cutoff ? "Fergal's cut you off till you sober up" : `then split the G: $${PUB.prize} if you nail it`); // (R12.1)
     else if (!t && ut && ut.kind === "jukebox") simple("E", " Next tune on ", "the Jukebox", `now playing "${JUKEBOX.tunes[a.jukeTune] ?? ""}" (it's free: the coin slot's been broken for years)`); // (R12.2b)
-    else if (!t && ut && ut.kind === "mammy") simple("E", " Have a word with ", "Mammy Moloney", `she owns the place. Bring her what she's after (double what it's worth); rate high enough (${MAMMY.tipAura}+ aura) and she'll give you tips. No rough stuff.`); // (R12.2)
+    else if (!t && ut && ut.kind === "seamus") simple("E", " Have a word with ", "Seamus O'Shortly", `he runs the place. Bring him what he's after for a pot of gold; rate high enough (${SEAMUS.tipAura}+ aura) and he'll give you tips. Start trouble and his lads swarm you.`); // (R12.2c)
     else if (!t && ut && ut.kind === "mocktail") simple("E", " Order a mocktail: ", `$${FEVER.mocktail}`, `glowing, silly, totally alcohol-free: ${FEVER.boost} s of dance energy (stamina refills fast)`);
     // C5c.3: THE COMPACTOR
     else if (!t && ut && ut.kind === "clubrope") simple("E", a.myAura >= CLUB.vipAura || a.carryingType("vip_wristband") ? " VIP: walk in " : " Pay the cover: ", a.myAura >= CLUB.vipAura || a.carryingType("vip_wristband") ? "FREE" : `$${CLUB.cover}`, a.myAura >= CLUB.vipAura || a.carryingType("vip_wristband") ? "Big Crunch knows a somebody when he sees one" : `Big Crunch stamps your hand till dawn. (VIPs free: ${CLUB.vipAura}+ aura or a VIP wristband)`);

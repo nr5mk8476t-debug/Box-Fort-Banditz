@@ -54,7 +54,7 @@ const PROP_NAMES: Record<string, string> = {
   // C5a: the lobby squat
   dummy: "Practice Dummy", throwgame: "THROW-O-MATIC", racegame: "TROLLEY GRAND PRIX",
   // C5b: Chinatown's stalls
-  mocktail: "the Mocktail Bar", pinttap: "the GUZZLE'S Tap", pubboard: "the Chalkboard", mammy: "Mammy Moloney", jukebox: "the Jukebox", steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
+  mocktail: "the Mocktail Bar", pinttap: "the GUZZLE'S Tap", pubboard: "the Chalkboard", seamus: "Seamus O'Shortly", jukebox: "the Jukebox", steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
   // R4: Little Italy's
   pizzacart: "Pizza Cart", gelato: "Gelato Cart", ricordi: "Souvenir Stall", deli: "Deli Counter",
   // C5c: Uptown's landmarks
@@ -400,7 +400,7 @@ export class ArenaScene {
     input.jailMouse = (dx, dy) => this.lock.mouse(dx, dy);
     this.pint = new PintUI(document.getElementById("hud") ?? document.body);
     this.pint.onGulp = (hold) => this.onAction?.({ a: "gulp", hold });
-    this.npcs.pubPosts = (arena.posts ?? []).filter((q) => ["regular", "trad_band", "barman", "patron", "barmaid", "mammy"].includes(q.kind)); // (R12.1; R12.2: upstairs too)
+    this.npcs.pubPosts = (arena.posts ?? []).filter((q) => ["regular", "trad_band", "barman", "patron", "barmaid", "leprechaun", "lep_buddy", "drunk_dancer"].includes(q.kind)); // (R12.1; R12.2: upstairs too)
 
     this.remotes = new RemotePlayers(scene);
     const color = PLAYER_COLORS[spawnIndex % PLAYER_COLORS.length];
@@ -586,7 +586,7 @@ export class ArenaScene {
     const cam = this.camera.position;
     const gainAt = (x: number, y: number, z: number) => 1 / (1 + Math.hypot(x - cam.x, y - cam.y, z - cam.z) / 8);
     for (const e of events) {
-      if (e.t === "jukebox" || e.t === "dance" || e.t.startsWith("mammy")) { this.evTail.push(e.t + ((e as any).p === me ? "*" : "")); if (this.evTail.length > 30) this.evTail.shift(); } // (for tests)
+      if (e.t === "jukebox" || e.t === "dance" || e.t === "seamus" || e.t === "lepSwarm") { this.evTail.push(e.t + ((e as any).p === me ? "*" : "")); if (this.evTail.length > 30) this.evTail.shift(); } // (for tests)
       switch (e.t) {
         case "grab":
           if (e.p !== me) { const a = this.remotes.anchor(e.p); if (a && gainAt(a.x, a.y, a.z) > 0.25) sfx.grab(); }
@@ -867,7 +867,7 @@ export class ArenaScene {
         case "mocktail": if (e.p === me) { sfx.cash(); this.onFeedback?.(`One ${e.drink}, glowing. $${e.paid}. Dance energy for ${FEVER.boost} s!`, "good"); } break;
         case "mocktailNo": if (e.p === me) this.onFeedback?.(`"That's $${FEVER.mocktail}, champ." You're short.`, "info"); break;
         // R12.1: THE SOGGY SHAMROCK
-        case "pint": if (e.p === me) { sfx.pour(); this.pint.start(e.rate); this.onFeedback?.(`A pint of GUZZLE'S, $${e.paid}. Now split the G!`, "good"); } break;
+        case "pint": if (e.p === me) { sfx.pour(); this.pint.start(e.rate, e.w, e.ph); this.onFeedback?.(`A pint of GUZZLE'S, $${e.paid}. Now split the G!`, "good"); } break;
         case "pintNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"That's $${PUB.price}, pal." You're short.` : e.reason === "cutoff" ? `"You've had plenty, pal." Fergal won't serve you till you've sobered up.` : "Finish the one you've got first.", "info"); break;
         case "pintDone": {
           const pub = this.arena.pub, near = !!pub && Math.hypot(this.cur.x - (pub.rect.minX + pub.rect.maxX) / 2, this.cur.z - (pub.rect.minZ + pub.rect.maxZ) / 2) < 22;
@@ -875,7 +875,7 @@ export class ArenaScene {
           if (e.grade === "perfect" && near) { sfx.cheer(e.p === me ? 1 : 0.6); pubFlourish(); }
           break;
         }
-        // R12.2: MAMMY MOLONEY; R12.2b: the jukebox
+        // R12.2b: the jukebox; R12.2c: SEAMUS O'SHORTLY and the lads
         case "jukebox": {
           this.jukeTune = e.tune; this.city.setJukebox(e.tune);
           const jb = this.arena.pub?.jukebox, near = !!jb && Math.hypot(this.cur.x - jb.x, this.cur.z - jb.z) < 14 && this.pubLevel === 2;
@@ -883,11 +883,16 @@ export class ArenaScene {
           if (e.p === me) this.onFeedback?.(`On the jukebox: "${JUKEBOX.tunes[e.tune]}"`, "good");
           break;
         }
-        case "mammy": if (e.p === me) {
+        case "seamus": if (e.p === me) {
           if (e.reward) sfx.cash();
-          this.onFeedback?.(`MAMMY MOLONEY: ${e.line}${e.reward ? ` (+$${e.reward})` : ""}`, e.kind === "jobWait" ? "info" : "good");
+          if (e.kind === "bigJob") sfx.happyHour();
+          this.onFeedback?.(`SEAMUS O'SHORTLY: ${e.line}${e.reward ? ` (+$${e.reward})` : ""}`, e.kind === "jobWait" ? "info" : "good");
         } break;
-        case "mammyOut": if (e.p === me) { sfx.punchPlayer(0.8); this.onBanner?.("OUT!", "Mammy Moloney's thrown you out. No rough stuff in her pub.", "bad"); } break;
+        case "lepSwarm":
+          if (e.p === me && e.on) { sfx.chitter(1); sfx.chitter(0.8); this.onBanner?.("THE LADS!", "Seamus's wee buddies are on you. Run, or ride it out (8 s).", "bad"); }
+          else if (e.p === me) this.onFeedback?.("The lads have had their fun. They wander back to the snug.", "info");
+          break;
+        case "npcPop": { const g = gainAt(e.x, e.y + 0.5, e.z); if (g > 0.05) { sfx.coo(g); this.pop("POP!", e.x, e.y + 0.9, e.z, "#5ad87a"); } break; }
         // R11.4: SKETCHY STEVE, the back EXIT
         case "deal": if (e.p === me) { sfx.cash(); const g = DEAL.goods[e.kind]; this.onBanner?.(g.name + "!", e.kind === "zoomies" ? `Zoom zoom. ${g.time} s of speed (then a comedown).` : e.kind === "beef" ? `${g.time} s of BEEF: punches send them flying, heavy loot feels like nothing.` : `${g.time} s of float: SPACE in mid-air to jump again (3 times).`, e.heat ? "bad" : "good"); if (e.heat) this.onFeedback?.("A cop saw that. Heat! (Steve's legged it.)", "bad"); } break;
         case "dealNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"Fifteen. Cash. Don't waste my time, kid."` : "Steve's done a runner (cops about). Come back when it's quiet.", "info"); break;
@@ -1630,7 +1635,7 @@ export class ArenaScene {
   jukeGain = 0;
   /** for tests: the last few pub events (mine starred) */
   evTail: string[] = [];
-  pubInfo() { return { evTail: this.evTail.join(","), clock: this.clubClock, juke: jukeboxMusicOn(), jukeGain: this.jukeGain, jukeTune: this.jukeTune, open: this.pint.open, rate: this.pint.rate, level: this.pint.open ? this.pint.level : -1, holding: this.pint.holding, music: pubMusicOn(), gain: this.pubGain, level2: this.pubLevel, pints: this.cur.pints, tipsyT: this.cur.tipsyT }; }
+  pubInfo() { return { gShown: this.pint.gShown, evTail: this.evTail.join(","), clock: this.clubClock, juke: jukeboxMusicOn(), jukeGain: this.jukeGain, jukeTune: this.jukeTune, open: this.pint.open, rate: this.pint.rate, level: this.pint.open ? this.pint.level : -1, holding: this.pint.holding, music: pubMusicOn(), gain: this.pubGain, level2: this.pubLevel, pints: this.cur.pints, tipsyT: this.cur.tipsyT }; }
 
   /** R11.4: SKETCHY STEVE's goods on the HUD (what's left), the comedown's wobble */
   private buffEl: HTMLDivElement | null = null;

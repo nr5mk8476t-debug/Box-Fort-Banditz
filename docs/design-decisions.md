@@ -1472,3 +1472,64 @@ R12.3 is proper pub 8-ball on these tables:
 - NPC or friends, with an optional $5-50 bet.
 
 R12.4 is 501 darts on these oches, with the screens showing the score. Then the brawl, quiz and G-split champ; then R13, the alleys and fire escapes.
+
+## R12.2c: THE SOGGY SHAMROCK fixes, a hard Split the G, Big Dessie, open booths, Seamus O'Shortly and the swarm (Blake, 2026-10-28)
+
+### The front door (Blake: "clipping... congested and covering the sign", "the chalkboard sign out the front is upside-down", "the weird red line that cuts through the middle of the front door")
+
+- **The cause:** the corner door's red plinth, its pilasters and the black board behind the name were all turned 90° (`yawOut + PI/2`). So instead of running along the cut corner they stuck straight out through the middle of the doorway. That made the red line, plus a black bar through the top. The same mistake affected the panels round the door inside. They all run along the wall now (`yawOut`), and the plinth stops either side of the door.
+- **Removed or moved:**
+  - The curved hood over the door is gone. The balcony above shelters the door now, and the hood was squashed under it and covered the sign.
+  - The big clock moved off the corner onto its own bracket on the east front.
+- **The A-board:** each board is now a frame with the chalk drawn on a plane facing out, so the writing reads the right way up on both sides.
+- **Clipping sweep:** a scripted overlap check of every pub collision box found only wall corners (fine) and the old round-booth tables (rebuilt). The visual pass fixed three more:
+  - the upstairs back bar's crown poked into the ceiling (the gantry height now respects the ceiling);
+  - the canopy's crown touched the beams (lowered);
+  - one row of pendants hung through the glass rack (that row's gone).
+
+### Split the G, hard (Blake: "too easy... in real life you actually cannot see where the G is... you just need to visually see that you're drinking. hold the button and stop where you think the G is. needs to be a hard game to win")
+
+- **First person.** The pint's in front of you with its back to you, so the G's on the far side and you can't see it.
+  - Hold to drink: the glass tips up to your face (it rises, comes closer and leans back) and the stout drains, with bubbles.
+  - Let go where you reckon the G is. The glass comes down and turns round to show the G, the target marks and where your line stopped.
+- **Tight grades:** perfect is 2 mm (was 4) and close is 6 mm (was 12).
+- **An uneven gulp:** every pint surges and slackens on its own rhythm. The rate is multiplied by 1 + 0.45 × sin(w·t + ph), with w = 1.6–3.4 rad/s and a random phase ph, so you can't just count.
+  - The curve is integrated exactly and always goes down.
+  - The World sends `w` and `ph` with the pint and judges with the same `pintLevel`.
+  - The perfect window is now about 0.1–0.3 s.
+
+### Big Dessie (Blake: "1 drunk dancer dancing to the music in front of where the band is. make his movement unpredictable")
+
+- **Who:** a big red-faced lad in shirt sleeves (no chest squares) with messy hair, rosy cheeks and a pint, in front of the band's stage.
+- **How he dances:** every 1.6–3.2 s he picks a new move at random: stagger, spin, flail, drop to his knees, kick-jig, or point at the sky.
+  - He wanders about his spot while he does it.
+  - The moves come off the clock, so everyone watching sees the same dance.
+- He's one of the pub's folk, so hitting him sets off the swarm.
+
+### The round booths (Blake: "the booths you cannot enter")
+
+- The seat ring was bowed the wrong way, so its open side faced the wall.
+- Now its back is to the wall and it opens to the room. It's bigger (2.1 m radius), with a small table in the middle and room to walk in round it.
+- A walk test proves you can get in.
+
+### Seamus O'Shortly and his lads (Blake: "the boss upstairs, I want her gone and replaced with a different boss, a small leprechaun type. and he's got lots of little buddies with him. and if you hit anyone in the pub they swarm you, damaging you for a little bit")
+
+- **Mammy Moloney is gone.** Seamus O'Shortly sits in the big velvet chair:
+  - a wee man in a green coat and a green top hat with a gold band and a shamrock;
+  - a big red beard, sideburns, pointy ears and a clay pipe.
+- **His six wee buddies** lounge round the snug: pointy green caps, each with his own green and beard colour.
+- **E with Seamus:**
+  - **A little job:** bring him something for a pot of gold, paid at double its value ($20 at least).
+  - **A big job (1 in 5):** bring him something lucky (a lucky pigeon statue, a lucky cat, a lottery ticket or a snow globe) for the big pot: 4× its value, $80 at least.
+  - **Tips:** once you have 3+ aura.
+- **The swarm.** Hit anyone in the pub (a drinker, the band, Fergal, Róisín, Big Dessie, a buddy) or Seamus himself, and he yells "GET HIM, LADS!":
+  - All six run at you.
+  - Any who are far off or on another floor pop out round you (they're leprechauns), with a green "POP!".
+  - They nip at you: 4 damage a nip, with the odd stagger. They never take you below 20 hp, so it stings but never knocks you out.
+  - It lasts 8 s (hitting someone again tops it up). Then they wander back to the snug, popping home if they're far away or stuck.
+- **Seamus himself** doesn't go down when you hit him.
+
+### Notes
+
+- The pigeon lady already had a "swarm" event, so the leprechauns' one is `lepSwarm`.
+- The city has 62 NPCs now: the 55 from R12.2b (which included Mammy), minus Mammy, plus Seamus, his six buddies and Big Dessie.

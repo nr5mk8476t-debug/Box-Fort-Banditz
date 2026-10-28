@@ -3795,32 +3795,30 @@ export class CityRenderer {
         const roof = MB.CreateBox("pbBayRoof", { width: x1 - x0 + 0.2, height: 0.12, depth: z1 - z0 + 0.2 }, sc); roof.position.set((x0 + x1) / 2 + sx * 0.04, 3.32, (z0 + z1) / 2 + sz * 0.04); roof.rotation.set(sz * 0.25, 0, -sx * 0.25); this.add(roof, lead, 0.01, false);
         box(x1 - x0 + 0.1, 0.1, z1 - z0 + 0.1, (x0 + x1) / 2, 3.22, (z0 + z1) / 2, BLACK, 0.006);
       }
-      // the corner: the main door (two red doors folded back), a carved canopy over it, a clock on a bracket
-      const ox = MX + out[0] * 0.08, oz = MZ + out[1] * 0.08;
-      sb(L, 0.78, 0.18, ox, 0.39, oz, "panel", RED, 0.01, yawOut + PI / 2);
+      // the corner: the main door (two red doors folded back) between red pilasters, the name over it
+      // (R12.2c: these run ALONG the cut corner now (yawOut); at +PI/2 they stuck straight out through the middle of the door:
+      //  Blake's "weird red line" and the black bar through the top. The plinth stops either side of the door. The hood's
+      //  gone (the balcony shelters the door) and the clock's moved round to the east front.)
+      const ox = MX + out[0] * 0.08, oz = MZ + out[1] * 0.08, PW2 = (L - 2.4) / 2 - 0.25;
+      for (const sd of [-1, 1]) sb(PW2, 0.78, 0.18, ox + along[0] * sd * (L / 2 - PW2 / 2), 0.39, oz + along[1] * sd * (L / 2 - PW2 / 2), "panel", RED, 0.01, yawOut);
       for (const sd of [-1, 1]) {
-        sb(0.5, 3.3, 0.24, ox + along[0] * sd * 1.45, 1.65, oz + along[1] * sd * 1.45, "panel", RED, 0.01, yawOut + PI / 2);
-        sb(0.62, 0.3, 0.3, ox + along[0] * sd * 1.45, 3.15, oz + along[1] * sd * 1.45, "panel", BLACK, 0.01, yawOut + PI / 2);
+        sb(0.5, 3.3, 0.24, ox + along[0] * sd * 1.45, 1.65, oz + along[1] * sd * 1.45, "panel", RED, 0.01, yawOut);
+        sb(0.62, 0.3, 0.3, ox + along[0] * sd * 1.45, 3.15, oz + along[1] * sd * 1.45, "panel", BLACK, 0.01, yawOut);
         const dx = MX - out[0] * 0.55 + along[0] * sd * 1.05, dz = MZ - out[1] * 0.55 + along[1] * sd * 1.05;
         sb(0.08, 2.85, 1.1, dx, Y1 + 1.43, dz, "panel", RED, 0.01, yawOut + PI / 2 + PI / 2);
         for (const yy of [0.7, 1.6, 2.4]) box(0.03, 0.5, 0.7, dx - out[0] * 0.05, Y1 + yy, dz - out[1] * 0.05, "#a80e16", 0, yawOut + PI);
         cyl(0.07, 0.07, dx - out[0] * 0.07, Y1 + 1.1, dz - out[1] * 0.07, BRASS, 0.004, 8);
       }
-      sb(L + 0.2, 1.0, 0.2, ox, 3.88, oz, "panel", BLACK, 0.01, yawOut + PI / 2);
+      sb(L - 0.4, 1.0, 0.2, ox, 3.88, oz, "panel", BLACK, 0.01, yawOut);
       sheet(L - 0.8, 0.7, ox + out[0] * 0.11, 3.88, oz + out[1] * 0.11, out[0], out[1], fascia);
-      // the canopy: a curved hood over the door on two brackets, gold-edged
-      { const cx = MX + out[0] * 0.7, cz = MZ + out[1] * 0.7, path: Vector3[] = [];
-        for (let k = 0; k <= 16; k++) { const u = (k / 16) * PI; path.push(new Vector3(cx + along[0] * Math.cos(u) * 1.5, 3.3 + Math.sin(u) * 0.45, cz + along[1] * Math.cos(u) * 1.5)); }
-        const hood = MB.CreateTube("pbHood", { path, radius: 0.55, tessellation: 12, arc: 0.5, cap: 0, sideOrientation: Mesh.DOUBLESIDE }, sc); hood.rotation.set(0, 0, 0); this.add(hood, BLACK, 0.012, false);
-        tube(path.map((v) => v.add(new Vector3(out[0] * 0.55, -0.02, out[1] * 0.55))), 0.04, GOLD, 0.004);
-        for (const sd of [-1, 1]) box(0.08, 0.08, 0.75, cx + along[0] * sd * 1.45 - out[0] * 0.3, 3.15, cz + along[1] * sd * 1.45 - out[1] * 0.3, BLACK, 0.004, yawOut); }
-      // the clock, out on an iron bracket off the corner, above the canopy
-      { const cx = -73.6, cz = 5.6, cy = 4.05; // (R12.2: it hangs under the balcony's corner now)
-        tube([new Vector3(cx, P.y2 - 0.15, cz), new Vector3(cx, cy + 0.4, cz)], 0.03, BLACK, 0);
+      // the clock, out on an iron bracket off the east front (R12.2c: moved off the corner; it crowded the door's name)
+      { const cx = r.maxX + 0.75, cz = 20.0, cy = 4.1;
+        tube([new Vector3(r.maxX + 0.02, cy + 0.55, cz), new Vector3(cx, cy + 0.55, cz), new Vector3(cx, cy + 0.42, cz)], 0.035, BLACK, 0);
+        tube([new Vector3(r.maxX + 0.02, cy - 0.1, cz), new Vector3(cx - 0.3, cy + 0.5, cz)], 0.025, BLACK, 0);
         const face = texMat("clock", 256, 256, (c) => { c.fillStyle = "#f8f2e0"; c.beginPath(); c.arc(128, 128, 124, 0, 6.3); c.fill(); c.strokeStyle = "#141010"; c.lineWidth = 10; c.stroke(); c.fillStyle = "#141010"; c.font = "bold 30px Georgia, serif"; c.textAlign = "center"; c.textBaseline = "middle"; ["XII", "III", "VI", "IX"].forEach((t, i) => { const a = (i / 4) * 2 * PI - PI / 2; c.fillText(t, 128 + Math.cos(a) * 92, 128 + Math.sin(a) * 92); }); c.lineCap = "round"; c.lineWidth = 9; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 + 50, 128 - 30); c.stroke(); c.lineWidth = 6; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 - 10, 128 - 85); c.stroke(); }, 0.6, true);
-        const cl = MB.CreateCylinder("pbClock", { diameter: 0.8, height: 0.14, tessellation: 24 }, sc); cl.position.set(cx, cy, cz); cl.rotation.set(PI / 2, Math.atan2(along[0], along[1]), 0); this.add(cl, BLACK, 0.01, false);
-        for (const sd of [-1, 1]) sheet(0.7, 0.7, cx + along[0] * sd * 0.075, cy, cz + along[1] * sd * 0.075, along[0] * sd, along[1] * sd, face);
-        const rim = MB.CreateTorus("pbClockRim", { diameter: 0.82, thickness: 0.05, tessellation: 24 }, sc); rim.position.set(cx, cy, cz); rim.rotation.set(PI / 2, 0, Math.atan2(along[0], along[1]) + PI / 2); rim.rotation.set(0, Math.atan2(along[0], along[1]), PI / 2); this.add(rim, GOLD, 0, false); }
+        const cl = MB.CreateCylinder("pbClock", { diameter: 0.8, height: 0.14, tessellation: 24 }, sc); cl.position.set(cx, cy, cz); cl.rotation.set(PI / 2, 0, 0); this.add(cl, BLACK, 0.01, false);
+        for (const sd of [-1, 1]) sheet(0.7, 0.7, cx, cy, cz + sd * 0.075, 0, sd, face);
+        const rim = MB.CreateTorus("pbClockRim", { diameter: 0.82, thickness: 0.05, tessellation: 24 }, sc); rim.position.set(cx, cy, cz); rim.rotation.set(PI / 2, 0, 0); this.add(rim, GOLD, 0, false); }
       // the side door: one red door swung in, a fanlight, two lanterns, the step
       { const D2 = P.door2, dx = (D2.minX + D2.maxX) / 2, w = D2.maxX - D2.minX;
         sbx(D2.minX + 0.05, D2.minX + 0.13, Y1, Y1 + 2.8, IN.minZ, IN.minZ + w - 0.2, "panel", RED, 0.01);
@@ -3855,7 +3853,13 @@ export class CityRenderer {
       }
       { const ax = MX + out[0] * 2.4 - along[0] * 2.4, az = MZ + out[1] * 2.4 - along[1] * 2.4;
         const am = texMat("aboard", 256, 384, (c) => { c.fillStyle = "#1e2a22"; c.fillRect(0, 0, 256, 384); c.strokeStyle = "#5a2a12"; c.lineWidth = 16; c.strokeRect(0, 0, 256, 384); c.fillStyle = "#f4f1ea"; c.textAlign = "center"; c.font = "bold 34px 'Comic Sans MS', cursive"; c.fillText("GUZZLE'S", 128, 70); c.fillStyle = "#ffe14a"; c.fillText("$6", 128, 115); c.fillStyle = "#f4f1ea"; c.font = "bold 28px 'Comic Sans MS', cursive"; c.fillText("SPLIT THE G", 128, 180); c.fillText("WIN $15", 128, 215); c.fillStyle = "#7dff9a"; c.fillText("LIVE TRAD", 128, 280); c.fillText("NIGHTLY", 128, 315); }, 0.35);
-        for (const sd of [-1, 1]) { const b = MB.CreateBox("pbABoardSide", { width: 0.6, height: 0.9, depth: 0.04 }, sc); b.position.set(ax + out[0] * sd * 0.14, 0.6, az + out[1] * sd * 0.14); b.rotation.set(-sd * 0.16, yawOut, 0); keepM(b, am); } }
+        // (R12.2c: its two boards are frames with the chalk drawn on planes facing out, so the writing's the right way up)
+        const ab = new TransformNode("pbABoard", sc); ab.parent = this.root; ab.position.set(ax, 0, az); ab.rotation.y = yawOut;
+        for (const sd of [-1, 1]) {
+          const leaf = new TransformNode("pbABoardLeaf", sc); leaf.parent = ab; leaf.position.set(0, 0.6, sd * 0.14); leaf.rotation.x = -sd * 0.16;
+          const fr = MB.CreateBox("pbABoardSide", { width: 0.64, height: 0.94, depth: 0.04 }, sc); fr.parent = leaf; fr.material = toon(sc, "#3a2416"); fr.isPickable = false;
+          const pl = MB.CreatePlane("pbABoardFace", { width: 0.56, height: 0.84 }, sc); pl.parent = leaf; pl.position.z = sd * 0.025; pl.rotation.y = sd > 0 ? PI : 0; pl.material = am; pl.isPickable = false;
+        } }
       // chimney stacks on the roof
       for (const [x, z] of [[r.minX + 3, r.maxZ - 1.5], [(r.minX + r.maxX) / 2, r.maxZ - 1.5], [r.maxX - 4, r.maxZ - 1.5]]) { sbx(x - 0.6, x + 0.6, P.roofY, P.roofY + 1.6, z - 0.5, z + 0.5, "brick", "#6a3022"); for (let k = 0; k < 3; k++) cyl(0.22, 0.45, x - 0.35 + k * 0.35, P.roofY + 1.82, z, "#b86a3a", 0.006, 10); }
     }
@@ -3881,8 +3885,8 @@ export class CityRenderer {
         }
       }
       const inn = [-1 / S2, 1 / S2], ix = MX + inn[0] * 0.33, iz = MZ + inn[1] * 0.33;
-      for (const sd of [-1, 1]) { const cx = ix + along[0] * sd * (L / 4 + 0.6), cz = iz + along[1] * sd * (L / 4 + 0.6); sb(L / 2 - 1.2, 1.15, 0.02, cx, Y1 + 0.58, cz, "mahogany", MAH, 0, yawOut + PI / 2); sb(L / 2 - 1.2, CEIL - 1.35, 0.02, cx, (1.35 + CEIL) / 2, cz, "damask", "#163a26", 0, yawOut + PI / 2); }
-      sb(2.6, CEIL - 3.1, 0.02, ix, (3.1 + CEIL) / 2, iz, "damask", "#163a26", 0, yawOut + PI / 2);
+      for (const sd of [-1, 1]) { const cx = ix + along[0] * sd * (L / 4 + 0.6), cz = iz + along[1] * sd * (L / 4 + 0.6); sb(L / 2 - 1.2, 1.15, 0.02, cx, Y1 + 0.58, cz, "mahogany", MAH, 0, yawOut); sb(L / 2 - 1.2, CEIL - 1.35, 0.02, cx, (1.35 + CEIL) / 2, cz, "damask", "#163a26", 0, yawOut + PI / 2); }
+      sb(2.6, CEIL - 3.1, 0.02, ix, (3.1 + CEIL) / 2, iz, "damask", "#163a26", 0, yawOut);
       // the dado rail (brass-capped) and the picture rail right round
       for (const [x0, x1, z0, z1, nx, nz] of [[IN.minX, IN.maxX - P.cham, IN.minZ, IN.minZ, 0, 1], [IN.minX, IN.maxX, IN.maxZ, IN.maxZ, 0, -1], [IN.minX, IN.minX, IN.minZ, IN.maxZ, 1, 0], [IN.maxX, IN.maxX, IN.minZ + P.cham, IN.maxZ, -1, 0]] as [number, number, number, number, number, number][]) {
         const ax = x0 === x1;
@@ -4016,7 +4020,7 @@ export class CityRenderer {
       { const tx = G.maxX + 0.25, tz = G.minZ - 0.25; box(0.36, 0.28, 0.3, tx, Y1 + 1.1, tz, BRASS, 0.006); box(0.36, 0.14, 0.14, tx, Y1 + 1.32, tz - 0.05, BRASS, 0.004, 0, -0.4); for (let k = 0; k < 6; k++) cyl(0.035, 0.05, tx - 0.12 + (k % 3) * 0.12, Y1 + 1.27, tz + 0.05 - Math.floor(k / 3) * 0.08, "#f4f1ea", 0, 6); }
       // the gantry: a cabinet, three tiers of backlit shelves in arched bays (both faces), turned columns, mirrors in
       // the end bays, a carved crown, the stained-glass signs on top (lit)
-      const gy0 = Y1 + 0.95, gy1 = Y1 + 3.0, nb = 3, bw = (G.maxX - G.minX) / nb;
+      const gy0 = Y1 + 0.95, gy1 = Math.min(Y1 + 3.0, CEIL - 1.38), nb = 3, bw = (G.maxX - G.minX) / nb; // (R12.2c: its crown clears the ceiling)
       sbx(G.minX, G.maxX, Y1, gy0, G.minZ, G.maxZ, "mahogany", MAH, 0.01);
       sbx(G.minX + 0.08, G.maxX - 0.08, gy0, gy1, (G.minZ + G.maxZ) / 2 - 0.05, (G.minZ + G.maxZ) / 2 + 0.05, "mahogany", MAH2); // (the spine)
       const back = glow("#ffb050"); // (the backlight)
@@ -4195,7 +4199,7 @@ export class CityRenderer {
       // the snug's doorway frame
       for (const [x, z, ax] of [[-92.94, 25.95, true]] as [number, number, boolean][]) { for (const e of [-0.78, 0.78]) box(ax ? 0.22 : 0.12, 2.45, ax ? 0.12 : 0.22, x + (ax ? 0 : e), U + 1.22, z + (ax ? e : 0), MAH2, 0.006); box(ax ? 0.24 : 1.7, 0.16, ax ? 1.7 : 0.24, x, U + 2.5, z, MAH2, 0.006); }
       const sign2 = (text: string, x: number, z: number, nx: number, nz: number) => sheet(1.4, 0.32, x, U + 2.8, z, nx, nz, texMat("sign2-" + text, 512, 116, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 512, 116); c.strokeStyle = GOLD; c.lineWidth = 6; c.strokeRect(6, 6, 500, 104); lettering(c, text, 512, 116); }, 0.5));
-      sign2("MAMMY'S SNUG", -93.07, 25.95, -1, 0);
+      sign2("SEAMUS'S SNUG", -93.07, 25.95, -1, 0);
       // the ceiling: pressed tin and beams; milk-glass globes
       sbx(IN.minX, IN.maxX, UC - 0.025, UC - 0.005, IN.minZ, IN.maxZ, "tin", "#c8b890");
       for (let z = IN.minZ + 1.8; z < IN.maxZ - 0.5; z += 3.0) sbx(IN.minX, IN.maxX, UC - 0.28, UC - 0.025, z - 0.13, z + 0.13, "mahogany", MAH2);
@@ -4219,7 +4223,7 @@ export class CityRenderer {
         fascia(0.35, cy0, cy1, "#8e1414");
         tube(ring(0.4, cy0), 0.05, MAH2, 0.004, 6); tube(ring(0.4, cy1), 0.06, MAH2, 0.004, 6); tube(ring(0.41, (cy0 + cy1) / 2), 0.018, GOLD, 0, 6);
         walk(ring(0.45, 0), 0.24, (x, z) => { gsph(0.085, x, cy0 - 0.03, z, bulb); gsph(0.085, x, cy1 + 0.03, z, bulb); });
-        const cr0 = U + 3.75, cr1 = U + 4.0;
+        const cr0 = U + 3.63, cr1 = U + 3.86; // (R12.2c: under the beams)
         fascia(-0.6, cr0, cr1, CREAM);
         tube(ring(-0.56, cr1), 0.04, MAH2, 0.004, 6);
         walk(ring(-0.53, 0), 0.26, (x, z) => gsph(0.075, x, cr1 + 0.04, z, bulb));
@@ -4229,7 +4233,7 @@ export class CityRenderer {
         for (const sz of [-1, 1]) sheet(4.4, 0.46, (B2.minX + B2.maxX) / 2, (cy0 + cy1) / 2, (sz < 0 ? B2.minZ - 0.35 : B2.maxZ + 0.35) + sz * 0.05, 0, sz, nb2);
         const nb3 = texMat("canopyEnd", 512, 160, (c) => { c.fillStyle = "#123a24"; c.fillRect(0, 0, 512, 160); c.strokeStyle = GOLD; c.lineWidth = 10; c.strokeRect(8, 8, 496, 144); lettering(c, "GUZZLE'S", 512, 160); }, 0.55);
         for (const sx of [-1, 1]) sheet(2.4, 0.46, (sx < 0 ? B2.minX - 0.35 : B2.maxX + 0.35) + sx * 0.05, (cy0 + cy1) / 2, (B2.minZ + B2.maxZ) / 2, sx, 0, nb3);
-        for (let x = B2.minX + 1.3; x < B2.maxX - 1.0; x += 1.4) for (const z of [B2.minZ + 0.4, B2.maxZ - 0.4]) { cyl(0.015, UC - (U + 2.62), x, (U + 2.62 + UC) / 2, z, BLACK, 0, 4); cyl(0.26, 0.18, x, U + 2.55, z, "#1f4a2e", 0.004, 12, 0.1); gsph(0.12, x, U + 2.45, z, "#ffd890"); }
+        for (let x = B2.minX + 1.3; x < B2.maxX - 1.0; x += 1.4) for (const z of [B2.maxZ - 0.4]) { /* (R12.2c: the south row went: it hung through the glass rack) */ cyl(0.015, UC - (U + 2.62), x, (U + 2.62 + UC) / 2, z, BLACK, 0, 4); cyl(0.26, 0.18, x, U + 2.55, z, "#1f4a2e", 0.004, 12, 0.1); gsph(0.12, x, U + 2.45, z, "#ffd890"); }
       }
       // ---------------------------------------------------------------- THE DARTS: two booths down the west wall, like
       // Flight Club: panelled mahogany, a red-and-cream ringed board inside a ring of bulbs, a screen over it, stained-glass
@@ -4317,11 +4321,11 @@ export class CityRenderer {
         this.skinPush(arcPrism(sc, rb.x, rb.z, rb.a0, rb.a1, rb.r - 0.2, rb.r, U + 0.46, U + 1.45, 18), "leather", LEATHER, 0.008);
         this.skinPush(arcPrism(sc, rb.x, rb.z, rb.a0, rb.a1, rb.r - 0.23, rb.r + 0.02, U + 1.45, U + 1.53, 18), "mahogany", MAH2, 0.006);
         for (const yy of [0.75, 1.05, 1.3]) for (let k = 1; k < 12; k++) { const u = rb.a0 + ((rb.a1 - rb.a0) * (k + (yy === 1.05 ? 0.5 : 0))) / 12; ball(0.035, rb.x + Math.cos(u) * (rb.r - 0.21), U + yy, rb.z + Math.sin(u) * (rb.r - 0.21), "#140604", 0, 4); }
-        const tx = rb.x - 0.6;
+        const tx = rb.x; // (R12.2c: the table in the middle; the booth opens to the room)
         cyl(0.92, 0.05, tx, U + 0.76, rb.z, MAH, 0.006, 18); cyl(0.09, 0.72, tx, U + 0.37, rb.z, MAH2, 0.003, 8); cyl(0.45, 0.04, tx, U + 0.02, rb.z, MAH2, 0, 10);
         cyl(0.085, 0.15, tx + 0.15, U + 0.86, rb.z + 0.1, "#1b0a06", 0.003, 10, 0.09); cyl(0.095, 0.025, tx + 0.15, U + 0.94, rb.z + 0.1, "#f2e2bc", 0, 10); cyl(0.085, 0.15, tx - 0.1, U + 0.86, rb.z - 0.15, "#1b0a06", 0.003, 10, 0.09);
         cyl(0.07, 0.2, tx, U + 0.88, rb.z + 0.25, "#2f6a3a", 0.003, 8, 0.04); gsph(0.05, tx, U + 1.02, rb.z + 0.25, "#ffcf6a");
-        box(0.06, 0.18, 0.12, rb.x - 0.05, U + 2.0, rb.z, BRASS, 0.004); cyl(0.2, 0.22, rb.x - 0.22, U + 2.12, rb.z, "#8e1414", 0.004, 10, 0.12); gsph(0.1, rb.x - 0.22, U + 2.02, rb.z, "#ffd890");
+        box(0.06, 0.18, 0.12, IN.maxX - 0.05, U + 2.0, rb.z, BRASS, 0.004); cyl(0.2, 0.22, IN.maxX - 0.22, U + 2.12, rb.z, "#8e1414", 0.004, 10, 0.12); gsph(0.1, IN.maxX - 0.22, U + 2.02, rb.z, "#ffd890");
       }
       for (const t of P.highTables) {
         cyl(0.72, 0.05, t.x, U + 1.1, t.z, MAH, 0.006, 16); cyl(0.07, 1.06, t.x, U + 0.55, t.z, BRASS, 0.003, 8); cyl(0.5, 0.04, t.x, U + 0.02, t.z, MAH2, 0, 12);
@@ -4393,7 +4397,7 @@ export class CityRenderer {
       for (const y of [U + 0.55, U + 1.05, U + 1.55, U + 2.05]) { sbx(-92.78, -92.32, y - 0.02, y + 0.02, 27.45, 30.35, "mahogany", MAH2); for (let z = 27.6; z < 30.25; z += 0.17) this.pubBottle(-92.55, y + 0.02, z, Math.round(z * 10) + Math.round(y * 3)); }
       sheet(0.9, 0.3, -92.28, U + 2.45, 28.9, 1, 0, texMat("whisk", 512, 160, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 512, 160); lettering(c, "O'BINLID'S", 512, 160); }, 0.5));
       // Mammy's chair (a high wing back, buttoned velvet), a footstool, her cup of tea, a cushion
-      { const m = P.mammy, c = Math.cos(m.yaw), s2 = Math.sin(m.yaw), bx = m.x - s2 * 0.35, bz = m.z - c * 0.35;
+      { const m = P.seamus, c = Math.cos(m.yaw), s2 = Math.sin(m.yaw), bx = m.x - s2 * 0.35, bz = m.z - c * 0.35;
         sb(0.95, 0.5, 0.8, m.x - s2 * 0.05, U + 0.25, m.z - c * 0.05, "velvet", "#3a1a4a", 0.01, m.yaw);
         sb(0.95, 1.4, 0.18, bx, U + 1.05, bz, "velvet", "#3a1a4a", 0.01, m.yaw);
         for (const sd of [-1, 1]) sb(0.14, 0.4, 0.75, m.x + c * sd * 0.45, U + 0.65, m.z - s2 * sd * 0.45, "velvet", "#3a1a4a", 0.008, m.yaw);

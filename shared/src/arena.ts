@@ -114,8 +114,8 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   | "dealgoods"
   // R12.1: THE SOGGY SHAMROCK: the GUZZLE'S taps (E: a pint, then split the G) and the chalkboard of the best splits
   | "pinttap" | "pubboard"
-  // R12.2: MAMMY MOLONEY (E: a word with her: a tip, a job)
-  | "mammy" | "jukebox";
+  // R12.2c: SEAMUS O'SHORTLY (E: a word with him: a tip, a job for a pot of gold); R12.2b: the jukebox
+  | "seamus" | "jukebox";
 export interface PropDef {
   id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
   /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
@@ -344,7 +344,7 @@ export interface ArenaLayout {
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
   /** C1.1: people who stand at a spot (the apartment tower's doorman) */
-  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "barmaid" | "mammy"; x: number; z: number; yaw: number;
+  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "barmaid" | "leprechaun" | "lep_buddy" | "drunk_dancer"; x: number; z: number; yaw: number;
     /** R12.1: which one (the regulars, the band's four), and sitting down (stool, bench) */
     v?: number; sit?: number;
     /** C5a: standing height (Uncle Dumpster lives on a rooftop) */
@@ -773,10 +773,11 @@ export interface PubDef {
   barman: { x: number; z: number; yaw: number };
   /** the bay windows jutting out over the pavement */
   bays: Rect[];
-  /** R12.2 upstairs: the balcony (its parts; the corner triangle joins them) and its standing tables, MAMMY MOLONEY's
-   *  whiskey snug, the landing, where Mammy sits, the snug's fire, the two old fellas reading the paper */
+  /** R12.2 upstairs: the balcony (its parts; the corner triangle joins them) and its standing tables, the whiskey snug,
+   *  the landing, where SEAMUS O'SHORTLY sits (R12.2c; Mammy's old chair), where his six buddies hang about, the snug's
+   *  fire, the two old fellas reading the paper; BIG DESSIE's patch of floor in front of the band */
   balcony: Rect[]; balTables: { x: number; z: number }[];
-  snug2: Rect; hall: Rect; mammy: { x: number; z: number; yaw: number }; snugFire: { x: number; z: number };
+  snug2: Rect; hall: Rect; seamus: { x: number; z: number; yaw: number }; buddies: { x: number; z: number }[]; dancer: { x: number; z: number }; snugFire: { x: number; z: number };
   readers: { x: number; z: number; yaw: number }[];
   /** R12.2b (Blake: "a laid back area where you can have fun with your friends"): the island bar under its canopy (its
    *  outer edge, the staff's lane and flap, the back bar in the middle) and the barmaid; the two darts booths (the
@@ -795,17 +796,36 @@ export interface PubDef {
  *  (`rate` differs pint to pint); let go on the bar. Perfect (4 mm): $15 and the room cheers; close (12 mm): your $6
  *  back; the best 5 of the match on the chalkboard. Every pint makes you tipsier (45 s more, 3 min at most); after 6,
  *  Fergal cuts you off till you're sober */
-export const PUB = { price: 6, glassMm: 160, start: 0.86, g: 0.62, accel: 0.03, rateMin: 0.06, rateMax: 0.11, perfectMm: 4, closeMm: 12, prize: 15,
-  pour: 30, tipsyAdd: 45, tipsyMax: 180, cutoff: 6, boardN: 5, bpm: 116 };
-/** where the line is after holding the gulp `t` seconds (0..1 of the glass) */
-export function pintLevel(t: number, rate: number): number { return Math.max(0, PUB.start - rate * t - 0.5 * PUB.accel * t * t); }
+export const PUB = { price: 6, glassMm: 160, start: 0.86, g: 0.62, accel: 0.03, rateMin: 0.06, rateMax: 0.11, perfectMm: 2, closeMm: 6, prize: 15,
+  pour: 30, tipsyAdd: 45, tipsyMax: 180, cutoff: 6, boardN: 5, bpm: 116,
+  /** R12.2c (Blake: "too easy... in real life you actually cannot see where the G is... needs to be a hard game to win"):
+   *  2 mm perfect, 6 mm close; and every pint gulps unevenly: the rate surges and slackens by up to `surge` (45%) on its
+   *  own rhythm (`w` rad/s, from wMin..wMax, starting at phase `ph`), so you can't just count */
+  surge: 0.45, wMin: 1.6, wMax: 3.4 };
+/** where the line is after holding the gulp `t` seconds (0..1 of the glass). R12.2c: with `w` > 0 the gulp surges:
+ *  the rate is rate * (1 + surge * sin(w t + ph)), always forward (surge < 1), integrated exactly */
+export function pintLevel(t: number, rate: number, w = 0, ph = 0): number {
+  const drunk = w > 0 ? t - (PUB.surge / w) * (Math.cos(w * t + ph) - Math.cos(ph)) : t;
+  return Math.max(0, PUB.start - rate * drunk - 0.5 * PUB.accel * t * t);
+}
 /** how far off the G's bar you stopped (mm) */
-export function pintMissMm(t: number, rate: number): number { return Math.abs(pintLevel(t, rate) - PUB.g) * PUB.glassMm; }
+export function pintMissMm(t: number, rate: number, w = 0, ph = 0): number { return Math.abs(pintLevel(t, rate, w, ph) - PUB.g) * PUB.glassMm; }
+/** R12.2c: how long a gulp takes to bring the line to `level` (for tests and the reveal): the curve only goes down */
+export function pintHoldFor(level: number, rate: number, w = 0, ph = 0): number {
+  let lo = 0, hi = 60;
+  for (let k = 0; k < 60; k++) { const m = (lo + hi) / 2; if (pintLevel(m, rate, w, ph) > level) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
 export function pintGrade(mm: number): "perfect" | "close" | "miss" { return mm <= PUB.perfectMm ? "perfect" : mm <= PUB.closeMm ? "close" : "miss"; }
 
 /** R12.2b: the upstairs JUKEBOX: E puts on the next tune (a few seconds between changes); every window plays it in time
  *  off the city clock. Three originals. */
 export const JUKEBOX = { cd: 3, tunes: ["Soggy Sunday", "Last Bus Home", "Puddle Stomp"] };
-/** R12.2: MAMMY MOLONEY: a tip if she rates you (3+ aura, one every 45 s), else a little job: bring her one of these
- *  (double what it's worth, $20 at least) */
-export const MAMMY = { tipAura: 3, tipCd: 45, minPay: 20, jobs: ["rubber_chicken", "mixtape", "newspaper", "canned_beans", "baguette", "smelly_fish", "bagel", "disposable_camera", "fancy_cheese", "half_sandwich"] };
+/** R12.2c: SEAMUS O'SHORTLY: a tip if he rates you (3+ aura, one every 45 s), else a little job: bring him one of these
+ *  for a pot of gold (double what it's worth, $20 at least). Now and then (bonusChance) it's a big job: something rarer,
+ *  for the big pot (bonusMult times what it's worth, `bonusMin` at least) */
+export const SEAMUS = { tipAura: 3, tipCd: 45, minPay: 20, jobs: ["rubber_chicken", "mixtape", "newspaper", "canned_beans", "baguette", "smelly_fish", "bagel", "disposable_camera", "fancy_cheese", "half_sandwich"],
+  bonusChance: 0.2, bonusJobs: ["lucky_pigeon", "lucky_cat", "lottery_ticket", "snow_globe"], bonusMult: 4, bonusMin: 80 };
+/** R12.2c: hit anyone in the pub and Seamus's six wee buddies swarm you: they pop out round you (leprechauns), nip at
+ *  your ankles (a little damage each, the odd stagger), for `t` seconds; they won't take you below `floor` hp */
+export const SWARM = { t: 8, nip: 4, floor: 20, pop: 3.5, stagger: 0.25 };

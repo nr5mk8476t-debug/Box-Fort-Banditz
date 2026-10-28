@@ -279,9 +279,12 @@ function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number,
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// R12.1: SPLIT THE G. A close-up of your pint of GUZZLE'S: hold the mouse (or SPACE) to gulp and the line (where
-// the black meets the cream) drops, faster the longer you hold; let go when it's on the G's bar. The line is drawn
-// from the same sum the World checks (pintLevel), so what you see is what you get. Tipsy, the glass sways.
+// R12.1: SPLIT THE G. R12.2c (Blake: "too easy and in real life you actually cannot see where the G is. you just need
+// to visually see that you're drinking. hold the button and stop where you think the G is. needs to be a hard game"):
+// first person. The pint's in front of you, its back to you (the G's printed on the far side, so you can't see it).
+// Hold the mouse (or SPACE): the glass tips up to your face and the stout goes down, in surges (each pint its own
+// rhythm: the World uses the very same curve, pintLevel). Let go where you reckon the G is; the glass comes down and
+// turns round: there's the G, and where your line stopped.
 const PW = 300, PH = 440;
 export class PintUI {
   readonly root: HTMLDivElement;
@@ -289,6 +292,8 @@ export class PintUI {
   private g: CanvasRenderingContext2D;
   private help: HTMLDivElement;
   rate = 0;
+  private w = 0;
+  private ph = 0;
   holding = false;
   hold = 0;
   /** waiting for the verdict (after you let go), then showing it */
@@ -296,6 +301,10 @@ export class PintUI {
   private verdict: { mm: number; grade: string; won: number } | null = null;
   private verdictT = 0;
   private t = 0;
+  /** how far the glass is tipped up to your face (0 resting .. 1 tipped) */
+  private tip = 0;
+  /** the reveal: the glass turning round (0 its back to you .. 1 the G facing you) */
+  private turn = 0;
   /** how tipsy (0..1): the glass sways */
   wobble = 0;
   /** the gulp's over: hold seconds */
@@ -312,10 +321,12 @@ export class PintUI {
   }
   get open() { return this.rate > 0; }
   /** where the line is now (0..1 of the glass) */
-  get level() { return pintLevel(this.hold, this.rate); }
-  start(rate: number) {
-    this.rate = rate; this.hold = 0; this.holding = false; this.sent = false; this.verdict = null; this.verdictT = 0;
-    this.help.innerHTML = "<b>HOLD CLICK</b> (or <b>SPACE</b>) to gulp. Let go when the line's on the <b>G</b>'s bar.";
+  get level() { return pintLevel(this.hold, this.rate, this.w, this.ph); }
+  /** for tests: is the G showing? (only once the verdict's in) */
+  get gShown() { return this.turn > 0.5; }
+  start(rate: number, w = 0, ph = 0) {
+    this.rate = rate; this.w = w; this.ph = ph; this.hold = 0; this.holding = false; this.sent = false; this.verdict = null; this.verdictT = 0; this.tip = 0; this.turn = 0;
+    this.help.innerHTML = "<b>HOLD CLICK</b> (or <b>SPACE</b>) to drink. Let go where you reckon the <b>G</b> is. You can't see it from your side.";
     this.root.classList.remove("hidden");
   }
   /** mouse / SPACE down or up */
@@ -329,44 +340,56 @@ export class PintUI {
     this.onGulp?.(this.hold);
   }
   /** the World's verdict */
-  result(mm: number, grade: string, won: number) { this.verdict = { mm, grade, won }; this.verdictT = 2.6; this.sent = true; this.holding = false;
+  result(mm: number, grade: string, won: number) { this.verdict = { mm, grade, won }; this.verdictT = 3.4; this.sent = true; this.holding = false;
     this.help.innerHTML = grade === "perfect" ? `<b>SPLIT IT!</b> ${mm.toFixed(1)} mm off. +$${won}` : grade === "close" ? `So close: ${mm.toFixed(1)} mm. Your $${won} back.` : `Missed by ${mm.toFixed(1)} mm.`; }
   close() { this.rate = 0; this.holding = false; this.root.classList.add("hidden"); }
   update(dt: number) {
     if (!this.open) return;
     this.t += dt;
     if (this.holding) { this.hold += dt; if (this.level <= 0.02) this.release(); }
-    if (this.verdict) { this.verdictT -= dt; if (this.verdictT <= 0) { this.close(); return; } }
+    // the glass up to your mouth while you drink; down again after; it turns round once the verdict's in
+    const up = this.holding ? 1 : 0;
+    this.tip += (up - this.tip) * Math.min(1, dt * (this.holding ? 4 : 5));
+    if (this.verdict) { this.turn = Math.min(1, this.turn + dt * 2.2); this.verdictT -= dt; if (this.verdictT <= 0) { this.close(); return; } }
     this.draw();
   }
   private draw() {
-    const g = this.g, t = this.t;
+    const g = this.g, t = this.t, tip = this.tip, turn = this.turn;
     g.clearRect(0, 0, PW, PH);
     g.save();
+    // tipping up to your face: it rises, comes closer (bigger), leans back towards you; gulps make it bob
     const sway = this.wobble * (Math.sin(t * 1.7) * 0.07 + Math.sin(t * 3.1) * 0.03);
-    g.translate(PW / 2 + Math.sin(t * 1.3) * 14 * this.wobble, PH - 30); g.rotate(sway);
+    const bob = this.holding ? Math.abs(Math.sin(t * 7)) * 4 : 0;
+    g.translate(PW / 2 + Math.sin(t * 1.3) * 14 * this.wobble - tip * 20, PH - 30 - tip * 120 - bob);
+    g.rotate(sway - tip * 0.75);
+    const sc = 1 + tip * 0.35; g.scale(sc * (turn > 0 ? Math.abs(Math.cos(turn * Math.PI)) * 0.9 + 0.1 : 1), sc);
     // the glass (a tulip pint): y up from its foot, 0..H
     const H = 360, top = 100, foot = 72, bulge = 112;
     const half = (u: number) => u < 0.72 ? foot + (bulge - foot) * Math.sin((u / 0.72) * Math.PI / 2) : bulge - (bulge - top * 0.95) * ((u - 0.72) / 0.28);
     const path = (u0: number, u1: number) => { g.beginPath(); const n = 24; for (let k = 0; k <= n; k++) { const u = u0 + ((u1 - u0) * k) / n; g.lineTo(half(u), -u * H); } for (let k = n; k >= 0; k--) { const u = u0 + ((u1 - u0) * k) / n; g.lineTo(-half(u), -u * H); } g.closePath(); };
-    const lvl = this.level;
-    // the stout (dark ruby-black), the cream head above the line
+    const lvl = this.level, facing = turn > 0.5;
+    // the stout (dark ruby-black), the cream head above the line (it froths while you gulp)
     path(0.03, lvl); const sg = g.createLinearGradient(-bulge, 0, bulge, 0); sg.addColorStop(0, "#1a0806"); sg.addColorStop(0.5, "#2a0e08"); sg.addColorStop(1, "#140604"); g.fillStyle = sg; g.fill();
-    path(lvl, Math.min(0.99, lvl + 0.12 + (this.holding ? 0.01 * Math.sin(t * 30) : 0))); g.fillStyle = "#f2e2bc"; g.fill();
+    path(lvl, Math.min(0.99, lvl + 0.12 + (this.holding ? 0.012 * Math.sin(t * 30) : 0))); g.fillStyle = "#f2e2bc"; g.fill();
+    if (this.holding) { g.fillStyle = "rgba(255,240,210,0.55)"; for (let k = 0; k < 7; k++) { const u = ((t * 0.9 + k * 0.137) % 1); g.beginPath(); g.arc(Math.sin(k * 3.7 + t * 2) * 60, -(0.05 + u * (lvl - 0.05)) * H, 3 + (k % 3), 0, 6.3); g.fill(); } }
     // the glass outline and its shine
     path(0, 1); g.strokeStyle = "rgba(230,240,255,0.9)"; g.lineWidth = 4; g.stroke();
     g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(-bulge + 18, -H * 0.9, 10, H * 0.75);
-    // GUZZLE'S and the gold G (its bar at PUB.g)
-    const gy = -PUB.g * H;
-    g.fillStyle = "#e8c050"; g.font = "bold 20px Georgia, serif"; g.textAlign = "center"; g.fillText("GUZZLE'S", 0, -0.42 * H);
-    g.strokeStyle = "#e8c050"; g.lineWidth = 9; g.lineCap = "round";
-    g.beginPath(); g.arc(0, gy, 30, 0, 1.68 * Math.PI, false); g.stroke(); // (a G: open at the top right)
-    g.beginPath(); g.moveTo(2, gy); g.lineTo(30, gy); g.stroke(); // (the G's bar: this is the line to hit)
-    // the target marks either side
-    g.strokeStyle = "rgba(255,225,74,0.85)"; g.lineWidth = 2; g.setLineDash([6, 5]);
-    g.beginPath(); g.moveTo(-bulge - 14, gy); g.lineTo(-bulge + 4, gy); g.moveTo(bulge - 4, gy); g.lineTo(bulge + 14, gy); g.stroke(); g.setLineDash([]);
+    if (facing) {
+      // turned round: GUZZLE'S and the gold G (its bar at PUB.g), and the marks either side of it
+      const gy = -PUB.g * H;
+      g.fillStyle = "#e8c050"; g.font = "bold 20px Georgia, serif"; g.textAlign = "center"; g.fillText("GUZZLE'S", 0, -0.42 * H);
+      g.strokeStyle = "#e8c050"; g.lineWidth = 9; g.lineCap = "round";
+      g.beginPath(); g.arc(0, gy, 30, 0, 1.68 * Math.PI, false); g.stroke();
+      g.beginPath(); g.moveTo(2, gy); g.lineTo(30, gy); g.stroke();
+      g.strokeStyle = "rgba(255,225,74,0.85)"; g.lineWidth = 2; g.setLineDash([6, 5]);
+      g.beginPath(); g.moveTo(-bulge - 14, gy); g.lineTo(-bulge + 4, gy); g.moveTo(bulge - 4, gy); g.lineTo(bulge + 14, gy); g.stroke(); g.setLineDash([]);
+    } else {
+      // its back: just the faint shadow of the print through the glass (no G to aim at)
+      g.fillStyle = "rgba(232,192,80,0.10)"; g.fillRect(-46, -0.47 * H, 92, 14);
+    }
     g.restore();
-    if (this.verdict) {
+    if (this.verdict && facing) {
       const v = this.verdict, col = v.grade === "perfect" ? "#7dff9a" : v.grade === "close" ? "#ffe14a" : "#ff8a7a";
       g.fillStyle = col; g.font = "26px Bungee, sans-serif"; g.textAlign = "center";
       g.lineWidth = 6; g.strokeStyle = "#1b1420"; const txt = v.grade === "perfect" ? "SPLIT THE G!" : v.grade === "close" ? "NEARLY!" : "MISSED IT";

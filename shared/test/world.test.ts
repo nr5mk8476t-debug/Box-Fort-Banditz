@@ -2182,19 +2182,22 @@ test("R11.4 the goods' timers sync packed in one number (the player schema is at
 });
 
 // ---- R12.1: THE SOGGY SHAMROCK ----
-import { PUB, pintLevel, pintMissMm, pintGrade, tipsyDrift, tipsyAmount } from "../src/index.js";
-test("R12.1 split the G: the line drops faster the longer you gulp; the hold that lands it on the G's bar is a perfect split; 4 mm is perfect, 12 mm close", () => {
-  for (const rate of [PUB.rateMin, 0.08, PUB.rateMax]) {
-    assert.ok(pintLevel(0, rate) === PUB.start && pintLevel(1, rate) - pintLevel(2, rate) > pintLevel(0, rate) - pintLevel(1, rate), "it speeds up");
-    // the perfect hold (solve the quadratic), and the window round it
-    const a = PUB.accel / 2, b = rate, c = -(PUB.start - PUB.g), t = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
-    assert.ok(t > 1.5 && t < 4, `about 2-3 s of gulping (${t.toFixed(2)} s)`);
-    assert.ok(pintMissMm(t, rate) < 0.01);
-    assert.equal(pintGrade(pintMissMm(t + 0.1, rate)), "perfect");
-    assert.equal(pintGrade(pintMissMm(t + 0.35, rate)), "close");
-    assert.equal(pintGrade(pintMissMm(t + 1.2, rate)), "miss");
-    assert.equal(pintGrade(pintMissMm(0.3, rate)), "miss");
+import { PUB, pintLevel, pintMissMm, pintGrade, pintHoldFor, tipsyDrift, tipsyAmount } from "../src/index.js";
+test("R12.2c split the G (hard): the line drops faster the longer you gulp, surging and slackening on each pint's own rhythm (always down); stopping on the G's bar is perfect; 2 mm is perfect, 6 mm close", () => {
+  for (const [rate, w, ph] of [[PUB.rateMin, PUB.wMin, 0], [0.08, 2.5, 1.7], [PUB.rateMax, PUB.wMax, 4.4]]) {
+    for (let t = 0; t < 8; t += 0.05) assert.ok(pintLevel(t + 0.05, rate, w, ph) <= pintLevel(t, rate, w, ph), "always going down");
+    const t = pintHoldFor(PUB.g, rate, w, ph);
+    assert.ok(t > 1.2 && t < 4.5, `about 1-4 s of gulping (${t.toFixed(2)} s)`);
+    assert.ok(pintMissMm(t, rate, w, ph) < 0.01);
+    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 1.5 / PUB.glassMm, rate, w, ph), rate, w, ph)), "perfect");
+    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 4 / PUB.glassMm, rate, w, ph), rate, w, ph)), "close");
+    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 8 / PUB.glassMm, rate, w, ph), rate, w, ph)), "miss");
+    // tight: the perfect window is only a moment long
+    const win = pintHoldFor(PUB.g - 2 / PUB.glassMm, rate, w, ph) - pintHoldFor(PUB.g + 2 / PUB.glassMm, rate, w, ph);
+    assert.ok(win > 0.05 && win < 0.4, `the perfect window: ${(win * 1000).toFixed(0)} ms`);
   }
+  // the surge changes when the G comes: the same rate, two rhythms, different holds
+  assert.ok(Math.abs(pintHoldFor(PUB.g, 0.08, 2.0, 0) - pintHoldFor(PUB.g, 0.08, 2.0, 3.1)) > 0.12, "you can't just count");
 });
 test("R12.1 THE SOGGY SHAMROCK: $6 a pint at the tap (broke: no pint); split the G for $15, close gets your $6 back; the chalkboard keeps the best 5 of the match; one pint at a time", () => {
   const { w, ps: [a, b] } = hotWorld(2);
@@ -2211,8 +2214,9 @@ test("R12.1 THE SOGGY SHAMROCK: $6 a pint at the tap (broke: no pint); split the
   w.props.use(a, tap.id);
   assert.ok(w.takeEvents().some((e) => e.t === "pintNo" && (e as any).reason === "busy"), "one at a time");
   // a perfect split
-  const hold = (rate: number) => { const q = PUB.accel / 2, c = -(PUB.start - PUB.g); return (-rate + Math.sqrt(rate * rate - 4 * q * c)) / (2 * q); };
-  w.action(a.id, { a: "gulp", hold: hold(ev.rate) });
+  const hold = (e: any, mm = 0) => pintHoldFor(PUB.g - mm / PUB.glassMm, e.rate, e.w, e.ph); // (R12.2c: past the G by mm)
+  assert.ok(ev.w >= PUB.wMin && ev.w <= PUB.wMax && ev.ph >= 0 && ev.ph < 6.3, "its own surges");
+  w.action(a.id, { a: "gulp", hold: hold(ev) });
   const d1 = w.takeEvents().find((e) => e.t === "pintDone") as any;
   assert.ok(d1 && d1.grade === "perfect" && d1.won === PUB.prize && d1.best, `split it (${JSON.stringify(d1)})`);
   assert.equal(a.cash, 94 + PUB.prize);
@@ -2220,12 +2224,12 @@ test("R12.1 THE SOGGY SHAMROCK: $6 a pint at the tap (broke: no pint); split the
   assert.ok(!w.takeEvents().some((e) => e.t === "pintDone"), "no pint, no gulp");
   // a close one: your money back
   w.props.use(a, tap.id); const e2 = w.takeEvents().find((e) => e.t === "pint") as any;
-  w.action(a.id, { a: "gulp", hold: hold(e2.rate) + 0.35 });
+  w.action(a.id, { a: "gulp", hold: hold(e2, 4) });
   const d2 = w.takeEvents().find((e) => e.t === "pintDone") as any;
   assert.ok(d2.grade === "close" && d2.won === 6, "close: $6 back");
   // the chalkboard: the best splits, closest first, five at most (b goes on too)
   b.cash = 100; atTap(b);
-  for (const off of [0.2, 0.25, 0.3, 0.33]) { w.props.use(b, tap.id); const e = w.takeEvents().find((x) => x.t === "pint") as any; w.action(b.id, { a: "gulp", hold: hold(e.rate) + off }); w.takeEvents(); b.move.pints = 0; }
+  for (const off of [2.5, 3, 3.5, 4]) { w.props.use(b, tap.id); const e = w.takeEvents().find((x) => x.t === "pint") as any; w.action(b.id, { a: "gulp", hold: hold(e, off) }); w.takeEvents(); b.move.pints = 0; }
   assert.equal(w.pubBoard.length, PUB.boardN);
   assert.ok(w.pubBoard.every((x, i) => i === 0 || x.mm >= w.pubBoard[i - 1].mm), "closest first");
   assert.equal(w.pubBoard[0].name, a.name);
@@ -2279,8 +2283,8 @@ test("R12.1 the sober-up timer and the pint count ride in the packed buffs too (
   assert.ok(Number.isSafeInteger(packBuffs(s)));
 });
 
-// ---- R12.2: MAMMY MOLONEY; R12.2b: the laid-back upstairs (the céilí's gone), the island bar, the jukebox ----
-import { MAMMY, JUKEBOX } from "../src/index.js";
+// ---- R12.2b: the laid-back upstairs (the céilí's gone), the island bar, the jukebox; R12.2c: SEAMUS O'SHORTLY, the swarm ----
+import { SEAMUS, SWARM, JUKEBOX } from "../src/index.js";
 test("R12.2b up THE SOGGY SHAMROCK's stairs to floor 2; a pint at the island bar (Róisín pours it, split the G up here too); B upstairs is just the ordinary dance (no céilí)", () => {
   const { w, ps: [a] } = hotWorld(1);
   const pb = w.arena.pub!;
@@ -2317,31 +2321,67 @@ test("R12.2b the jukebox: E puts on the next tune (round the three), everyone he
   settle(w, JUKEBOX.cd + 0.2); w.props.use(a, jb.id); settle(w, JUKEBOX.cd + 0.2); w.props.use(a, jb.id);
   assert.equal(w.jukeTune, 0, "round the three and back to the first");
 });
-test("R12.2 MAMMY MOLONEY: a job (bring her something), \"still waiting\", then paid double for it; a tip about today's city once you've a name (3+ aura); start trouble in her pub and her stick sends you out the front door", () => {
+test("R12.2c SEAMUS O'SHORTLY: a job (bring him something) for a pot of gold, \"still waiting\", then paid; now and then a big job for the big pot; a tip once you've a name (3+ aura); Mammy's gone", () => {
   const { w, ps: [a] } = hotWorld(1);
   const pb = w.arena.pub!;
   settle(w, 1);
-  const talk = () => { w.debugTeleport(a.id, pb.mammy.x + Math.sin(pb.mammy.yaw) * 1.1, pb.mammy.z + Math.cos(pb.mammy.yaw) * 1.1, pb.mammy.yaw + Math.PI, pb.y2 + 0.05); drive(w, a.id, 10, {}); w.takeEvents(); w.props.use(a, "mammy1"); return w.takeEvents().find((e) => e.t === "mammy") as any; };
-  for (const t of MAMMY.jobs) assert.ok(lootDef(t), `${t} is a real thing`);
+  assert.ok(![...w.npc.npcs.values()].some((n) => (n.kind as string) === "mammy"), "Mammy's gone");
+  assert.equal([...w.npc.npcs.values()].filter((n) => n.kind === "leprechaun").length, 1);
+  assert.equal([...w.npc.npcs.values()].filter((n) => n.kind === "lep_buddy").length, 6);
+  const talk = () => { w.debugTeleport(a.id, pb.seamus.x + Math.sin(pb.seamus.yaw) * 1.1, pb.seamus.z + Math.cos(pb.seamus.yaw) * 1.1, pb.seamus.yaw + Math.PI, pb.y2 + 0.05); drive(w, a.id, 10, {}); w.takeEvents(); w.props.use(a, "seamus1"); return w.takeEvents().find((e) => e.t === "seamus") as any; };
+  for (const t of [...SEAMUS.jobs, ...SEAMUS.bonusJobs]) assert.ok(lootDef(t), `${t} is a real thing`);
   a.aura = 0;
-  const j = talk();
-  assert.ok(j && j.kind === "job" && /Bring me/.test(j.line), `a job (${j?.line})`);
-  const w2 = talk();
-  assert.equal(w2.kind, "jobWait");
-  const type = MAMMY.jobs.find((t) => j.line.toLowerCase().includes((lootDef(t)!.name).toLowerCase()))!;
-  assert.ok(type, "the job names the thing");
-  holdNew(w, a, type, 14);
-  a.cash = 0;
-  const d = talk();
-  assert.ok(d.kind === "jobDone" && d.reward === 28 && a.cash === 28 && !a.hand && a.pockets.every((x) => !x), `paid double ($${a.cash}), and she's taken it`);
+  // keep asking (job, done) until we've seen both a small job and a big one
+  let small = false, big = false;
+  for (let k = 0; k < 40 && !(small && big); k++) {
+    const j = talk();
+    assert.ok(j && (j.kind === "job" || j.kind === "bigJob") && /Bring me/.test(j.line), `a job (${j?.line})`);
+    const list = j.kind === "bigJob" ? SEAMUS.bonusJobs : SEAMUS.jobs;
+    const type = list.find((t) => j.line.toLowerCase().includes((lootDef(t)!.name).toLowerCase()))!;
+    assert.ok(type, "the job names the thing");
+    if (!small && !big) assert.equal(talk().kind, "jobWait");
+    holdNew(w, a, type, 14);
+    a.cash = 0;
+    const d = talk();
+    const want = j.kind === "bigJob" ? Math.max(SEAMUS.bonusMin, 14 * SEAMUS.bonusMult) : Math.max(SEAMUS.minPay, 28);
+    assert.ok(d.kind === "jobDone" && d.reward === want && a.cash === want && !a.hand && a.pockets.every((x) => !x), `paid in gold ($${a.cash}, want $${want})`);
+    if (j.kind === "bigJob") big = true; else small = true;
+  }
+  assert.ok(small && big, "small jobs and the odd big one");
   a.aura = 5;
   const tip = talk();
   assert.ok(tip.kind === "tip" && tip.line.length > 20, `a tip: "${tip.line}"`);
-  // trouble: punch a drinker in her pub
-  const pat = [...w.npc.npcs.values()].find((n) => n.kind === "patron" && inRect(pb.rect, n.move.x, n.move.z))!;
+});
+test("R12.2c the swarm: hit anyone in the pub and Seamus's six wee buddies come for you (popping out round you, even downstairs), nip at you (a little each, never below the floor), for 8 s, then go back to the snug; hitting Seamus does it too", () => {
+  const { w, ps: [a] } = hotWorld(1);
+  const pb = w.arena.pub!;
+  settle(w, 1);
+  const lads = () => [...w.npc.npcs.values()].filter((n) => n.kind === "lep_buddy");
+  // trouble downstairs: punch a drinker (the lads are all upstairs)
+  const pat = [...w.npc.npcs.values()].find((n) => n.kind === "patron" && inRect(pb.rect, n.move.x, n.move.z) && n.move.y < pb.y2 - 1)!;
   w.debugTeleport(a.id, pat.move.x + 0.8, pat.move.z, -Math.PI / 2, pat.move.y); settle(w, 0.1); w.takeEvents();
+  a.hp = 100;
   w.npc.hit(pat.id, a.id, a.move.x, a.move.z);
   const ev = w.takeEvents();
-  assert.ok(ev.some((e) => e.t === "mammyOut"), "OUT!");
-  assert.ok((a.move.x - pb.rect.maxX) - (a.move.z - pb.rect.minZ) > -pb.cham && Math.hypot(a.move.x - pb.out.x, a.move.z - pb.out.z) < 1.5 && a.move.knockT > 0, `out on the pavement (${a.move.x.toFixed(1)},${a.move.z.toFixed(1)})`);
+  assert.ok(ev.some((e) => e.t === "lepSwarm" && (e as any).on && (e as any).p === a.id), "the swarm's on");
+  assert.ok(ev.filter((e) => e.t === "npcPop").length >= 4, "they pop out round you (downstairs)");
+  assert.ok(lads().every((n) => n.state === "chase" && n.target === a.id), "all six come for you");
+  assert.ok(lads().every((n) => Math.abs(n.move.y - a.move.y) < 1 && Math.hypot(n.move.x - a.move.x, n.move.z - a.move.z) < SWARM.pop + 1), "round you, on your floor");
+  // stand still and take it for a few seconds: nips, never below the floor
+  const hp0 = a.hp; let nips = 0;
+  for (let i = 0; i < 6 * 60; i++) { w.pushInputs(a.id, [inp(a.lastSeq + 1, {})]); w.tick(); nips += w.takeEvents().filter((e) => e.t === "hurt" && (e as any).p === a.id).length; }
+  assert.ok(nips >= 4, `nipped (${nips} times)`);
+  assert.ok(a.hp < hp0 && a.hp >= SWARM.floor && a.move.knockT <= 0, `a little damage, never below ${SWARM.floor} (hp ${a.hp})`);
+  assert.ok(w.swarmOn(a.id), "still swarming at 6 s");
+  // it ends: they go back up to the snug
+  settle(w, SWARM.t - 6 + 1);
+  assert.ok(!w.swarmOn(a.id), "over after 8 s");
+  settle(w, 4);
+  assert.ok(lads().every((n) => n.state !== "chase" && n.state !== "windup"), "they leave you be");
+  assert.ok(lads().every((n) => Math.abs(n.move.y - pb.y2) < 0.6 && inRect(pb.snug2, n.move.x, n.move.z, 1.5)), "back in the snug");
+  // hitting the boss sets them off too (he doesn't go down)
+  const boss = [...w.npc.npcs.values()].find((n) => n.kind === "leprechaun")!;
+  w.debugTeleport(a.id, boss.move.x + 0.9, boss.move.z, -Math.PI / 2, boss.move.y); settle(w, 0.2); w.takeEvents();
+  assert.equal(w.npc.hit(boss.id, a.id, a.move.x, a.move.z), "hit");
+  assert.ok(w.takeEvents().some((e) => e.t === "lepSwarm" && (e as any).on) && boss.state !== "ko", "GET HIM, LADS!");
 });

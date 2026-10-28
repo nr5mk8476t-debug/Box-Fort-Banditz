@@ -63,9 +63,12 @@ const LOOKS: Record<string, Look> = {
   regular: { body: "#6b5a3a", legs: "#4a4038", skin: "#e8b090", hatShape: "none", prop: "none", bulk: 1.15 },
   trad_band: { body: "#2f6b3a", legs: "#2b2433", skin: "#f0c09a", hatShape: "none", prop: "none", bulk: 1.05 },
   patron: { body: "#3a4a6a", legs: "#2b2433", skin: "#f0c09a", hatShape: "none", prop: "none", bulk: 1.1 },
-  // R12.2: MAMMY MOLONEY (tiny, fierce, in pearls); R12.2b: RÓISÍN behind the island bar (red hair up, a bottle-green top)
+  // R12.2b: RÓISÍN behind the island bar (red hair up, a bottle-green top); R12.2c: SEAMUS O'SHORTLY (a wee leprechaun of a
+  // man: green coat, green top hat, a big red beard, a clay pipe), his six wee buddies, BIG DESSIE (red-faced, shirt sleeves)
   barmaid: { body: "#1f4a2e", legs: "#1b1420", skin: "#f5c8a8", hat: "#b8441a", hatShape: "none", prop: "none", bulk: 1.0 },
-  mammy: { body: "#5a2a6a", legs: "#3a2a3a", skin: "#f0c8a8", hat: "#f4f1ea", hatShape: "none", prop: "cane", bulk: 1.0 },
+  leprechaun: { body: "#1f6a2e", legs: "#163a1e", skin: "#f0b898", hat: "#1f6a2e", hatShape: "none", prop: "none", bulk: 1.2 },
+  lep_buddy: { body: "#2f8a3a", legs: "#1f4a2a", skin: "#f0c09a", hat: "#2f8a3a", hatShape: "none", prop: "none", bulk: 1.15 },
+  drunk_dancer: { body: "#f4f1ea", legs: "#2a2a3a", skin: "#e8907a", hat: "#3a2418", hatShape: "none", prop: "none", bulk: 1.4 },
   pigeon_lady: { body: "#6b8f5a", legs: "#5a4d6e", skin: "#e0a67c", hat: "#b5653b", hatShape: "scarf", prop: "crumbs" },
 };
 
@@ -85,6 +88,15 @@ const PUB_LOOKS: Record<string, Look[]> = {
   // R12.1b: the eight drinkers: a lad in a green-and-white hooped jersey, a woman in a red coat, a big fella in a
   // cable-knit jumper, a student in a beanie, an old boy in a flat cap and tweed, a woman in a denim jacket, and the
   // two out on the pavement (a suit with his tie loose, a woman in a yellow raincoat)
+  // R12.2c: the wee buddies: different greens, different beards (hat: the beard's colour)
+  lep_buddy: [
+    { body: "#2f8a3a", legs: "#1f4a2a", skin: "#f0c09a", hat: "#c8541a", hatShape: "none", prop: "none", bulk: 1.15 },
+    { body: "#3a9a4a", legs: "#3a2a1a", skin: "#e8b48a", hat: "#5a3a1a", hatShape: "none", prop: "none", bulk: 1.2 },
+    { body: "#1f7a3a", legs: "#1f4a2a", skin: "#f5c29a", hat: "#e8e2d4", hatShape: "none", prop: "none", bulk: 1.1 },
+    { body: "#4aa858", legs: "#2a3a2a", skin: "#d99a6c", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.15 },
+    { body: "#2a6a32", legs: "#3a2a1a", skin: "#f0c8a8", hat: "#e0a030", hatShape: "none", prop: "none", bulk: 1.25 },
+    { body: "#3a8a5a", legs: "#1f4a2a", skin: "#f0b898", hat: "#a83a1a", hatShape: "none", prop: "none", bulk: 1.1 },
+  ],
   patron: [
     { body: "#2f8a4a", legs: "#2b3350", skin: "#f0c09a", hat: "#8a5a2a", hatShape: "none", prop: "none", bulk: 1.15 },
     { body: "#b8262a", legs: "#2b2433", skin: "#e8b48a", hat: "#3a1a0a", hatShape: "none", prop: "none", bulk: 1.0 },
@@ -98,7 +110,7 @@ const PUB_LOOKS: Record<string, Look[]> = {
 };
 
 /** R12.1-R12.2: THE SOGGY SHAMROCK's people (which one; sitting; playing; dancing) */
-const PUB_KINDS = new Set(["regular", "trad_band", "barman", "patron", "barmaid", "mammy"]);
+const PUB_KINDS = new Set(["regular", "trad_band", "barman", "patron", "barmaid", "leprechaun", "lep_buddy", "drunk_dancer"]);
 /** R12.2: the chest squares (see build's part()): never built */
 const NO_CHEST = new Set(["lapel", "tee", "suspender", "badge", "donShirt", "steveLining", "steveGoods", "steveFlap", "vgTie", "bowtie", "shirtfront", "vest", "armor", "copbadge", "apron", "tag", "tie", "fgVest", "fgBtn", "fgApron", "patShirt", "patTie", "cable", "tbVest", "inmatenum", "btn", "coinpin", "buckle", "donMedal"]);
 
@@ -403,15 +415,30 @@ export class NpcRenderer {
       const bun = part(MeshBuilder.CreateSphere("rosBun", { diameter: 0.2, segments: 6 }, sc), L.hat!, head, 0.01); bun.position.set(0, 0.21, -0.12);
       for (const sx of [-1, 1]) { const e = part(MeshBuilder.CreateTorus("rosHoop", { diameter: 0.06, thickness: 0.012, tessellation: 10 }, sc), "#e8c050", head, 0); e.position.set(sx * 0.2, -0.06, 0); e.rotation.z = Math.PI / 2; }
     }
-    if (v.kind === "mammy") {
-      // R12.2: MAMMY MOLONEY: a white bun, big round glasses, pearls, a shawl, a stick
-      const bun = part(MeshBuilder.CreateSphere("mamBun", { diameter: 0.2, segments: 6 }, sc), "#f4f1ea", head, 0.01); bun.position.set(0, 0.2, -0.12);
-      const hair = part(MeshBuilder.CreateSphere("mamHair", { diameter: 0.43, segments: 8, slice: 0.5 }, sc), "#f4f1ea", head, 0.01); hair.position.set(0, 0.05, -0.03);
-      for (const sx of [-1, 1]) { const g = part(MeshBuilder.CreateTorus("mamSpecs", { diameter: 0.12, thickness: 0.02, tessellation: 12 }, sc), "#c8a040", head, 0); g.rotation.x = Math.PI / 2; g.position.set(sx * 0.075, 0.03, 0.19); }
-      const pearls = part(MeshBuilder.CreateTorus("mamPearls", { diameter: 0.32, thickness: 0.035, tessellation: 16 }, sc), "#f8f4ec", pivot, 0); pearls.position.set(0, 1.4, 0.04); pearls.rotation.x = 0.35;
-      const shawl = part(MeshBuilder.CreateTorus("mamShawl", { diameter: 0.5, thickness: 0.14, tessellation: 14 }, sc), "#2f6a3a", pivot, 0.01); shawl.position.y = 1.38;
-      const skirt = part(MeshBuilder.CreateCylinder("mamSkirt", { diameterTop: 0.5, diameterBottom: 0.62, height: 0.5, tessellation: 14 }, sc), L.body, pivot, 0.012); skirt.position.y = 0.6;
-      root.scaling.setAll(0.82);
+    if (v.kind === "leprechaun" || v.kind === "lep_buddy") {
+      // R12.2c: SEAMUS O'SHORTLY and his lads: a top hat (Seamus) or a pointy cap with a brim (the lads), a big beard,
+      // sideburns, little pointy ears; Seamus has his clay pipe and a gold band round the hat. All wee.
+      const boss = v.kind === "leprechaun", beardCol = boss ? "#c8401a" : (L.hat ?? "#c8541a"), hatCol = boss ? "#1f6a2e" : L.body;
+      if (boss) {
+        const brim = part(MeshBuilder.CreateCylinder("lepBrim", { diameter: 0.56, height: 0.04, tessellation: 18 }, sc), hatCol, head, 0.012); brim.position.y = 0.17;
+        const crown = part(MeshBuilder.CreateCylinder("lepCrown", { diameterTop: 0.34, diameterBottom: 0.3, height: 0.36, tessellation: 16 }, sc), hatCol, head, 0.012); crown.position.y = 0.36;
+        const band = part(MeshBuilder.CreateCylinder("lepBand", { diameter: 0.315, height: 0.06, tessellation: 16 }, sc), "#e8c050", head, 0); band.position.y = 0.22;
+        const clover = part(MeshBuilder.CreateSphere("lepClover", { diameter: 0.08, segments: 5 }, sc), "#5ad87a", head, 0); clover.position.set(0.16, 0.25, 0.05);
+        const bowl = part(MeshBuilder.CreateCylinder("lepPipeBowl", { diameter: 0.07, height: 0.09, tessellation: 8 }, sc), "#f4f1ea", head, 0.006); bowl.position.set(0.16, -0.08, 0.36);
+        const stem = part(MeshBuilder.CreateCylinder("lepPipeStem", { diameter: 0.022, height: 0.2, tessellation: 6 }, sc), "#f4f1ea", head, 0); stem.rotation.x = Math.PI / 2 - 0.3; stem.position.set(0.1, -0.11, 0.26);
+      } else {
+        const brim = part(MeshBuilder.CreateCylinder("lepCapBrim", { diameter: 0.46, height: 0.035, tessellation: 14 }, sc), hatCol, head, 0.012); brim.position.y = 0.16;
+        const cap = part(MeshBuilder.CreateCylinder("lepCap", { diameterTop: 0.04, diameterBottom: 0.32, height: 0.36, tessellation: 12 }, sc), hatCol, head, 0.012); cap.position.y = 0.34; cap.rotation.z = (((pubV?.v ?? 0) % 3) - 1) * 0.25;
+        const band = part(MeshBuilder.CreateCylinder("lepCapBand", { diameter: 0.29, height: 0.05, tessellation: 12 }, sc), "#e8c050", head, 0); band.position.y = 0.2;
+      }
+      const beard = part(MeshBuilder.CreateSphere("lepBeard", { diameter: 0.36, segments: 8 }, sc), beardCol, head, 0.01); beard.position.set(0, -0.15, 0.1); beard.scaling.set(1.05, 1.0, 0.75);
+      for (const sx of [-1, 1]) { const sb2 = part(MeshBuilder.CreateSphere("lepBurn", { diameter: 0.14, segments: 5 }, sc), beardCol, head, 0.006); sb2.position.set(sx * 0.17, 0.0, 0.03); const ear = part(MeshBuilder.CreateCylinder("lepEar", { diameterTop: 0, diameterBottom: 0.08, height: 0.14, tessellation: 5 }, sc), L.skin, head, 0.006); ear.position.set(sx * 0.21, 0.07, -0.01); ear.rotation.z = -sx * 1.1; }
+      root.scaling.setAll(boss ? 0.62 : 0.52);
+    }
+    if (v.kind === "drunk_dancer") {
+      // R12.2c: BIG DESSIE: messy hair, a red face, rosy cheeks, his shirt sleeves rolled up (no chest squares)
+      const hair = part(MeshBuilder.CreateSphere("dessieHair", { diameter: 0.46, segments: 7, slice: 0.55 }, sc), L.hat!, head, 0.01); hair.position.set(0.03, 0.06, -0.03); hair.rotation.z = 0.2;
+      for (const sx of [-1, 1]) { const ch = part(MeshBuilder.CreateSphere("dessieCheek", { diameter: 0.1, segments: 5 }, sc), "#ff5a5a", head, 0); ch.position.set(sx * 0.12, -0.03, 0.16); }
     }
     if (v.kind === "trad_band") {
       const vv = pubV?.v ?? 0;
@@ -430,7 +457,7 @@ export class NpcRenderer {
     };
     const armL = arm(-1), armR = arm(1);
     // R12.1: the pub: a pint in the regulars' hands; the band's instruments
-    if (v.kind === "regular" || v.kind === "patron") {
+    if (v.kind === "regular" || v.kind === "patron" || v.kind === "drunk_dancer") {
       const g = part(MeshBuilder.CreateCylinder("pint", { diameterTop: 0.1, diameterBottom: 0.08, height: 0.17, tessellation: 10 }, sc), "#1b0d08", armR, 0.008); g.position.set(0, -0.6, 0.1);
       const h = part(MeshBuilder.CreateCylinder("pintHead", { diameter: 0.1, height: 0.03, tessellation: 10 }, sc), "#f4e8c8", armR, 0); h.position.set(0, -0.505, 0.1);
     }
@@ -640,6 +667,7 @@ export class NpcRenderer {
       n.root.rotation.y = yaw + n.spin;
       n.pivot.rotation.x = n.lean - n.flat * 1.45;
       n.pivot.position.y = n.flat * 0.25;
+      n.pivot.position.x = 0; n.pivot.position.z = 0; n.head.rotation.x = 0; // (R12.2c: Big Dessie wanders about his spot)
 
       // walk cycle: one stride per ~1.1 m travelled, so feet match the ground (no moonwalking);
       // longer strides + bigger arm swing when running, gentle bob + hip sway, breathing when still
@@ -687,7 +715,7 @@ export class NpcRenderer {
         // sipping, Fergal polishing a glass
         const t = this.time + n.phase0, beat = t * (116 / 60) * Math.PI; // (the jig: 116 dotted-crotchets a minute)
         const seat = n.pub.seat, high = seat >= 0.6;
-        if (seat > 0) { n.pivot.position.y = seat - 0.72; n.legL.rotation.x = high ? -1.15 : -1.45; n.legR.rotation.x = (high ? -1.15 : -1.45) + (n.view.kind === "trad_band" ? Math.max(0, Math.sin(beat)) * 0.25 : 0); }
+        if (seat > 0) { n.pivot.position.y = seat / Math.max(0.1, n.root.scaling.y) - 0.72; /* (R12.2c: wee folk sit right too) */ n.legL.rotation.x = high ? -1.15 : -1.45; n.legR.rotation.x = (high ? -1.15 : -1.45) + (n.view.kind === "trad_band" ? Math.max(0, Math.sin(beat)) * 0.25 : 0); }
         if (n.view.kind === "trad_band") {
           const vv = n.pub.v;
           if (vv === 0) { n.armL.rotation.x = -1.45; n.armL.rotation.z = 0.15; n.armR.rotation.x = -1.1 + Math.sin(beat * 1.5) * 0.28; n.armR.rotation.z = 0.5 + Math.sin(beat * 1.5) * 0.25; n.head.rotation.z = -0.25; }
@@ -695,8 +723,31 @@ export class NpcRenderer {
           else if (vv === 2) { n.armL.rotation.x = -0.9; n.armL.rotation.z = -0.3; n.armR.rotation.x = -1.0 + Math.abs(Math.sin(beat * 1.5)) * 0.55; }
           else { n.armR.rotation.x = -0.75 + Math.sin(beat * 3) * 0.12; n.armL.rotation.x = -1.0; n.armL.rotation.z = -0.9; }
           n.pivot.position.y += Math.abs(Math.sin(beat)) * 0.02;
-        } else if (n.view.kind === "mammy") {
-          n.armR.rotation.x = -0.6 + Math.max(0, Math.sin(t * 0.7) - 0.9) * 4; n.armL.rotation.x = -0.4;
+        } else if (n.view.kind === "leprechaun") {
+          // Seamus: puffs his pipe, taps the chair arm, the odd jab of a finger at you
+          n.armR.rotation.x = -0.7 + Math.max(0, Math.sin(t * 0.6) - 0.85) * 5; n.armL.rotation.x = -0.4 + Math.sin(t * 2.3) * 0.08;
+          n.head.rotation.z = Math.sin(t * 0.4) * 0.08;
+        } else if (n.view.kind === "lep_buddy") {
+          // the lads lounging: one leg jiggling, counting coins, a wee hop now and then
+          n.armL.rotation.x = -0.9 + Math.sin(t * 6) * 0.15; n.armR.rotation.x = -0.9 - Math.sin(t * 6) * 0.15;
+          n.legR.rotation.x = Math.max(0, Math.sin(t * 9)) * 0.2;
+          n.pivot.position.y += Math.max(0, Math.sin(t * 1.3 + n.phase0) - 0.92) * 2.5;
+        } else if (n.view.kind === "drunk_dancer") {
+          // R12.2c: BIG DESSIE: every couple of seconds a new move, picked at random (the same for everyone watching:
+          // it's off the clock), wandering about his spot: stagger, spin, flail, down on his knees, kick-jig, point at
+          // the sky. Never the same twice in a row for long.
+          const T = this.time + n.phase0 * 7, len = 1.6 + (Math.sin(Math.floor(T / 2.0) * 3.1) * 0.5 + 0.5) * 1.6, seg = Math.floor(T / len), u = T / len - seg;
+          const h = (k: number) => { const x = Math.sin(seg * 127.1 + k * 311.7 + n.phase0 * 13) * 43758.5453; return x - Math.floor(x); };
+          const move = Math.floor(h(1) * 6), beat2 = T * (116 / 60) * Math.PI;
+          n.pivot.position.x = Math.sin(T * 0.7 + h(2) * 6) * 0.45 + Math.sin(T * 1.9) * 0.12;
+          n.pivot.position.z = Math.cos(T * 0.53 + h(3) * 6) * 0.4;
+          n.pivot.rotation.z = Math.sin(T * 2.1) * 0.12; n.armR.rotation.z = 0;
+          if (move === 0) { n.pivot.rotation.z = Math.sin(T * 3.2) * 0.35; n.armL.rotation.z = 0.9 + Math.sin(T * 4) * 0.3; n.armR.rotation.x = -1.2; n.legL.rotation.x = Math.sin(T * 5) * 0.4; n.legR.rotation.x = -Math.sin(T * 5) * 0.4; }
+          else if (move === 1) { n.pivot.rotation.y = u * Math.PI * 2 * (h(4) > 0.5 ? 1.5 : -1.5); n.armL.rotation.z = 1.3; n.armR.rotation.z = -1.3; n.armR.rotation.x = -0.3; n.pivot.position.y += Math.abs(Math.sin(u * Math.PI)) * 0.08; }
+          else if (move === 2) { n.armL.rotation.x = Math.sin(T * 9) * 2.4; n.armR.rotation.x = Math.cos(T * 8) * 2.4; n.armL.rotation.z = 0.6; n.pivot.position.y += Math.abs(Math.sin(beat2)) * 0.12; n.head.rotation.z = Math.sin(T * 7) * 0.3; }
+          else if (move === 3) { const k = Math.sin(Math.min(1, u * 1.4) * Math.PI); n.pivot.position.y -= 0.42 * k; n.legL.rotation.x = n.legR.rotation.x = -1.4 * k; n.armL.rotation.x = n.armR.rotation.x = -2.9 * k; n.armL.rotation.z = 0.4; n.armR.rotation.z = -0.4; n.head.rotation.x = -0.4 * k; }
+          else if (move === 4) { const kk = Math.sin(beat2); n.legL.rotation.x = kk > 0 ? -kk * 1.1 : 0; n.legR.rotation.x = kk < 0 ? kk * 1.1 : 0; n.pivot.position.y += Math.abs(kk) * 0.1; n.armL.rotation.z = 0.5; n.armR.rotation.x = -1.0; }
+          else { n.armL.rotation.x = -3.0; n.armL.rotation.z = 0.15 + Math.sin(T * 3) * 0.1; n.armR.rotation.x = -1.3; n.head.rotation.x = -0.35; n.pivot.rotation.z = Math.sin(T * 1.5) * 0.18; n.pivot.position.y += Math.abs(Math.sin(beat2 * 0.5)) * 0.06; }
         } else if (n.view.kind === "regular" || n.view.kind === "patron") {
           const sip = Math.max(0, Math.sin(t * 0.9) - 0.85) / 0.15;
           n.armR.rotation.x = -0.9 - sip * 1.3; n.armL.rotation.x = -0.5;

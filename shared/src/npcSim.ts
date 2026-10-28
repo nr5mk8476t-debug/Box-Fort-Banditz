@@ -5,9 +5,9 @@ import { makeMoveState, stepMovement, type MoveState, type MoveInput } from "./m
 import { PLAYER, SIM_DT } from "./constants.js";
 import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, MEAT_LOCKER, CHAMP, BOUNCERS, SHOP_OWNERS, BYSTANDER_SCREAMS, pickWeighted, pickLine, type NpcKind } from "./npc.js";
 import { buildNavGraph, type NavNode } from "./navgraph.js";
-import { nearBoxes, onRoadAt, inFoot, inRect, DEAL, type ArenaLayout } from "./arena.js";
-/** R12.2: THE SOGGY SHAMROCK's people (hit one and Mammy throws you out) */
-const PUB_FOLK = new Set<string>(["barman", "regular", "trad_band", "patron", "barmaid", "mammy"]);
+import { nearBoxes, onRoadAt, inFoot, inRect, DEAL, SWARM, type ArenaLayout } from "./arena.js";
+/** R12.2: THE SOGGY SHAMROCK's people (R12.2c: hit one and Seamus's lads swarm you) */
+const PUB_FOLK = new Set<string>(["barman", "regular", "trad_band", "patron", "barmaid", "leprechaun", "lep_buddy", "drunk_dancer"]);
 
 export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup" | "gloat" | "ko" | "film" | "huff"
   // C4b: the old lady: asleep upstairs (not drawn), then yelling out of her window
@@ -90,7 +90,7 @@ export interface NpcHost {
   playersForNpcs(): { id: string; x: number; y: number; z: number; yaw: number; connected: boolean; knocked: boolean; immune: boolean; inCell?: boolean }[];
   npcHitPlayer(npcId: string, playerId: string, knock: boolean): void;
   npcDropLoot(npcId: string, type: string, x: number, y: number, z: number, awayX: number, awayZ: number): void;
-  npcEvent(e: { t: "npcSay"; npc: string; line: string } | { t: "npcAttack"; npc: string; p: string; hit: boolean } | { t: "npcDodge"; npc: string; p: string } | { t: "npcKo"; npc: string; by: string } | { t: "panic"; npc: string } | { t: "louHit"; npc: string; p: string; shop?: number } | { t: "donHit"; npc: string; p: string } | { t: "pubRowdy"; npc: string; p: string } | BigShotEvent | OldLadyEvent): void;
+  npcEvent(e: { t: "npcSay"; npc: string; line: string } | { t: "npcAttack"; npc: string; p: string; hit: boolean } | { t: "npcDodge"; npc: string; p: string } | { t: "npcKo"; npc: string; by: string } | { t: "panic"; npc: string } | { t: "louHit"; npc: string; p: string; shop?: number } | { t: "donHit"; npc: string; p: string } | { t: "pubRowdy"; npc: string; p: string } | { t: "npcPop"; npc: string; x: number; y: number; z: number } | BigShotEvent | OldLadyEvent): void;
   addNotoriety(playerId: string, amount: number): void;
   /** a cashier got punched: shop alarm */
   shopAlarm(shopId: number): void;
@@ -195,8 +195,39 @@ export class NpcSystem {
     for (const n of this.npcs.values()) if (n.kind === "sketchy_steve") return !((n.awayT ?? 0) > 0) && n.post && Math.hypot(n.post.x - n.move.x, n.post.z - n.move.z) < 1.2 ? n : null;
     return null;
   }
-  /** R12.2: MAMMY MOLONEY says something (a line of her own) */
-  mammySay(line: string) { for (const n of this.npcs.values()) if (n.kind === "mammy") { n.sayCd = 4; this.host.npcEvent({ t: "npcSay", npc: n.id, line }); return; } }
+  /** R12.2c: SEAMUS O'SHORTLY says something (a line of his own) */
+  seamusSay(line: string) { for (const n of this.npcs.values()) if (n.kind === "leprechaun") { n.sayCd = 4; this.host.npcEvent({ t: "npcSay", npc: n.id, line }); return; } }
+  /** R12.2c: the lads swarm a player (at x, y, z): every wee buddy who's up runs at them; those far off or on another
+   *  floor pop out round them (they're leprechauns) */
+  swarm(pid: string, x: number, y: number, z: number, _t: number, pop: boolean) {
+    let k = 0;
+    for (const n of this.npcs.values()) {
+      if (n.kind !== "lep_buddy" || n.state === "ko") continue;
+      n.target = pid; n.chaseT = 0;
+      if (n.state !== "windup") n.state = "chase";
+      if (n.sayCd <= 0 || pop) this.say(n, NPC_DEFS.lep_buddy.lines.fight, pop && k < 2);
+      const far = Math.abs(n.move.y - y) > 1.5 || Math.hypot(n.move.x - x, n.move.z - z) > 12;
+      if (pop && far) {
+        for (let q = 0; q < 16; q++) {
+          const a = k * 1.05 + q * 0.79, r = SWARM.pop * (0.7 + 0.15 * (q % 3)), px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
+          if (!this.solidAt(px, pz, y, 0.3) && this.lineClear(x, z, px, pz, y)) { this.popTo(n, px, y, pz); break; }
+        }
+      }
+      k++;
+    }
+  }
+  /** R12.2c: the swarm's over: back to their spots round the snug (popping back if they're far off) */
+  swarmOff(pid: string) {
+    for (const n of this.npcs.values()) {
+      if (n.kind !== "lep_buddy" || n.target !== pid) continue;
+      n.target = ""; if (n.state !== "ko") n.state = "work";
+      const post = n.post; if (post && (Math.abs(n.move.y - (post.y ?? 0)) > 1.5 || Math.hypot(n.move.x - post.x, n.move.z - post.z) > 10)) this.popTo(n, post.x, post.y ?? 0, post.z);
+    }
+  }
+  private popTo(n: NpcSimData, x: number, y: number, z: number) {
+    const m = n.move; m.x = x; m.z = z; m.y = y + 0.05; m.vx = m.vz = m.vy = 0; n.curSpeed = 0; n.stuckT = 0;
+    this.host.npcEvent({ t: "npcPop", npc: n.id, x, y, z });
+  }
   /** R12.1: THE SOGGY SHAMROCK: Fergal (or the regulars) chime in */
   pubSay(kind: "barman" | "barmaid" | "regular" | "patron", what: "pour" | "cutoff" | "perfect" | "close" | "miss", all = false) {
     for (const n of this.npcs.values()) if (n.kind === kind && n.state !== "ko") { const l = NPC_DEFS[kind].lines[what]; if (l) this.say(n, l, true); if (!all) return; }
@@ -350,7 +381,7 @@ export class NpcSystem {
     }
     // R12.2: trouble in THE SOGGY SHAMROCK (anyone in there, or Mammy herself): Mammy throws you out
     { const pb = this.host.arena.pub; if (pb && (PUB_FOLK.has(n.kind) || inRect(pb.rect, n.move.x, n.move.z, 3))) this.host.npcEvent({ t: "pubRowdy", npc: n.id, p: byPlayer }); }
-    if (n.kind === "mammy") { this.say(n, def.lines.hit, true); return "hit"; }
+    if (n.kind === "leprechaun") { this.say(n, def.lines.hit, true); return "hit"; } // (R12.2c: the boss doesn't go down; his lads come for you)
     if (n.kind === "don") {
       // R11: you punched DON BINNIE: he straightens his suit and sends the boys
       n.state = "cower"; n.stateT = 2; n.target = byPlayer;
@@ -818,6 +849,7 @@ export class NpcSystem {
             break;
           }
           if (n.state === "cower" && n.stateT <= 0) n.state = "work";
+          if (n.kind === "lep_buddy" && (Math.abs(n.move.y - (post.y ?? 0)) > 1.5 || n.stuckT > 1.5)) { this.popTo(n, post.x, post.y ?? 0, post.z); break; } // (R12.2c: a wee fella stuck on his way home just pops back)
           const d = Math.hypot(post.x - n.move.x, post.z - n.move.z);
           if (d <= 0.3 && n.kind === "old_lady") { n.state = "sleep"; break; } // (back upstairs to bed)
           if (d > 0.3) { tx = post.x; tz = post.z; speed = def.walk; if (BOUNCERS.has(n.kind)) { const wp = this.hotWay(n, tx, tz); tx = wp.x; tz = wp.z; speed = 2.4; } } else face = post.yaw;

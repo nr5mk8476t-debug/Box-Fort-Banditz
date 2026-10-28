@@ -1648,8 +1648,12 @@ try {
       await R3.waitForFunction(() => (window.__bfb.pubInfo()?.level ?? 1) < 0.66, null, { timeout: 30000 }).catch(() => {});
       const mid = await R3.evaluate(() => window.__bfb.pubInfo());
       ok(mid.holding && mid.level < 0.7, `gulping: the line's dropping (${mid.level.toFixed(2)})`);
+      ok(!mid.gShown, "R12.2c: drinking, you can't see the G (it's on the far side)");
+      await hideOverlays(R3); await shot(R3, "r122c-pint-drinking.png");
       await R3.evaluate(() => window.__bfb.pintPress(false));
       ok(await R3.waitForFunction(() => /G!|Close|Missed/.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false), "the verdict comes back");
+      ok(await R3.waitForFunction(() => window.__bfb.pubInfo()?.gShown, null, { timeout: 10000 }).then(() => true, () => false), "R12.2c: then the glass turns round and there's the G");
+      await hideOverlays(R3); await shot(R3, "r122c-pint-reveal.png");
       ok(await R3.waitForFunction(() => window.__bfb.move().pints === 1 && window.__bfb.move().tipsyT > 30, null, { timeout: 30000 }).then(() => true, () => false), "one pint in you (the sober-up timer's running)");
       { const pi = await R3.evaluate(() => window.__bfb.pubInfo()); ok(pi.gain > 0.4, `the session's loud in here (gain ${pi.gain.toFixed(2)}; audio running: ${pi.music})`); }
       const npcs = await R3.evaluate(() => { const out = {}; for (const n of window.__bfb.npcs()) out[n.kind] = (out[n.kind] ?? 0) + 1; return out; });
@@ -1672,7 +1676,7 @@ try {
         ok(upOk, `walked up the stairs (y ${(await R3.evaluate(() => window.__bfb.move().y)).toFixed(2)}, the floor's at ${y2})`);
         ok(await R3.waitForFunction(() => window.__bfb.pubInfo()?.level2 === 2, null, { timeout: 20000 }).then(() => true, () => false), "upstairs (level 2)");
         const npc2 = await R3.evaluate(() => { const out = {}; for (const n of window.__bfb.npcs()) out[n.kind] = (out[n.kind] ?? 0) + 1; return out; });
-        ok(npc2.barmaid === 1 && npc2.mammy === 1 && !npc2.ceili_band && !npc2.ceili_dancer && npc2.patron === 12, `Róisín, Mammy, 12 drinkers (4 upstairs), no céilí folk (${JSON.stringify({ r: npc2.barmaid, m: npc2.mammy, p: npc2.patron, cb: npc2.ceili_band ?? 0, cd: npc2.ceili_dancer ?? 0 })})`);
+        ok(npc2.barmaid === 1 && npc2.leprechaun === 1 && npc2.lep_buddy === 6 && npc2.drunk_dancer === 1 && !npc2.mammy && !npc2.ceili_band && npc2.patron === 12, `Róisín, Seamus O'Shortly and his 6 lads, Big Dessie, 12 drinkers, no Mammy, no céilí folk (${JSON.stringify({ r: npc2.barmaid, s: npc2.leprechaun, b: npc2.lep_buddy, d: npc2.drunk_dancer, m: npc2.mammy ?? 0, p: npc2.patron })})`);
         // a pint at the island bar
         const tap2 = pb.taps.find((t) => t.y > y2);
         await R3.evaluate((t) => { window.__bfb.teleportY(t.x + t.face[0] * 0.85, t.y - 1.1 + 0.25, t.z + t.face[1] * 0.85, Math.atan2(-t.face[0], -t.face[1])); window.__bfb.setPitch(0.45); }, tap2);
@@ -1707,12 +1711,21 @@ try {
           const mv = await R3.evaluate(() => window.__bfb.move());
           ok(Math.abs(mv.y - y2) < 0.4 && Math.abs(mv.x - (q.x - q.w / 2 - 0.7)) < 0.5, `beside pool table ${i + 1} (${mv.x.toFixed(1)}, ${mv.z.toFixed(1)})`);
         }
-        // MAMMY MOLONEY
-        const m = pb.mammy, mx = m.x + Math.sin(m.yaw) * 1.5, mz = m.z + Math.cos(m.yaw) * 1.5;
-        await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, o.yaw + Math.PI); window.__bfb.setPitch(0.25); }, { x: mx, y: y2, z: mz, yaw: m.yaw });
-        ok(await R3.waitForFunction(() => /Mammy/.test(window.__bfb.promptText()), null, { timeout: 20000 }).then(() => true, () => false), `Mammy's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
+        // R12.2c: SEAMUS O'SHORTLY
+        const m = pb.seamus, mx = m.x + Math.sin(m.yaw) * 1.5, mz = m.z + Math.cos(m.yaw) * 1.5;
+        await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, o.yaw + Math.PI); window.__bfb.setPitch(0.35); }, { x: mx, y: y2, z: mz, yaw: m.yaw });
+        ok(await R3.waitForFunction(() => /Seamus/.test(window.__bfb.promptText()), null, { timeout: 20000 }).then(() => true, () => false), `Seamus's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 40)}"`);
         await R3.keyboard.press("e");
-        ok(await R3.waitForFunction(() => /MAMMY MOLONEY:/.test(document.body.innerText), null, { timeout: 20000 }).then(() => true, () => false), "a word with Mammy (she's after something)");
+        ok(await R3.waitForFunction(() => /SEAMUS O'SHORTLY:/.test(document.body.innerText), null, { timeout: 20000 }).then(() => true, () => false), "a word with Seamus (he's after something, for a pot of gold)");
+        await R3.evaluate((o) => window.__bfb.camAt(o.x + Math.sin(o.yaw) * 2.4, o.y + 1.1, o.z + Math.cos(o.yaw) * 2.4, o.yaw + Math.PI, 0.18), { ...m, y: y2 }); await sleep(2500); await hideOverlays(R3);
+        await shot(R3, "r122c-seamus.png"); await R3.evaluate(() => window.__bfb.camFree());
+        // R12.2c: walk into a round booth, up to its table
+        { const rb = pb.roundBooths[0];
+          await R3.evaluate((o) => window.__bfb.teleportY(o.x, o.y + 0.25, o.z, Math.PI / 2), { x: rb.x - rb.r - 0.6, y: y2, z: rb.z }); await sleep(1200);
+          await R3.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+          const inOk = await R3.waitForFunction((x) => window.__bfb.move().x > x, rb.x - 0.9, { timeout: 20000 }).then(() => true, () => false);
+          await R3.evaluate(() => window.__bfb.setAxes(null));
+          ok(inOk, `walked into a round booth, up to its table (x ${(await R3.evaluate(() => window.__bfb.move().x)).toFixed(1)}, the table at ${rb.x.toFixed(1)})`); }
         // the balcony: stand on it
         const bal = pb.balcony[1], bx = (bal.minX + bal.maxX) / 2, bz = (bal.minZ + bal.maxZ) / 2;
         await R3.evaluate((o) => window.__bfb.teleportY(o.x, o.y + 0.3, o.z, 0), { x: bx, y: y2, z: bz });
@@ -1722,6 +1735,20 @@ try {
         await R3.evaluate((o) => window.__bfb.teleportY(o.x, o.y + 0.25, o.z, 0), { x: -80.0, y: y2, z: 16.4 });
         await sleep(1500);
         ok(!/c[ée]il[ií]/i.test(await R3.evaluate(() => window.__bfb.promptText())), "no céilí prompt anywhere upstairs");
+        // R12.2c: BIG DESSIE in front of the band; punch him and Seamus's lads swarm you (they pop out round you, downstairs)
+        { const d = pb.dancer;
+          await R3.evaluate((o) => window.__bfb.camAt(o.x - 3.2, 1.7, o.z - 2.6, 0.9, 0.08), d); await sleep(2500); await hideOverlays(R3);
+          await shot(R3, "r122c-dessie.png"); await R3.evaluate(() => window.__bfb.camFree());
+          await R3.evaluate((o) => { window.__bfb.teleportY(o.x - 1.2, 0.25, o.z, Math.PI / 2); window.__bfb.setPitch(0.15); }, d);
+          const saw = await R3.waitForFunction(() => window.__bfb.punchTarget()?.kind === "drunk_dancer", null, { timeout: 15000 }).then(() => true, () => false);
+          ok(saw, "facing Big Dessie (punch target)");
+          const vp = R3.viewportSize() ?? { width: 800, height: 450 };
+          await R3.mouse.click(vp.width / 2, vp.height / 2);
+          ok(await R3.waitForFunction(() => /lepSwarm\*/.test(window.__bfb.pubInfo()?.evTail ?? ""), null, { timeout: 20000 }).then(() => true, () => false), `the swarm's on (${await R3.evaluate(() => window.__bfb.pubInfo()?.evTail)})`);
+          ok(await R3.waitForFunction(() => { const me = window.__bfb.move(); return window.__bfb.npcs().filter((n) => n.kind === "lep_buddy" && Math.abs(n.y - me.y) < 1.5 && Math.hypot(n.x - me.x, n.z - me.z) < 5).length >= 3; }, null, { timeout: 20000 }).then(() => true, () => false), "the lads are round you (downstairs)");
+          await sleep(1500); await hideOverlays(R3); await shot(R3, "r122c-swarm.png");
+          ok(await R3.waitForFunction(() => /lepSwarm\*,?$/.test(window.__bfb.pubInfo()?.evTail ?? "") && (window.__bfb.pubInfo()?.evTail ?? "").split("lepSwarm*").length >= 3, null, { timeout: 60000 }).then(() => true, () => false), "the swarm ends (8 s)");
+          await sleep(3000); }
         // the shots: the island bar (day, night), the darts booths, the pool area, the lounge, Mammy's snug, the balcony
         const B2 = pb.bar2, bxm = (B2.minX + B2.maxX) / 2, bzm = (B2.minZ + B2.maxZ) / 2;
         const shots2 = [
@@ -1731,7 +1758,7 @@ try {
           ["r122b-pool.png", { x: -79.2, y: y2 + 2.1, z: 23.0, yaw: 0, pitch: 0.32 }],
           ["r122b-lounge.png", { x: -84.0, y: y2 + 1.7, z: 9.5, yaw: 0.7, pitch: 0.1 }],
           ["r122b-fire.png", { x: pb.fire2.x + 0.3, y: y2 + 1.6, z: pb.fire2.z - 5.0, yaw: 0, pitch: 0.05 }],
-          ["r122b-mammy-snug.png", { x: m.x + Math.sin(m.yaw) * 2.6, y: y2 + 1.5, z: m.z + Math.cos(m.yaw) * 2.6, yaw: m.yaw + Math.PI, pitch: 0.12 }],
+          ["r122c-seamus-snug.png", { x: m.x + Math.sin(m.yaw) * 2.6, y: y2 + 1.5, z: m.z + Math.cos(m.yaw) * 2.6, yaw: m.yaw + Math.PI, pitch: 0.12 }],
         ];
         for (const [name, c] of shots2) { await R3.evaluate((o) => window.__bfb.camAt(o.x, o.y, o.z, o.yaw, o.pitch), c); await sleep(2500); await hideOverlays(R3); await shot(R3, name); }
         // the drinkers and Róisín close up (no chest squares)

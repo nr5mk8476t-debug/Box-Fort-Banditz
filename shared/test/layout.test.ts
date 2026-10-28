@@ -724,6 +724,7 @@ test("R12.1b THE SOGGY SHAMROCK: the whole block (the alley between goes); in th
     assert.ok(walk(p.stage.minX - 0.8, (p.stage.minZ + p.stage.maxZ) / 2) < 55, "the band's stage");
     assert.ok(walk(p.stairs.maxX + 0.9, (p.stairs.minZ + p.stairs.maxZ) / 2) < 55, "the foot of the stairs");
     assert.ok(walk((p.lane.minX + p.lane.maxX) / 2, p.lane.minZ + 0.6) < 60, "inside the horseshoe (through the flap)");
+    assert.ok(walk(p.dancer.x - 1.0, p.dancer.z - 0.8) < 55, "R12.2c: up to BIG DESSIE (in front of the band)");
   }
   // the walls: the doors are the only ways in on floor 1
   const solid = (x: number, z: number, y: number) => nc.boxes.some((b) => (b.kind === "wall" || b.kind === "glass") && inFoot(b, x, z, 0) && b.y - b.h / 2 <= y && b.y + b.h / 2 >= y);
@@ -745,6 +746,7 @@ test("R12.1b THE SOGGY SHAMROCK: the whole block (the alley between goes); in th
   assert.equal(posts.filter((q) => q.kind === "patron" && !inRect(p.rect, q.x, q.z)).length, 2, "two drinkers out on the pavement");
   assert.equal(nc.props!.filter((q) => q.kind === "pinttap" && q.y < p.y2).length, 3);
   assert.equal(nc.props!.filter((q) => q.kind === "pubboard").length, 1);
+  assert.equal(posts.filter((q) => q.kind === "drunk_dancer").length, 1, "R12.2c: BIG DESSIE");
   // nobody's standing or sitting inside something solid (a posted person in a box gets shoved about)
   for (const q of posts) assert.ok(!nc.boxes.some((b) => b.y + b.h / 2 > (q.y ?? 0) + 0.12 && b.y - b.h / 2 < (q.y ?? 0) + 1.5 && inFoot(b, q.x, q.z, 0.22)), `${q.kind} ${q.v ?? ""} at ${q.x.toFixed(1)},${q.z.toFixed(1)} is clear`);
   // the pavement outside the east front still has room to walk past the parasols
@@ -778,12 +780,12 @@ test("R12.2b upstairs at THE SOGGY SHAMROCK: from the top of the stairs you can 
   for (const d of p.darts) { reach(d.oche + 0.3, d.board.z, "on the oche, facing a dartboard"); reach(d.podium.x + 0.6, d.podium.z + 0.2, "at the scoring podium"); }
   for (const q of p.pools) { reach(q.x - q.w / 2 - 0.7, q.z, "beside a pool table (west)"); reach(q.x + q.w / 2 + 0.7, q.z, "beside a pool table (east)"); reach(q.x, q.z - q.d / 2 - 0.7, "at a pool table's end (south)"); reach(q.x, q.z + q.d / 2 + 0.7, "at a pool table's end (north)"); }
   for (const f of p.sofas) reach(f.x - f.w / 2 - 0.6, f.z, "beside a chesterfield");
-  for (const rb of p.roundBooths) reach(rb.x - rb.r - 0.6, rb.z, "in front of a round booth");
+  for (const rb of p.roundBooths) { reach(rb.x - rb.r - 0.4, rb.z, "in front of a round booth"); reach(rb.x - 0.95, rb.z, "into a round booth, at its table (R12.2c)"); reach(rb.x, rb.z + 0.95, "round the booth's table, by the seat"); }
   for (const t of p.highTables) reach(t.x + (t.x < -90 ? 0.95 : 0), t.z + (t.x < -90 ? 0 : -0.95), "at a high table");
   for (const w of p.wings) reach(w.x, w.z - 1.1, "by a wing chair");
   reach(p.fire2.x, p.fire2.z - 1.1, "at the fire (between the wing chairs)");
   reach(p.jukebox.x, p.jukebox.z - 1.0, "at the jukebox");
-  reach(p.mammy.x + Math.sin(p.mammy.yaw) * 1.1, p.mammy.z + Math.cos(p.mammy.yaw) * 1.1, "in front of Mammy");
+  reach(p.seamus.x + Math.sin(p.seamus.yaw) * 1.1, p.seamus.z + Math.cos(p.seamus.yaw) * 1.1, "in front of Seamus");
   reach(-76.0, 5.5, "out on the balcony (the corner)"); reach(-72.8, 13.5, "out on the balcony (along the east front)");
   for (const [x, z] of [[-76.0, 4.4], [-71.7, 10.0]]) assert.ok(!seen[at(x, z)], `no walking off the balcony at ${x},${z}`);
   // the posted people upstairs are clear of anything solid
@@ -794,7 +796,9 @@ test("R12.2b upstairs at THE SOGGY SHAMROCK: from the top of the stairs you can 
   assert.equal(nc.props!.filter((o) => o.kind === "pinttap" && o.y > Y).length, 3, "three taps on the island bar");
   assert.equal(nc.props!.filter((o) => o.kind === "jukebox").length, 1, "the jukebox (E)");
   assert.ok(!nc.boxes.some((b) => b.deco === "pubstage2"), "the céilí band's stage is gone");
-  assert.equal(nc.posts!.filter((o) => o.kind === "mammy").length, 1);
-  assert.ok(nc.props!.some((o) => o.kind === "mammy"), "a word with Mammy (E)");
+  assert.equal(nc.posts!.filter((o) => o.kind === "leprechaun").length, 1, "Seamus O'Shortly");
+  assert.equal(nc.posts!.filter((o) => o.kind === "lep_buddy").length, 6, "his six wee buddies");
+  assert.ok(nc.posts!.filter((o) => o.kind === "lep_buddy").every((o) => inRect(p.snug2, o.x, o.z, 0.2)), "round his snug");
+  assert.ok(nc.props!.some((o) => o.kind === "seamus"), "a word with Seamus (E)");
   assert.ok(!nc.boxes.some((b) => b.deco === "pubrope"), "the rope's off the stairs");
 });
