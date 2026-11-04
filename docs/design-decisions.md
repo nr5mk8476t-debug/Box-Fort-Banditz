@@ -1533,3 +1533,15 @@ R12.4 is 501 darts on these oches, with the screens showing the score. Then the 
 
 - The pigeon lady already had a "swarm" event, so the leprechauns' one is `lepSwarm`.
 - The city has 62 NPCs now: the 55 from R12.2b (which included Mammy), minus Mammy, plus Seamus, his six buddies and Big Dessie.
+
+## GitHub (Blake, 2026-11-04)
+
+Blake: "i want chat gpt to start seeing the updates too. i want you to start pushing every update onto github."
+
+- **The repo:** private, named `box-fort-banditz`. ChatGPT reads it through its GitHub connector.
+- **Every update pushes:**
+  - all the code and docs;
+  - a `CHANGELOG.md` entry;
+  - that round's screenshots in `screenshots/<round>/`.
+- **The file cap:** the 100-file cap now counts code and docs only. `CHANGELOG.md` and `screenshots/` sit outside it, because Blake chose screenshots knowing they'd push past it.
+- **Status:** the first push is waiting on the repo being created on GitHub and connected to the Claude session. Until then every update is committed locally as usual, and the history is pushed in one go once it's connected.

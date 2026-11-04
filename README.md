@@ -2,7 +2,7 @@
 
 A chaotic first-person 3D browser party game for 2–4 players (plus solo), set in the city of **Trashington**.
 
-**Status: Overhaul Slice 2A (the new 230 m city: towers with 15 walk-in shops, upstairs floors, the plaza park + pond) on top of Phase 5A (day/night cycle, fort raids, pawn shop). Online games are hosted in the room creator's browser.** Placeholder art and sound. See `docs/design-decisions.md` for the agreed design and `docs/test-plan.md` for how everything is tested.
+**Status: R12.2c. The new city with Little Italy, Chinatown, the police station, NEON FEVER DREAM (the nightclub) and THE SOGGY SHAMROCK (the Irish pub: Split the G, darts and pool areas, Seamus O'Shortly and his swarm). Online games are hosted in the room creator's browser.** Placeholder art and sound. What changed in each update is in `CHANGELOG.md` (screenshots in `screenshots/`); the agreed design is in `docs/design-decisions.md`, and how everything is tested is in `docs/test-plan.md`.
 
 ## Tech
 
