@@ -305,7 +305,7 @@ export class PubGamesView {
       if (this.near(s, 12)) { sfx.dartThunk(e.who === me ? 1 : 0.7); }
       if (e.who === me && e.bust) this.hooks.feedback(String(e.bust), "bad");
       if (e.who !== me && this.near(s, 12)) { const k = (s.note?.darts?.d.length ?? 0); this.fly = this.fly ?? { st: s, k, t: 0, u: Number(e.u), v: Number(e.v), from: new Vector3((s.g.oche ?? 0) + 0.35, this.U + 1.7, s.g.z + 0.25) }; }
-    } else if (e.t === "pgMsg") { if (e.to === me && e.msg) this.hooks.feedback(String(e.msg), "info"); }
+    } else if (e.t === "pgMsg") { if (e.to === me && e.msg) { this.lastMsg = String(e.msg); this.hooks.feedback(this.lastMsg, "info"); } }
     else if (e.t === "pgEnd") {
       const mineSeat = s.seatOf(me);
       if (mineSeat >= 0 || this.near(s, 10)) {

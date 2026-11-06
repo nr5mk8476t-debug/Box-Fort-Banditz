@@ -136,13 +136,14 @@ export class FortRoom extends Room<{ state: FortRoomState }> {
       }
     }
     for (const id of [...this.state.npcs.keys()]) if (!this.world.npc.npcs.has(id)) this.state.npcs.delete(id);
-    // props: only two flags each, and they rarely change
+    // props: two flags and a note each, and they rarely change
     for (const id of this.world.props.props.keys()) {
       let ps = this.state.props.get(id) as PropState | undefined;
       if (!ps) { ps = new PropState() as PropState; this.state.props.set(id, ps); }
       propView(this.world, id, scratch);
       if (ps.ready !== scratch.ready) ps.ready = scratch.ready;
       if (ps.alarm !== scratch.alarm) ps.alarm = scratch.alarm;
+      if (ps.note !== scratch.note) ps.note = scratch.note; // (the pub's chalkboard, jukebox, pawn case, pool + darts: R12.3)
     }
     this.world.traffic.cars.forEach((c, i) => {
       let cs = this.state.cars.get(c.id) as CarState | undefined;

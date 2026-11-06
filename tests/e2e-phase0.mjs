@@ -1783,7 +1783,12 @@ try {
         await R3.evaluate(() => { window.__bfb.forceNight(false); window.__bfb.camFree(); });
         // ================================================================ R12.3: pool and darts upstairs (solo)
         console.log("\n# R12.3 pool + darts upstairs (solo)");
-        await R3.evaluate(() => window.__bfb.setTimeLeft(300)); // (plenty of scavenge left: before last orders)
+        // (this window's match has been running a long while: back to the day, with plenty of scavenge left before last orders)
+        if ((await R3.evaluate(() => window.__bfb.match().phase)) !== "scavenge") {
+          await R3.evaluate(() => window.__bfb.startMatch());
+          for (let k = 0; k < 40 && (await R3.evaluate(() => window.__bfb.match().phase)) !== "scavenge"; k++) { await R3.evaluate(() => window.__bfb.setTimeLeft(0.1)); await sleep(1500); }
+        }
+        await R3.evaluate(() => window.__bfb.setTimeLeft(300));
         const pg = () => R3.evaluate(() => window.__bfb.pg());
         const T1 = pb.pools[0], T2 = pb.pools[1], O1 = pb.darts[0];
         ok(Math.abs(O1.oche - O1.faceX - 2.37) < 1e-6 && Math.abs(O1.board.y - y2 - 1.73) < 1e-6, "the oche is 2.37 m from the board's face, the bull 1.73 m up");
@@ -1804,7 +1809,7 @@ try {
         await R3.keyboard.press("e");
         ok(await R3.waitForFunction(() => window.__bfb.pg()?.mode === "menu" && /Play HUGHIE/.test(document.getElementById("pg-menu")?.textContent ?? ""), null, { timeout: 15000 }).then(() => true, () => false), "E: the table's menu (play HUGHIE / wait for a mate, a stake)");
         await R3.keyboard.press("Digit1");
-        ok(await R3.waitForFunction(() => window.__bfb.pg()?.pooltable2?.ph === "play", null, { timeout: 30000 }).then(() => true, () => false), `1: a game of pool v HUGHIE (no stake unless you pick one) ${(await pg()).lastMsg}`);
+        ok(await R3.waitForFunction(() => window.__bfb.pg()?.pooltable2?.ph === "play", null, { timeout: 30000 }).then(() => true, () => false), `1: a game of pool v HUGHIE (no stake unless you pick one) ${(await pg()).lastMsg} [${await R3.evaluate(() => window.__bfb.match().phase)}]`);
         ok((await pg()).mode === "" || (await pg()).mode === "place" || (await pg()).mode === "aim", "the menu's closed");
         // play it: our shots go through our own controls (aim + power); his through the same shot system
         let mine = 0, his = 0, sawRoll = false, sawHughie = false;

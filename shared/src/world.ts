@@ -812,7 +812,8 @@ export class World {
       if ((op === "shot" || op === "dart") && (p.jailT > 0 || p.move.knockT > 0 || p.move.stunT > 0 || p.respawnT > 0)) { this.emit({ t: "pgMsg", st: String((act as any).st ?? ""), msg: "You can't play from the floor.", to: p.id }); return; }
       const err = this.pubGames.act(p.id, act as any);
       // (tell the player why not: "not your turn", "balls still rolling"... a repeat of the same shot/dart says nothing)
-      if (err && err !== "duplicate") this.emit({ t: "pgMsg", st: String((act as any).st ?? ""), msg: PG_WHY[err] ?? "", to: p.id });
+      // (a station that explained itself already sent its own message: no second, empty one on top)
+      if (err && PG_WHY[err]) this.emit({ t: "pgMsg", st: String((act as any).st ?? ""), msg: PG_WHY[err], to: p.id });
       return;
     }
     if (p.jailT > 0) { // locked up: pick the lock; R6 (the holding cell): also walk about, flush the toilet, start a fight
