@@ -1310,7 +1310,7 @@ export class ArenaScene {
     }
     if (a === "grab" && this.tug) { this.onAction?.({ a: "tug" }); sfx.tugPull(); this.viewmodel.kick(0.25); return; }
     if (a === "grab") this.updateLookTarget();
-    if (a === "grab" && !this.lookTarget && this.useTarget && (this.useTarget.kind === "pooltable" || this.useTarget.kind === "dartsoche")) { this.pg.use(this.useTarget.id); return; } // (R12.3: its menu, or your shot)
+    if (a === "grab" && !this.lookTarget && this.useTarget && (this.useTarget.kind === "pooltable" || this.useTarget.kind === "dartsoche")) { this.pg.use(this.useTarget.id); this.input.game = this.pg.active ? this.pg.input : null; return; } // (R12.3: its menu, or your shot; the keys are the menu's at once, not next frame: at a low frame rate a quick "1" would slip through)
     if (a === "grab" && !this.lookTarget && this.useTarget) {
       const u = this.useTarget;
       if (u.empty && u.kind !== "door") { sfx.full(); /* (R9: an open door is "empty" but E shuts it) */ this.onFeedback?.(u.kind === "washer" || u.kind === "dryer" ? "Already emptied today." : u.kind === "djdecks" ? "The decks are still warm. Give DJ Crunch a minute." : u.kind === "pawncase" ? "The case is smashed. Sal's boarding it up till dawn." : u.kind === "clubsafe" ? "Cleaned out. The takings start again tomorrow." : "Already searched. It'll refill later.", "info"); return; }
