@@ -4,7 +4,7 @@ import {
   World, buildTrashington, fortAt, LOCK_TIME, ROUND_TIME, INTRO_TIME, TRUCK_SPEED, CYCLES, NIGHT_TIME, DUSK_TIME, DAWN_TIME, SHOP_TIME, UPGRADE_TIME, ITEM_TARGET_NIGHT,
   lootDef, type WorldEvent, type MoveInput,
 } from "../src/index.js";
-import { setCityMap as useCity } from "../src/index.js";
+import { setCityMap as useCity, makeRoomCode, isValidRoomCode, normalizeRoomCode, sanitizeName, NAME_MAX_LENGTH } from "../src/index.js";
 useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
@@ -510,4 +510,18 @@ test("R4 traffic and the parades: their street closes, and no car drives into th
     assert.ok(worst > 1.5, `${kind} (seed ${seed}): closest a moving car got was ${worst.toFixed(2)} m`);
     assert.ok(engulf > 1.5, `${kind} (seed ${seed}): its street is closed to traffic, so it never rolls through a waiting car (closest ${engulf.toFixed(2)} m)`);
   }
+});
+
+// ---- room codes and names (were test/names.test.ts) ----
+test("room codes are valid, and normalizing handles lowercase and junk", () => {
+  for (let i = 0; i < 200; i++) assert.ok(isValidRoomCode(makeRoomCode()));
+  assert.equal(normalizeRoomCode(" ab-c2d9 "), "ABC2D");
+  assert.ok(!isValidRoomCode("ABCD0")); // 0 is excluded as look-alike
+});
+
+test("names are cleaned and capped", () => {
+  assert.equal(sanitizeName("  <b>Bob</b>  "), "bBob/b");
+  assert.ok(sanitizeName("x".repeat(100)).length === NAME_MAX_LENGTH);
+  assert.ok(sanitizeName("   ").length > 0);
+  assert.ok(sanitizeName(42).length > 0);
 });
