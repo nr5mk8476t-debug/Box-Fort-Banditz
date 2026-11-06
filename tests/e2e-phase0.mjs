@@ -1947,11 +1947,15 @@ try {
     await down.waitForFunction(() => (window.__bfb.pg().dartsoche2.darts?.n ?? 0) >= 1, null, { timeout: 30000 }).catch(() => {});
     // Gus reloads the tab mid-game: back in, he gets the whole game (scores, darts already thrown) and keeps his seat
     await G.reload({ waitUntil: "domcontentloaded" });
+    // (while he's gone: Hana's window still shows the game, his seat kept)
+    const held = await H.waitForFunction(() => { const d = window.__bfb.pg()?.dartsoche2; return d && d.ph === "play" && d.seats.includes("Gus"); }, null, { timeout: 20000 }).then(() => true, () => false);
     await G.waitForFunction(() => window.__bfb?.info().screen === "title" || window.__bfb?.info().screen === "playing", null, { timeout: 480000 });
     if ((await info(G)).screen !== "playing") { await G.click("#btn-accept-invite").catch(() => {}); await G.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 1500000 }); }
     ok(await G.waitForFunction(() => { const d = window.__bfb.pg()?.dartsoche2; return d && d.ph === "play" && (d.darts?.n ?? 0) >= 1; }, null, { timeout: 120000 }).then(() => true, () => false), "after a reload Gus sees the game as it stands (the dart already thrown)");
-    ok((await gpg(H)).dartsoche2.ph === "play", "his seat was held while he was gone");
-    // sunrise mid-game: called off, both stakes back
+    ok(held, "his seat was held while he was gone");
+    // sunrise mid-game: called off, both stakes back (on this box the darts clock may have thrown out his visit while he
+    //  reloaded and finished it: then a fresh game, waiting for a mate, gets called off instead)
+    if ((await gpg(H)).dartsoche2.ph !== "play") { await H.waitForFunction(() => window.__bfb.pg().dartsoche2.ph === "free", null, { timeout: 120000 }).catch(() => {}); await openGame(H, "dartsoche2", "mate", 0); }
     await H.evaluate(() => window.__bfb.startMatch());
     ok(await H.waitForFunction(() => window.__bfb.pg()?.dartsoche2?.end === "void", null, { timeout: 120000 }).then(() => true, () => false), "a new cycle (the match starts): the game's called off");
     ok(await H.waitForFunction(() => (window.__bfb.match().scores ?? []).length === 2, null, { timeout: 30000 }).then(() => true, () => false) && (await cashOf()).every((c) => c === 0 || c === 50), `stakes back before the match resets cash (${JSON.stringify(await cashOf())})`);
