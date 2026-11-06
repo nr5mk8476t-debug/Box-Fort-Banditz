@@ -1813,8 +1813,15 @@ try {
         ok((await pg()).mode === "" || (await pg()).mode === "place" || (await pg()).mode === "aim", "the menu's closed");
         // play it: our shots go through our own controls (aim + power); his through the same shot system
         let mine = 0, his = 0, sawRoll = false, sawHughie = false;
-        for (let k = 0; k < 40; k++) {
-          const q = (await pg()).pooltable2; if (q.ph !== "play") break;
+        // (a time budget, not a count: if HUGHIE breaks and goes on a run, game time on a slow box can outlast 40 polls; if he clears up first, rack another)
+        for (let k = 0, until = Date.now() + 240000, racks = 1; Date.now() < until; k++) {
+          let q = (await pg()).pooltable2;
+          if (q.ph !== "play") {
+            if (mine >= 2 || racks >= 3) break;
+            racks++; await R3.evaluate(() => window.__bfb.pgAct({ op: "open", st: "pooltable2", vs: "npc", stake: 0 }));
+            await R3.waitForFunction(() => window.__bfb.pg()?.pooltable2?.ph === "play", null, { timeout: 30000 }).catch(() => {});
+            q = (await pg()).pooltable2; if (q.ph !== "play") break;
+          }
           const me = q.seats.findIndex((n) => n !== "HUGHIE");
           if (q.turn === me && !q.rolling) {
             const P = q.pool, cue = P.b.find((b) => b[0] === 0), g = P.g[me];
