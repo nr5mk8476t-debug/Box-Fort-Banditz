@@ -1729,6 +1729,12 @@ Nothing was playable. The tables and booths were decoration, with "coming soon" 
 - **The 8-minute scavenge:** games run through sunset and night; last orders 90 s from the end; at sunrise games are called off and refunded; at a new cycle the NPC kitties refill.
 - **No safe zone:** the pub isn't one. Seamus's swarm still deals with anyone who starts trouble.
 
+### Polish: bugs the browser tests caught (stage 6)
+
+- **Empty refusals:** the client never kept the refusal text, and the World sent a second, empty message on top of a station's own one. Now there's one message and it's shown.
+- **Server-hosted rooms:** the Colyseus room synced each prop's two flags but not its note, so in server-hosted mode nobody saw the tables or the boards change. The note is synced now (browser-hosted P2P was always fine).
+- **A quick E then 1:** the table's menu only took the keyboard on the next frame, so at a low frame rate a fast "1" went to the normal controls and no game started. The menu takes the keys the moment E opens it.
+
 ### Files
 
 - `shared/src/pubgames.ts`: the geometry, the simulation, the house rules, 301, NPC play and the stations.

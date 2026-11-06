@@ -37,6 +37,9 @@ Every update to Box Fort Banditz, newest first. Each round has its screenshots i
 **Fixed**
 - **The darts oche** was 16.5 cm short, and the bull rings were drawn about 60% too big.
 - **The jukebox's name plate** read backwards.
+- **Refusals** ("Not your turn.", "Wait for the balls to stop.") reached the player blank.
+- **Server-hosted rooms** didn't show the tables, boards or scores changing.
+- **The table's menu** missed a quick "1" straight after E on a slow PC.
 
 **Rules for pub games**
 - **Last orders:** no new games 90 s before sunrise.

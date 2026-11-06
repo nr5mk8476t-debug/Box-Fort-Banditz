@@ -550,7 +550,7 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 
 | Area | Check | How | Result |
 |---|---|---|---|
-| Cycle | intro → 5.5 min day → 30 s sunset (still scavenging, nothing lost) → 2 min night (raids, x2) → dawn; one clock; "30 s to sunrise" warning; no wipe at nightfall, fresh x2 loot appears; carried loot lost only at sunrise | unit (match) + e2e | pass (unit); e2e: E2E_NORMAL |
+| Cycle | intro → 5.5 min day → 30 s sunset (still scavenging, nothing lost) → 2 min night (raids, x2) → dawn; one clock; "30 s to sunrise" warning; no wipe at nightfall, fresh x2 loot appears; carried loot lost only at sunrise | unit (match) + e2e | pass (unit and e2e) |
 | Board | every number in every bed (single inner/outer, treble, double), 20 top / 3 bottom / 6 right / 11 left; aim points land in their beds; WDF sizes; the oche 2.37 m from the face, the bull 1.73 m | unit | pass |
 | Wires | on a ring wire = the ring nearer the bull (bull/25/T/single/D/miss boundaries); on a segment wire = clockwise | unit | pass |
 | 301 | three-dart visits; busts below zero, leaving 1, zero without a double (Blake's 40 → 20, 20 example) restore the visit's start and end it; double out; bull finish; the outer bull isn't a double; a checkout ends the leg on that dart | unit | pass |
@@ -564,13 +564,13 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 | Four at once | Hughie at one table, two mates at the other, Dinny at one oche, two mates at the other, 90 s: all move on, nothing crosses over, the money adds up | unit (world) | pass |
 | Interruptions | last orders 90 s from the end; sunrise calls off and refunds; the match starting calls off before the cash resets; a dropped seat (and its clock) held 45 s then called off; walking off (downstairs / 30 m) = forfeit, fetching a pint = fine; arrest = forfeit; AFK: two timed-out shots, or a whole visit thrown by the clock = forfeit | unit + unit (world) | pass. Two bugs caught: a dropped player could lose on the clock inside the 45 s hold (the clock now waits); stakes refunded after the match reset cash (now before). |
 | Layout | full-cue room round both tables at elbow height (every 5°); 2.9 m+ between them; tables not shrunk; the throwing lanes clear; everything still reachable | unit (layout) | pass |
-| Browser (solo) | the table's prompt, the menu (E), a game v Hughie; shots through the player's own controls; balls roll and sit on the cloth; the camera crouched behind the white; concede, the table frees; darts v Dinny: the ring sways gently, a dart aimed at the treble 20 scores T20 = 60; E steps back to normal controls | e2e (R12.3 solo) | E2E_SOLO |
-| Browser (online) | two games at once (Hughie, Dinny) seen in both windows; one game at a time; a spectator's dart refused; a $10 stakes game: taken once; out of turn refused; a reload mid-game: the whole game comes back and the seat was held; the match starting calls it off | e2e (R12.3 online) | E2E_ONLINE |
-| | full browser e2e, normal | e2e | E2E_NORMAL |
-| | full browser e2e, 110 ms lag | e2e | E2E_LAG |
+| Browser (solo) | the table's prompt, the menu (E), a game v Hughie; shots through the player's own controls; balls roll and sit on the cloth; the camera crouched behind the white; concede, the table frees; darts v Dinny: the ring sways gently, a dart aimed at the treble 20 scores T20 = 60; E steps back to normal controls | e2e (R12.3 solo) | pass. A quick E then 1 was missed at a low frame rate (the menu only took the keys a frame later): fixed. Under lag, HUGHIE's run outlasted the test's 40 polls: the test now plays on a time budget. |
+| Browser (online) | two games at once (Hughie, Dinny) seen in both windows; one game at a time; a spectator's dart refused; a $10 stakes game: taken once; out of turn refused; a reload mid-game: the whole game comes back and the seat was held; the match starting calls it off | e2e (R12.3 online) | pass, 18/18. Two game bugs caught: refusal messages reached the player empty, and server-hosted rooms never synced the tables' state. Both fixed. |
+| | full browser e2e, normal | e2e | pass, 436/436 |
+| | full browser e2e, 110 ms lag | e2e | pass, 437/437 (the crouched-camera check also ran) |
 | Speed | the same views, the pre-R12.3 build v this one, side by side | fps (scratch script) | same within noise (pool 24–29 v 23–28, darts 10–13 v 11–12, room 7 v 8–10). Both builds slow down the longer a headless page runs (the test box, not the game). |
 | Looks | the approach, the pool room, both booths, the pockets, a tight shooting spot, the aim view, a game with the opponent, the oche view, the board after a dart, spectating Dinny, the scoreboard, both at night | screenshots (eye height) | reviewed (see below) |
-| Everything | SHARED_UNIT shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass. The server smoke's "sees Alice crouching" failed once on the busy box, then passed. |
+| Everything | 285 shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass. The server smoke's "sees Alice crouching" failed once on the busy box, then passed. |
 
 ## Manual checklist for Blake (R12.3)
 
