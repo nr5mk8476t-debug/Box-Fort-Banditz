@@ -33,11 +33,6 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R12.2c)
-- R12.3: proper pub 8-ball on the upstairs pool tables:
-  - reds vs yellows (the first potted picks), then the black;
-  - a foul gives the other player two visits;
-  - potting the black early, or the white with the black, loses;
-  - play an NPC or friends, with an optional $5-50 bet.
-- R12.4: 501 darts in the upstairs booths: steady the sway and click; the screens show the score.
-- Then the pub brawl, the quiz, and the G-split champ. Then R13: the alleys and fire escapes.
+## Next up (as of R12.3)
+- R12.3 shipped pool (pub 8-ball, Hughie) and darts (301, Big Dinny) upstairs, plus the 8-minute scavenge (day, sunset, night). Wait for Blake's feel notes (the manual checklist in `docs/test-plan.md`).
+- Then: the pub brawl, the quiz, and the G-split champ. Then R13: the alleys and fire escapes.

@@ -170,7 +170,7 @@ async function startSolo() {
   show("lp-code-row", false);
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
-  $("lp-hint").textContent = "Press ENTER to start. Each cycle: 3 min scavenge, 1 min NIGHT scavenge (x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
+  $("lp-hint").textContent = "Press ENTER to start. Each cycle: an 8-minute scavenge (day, then sunset, then 2 min of NIGHT: x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
   $("mode-badge").textContent = ROAD_TEST ? "NEW CITY R3 / SOLO" : "CITY C5c.3 / SOLO";
 }
 

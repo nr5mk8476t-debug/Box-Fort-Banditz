@@ -2,6 +2,48 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.3: pool and darts upstairs at THE SOGGY SHAMROCK, and one 8-minute scavenge (2026-11-06)
+
+**Added**
+- **Pool on both upstairs tables:** pub 8-ball by our house rules.
+  - Reds v yellows; the first pot after the break picks your colour.
+  - A foul gives the other player two visits; the white goes behind the baulk line.
+  - The black early, with the white or on a foul loses; the black on the break means a re-rack.
+  - **Controls:** E at the table, then crouch over the cue ball and aim with the mouse. Hold the click, pull back for power and let go to strike.
+  - **Aim guide:** a line to the first ball, a ghost ball, and where both go.
+  - Play HUGHIE (the regular by the pool) or a mate.
+- **301 darts at both oches:** double out, three darts a visit, the bull counts as a double, and busts are explained.
+  - Aim with the mouse. Your hand sways gently and the ring shows exactly where the dart will land; hold SHIFT to steady it. Pints make you sway more.
+  - Play BIG DINNY or a mate. The cabinet doors chalk up the scores, with a checkout hint.
+- **Bets:** optional, $5–50, taken once and paid out once.
+  - NPCs bet up to $20 and can only lose $40 a cycle each.
+- **Spectators and players joining late** see the real game: the balls rolling, the darts in the board, the scores.
+
+**Changed**
+- **One 8-minute scavenge:**
+  - **Day:** about 5½ minutes.
+  - **Sunset:** 30 seconds, and you keep playing through it.
+  - **Night:** 2 minutes. Fresh x2 loot appears, fort raids are on, and the cops get tougher.
+  - Nothing's wiped and nothing's lost until sunrise.
+- **The pool room:**
+  - The tables were moved apart, so two people can shoot at once with full-length cues.
+  - They're proper 7 ft pub tables now: real-size balls, real cushions and jaws, pockets you can see down into, a ball-collection window, and a low three-shade lamp.
+  - New round the room: a spectators' ledge (drinks well away from the cloth), the cue rack, chalk scoreboards, house rules, league photos and a trophy shelf.
+- **The darts booths:**
+  - A WDF-sized board in a mahogany cabinet, lit by brass picture lights. No ring of bulbs any more.
+  - A bottle-green scoreboard and leaded glass.
+  - A brass oche exactly 2.37 m from the board's face, with the bull 1.73 m up.
+
+**Fixed**
+- **The darts oche** was 16.5 cm short, and the bull rings were drawn about 60% too big.
+- **The jukebox's name plate** read backwards.
+
+**Rules for pub games**
+- **Last orders:** no new games 90 s before sunrise.
+- **Sunrise:** unfinished games are called off and stakes refunded.
+- **Dropped connection:** your seat is held 45 s.
+- **Walking off:** going downstairs or getting arrested forfeits. Fetching a pint is fine.
+
 ## R12.2c: SOGGY SHAMROCK fixes, a hard Split the G, Big Dessie, Seamus O'Shortly and the swarm (2026-10-28)
 
 **Fixed**

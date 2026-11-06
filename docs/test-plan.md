@@ -546,6 +546,42 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.3: pool and darts upstairs at THE SOGGY SHAMROCK, and one 8-minute scavenge (2026-11-06)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Cycle | intro → 5.5 min day → 30 s sunset (still scavenging, nothing lost) → 2 min night (raids, x2) → dawn; one clock; "30 s to sunrise" warning; no wipe at nightfall, fresh x2 loot appears; carried loot lost only at sunrise | unit (match) + e2e | pass (unit); e2e: E2E_NORMAL |
+| Board | every number in every bed (single inner/outer, treble, double), 20 top / 3 bottom / 6 right / 11 left; aim points land in their beds; WDF sizes; the oche 2.37 m from the face, the bull 1.73 m | unit | pass |
+| Wires | on a ring wire = the ring nearer the bull (bull/25/T/single/D/miss boundaries); on a segment wire = clockwise | unit | pass |
+| 301 | three-dart visits; busts below zero, leaving 1, zero without a double (Blake's 40 → 20, 20 example) restore the visit's start and end it; double out; bull finish; the outer bull isn't a double; a checkout ends the leg on that dart | unit | pass |
+| Checkouts | 170 = T20 T20 BULL; 40 = D20; no route for 169 or 1; every route adds up and finishes on a double | unit | pass |
+| Pool table | the rack (7/7/black in the middle, nothing touching); UK 7 ft sizes; a straight pot in a corner and a middle; a cushion shot never tunnels; rolling along a cushion past the middle pocket stays up | unit | pass |
+| Physics | 300 hard random shots: always settle, never off the cloth (or hanging on a pocket's lip), never overlapping at rest; deterministic replay; a client replaying in frame-sized chunks gets the host's exact result | unit | pass |
+| House rules | break (2 to a cushion or a pot, else a foul); black on the break = re-rack; first legal pot picks colours; both colours = open; black first on an open table = foul; wrong colour first, a miss, their ball, the white (in hand behind the line) = two visits; two visits play out (second visit / keep going / lost on a foul); the black early, with the white, with your last colour, on a foul = loss; legal black = win; two visits on the black | unit | pass |
+| Hughie | legal shots (28+/40 hit his colour first), places the white legally, pots some not all; walks over round the table (never through it) and home again | unit + unit (world) | pass. First version potted 1 in 5 (0.8° error): lowered to 0.3°, aimed at the pocket's mouth. |
+| Big Dinny | treble 20 to score, checkout routes to finish, 3-dart average 35–75 (measured 57), rarely off the board; walks to the booth | unit + unit (world) | pass |
+| Stations | bets taken once at the join, one payout, refunds once; one game at a time; spectators, out of turn, duplicates, bad values refused; join race: first wins; NPC $20 cap and $40 kitty, refilled each cycle | unit | pass |
+| Four at once | Hughie at one table, two mates at the other, Dinny at one oche, two mates at the other, 90 s: all move on, nothing crosses over, the money adds up | unit (world) | pass |
+| Interruptions | last orders 90 s from the end; sunrise calls off and refunds; the match starting calls off before the cash resets; a dropped seat (and its clock) held 45 s then called off; walking off (downstairs / 30 m) = forfeit, fetching a pint = fine; arrest = forfeit; AFK: two timed-out shots, or a whole visit thrown by the clock = forfeit | unit + unit (world) | pass. Two bugs caught: a dropped player could lose on the clock inside the 45 s hold (the clock now waits); stakes refunded after the match reset cash (now before). |
+| Layout | full-cue room round both tables at elbow height (every 5°); 2.9 m+ between them; tables not shrunk; the throwing lanes clear; everything still reachable | unit (layout) | pass |
+| Browser (solo) | the table's prompt, the menu (E), a game v Hughie; shots through the player's own controls; balls roll and sit on the cloth; the camera crouched behind the white; concede, the table frees; darts v Dinny: the ring sways gently, a dart aimed at the treble 20 scores T20 = 60; E steps back to normal controls | e2e (R12.3 solo) | E2E_SOLO |
+| Browser (online) | two games at once (Hughie, Dinny) seen in both windows; one game at a time; a spectator's dart refused; a $10 stakes game: taken once; out of turn refused; a reload mid-game: the whole game comes back and the seat was held; the match starting calls it off | e2e (R12.3 online) | E2E_ONLINE |
+| | full browser e2e, normal | e2e | E2E_NORMAL |
+| | full browser e2e, 110 ms lag | e2e | E2E_LAG |
+| Speed | the same views, the pre-R12.3 build v this one, side by side | fps (scratch script) | same within noise (pool 24–29 v 23–28, darts 10–13 v 11–12, room 7 v 8–10). Both builds slow down the longer a headless page runs (the test box, not the game). |
+| Looks | the approach, the pool room, both booths, the pockets, a tight shooting spot, the aim view, a game with the opponent, the oche view, the board after a dart, spectating Dinny, the scoreboard, both at night | screenshots (eye height) | reviewed (see below) |
+| Everything | SHARED_UNIT shared + 3 client unit; matchmaking + server smoke; typecheck | full suite | pass. The server smoke's "sees Alice crouching" failed once on the busy box, then passed. |
+
+## Manual checklist for Blake (R12.3)
+
+- [ ] Pool: does the crouch-and-pull-back feel good? Is the power range right (a soft safety to a big break)?
+- [ ] Pool: is Hughie a fair game (he pots about 3 in 5 of what he goes for)?
+- [ ] Darts: is the sway readable? Is Shift-to-steady useful? Too easy, too hard? (Treble beds are 8 mm, like the real thing.)
+- [ ] Darts: does 301 fit in a minute or two with your mates?
+- [ ] The 8-minute scavenge: does the sunset feel right? Is 2 minutes of night enough?
+- [ ] The room from the stairs: does it feel like a pub that's been here for decades?
+- [ ] Anything clipping, floating, or in the way when you shoot or throw?
+
 ## R12.2c: THE SOGGY SHAMROCK fixes (the front door, clipping, the booths), a hard Split the G, Big Dessie, Seamus O'Shortly and the swarm (2026-10-28)
 
 | Area | Check | How | Result |

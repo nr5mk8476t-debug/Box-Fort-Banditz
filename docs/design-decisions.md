@@ -1545,3 +1545,193 @@ Blake: "i want chat gpt to start seeing the updates too. i want you to start pus
   - that round's screenshots in `screenshots/<round>/`.
 - **The file cap:** the 100-file cap now counts code and docs only. `CHANGELOG.md` and `screenshots/` sit outside it, because Blake chose screenshots knowing they'd push past it.
 - **Status:** the first push is waiting on the repo being created on GitHub and connected to the Claude session. Until then every update is committed locally as usual, and the history is pushed in one go once it's connected.
+
+## R12.3: pool and darts upstairs at THE SOGGY SHAMROCK, and one 8-minute scavenge (Blake, 2026-11-06)
+
+Blake: "make the upstairs somewhere my friends and I actually want to spend time... play pool and darts, watch each other, and enjoy the room." Delivered in stages: inspect, propose and ask; fix the room; pool; darts; multiplayer and interruptions; polish.
+
+### Stage 1: what was there (from the code and from eye height)
+
+Nothing was playable. The tables and booths were decoration, with "coming soon" signs.
+
+**Pool:**
+- **Balls:** 110 mm across, twice the real size.
+- **Pockets:** flat black discs painted on top of the rail.
+- **Lamps:** 3.3 m up, under a 4.25 m ceiling.
+- **Gap between the tables:** 3.1 m, too tight for two full cues at once.
+
+**Darts:**
+- **Board:** a correct 451 mm board, but sitting in a 3 m arcade ring of red and cream with 30 bulbs.
+- **Bull rings:** about 60% too big.
+- **Throwing distance:** the oche was 2.37 m from the wall, not from the board's face, so it was 16.5 cm short.
+- **Screen:** a magenta "BULLSEYE BAR" screen.
+
+**Also:** the jukebox's name plate faced the wall, so it read backwards.
+
+### Blake's decisions (asked as numbered questions with recommendations)
+
+- **One 8-minute scavenge** (Blake: "instead of a day cycle, then a night cycle... day turning into night, 8 minutes"):
+  - about 5.5 min of day, a 30 s sunset you keep playing through, then 2 min of night;
+  - no city wipe at dusk, and nothing lost at sunset;
+  - fresh x2 loot appears as night falls;
+  - raids, double heat and the tougher cops come with the night.
+- **Pool:**
+  - power: hold the click, pull back to draw the cue, let go to strike;
+  - ball in hand: behind the baulk line;
+  - potting the other player's ball is a foul (two visits).
+- **Darts:**
+  - Blake: "a darts match should only go for a minute or two", so the game is 301, double out, one leg;
+  - Shift steadies your hand, and each pint adds 15% sway (up to +75%).
+- **Interruptions:**
+  - last orders 90 s before the end of the scavenge (no new games after that);
+  - anything unfinished at sunrise is called off and the stakes refunded;
+  - a dropped player's seat is held 45 s, then the game is called off.
+- **NPC bets:** up to $20 a game, with a $40 kitty per NPC per cycle, so they can't be farmed.
+- **The file cap:** `docs/code-snapshot.md` deleted (a stale Phase 4.5 copy of the source). Two tiny test files merged into their neighbours.
+
+### The room (stage 2)
+
+**The pool tables:**
+- moved apart to x −81.6 / −76.65, giving 3.75 m between them and about 2.2 m to each wall;
+- a layout test sweeps a 1.45 m cue room round each table at elbow height;
+- tables not shrunk.
+
+**The pool tables, rebuilt as UK 7 ft pub tables**, using the same numbers as the simulation (`POOL` in `shared/src/pubgames.ts`):
+- **sizes:** a 1.83 × 0.91 m bed, 2" balls and a 48 mm cue ball;
+- **pockets:** an 86 mm corner mouth and a 95 mm middle mouth;
+- **cushions and jaws:** drawn from the simulation's own cushion segments;
+- **pockets you can see into:** holes cut in the cloth, leather cups and lips, and dull brass caps;
+- **the cabinet:** a ball-collection window at the foot end (potted balls line up in it), a coin mech, a plinth, turned legs and mother-of-pearl sights;
+- **the lamp:** a three-shade green-and-brass billiard lamp, 1.12 m off the cloth.
+  - The light pool is baked into the cloth texture, because a real light would make every material's shader heavier.
+
+**Round the tables:**
+- a spectators' ledge on the snug wall, with beer mats (no drink near the cloth);
+- a cue rack with a short cue, chalk and the brush;
+- live chalk scoreboards behind each table;
+- the house rules, four league photos and a trophy shelf with a pennant;
+- worn boards round the tables;
+- owner's notices: "No drink on the cloth. The cloth has suffered enough." and "Lost a bet? Seamus accepts gold. Hughie accepts excuses."
+
+**The darts booths** keep the Flight Club layout (walled booths, screens either side, the ledge behind), with a pub oche instead of an arcade:
+- **the board:** drawn by `drawDartboard` from `DARTS`, the same numbers `dartScore` hit-tests with, and checked in a screenshot (20 at the top, 6 right, 3 bottom, 11 left);
+- **the cabinet:** mahogany, its doors folded open, with chalkboards on the doors that chalk up each player's running score live;
+- **lighting:** two brass picture lights instead of the bulb ring;
+- **the scoreboard:** a mahogany-framed board in bottle green and cream;
+- **the side screens:** leaded glass (amber, a few green and oxblood quarries) instead of "Three Darts · good luck" stars, and no bulbs;
+- **the oche:** a flush brass toe-bar, its front edge exactly 2.37 m from the board's face and 1.73 m below the bull, with a worn runner;
+- **notices:** "Darts are for the board. Not for settling arguments." and "Mind the gap: 2.37 m. We measured. Twice."
+
+**Checking the board's ink outline:** the board cylinder's ink outline stood 4 mm proud of its face and hid the board texture. The cylinder now has no outline.
+
+**Frame rate:** an identical before/after comparison (the pre-R12.3 build served next to the new one, the same views in the same order) gave the same fps within noise.
+
+**Measured references:**
+- the WDF ring sizes: bull 12.7 mm, 25 ring 31.8 mm, treble wire 107.4 mm, double 170 mm, 8 mm beds;
+- WEPF and retailer specs for a 7 ft UK bed (1.83 × 0.91 m).
+- **Approximate, not an official template:** the pocket mouths (about 1.7 and 1.85 ball widths). The WEPF template itself wasn't published in what I could find.
+
+### Pool (stage 3)
+
+**The simulation:**
+- `PoolSim` is deterministic 2D: a fixed 1/240 s step, plus sub-steps so a ball never moves more than a quarter of its radius at a time.
+- It uses only + − × ÷ and sqrt, so every client replays a shot exactly from (start balls, direction, speed).
+- It covers equal-mass ball collisions (restitution 0.94), cushions and jaws as segments (0.72), rolling friction plus a little drag, and pocket capture past the mouth.
+
+**How a shot is shared:**
+- the host checks the shot, simulates it and stores it on the table's prop note;
+- clients replay it in step with the host's traffic-light clock;
+- the settled positions are the truth;
+- anyone who joins mid-shot fast-forwards to catch up.
+
+**Bug found in play, fixed:**
+- **The bug:** on a slow machine the game clock runs slower than real time. The client replayed shots by frame time, finished early, thought the balls had stopped, and its next shot was refused.
+- **The fix:** the replay never runs ahead of the host's clock, and "rolling" means the host still has the shot.
+
+**House rules (`poolResolve`):** "our house rules", traditional pub blackball, simplified.
+
+| Situation | Rule |
+|---|---|
+| Break | Taken from behind the baulk line. Pot a ball or drive at least 2 balls to a cushion; otherwise it's a foul. |
+| Black potted on the break | Re-rack; the same player breaks again. |
+| Groups | The first legal pot after the break decides. Break pots don't. If both colours go down, the table stays open. |
+| First contact | Your own colour (any colour on an open table, but not the black); the black once you've cleared your colour. There's no cushion rule. |
+| Foul | Two visits to the opponent. A visit lasts while you keep potting. You lose any visits you have left if you foul. Two visits still apply when you're on the black. |
+| White potted | Foul. The opponent places the cue ball behind the baulk line. |
+| Their ball potted | Foul, and the ball stays down. |
+| The black | You lose if it goes down early, with the white, on a foul, or on the same shot as your last colour. You win if it goes down legally. |
+| Shot clock | 40 s. Running out is a foul; two in a row and you forfeit. A whole game is capped at 15 min, then called off. |
+
+**Controls:**
+- **Joining:** E at a table opens a keyboard menu: play HUGHIE or wait for a mate, with A/D to change the stake.
+- **Your turn:** you crouch behind the cue ball, 0.36 m above the cloth. The camera slides in rather than going through a wall, a person or furniture.
+  - Space stands you up. With ball in hand, you place the white behind the line first.
+- **Aim:** move the mouse; hold Shift for fine aim.
+- **The guide:** a line to the first ball, a ghost ball, and short stubs for where both go. There's no cushion maths.
+- **Shooting:** hold the click and pull back (the cue draws back and a meter fills), let go to strike; right-click cancels.
+- **While you're at the table:** the mouse, its buttons and the keys all go to the game, so you can't punch, throw or walk off by accident. Being hit puts you back to normal controls.
+- **Sound and rolling:** restrained cue, ball, cushion and pocket sounds. Balls roll by distance over radius, and each has a maker's dot so you can see it turn (the white has red spots).
+
+**HUGHIE** (the regular who watched the pool) uses the same shot system:
+- he picks a ball and pocket he can actually pot, through the ghost-ball spot and a clear path, aiming for the middle of the pocket's mouth;
+- with no pot on, he plays a safety (rolls up to his nearest ball);
+- his errors: about 0.3° of aim and ±10% power. That pots about 3 in 5 of the pots he goes for; 0.8° only potted 1 in 5;
+- he takes 2–4 s to think, says the odd line, and walks round the table, not through it.
+
+### Darts (stage 4)
+
+**Scoring:**
+- `dartScore(u, v)` hit-tests in metres from the bull, using the same numbers the board is drawn from.
+- A dart exactly on a ring wire counts for the ring nearer the bull; exactly on a segment wire, for the segment clockwise of it.
+- Outside the double ring is a miss, and the dart sticks in the surround. There are no bounce-outs, and darts never deflect each other.
+
+**The rules (301, double out):**
+- three darts a visit; the bull is 50 and counts as a double;
+- **bust:** going below 0, leaving 1, or reaching 0 without a double. A bust puts the score back to the start of the visit, ends the visit, and says why;
+- a checkout ends the leg on that dart;
+- `checkout()` gives the standard fewest-darts routes, for the hint and for BIG DINNY.
+
+**Aiming:**
+- At the oche the view narrows: the board is about half the screen's height, with the cabinet and its chalk doors either side.
+- Moving the mouse moves a ring. Your hand's sway is two slow sine pairs, about ±12 mm.
+- **The ring is exactly where the dart lands.** There's no hidden spread.
+- **Steadying:** hold Shift to cut the sway to 40% for 2.5 s; after that your hand shakes (150%), and it recharges in 2 s.
+- **Pints:** each adds 15% sway, up to +75%.
+- **Throwing:** a click throws. The dart flies for 0.2 s and sticks where the ring was.
+- **Score feedback:** the score flashes on the scoreboard; busts are explained in words.
+- **The clock:** 20 s a dart. A whole visit thrown by the clock forfeits the game.
+
+**BIG DINNY** (the bearded regular at the darts' high table):
+- aims for the treble 20 to score, or the first dart of a checkout route, or sets up a good double;
+- his darts land with an 18 mm spread, a 3-dart average of about 57 when aiming at the treble 20 (measured over 3,000 darts): a decent pub player.
+
+### Multiplayer and interruptions (stage 5)
+
+**The stations:**
+- four stations (`pooltable1/2`, `dartsoche1/2`), each a prop whose note carries the station's whole state as JSON;
+- so spectators, late joiners and reloads get everything: seats, scores, the balls or the darts already in the board, and any shot mid-roll.
+
+**What the host controls, and what it refuses:**
+- the host controls seats, turns, the simulation, impacts, scores and money;
+- it refuses spectators, out-of-turn and duplicate actions, bad values, and a second game for anyone already playing;
+- refused actions are explained to the player ("Not your turn.", "Wait for the balls to stop.").
+
+**Bets:**
+- both stakes are held once, when the second player joins;
+- the winner gets the pot exactly once, and a called-off game refunds each stake exactly once;
+- **bug found by the online test, fixed:** a game going when the host started the match was refunded after the match had reset everyone's cash, so the stakes leaked into the match. It's now called off before the reset.
+
+**Interruptions:**
+- **Walking away:** going downstairs, or more than 30 m from your station, gives you 10 s to come back, then you forfeit. Fetching a pint from the island bar is fine; 12 m wasn't, so it was raised.
+- **Arrest:** you forfeit.
+- **Knocked down:** you're dropped out of the aiming view and your clock keeps running.
+- **A dropped connection:** the seat and its clock are held for 45 s, then the game's called off.
+- **The 8-minute scavenge:** games run through sunset and night; last orders 90 s from the end; at sunrise games are called off and refunded; at a new cycle the NPC kitties refill.
+- **No safe zone:** the pub isn't one. Seamus's swarm still deals with anyone who starts trouble.
+
+### Files
+
+- `shared/src/pubgames.ts`: the geometry, the simulation, the house rules, 301, NPC play and the stations.
+- `client/src/game/pubGames.ts`: the textures, the live games and the controls.
+- `shared/test/pubgames.test.ts`: the tests.
+- **Changed:** the World glue (`world.ts`), the layout (`city.ts`), the static room (`cityRenderer.ts`), input capture (`input.ts`), the scene hooks (`arenaScene.ts`), the prompt and test hooks (`main.ts`), the 8-minute cycle (`match.ts`, `nightRenderer.ts`, HUD and banners), and the sounds.
