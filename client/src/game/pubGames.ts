@@ -166,10 +166,12 @@ export class PubGamesView {
   private marker: TransformNode | null = null; private thrownN = -1; private thrownAt = 0; private fly: { st: Station; k: number; t: number; u: number; v: number; from: Vector3 } | null = null;
   private fov = 0;
   // the menu
-  private menu = { st: "", stake: 1, vs: "npc" as "npc" | "mate", confirm: false };
+  private menu = { st: "", stake: 0, vs: "npc" as "npc" | "mate", confirm: false };
   private hud: HTMLDivElement; private menuEl: HTMLDivElement;
   private ctx: PgCtx = { me: "", x: 0, y: 0, z: 0, clock: 0, pints: 0, tipsy: 0, others: [], hurt: false };
   private lastTurnMine = new Map<string, boolean>();
+  /** (tests: scenery screenshots) no HUD panel, no stepping up when your turn comes round */
+  quiet = false;
   /** (tests) the last thing the host told me */
   lastMsg = "";
   constructor(private scene: Scene, private arena: ArenaLayout, private hooks: PgHooks) {
@@ -252,7 +254,7 @@ export class PubGamesView {
     // my turn just started: step up to the table / the oche
     const mine = n.ph === "play" && s.seatOf(this.ctx.me) >= 0 && s.turn === s.seatOf(this.ctx.me) && !n.shot;
     const before = this.lastTurnMine.get(id) ?? false; this.lastTurnMine.set(id, mine);
-    if (mine && !before && Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < 7) this.enter(s);
+    if (mine && !before && !this.quiet && Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < 7) this.enter(s);
     if (!mine && this.at === id && this.mode !== "menu" && (this.mode !== "darts" || !this.fly)) this.leave();
     if (was && was.ph === "play" && n.ph === "over") { this.leave(); }
   }
@@ -402,7 +404,8 @@ export class PubGamesView {
     if (n?.ph === "over") { this.hooks.feedback(n.msg || "Game over. The table's free in a moment.", "info"); return; }
     this.openMenu(s);
   }
-  private openMenu(s: Station) { this.menu = { st: s.id, stake: 1, vs: "npc", confirm: false }; this.mode = "menu"; this.at = s.id; this.renderMenu(); }
+  private openMenu(s: Station) { this.menu = { st: s.id, stake: 0, vs: "npc", confirm: false }; // (no stake unless you choose one)
+    this.mode = "menu"; this.at = s.id; this.renderMenu(); }
   private renderMenu() {
     const s = this.st.get(this.menu.st); if (!s) return;
     const n = s.note, me = this.ctx.me, npc = PUB_NPCS[s.kind].name, stakes = PUBGAMES_STAKES;
@@ -583,7 +586,7 @@ export class PubGamesView {
     let s: Station | null = this.st.get(this.at) ?? null;
     if (!s) for (const q of this.st.values()) if (q.seatOf(me) >= 0 && q.note && (q.note.ph === "play" || q.note.ph === "waiting")) s = q;
     if (!s) for (const q of this.st.values()) if (this.near(q, 4.5)) { s = q; break; }
-    if (!s || !s.note || s.note.ph === "free") { this.hud.classList.add("hidden"); document.body.classList.remove("pg-on"); return; }
+    if (!s || !s.note || s.note.ph === "free" || this.quiet) { this.hud.classList.add("hidden"); document.body.classList.remove("pg-on"); return; }
     const n = s.note, seat = s.seatOf(me), mine = seat >= 0 && s.turn === seat;
     const who = n.seats.map((q, i) => `${i === s!.turn && n.ph === "play" ? "▶ " : ""}${esc(q[1])}${q[3] ? " (reconnecting)" : q[4] ? ` (back in ${q[4]}s!)` : ""}`).join("  v  ");
     let line = "", help = "", meter = "";

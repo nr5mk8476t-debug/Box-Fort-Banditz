@@ -1138,6 +1138,7 @@ enterTitle();
     pgDart: (id: string, u: number, v: number) => arena?.pg.testDart(id, u, v),
     pgRing: () => arena?.pg.ring() ?? null,
     pgLeave: () => arena?.pg.leave(),
+    pgQuiet: (on: boolean) => { if (arena) { arena.pg.quiet = on; if (on) arena.pg.leave(); } },
     pintPress: (down: boolean) => arena?.pint.press(down),
     pawnShop: () => { const ps = CITY.pawnShop; if (!ps) return null; const u = CITY.units![ps.unit]; return { ...ps, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, rect: u.rect }; },
     clubDrop: () => { if (local) local.world.clubB = local.world.traffic.clock; else room?.send("dbg", { op: "clubDrop" }); },
