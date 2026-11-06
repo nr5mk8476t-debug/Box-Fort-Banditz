@@ -1904,13 +1904,16 @@ try {
     const pb3 = await H.evaluate(() => window.__bfb.pub()), Y3 = pb3.y2;
     const gpg = (p) => p.evaluate(() => window.__bfb.pg());
     // (wait till the host has really moved you: on this box a guest's teleport can take a while to land)
-    const put = async (p, x, z, yaw) => { for (let k = 0; k < 4; k++) { await p.evaluate(([x, y, z, yaw]) => window.__bfb.teleportY(x, y, z, yaw), [x, Y3 + 0.25, z, yaw]); if (await p.waitForFunction(([x, z]) => { const m = window.__bfb.move(); return Math.hypot(m.x - x, m.z - z) < 0.8; }, [x, z], { timeout: 30000 }).then(() => true, () => false)) return; } };
+    const put = async (p, x, z, yaw) => { for (let k = 0; k < 8; k++) { await p.evaluate(([x, y, z, yaw]) => window.__bfb.teleportY(x, y, z, yaw), [x, Y3 + 0.25, z, yaw]); if (await p.waitForFunction(([x, z]) => { const m = window.__bfb.move(); return Math.hypot(m.x - x, m.z - z) < 0.8; }, [x, z], { timeout: 15000 }).then(() => true, () => false)) return true; } console.log("   (couldn't move", p.label, "to", x.toFixed(1), z.toFixed(1), "- at", JSON.stringify(await p.evaluate(() => { const m = window.__bfb.move(); return [m.x, m.y, m.z].map((v) => +v.toFixed(1)); })), ")"); return false; };
     // (open a game, retrying while the host's view of us catches up; returns what the host last told us)
     const openGame = async (p, st, vs, stake) => { for (let k = 0; k < 4; k++) { await p.evaluate(([st, vs, stake]) => window.__bfb.pgAct({ op: "open", st, vs, stake }), [st, vs, stake]); if (await p.waitForFunction((st) => ["play", "waiting"].includes(window.__bfb.pg()?.[st]?.ph), st, { timeout: 30000 }).then(() => true, () => false)) return ""; } return (await p.evaluate(() => window.__bfb.pg()?.lastMsg)) ?? "?"; };
     // two games at once: Hana v HUGHIE (table 1), Gus v BIG DINNY (oche 1)
-    await put(H, pb3.pools[0].x, pb3.pools[0].z - 1.7, 0); await put(G, pb3.darts[0].oche + 0.6, pb3.darts[0].board.z, -Math.PI / 2);
+    // (both in place first, then both games opened together: on this box a game left waiting while the other player's
+    //  still arriving can be played out by the regular before anyone looks)
+    const placed = (await put(G, pb3.darts[0].oche + 0.6, pb3.darts[0].board.z, -Math.PI / 2)) && (await put(H, pb3.pools[0].x, pb3.pools[0].z - 1.7, 0));
+    ok(placed, "both upstairs (Hana at table 1, Gus at oche 1)");
     await sleep(2500);
-    const why1 = await openGame(H, "pooltable1", "npc", 0), why2 = await openGame(G, "dartsoche1", "npc", 0);
+    const [why1, why2] = await Promise.all([openGame(H, "pooltable1", "npc", 0), openGame(G, "dartsoche1", "npc", 0)]);
     ok(!why1 && !why2, `both games open (${why1 || "ok"} / ${why2 || "ok"})`);
     ok(await G.waitForFunction(() => window.__bfb.pg()?.pooltable1?.ph === "play" && window.__bfb.pg()?.dartsoche1?.ph === "play", null, { timeout: 60000 }).then(() => true, () => false), "two games at once, and each window sees both");
     ok(await H.waitForFunction(() => window.__bfb.pg()?.dartsoche1?.seats.includes("Gus"), null, { timeout: 30000 }).then(() => true, () => false), "Hana's window sees Gus at the oche (a spectator gets the real game)");
@@ -1923,8 +1926,8 @@ try {
     ok(await H.waitForFunction((n) => (window.__bfb.pg().dartsoche1.darts?.n ?? 0) > n, gn, { timeout: 30000 }).then(() => true, () => false), "Gus's dart shows up in Hana's window");
     await H.evaluate(() => window.__bfb.pgAct({ op: "dart", st: "dartsoche1", n: 99, u: 0, v: 0 }));
     ok(await H.waitForFunction(() => /watching/.test(window.__bfb.pg()?.lastMsg ?? ""), null, { timeout: 20000 }).then(() => true, () => false), "a spectator's dart is refused");
-    for (const [p, st] of [[H, "pooltable1"], [G, "dartsoche1"]]) await p.evaluate((s) => window.__bfb.pgAct({ op: "leave", st: s }), st);
-    await H.waitForFunction(() => window.__bfb.pg().pooltable1.ph === "free" && window.__bfb.pg().dartsoche1.ph === "free", null, { timeout: 60000 }).catch(() => {});
+    for (const [p, st] of [[H, "pooltable1"], [H, "pooltable2"], [G, "dartsoche1"]]) await p.evaluate((s) => window.__bfb.pgAct({ op: "leave", st: s }), st);
+    await H.waitForFunction(() => ["pooltable1", "pooltable2", "dartsoche1"].every((k) => window.__bfb.pg()[k].ph !== "play" && window.__bfb.pg()[k].ph !== "waiting"), null, { timeout: 60000 }).catch(() => {});
     // a stakes game between them: $10 each, taken once when Gus joins
     for (const p of [H, G]) await p.evaluate(() => window.__bfb.setCash(50));
     await put(H, pb3.darts[1].oche + 0.6, pb3.darts[1].board.z - 1.2, -Math.PI / 2); await put(G, pb3.darts[1].oche + 0.8, pb3.darts[1].board.z + 1.2, -Math.PI / 2);
