@@ -141,6 +141,8 @@ class Station {
   // darts
   darts: TransformNode[] = []; dartIn: number[] = []; flash = { label: "", t: 0 };
   board: DynamicTexture | null = null; boardSig = "";
+  /** darts: the cabinet doors' chalkboards (each player's score, chalked up as the game goes) */
+  doors: DynamicTexture[] = []; doorSig = "";
   constructor(public id: string, public kind: "pool" | "darts", public idx: number, public g: { x: number; z: number; faceX?: number; oche?: number; by?: number }) {}
   seatOf(pid: string) { return this.note ? this.note.seats.findIndex((s) => s[0] === pid) : -1; }
   get turn() { return this.note?.pool?.turn ?? this.note?.darts?.turn ?? -1; }
@@ -225,6 +227,8 @@ export class PubGamesView {
       d.setEnabled(false); s.darts.push(d); s.dartIn.push(0);
     }
     s.board = this.boardPlane(s.id, 1.4, 0.66, new Vector3(this.wx + 0.095, this.U + 2.56, s.g.z), -Math.PI / 2, 768, 362);
+    // the cabinet's open doors: a chalkboard each, right beside the board (you see them from the oche): live scores
+    for (const e of [-1, 1]) s.doors.push(this.boardPlane(s.id + "door" + e, 0.34, 0.76, new Vector3(this.wx + 0.057, s.g.by!, s.g.z + e * 0.6), -Math.PI / 2, 256, 572));
   }
   private boardPlane(id: string, w: number, h: number, at: Vector3, yaw: number, W: number, H: number) {
     const t = new DynamicTexture("pgBoard" + id, { width: W, height: H }, this.scene, true);
@@ -384,6 +388,8 @@ export class PubGamesView {
     const c = t.getContext() as unknown as C2D, W = t.getSize().width, H = t.getSize().height;
     if (s.kind === "darts") drawDartsBoard(c, W, H, s, n); else drawPoolBoard(c, W, H, s, n);
     t.update();
+    // (the left door is the first player's, the right door the second's: facing the board, -z is on your left)
+    s.doors.forEach((d, k) => { drawDoorScore(d.getContext() as unknown as C2D, 256, 572, n, k, s); d.update(); });
   }
 
   // ---------------------------------------------------------------- using a station (E)
@@ -425,6 +431,7 @@ export class PubGamesView {
 
   /** step up: your shot (the crouch behind the cue ball) or your darts (the oche) */
   private enter(s: Station) {
+    if (this.at === s.id && (this.mode === "darts" || this.mode === "aim" || this.mode === "draw" || this.mode === "place")) return; // (already up)
     this.closeMenu(); this.at = s.id; this.fov = 0;
     if (s.kind === "pool") {
       const P = s.note?.pool; if (!P) return;
@@ -576,7 +583,7 @@ export class PubGamesView {
     let s: Station | null = this.st.get(this.at) ?? null;
     if (!s) for (const q of this.st.values()) if (q.seatOf(me) >= 0 && q.note && (q.note.ph === "play" || q.note.ph === "waiting")) s = q;
     if (!s) for (const q of this.st.values()) if (this.near(q, 4.5)) { s = q; break; }
-    if (!s || !s.note || s.note.ph === "free") { this.hud.classList.add("hidden"); return; }
+    if (!s || !s.note || s.note.ph === "free") { this.hud.classList.add("hidden"); document.body.classList.remove("pg-on"); return; }
     const n = s.note, seat = s.seatOf(me), mine = seat >= 0 && s.turn === seat;
     const who = n.seats.map((q, i) => `${i === s!.turn && n.ph === "play" ? "▶ " : ""}${esc(q[1])}${q[3] ? " (reconnecting)" : q[4] ? ` (back in ${q[4]}s!)` : ""}`).join("  v  ");
     let line = "", help = "", meter = "";
@@ -589,6 +596,7 @@ export class PubGamesView {
         help = this.mode === "place" ? "Ball in hand: move the mouse to place the white behind the line, CLICK to set it" : this.mode === "draw" ? "Pull the mouse back for power, LET GO to strike · right-click: cancel" : "Mouse: aim (SHIFT: fine) · HOLD CLICK and pull back, let go to strike · SPACE: stand up · E: step back";
         if (this.mode === "draw") { const p = this.drawD / 0.3; meter = `<div class="pg-meter"><i style="width:${Math.round(p * 100)}%"></i></div>`; }
       } else if (this.at === s.id) {
+        const D = n.darts; if (D) { const ck = checkout(D.sc[D.turn], 3 - D.d.length); line += `<br><b>${n.seats.map((q, i) => `${esc(q[1])} ${D.sc[i]}`).join("  ·  ")}</b>  ·  this visit: ${D.d.map((d) => d[2]).join(" ") || "-"}${ck ? `  ·  <span class="pg-ck">checkout ${ck.join(" ")}</span>` : ""}`; }
         help = "Mouse: aim · the ring is where the dart lands · HOLD SHIFT to steady your hand · CLICK to throw · E: step back";
         const st = this.steady; meter = `<div class="pg-meter steady"><i style="width:${Math.round((st.on ? Math.max(0, 1 - st.t / 2.5) : st.cool > 0 ? 1 - st.cool / 2 : 1) * 100)}%"></i></div>`;
       } else if (mine) help = `E at the ${s.kind === "pool" ? "table" : "oche"}: your ${s.kind === "pool" ? "shot" : "throw"}`;
@@ -596,7 +604,8 @@ export class PubGamesView {
     const html = `<div class="pg-line">${line}</div>${help ? `<div class="pg-help">${help}</div>` : ""}${meter}`;
     if (this.hud.innerHTML !== html) this.hud.innerHTML = html;
     this.hud.classList.remove("hidden");
-    this.hud.classList.toggle("top", this.mode === "darts");
+    this.hud.classList.toggle("top", this.active && this.mode !== "menu");
+    document.body.classList.toggle("pg-on", this.active && this.mode !== "menu");
   }
   /** the prompt when you look at a station */
   prompt(id: string): [string, string, string] {
@@ -675,4 +684,28 @@ function drawPoolBoard(c: C2D, W: number, H: number, s: Station, n: Note | null)
   const info = n.ph === "over" ? n.msg : `${P?.brk ? "Break" : P && P.vis > 1 ? "2 visits" : ""}${n.stake ? `   $${n.stake} each` : ""}   ${n.ph === "play" ? n.clock + "s" : ""}`;
   c.fillText(info.slice(0, 44), 24, 270);
   if (n.msg && n.ph === "play") { c.fillStyle = "#ffe9a8"; c.fillText(n.msg.slice(0, 44), 24, 310); }
+}
+
+/** a cabinet door's chalkboard: one player's 301, the running scores chalked down the side as visits come off */
+function drawDoorScore(c: C2D, W: number, H: number, n: Note | null, seat: number, s: Station) {
+  c.fillStyle = "#1e2622"; c.fillRect(0, 0, W, H);
+  c.strokeStyle = "rgba(240,236,224,0.10)"; c.lineWidth = 16; for (let q = 0; q < 5; q++) { c.beginPath(); c.moveTo(q * 60 - 20, H); c.lineTo(q * 60 + 50, 0); c.stroke(); }
+  c.fillStyle = CHALK; c.textAlign = "center";
+  const D = n?.darts, q = n?.seats[seat];
+  if (!n || !D || !q || (n.ph !== "play" && n.ph !== "over")) { c.font = `bold 34px ${HAND}`; c.fillText(seat ? "AWAY" : "HOME", W / 2, 54); c.font = `30px ${HAND}`; c.fillText("301", W / 2, 130); return; }
+  c.font = `bold 32px ${HAND}`; c.fillText(q[1].slice(0, 10).toUpperCase(), W / 2, 50);
+  c.strokeStyle = CHALK; c.lineWidth = 3; c.beginPath(); c.moveTo(20, 70); c.lineTo(W - 20, 70); c.stroke();
+  // the running list (kept per station: each visit's score off, as it happened)
+  const hist = (s as unknown as { hist?: number[][] }).hist ??= [[301], [301]];
+  if (D.sc[0] === 301 && D.sc[1] === 301 && D.n === 0) { hist[0] = [301]; hist[1] = [301]; }
+  for (const k of [0, 1]) if (hist[k][hist[k].length - 1] !== D.sc[k]) hist[k].push(D.sc[k]);
+  const h = hist[seat].slice(-7);
+  c.font = `30px ${HAND}`;
+  h.forEach((v, i) => { const y = 112 + i * 52, last = i === h.length - 1; c.globalAlpha = last ? 1 : 0.7; c.fillText(String(v), W / 2, y); if (!last) { c.beginPath(); c.moveTo(W / 2 - 40, y - 10); c.lineTo(W / 2 + 40, y - 10); c.stroke(); } });
+  c.globalAlpha = 1;
+  if (n.ph === "play" && D.turn === seat) {
+    c.fillStyle = "#ffe9a8"; c.font = `bold 26px ${HAND}`; c.fillText(D.d.map((d) => d[2]).join("  ") || "throwing", W / 2, H - 70);
+    const ck = checkout(D.sc[seat], 3 - D.d.length); if (ck) { c.font = `22px ${HAND}`; c.fillStyle = "#9ae0a8"; c.fillText(ck.join(" "), W / 2, H - 34); }
+  }
+  if (n.ph === "over" && n.win === q[0]) { c.fillStyle = "#ffe9a8"; c.font = `bold 34px ${HAND}`; c.fillText("GAME SHOT", W / 2, H - 50); }
 }

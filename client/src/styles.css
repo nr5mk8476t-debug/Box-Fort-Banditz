@@ -377,4 +377,6 @@ body.night .match-hud .mh-time { color: #bfd0ff; }
 .pg-menu .pg-stake span { padding: 0 5px; opacity: 0.6; } .pg-menu .pg-stake span.on { opacity: 1; color: #ffe9a8; border-bottom: 2px solid #e8c050; }
 .pg-menu small, .pg-menu .pg-foot { color: #c8b890; font-size: 13px; }
 .pg-hud.top { bottom: auto; top: 70px; }
+.pg-hud .pg-ck { color: #9ae0a8; }
+body.pg-on #pockets, body.pg-on #controls-hint { display: none; }
 .pg-hud.hidden, .pg-menu.hidden { display: none; }
