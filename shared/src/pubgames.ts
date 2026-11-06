@@ -87,6 +87,8 @@ export class PoolSim {
   balls: Ball[];
   t = 0;
   log: ShotLog = { first: -1, potted: [], cushionBalls: 0, contact: false };
+  /** (clients: the clicks and thuds; never changes the result) */
+  onHit: ((kind: "ball" | "cushion" | "pocket", speed: number, id: number) => void) | null = null;
   private cushioned = new Set<number>();
   constructor(start: Ball[], dx: number, dz: number, v: number) {
     this.balls = start.map((b) => ({ ...b, vx: 0, vz: 0 }));
@@ -133,6 +135,7 @@ export class PoolSim {
         if (rel > 0) {
           const imp = ((1 + POOL.eBall) / 2) * rel;
           a.vx -= imp * nx; a.vz -= imp * nz; b.vx += imp * nx; b.vz += imp * nz;
+          if (this.onHit) this.onHit("ball", rel, a.id);
           if (a.id === 0 || b.id === 0) { if (this.log.first < 0) this.log.first = a.id === 0 ? b.id : a.id; this.log.contact = true; }
         }
         const push = (rr - d) / 2 + 1e-7;
@@ -148,7 +151,7 @@ export class PoolSim {
       const qx = s.ax + ex * t, qz = s.az + ez * t, dx = b.x - qx, dz = b.z - qz, d2 = dx * dx + dz * dz;
       if (d2 >= r * r || d2 === 0) continue;
       const d = Math.sqrt(d2), nx = dx / d, nz = dz / d, vn = b.vx * nx + b.vz * nz;
-      if (vn < 0) { b.vx -= (1 + POOL.eCush) * vn * nx; b.vz -= (1 + POOL.eCush) * vn * nz; if (b.id !== 0 && !this.cushioned.has(b.id)) { this.cushioned.add(b.id); this.log.cushionBalls++; } }
+      if (vn < 0) { if (this.onHit) this.onHit("cushion", -vn, b.id); b.vx -= (1 + POOL.eCush) * vn * nx; b.vz -= (1 + POOL.eCush) * vn * nz; if (b.id !== 0 && !this.cushioned.has(b.id)) { this.cushioned.add(b.id); this.log.cushionBalls++; } }
       b.x = qx + nx * (r + 1e-7); b.z = qz + nz * (r + 1e-7);
     }
   }
@@ -158,7 +161,7 @@ export class PoolSim {
     const inCorner = (ax - hw) + (az - hl) > -c + 0.9 * r;
     const inMiddle = ax > hw + 0.5 * r && az < m + r;
     const off = ax > hw + 0.2 || az > hl + 0.2; // (can't happen: safety)
-    if (inCorner || inMiddle || off) { b.down = true; b.vx = 0; b.vz = 0; this.log.potted.push(b.id); }
+    if (inCorner || inMiddle || off) { b.down = true; b.vx = 0; b.vz = 0; this.log.potted.push(b.id); if (this.onHit) this.onHit("pocket", 1, b.id); }
   }
 }
 

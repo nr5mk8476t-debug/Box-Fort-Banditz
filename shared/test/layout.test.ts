@@ -777,7 +777,7 @@ test("R12.2b upstairs at THE SOGGY SHAMROCK: from the top of the stairs you can 
   reach((b.minX + b.maxX) / 2 + 0.4, b.minZ - 1.0, "in front of the island bar (its taps)"); reach(b.maxX + 1.1, (b.minZ + b.maxZ) / 2, "the bar's east side");
   reach(b.minX - 1.1, (b.minZ + b.maxZ) / 2, "the bar's west side"); reach((b.minX + b.maxX) / 2, b.maxZ + 1.0, "behind the bar (by the flap)");
   reach((p.flap2.minX + p.flap2.maxX) / 2, (p.lane2.minZ + p.lane2.maxZ) / 2 - 1.1, "inside the bar (through the flap)");
-  for (const d of p.darts) { reach(d.oche + 0.3, d.board.z, "on the oche, facing a dartboard"); reach(d.podium.x + 0.6, d.podium.z + 0.2, "at the scoring podium"); }
+  for (const d of p.darts) { reach(d.oche + 0.3, d.board.z, "on the oche, facing a dartboard"); reach(d.oche + 0.9, d.board.z + 1.6, "waiting your turn in the booth (R12.3)"); }
   for (const q of p.pools) { reach(q.x - q.w / 2 - 0.7, q.z, "beside a pool table (west)"); reach(q.x + q.w / 2 + 0.7, q.z, "beside a pool table (east)"); reach(q.x, q.z - q.d / 2 - 0.7, "at a pool table's end (south)"); reach(q.x, q.z + q.d / 2 + 0.7, "at a pool table's end (north)"); }
   for (const f of p.sofas) reach(f.x - f.w / 2 - 0.6, f.z, "beside a chesterfield");
   for (const rb of p.roundBooths) { reach(rb.x - rb.r - 0.4, rb.z, "in front of a round booth"); reach(rb.x - 0.95, rb.z, "into a round booth, at its table (R12.2c)"); reach(rb.x, rb.z + 0.95, "round the booth's table, by the seat"); }
@@ -801,4 +801,31 @@ test("R12.2b upstairs at THE SOGGY SHAMROCK: from the top of the stairs you can 
   assert.ok(nc.posts!.filter((o) => o.kind === "lep_buddy").every((o) => inRect(p.snug2, o.x, o.z, 0.2)), "round his snug");
   assert.ok(nc.props!.some((o) => o.kind === "seamus"), "a word with Seamus (E)");
   assert.ok(!nc.boxes.some((b) => b.deco === "pubrope"), "the rope's off the stairs");
+});
+
+// R12.3: the games need real room: a full cue's swing round each pool table, a clear line from the oche to the board
+test("R12.3 the Soggy Shamrock games: full-cue room round both pool tables; 2.37 m from the board's face to the oche, 1.73 m to the bull; the lanes clear", () => {
+  useCity("new");
+  const nc = buildTrashington(), p = nc.pub!, Y = p.y2;
+  const solid = (x: number, z: number, y0: number, y1: number, skip: (b: typeof nc.boxes[number]) => boolean) =>
+    nc.boxes.some((b) => !skip(b) && b.y + b.h / 2 > y0 && b.y - b.h / 2 < y1 && inFoot(b, x, z, 0));
+  for (const q of p.pools) {
+    // the shooter and the cue (butt end ~1.45 m out from the rail at elbow height) never meet a wall or furniture
+    const hw = q.w / 2, hd = q.d / 2;
+    for (let a = 0; a < 360; a += 5) {
+      const u = (a * Math.PI) / 180, dx = Math.sin(u), dz = Math.cos(u);
+      const t = Math.min(Math.abs(hw / (dx || 1e-9)), Math.abs(hd / (dz || 1e-9)));
+      for (const out of [0.3, 0.8, 1.45]) {
+        const x = q.x + dx * (t + out), z = q.z + dz * (t + out);
+        assert.ok(!solid(x, z, Y + 0.85, Y + 1.4, (b) => b.deco === "pooltable" && Math.abs(b.x - q.x) < 0.01), `pool table at x ${q.x}: room for the cue ${out} m out at ${a} deg (${x.toFixed(2)}, ${z.toFixed(2)})`);
+      }
+    }
+  }
+  const [t1, t2] = p.pools; assert.ok((t2.x - t2.w / 2) - (t1.x + t1.w / 2) >= 2 * 1.45, "two shooters between the tables never overlap");
+  assert.ok(p.pools.every((q) => q.w > 1.15 && q.d > 2.05), "proper 7 ft cabinets (not shrunk)");
+  for (const d of p.darts) {
+    assert.ok(Math.abs(d.oche - d.faceX - 2.37) < 1e-9, "2.37 m from the board's face"); assert.ok(Math.abs(d.board.y - Y - 1.73) < 1e-9, "1.73 m to the bull");
+    for (let x = d.faceX + 0.05; x < d.oche + 0.6; x += 0.1) for (const dz of [-0.35, 0, 0.35]) assert.ok(!solid(x, d.board.z + dz, Y + 0.2, Y + 2.2, () => false), `the throwing lane is clear at x ${x.toFixed(2)}`);
+  }
+  assert.equal(nc.props!.filter((o) => o.kind === "pooltable").length, 2); assert.equal(nc.props!.filter((o) => o.kind === "dartsoche").length, 2);
 });

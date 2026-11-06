@@ -35,6 +35,9 @@ export class FpInput {
   jailMouse: ((dx: number, dy: number) => void) | null = null;
   /** R12.1: splitting the G: while a pint's up, the left mouse button / SPACE are the gulp (held down = gulping) */
   gulp: ((down: boolean) => void) | null = null;
+  /** R12.3: at a pool table / the oche (or its menu): the mouse, its buttons and the keys all go to the game (no
+   *  punching, throwing or walking off by accident); `key` returns true when it used the key */
+  game: { mouse(dx: number, dy: number): void; button(b: number, down: boolean): void; key(code: string, down: boolean): boolean } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -54,11 +57,13 @@ export class FpInput {
     if (!this.enabled) return;
     if (this.frozen) { if (e.button === 0) this.jailKeys?.("Mouse0"); return; }
     if (this.gulp && e.button === 0) { this.gulp(true); return; }
+    if (this.game) { this.charging = null; this.game.button(e.button, true); return; }
     if (e.button === 0 && this.locked && !this.charging) { this.charging = "mouse"; this.onAction?.("chargeStart", "mouse"); }
     if (e.button === 2) this.onAction?.("special"); // (reserved: does nothing yet)
   };
   private onMouseUp = (e: PointerEvent) => {
     if (this.gulp && e.button === 0) { this.gulp(false); return; }
+    if (this.game) { this.game.button(e.button, false); return; }
     if (e.button === 0 && this.charging === "mouse") { this.charging = null; if (this.enabled) this.onAction?.("chargeEnd", "mouse"); }
   };
   private wheelAcc = 0;
@@ -131,6 +136,7 @@ export class FpInput {
       return;
     }
     if (this.gulp && e.code === "Space") { e.preventDefault(); if (!e.repeat) this.gulp(true); return; }
+    if (this.game && e.code !== "Escape") { if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault(); if (!e.repeat && this.game.key(e.code, true)) return; if (e.repeat) return; }
     this.keys.add(e.code);
     if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
     if (e.repeat) return;
@@ -147,6 +153,7 @@ export class FpInput {
   private onKeyUp = (e: KeyboardEvent) => {
     this.keys.delete(e.code);
     if (this.gulp && e.code === "Space") { this.gulp(false); return; }
+    if (this.game && this.game.key(e.code, false)) return;
     if (e.code === "KeyE" && this.enabled) this.onAction?.("grabEnd");
     if (e.code === "KeyR" && this.enabled) this.onAction?.("robEnd"); // letting go of R stops a hold-up
     if (e.code === "KeyF" && this.charging === "key") { this.charging = null; if (this.enabled) this.onAction?.("chargeEnd", "key"); }
@@ -179,6 +186,7 @@ export class FpInput {
     }
     if (!this.enabled) return;
     if (this.frozen) { this.jailMouse?.(dx, dy); return; } // camera holds still in jail
+    if (this.game) { this.game.mouse(dx, dy); return; } // (R12.3: aiming at the table / the board)
     // 0.0022 rad per pixel at sensitivity 1 feels close to common FPS defaults
     const k = 0.0022 * settings.mouseSensitivity;
     this.yaw += dx * k;
@@ -197,6 +205,7 @@ export class FpInput {
   axes(): Axes {
     if (this.frozen) return { mx: 0, mz: 0, sprint: false, jump: false, crouch: false, dodge: false }; // jailed: nothing moves you
     if (this.override) return this.override;
+    if (this.game) return { mx: 0, mz: 0, sprint: false, jump: false, crouch: false, dodge: false }; // (R12.3: you stand still to play)
     if (!this.enabled) return { mx: 0, mz: 0, sprint: false, jump: false, crouch: false, dodge: false };
     const mz = (this.down("KeyW", "ArrowUp") ? 1 : 0) - (this.down("KeyS", "ArrowDown") ? 1 : 0);
     const mx = (this.down("KeyD", "ArrowRight") ? 1 : 0) - (this.down("KeyA", "ArrowLeft") ? 1 : 0);

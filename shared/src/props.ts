@@ -36,7 +36,7 @@ const REFILL: Record<PropKind, number> = {
   glasscounter: 1e9, // (R7: fixed at dawn)
   door: 1e9, // (R8: a door stays how it's left; all shut at dawn)
   dealgoods: 0,
-  pinttap: 0, pubboard: 0, seamus: 0, jukebox: 0, // (R12.1: the taps never run dry; R12.2c: Seamus is always in)
+  pinttap: 0, pubboard: 0, seamus: 0, jukebox: 0, pooltable: 0, dartsoche: 0, // (R12.1: the taps never run dry; R12.2c: Seamus is always in)
 };
 /** How far a prop's surface is from its centre (for punch / use reach). Breakables use their box (hw/hd) instead. */
 export const PROP_RADIUS: Record<PropKind, number> = {
@@ -46,7 +46,7 @@ export const PROP_RADIUS: Record<PropKind, number> = {
   vaultdoor: 1.1, depositbox: 0.3, nose: 0.5, stash: 0.3,
   podium: 0.4, cloakroom: 0.6, dessertcart: 0.6, piano: 0.9, chefstable: 0.6, kitchen: 0.8,
   clubrope: 0.4, mocktail: 0.8, djdecks: 0.9, clubbar: 1.2, clubsafe: 0.45, rider: 0.6, lockers: 0.9, sortbin: 0.9, vipbooth: 0.8, pawncounter: 0.9, pawncase: 0,
-  toilet: 0.45, celldoor: 0.9, glasscounter: 0, door: 0, dealgoods: 0.18, pinttap: 0.5, pubboard: 0, seamus: 0.5, jukebox: 0.45,
+  toilet: 0.45, celldoor: 0.9, glasscounter: 0, door: 0, dealgoods: 0.18, pinttap: 0.5, pubboard: 0, seamus: 0.5, jukebox: 0.45, pooltable: 0, dartsoche: 0,
 };
 export const SMASHABLE = new Set<PropKind>(["phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank", "deli", "pawncase", "glasscounter"]);
 /** C5a: the lobby's mini-game machines (E to play) */
@@ -72,7 +72,7 @@ export function propNearest(d: PropDef, x: number, z: number): { x: number; z: n
 export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "pizzacart", "gelato", "ricordi", "depositbox", "stash", "cloakroom", "dessertcart", "chefstable", "kitchen",
   "clubbar", "rider", "lockers", "sortbin", "vipbooth"]);
 /** C5c.3: E on these does something of its own: pay Big Crunch's cover, hijack the DJ's decks, sell to Sal, the pawn case */
-export const CLUB_USE = new Set<PropKind>(["clubrope", "mocktail", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door", "dealgoods", "pinttap", "seamus", "jukebox"]);
+export const CLUB_USE = new Set<PropKind>(["clubrope", "mocktail", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door", "dealgoods", "pinttap", "seamus", "jukebox", "pooltable", "dartsoche"]);
 /** R11.4: a one-way fire door swings shut this long after it opens */
 export const ONE_WAY_SHUT = 3;
 /** R8: NPCs doing these don't open doors (standing at a post, down, sitting on someone) */
@@ -304,6 +304,7 @@ export class PropSystem {
     if (d.kind === "pinttap") { this.w.buyPint(p); return; } // (R12.1)
     if (d.kind === "seamus") { this.w.talkSeamus(p); return; } // (R12.2c)
     if (d.kind === "jukebox") { this.w.jukeboxNext(p); return; } // (R12.2b)
+    if (d.kind === "pooltable" || d.kind === "dartsoche") return; // (R12.3: E opens the game's menu on the client; it sends "pg" actions)
     if (d.kind === "pawncounter") { this.w.pawn.fence(p, d.shop ?? -1); return; } // (R7: which pawn shop's till)
     if (d.kind === "toilet") { this.w.flush(p); return; } // (R6)
     if (d.kind === "dealgoods") { this.w.buyDeal(p, d.sell ?? "zoomies"); return; } // (R11.4)
@@ -611,7 +612,7 @@ export class PropSystem {
 
   stateOf(id: string): { ready: boolean; alarm: boolean; note: string } {
     const ps = this.props.get(id)!;
-    return { ready: ps.ready, alarm: ps.alarmT > 0, note: ps.def.kind === "pawncase" ? this.w.pawn.caseNote() : ps.def.kind === "pubboard" ? this.w.pubBoardNote() : ps.def.kind === "jukebox" ? this.w.jukeNote() : "" };
+    return { ready: ps.ready, alarm: ps.alarmT > 0, note: ps.def.kind === "pawncase" ? this.w.pawn.caseNote() : ps.def.kind === "pubboard" ? this.w.pubBoardNote() : ps.def.kind === "jukebox" ? this.w.jukeNote() : ps.def.kind === "pooltable" || ps.def.kind === "dartsoche" ? this.w.pubGames.note(ps.def.id) : "" };
   }
 }
 

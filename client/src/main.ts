@@ -822,7 +822,7 @@ function updateHud(a: ArenaScene) {
   const tagT = a.tagTarget, tagHolding = a.throwCharge >= 0 && !!tagT && a.canUses > 0;
   const at = a.arrestTarget;
   const cellUse = jailed && !a.lock.open && ut && (ut.kind === "toilet" || ut.kind === "celldoor") ? ut.kind : ""; // (R6: the holding cell)
-  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
+  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
     const key = document.createElement("span"); key.className = "key"; key.textContent = keyText; if (!keyText) key.style.display = "none";
@@ -863,6 +863,8 @@ function updateHud(a: ArenaScene) {
     // R11: NEON FEVER DREAM's rope and bar
     else if (!t && ut && ut.kind === "clubrope" && a.arenaLayout.fever) simple("E", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? " VIP: walk in " : " Pay the cover: ", a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "FREE" : `$${FEVER.cover}`, a.myAura >= FEVER.vipAura || a.carryingType("vip_wristband") ? "the bouncer lifts the rope for you" : `a stamp on your hand till dawn (VIPs free: ${FEVER.vipAura}+ aura)`);
     else if (!t && ut && ut.kind === "pinttap") simple("E", " A pint of GUZZLE'S: ", `$${PUB.price}`, a.pubInfo().pints >= PUB.cutoff ? "Fergal's cut you off till you sober up" : `then split the G: $${PUB.prize} if you nail it`); // (R12.1)
+    else if (a.pg.active) prompt.classList.add("hidden"); // (R12.3: at the table / the oche: the game's own panel says what's what)
+    else if (!t && ut && (ut.kind === "pooltable" || ut.kind === "dartsoche")) { const [v, n, m] = a.pg.prompt(ut.id); simple("E", v, n, m); } // (R12.3: not while you're aiming)
     else if (!t && ut && ut.kind === "jukebox") simple("E", " Next tune on ", "the Jukebox", `now playing "${JUKEBOX.tunes[a.jukeTune] ?? ""}" (it's free: the coin slot's been broken for years)`); // (R12.2b)
     else if (!t && ut && ut.kind === "seamus") simple("E", " Have a word with ", "Seamus O'Shortly", `he runs the place. Bring him what he's after for a pot of gold; rate high enough (${SEAMUS.tipAura}+ aura) and he'll give you tips. Start trouble and his lads swarm you.`); // (R12.2c)
     else if (!t && ut && ut.kind === "mocktail") simple("E", " Order a mocktail: ", `$${FEVER.mocktail}`, `glowing, silly, totally alcohol-free: ${FEVER.boost} s of dance energy (stamina refills fast)`);
@@ -1127,6 +1129,15 @@ enterTitle();
     fever: () => CITY.fever ?? null, // (R11)
     pub: () => CITY.pub ?? null, // (R12.1)
     pubInfo: () => arena?.pubInfo() ?? null,
+    // R12.3: pool and darts: what each station shows; act as this player (open / join / leave a game); take a shot or
+    // throw a dart through the player's own controls (no mouse); the aim ring right now
+    pg: () => arena?.pg.info() ?? null,
+    pgAct: (act: any) => arena?.onAction?.({ a: "pg", ...act }),
+    pgUse: (id: string) => arena?.pg.use(id),
+    pgShot: (id: string, angle: number, power: number, place?: { x: number; z: number }) => arena?.pg.testShot(id, angle, power, place),
+    pgDart: (id: string, u: number, v: number) => arena?.pg.testDart(id, u, v),
+    pgRing: () => arena?.pg.ring() ?? null,
+    pgLeave: () => arena?.pg.leave(),
     pintPress: (down: boolean) => arena?.pint.press(down),
     pawnShop: () => { const ps = CITY.pawnShop; if (!ps) return null; const u = CITY.units![ps.unit]; return { ...ps, x: u.x, z: u.z, doorX: u.doorX, doorZ: u.doorZ, out: u.out, rect: u.rect }; },
     clubDrop: () => { if (local) local.world.clubB = local.world.traffic.clock; else room?.send("dbg", { op: "clubDrop" }); },

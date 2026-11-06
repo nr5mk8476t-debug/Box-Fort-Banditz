@@ -115,7 +115,7 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   // R12.1: THE SOGGY SHAMROCK: the GUZZLE'S taps (E: a pint, then split the G) and the chalkboard of the best splits
   | "pinttap" | "pubboard"
   // R12.2c: SEAMUS O'SHORTLY (E: a word with him: a tip, a job for a pot of gold); R12.2b: the jukebox
-  | "seamus" | "jukebox";
+  | "seamus" | "jukebox" | "pooltable" | "dartsoche";
 export interface PropDef {
   id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
   /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
@@ -785,8 +785,8 @@ export interface PubDef {
    *  pool area (open to the front room) and its two tables (long along z); the lounge: chesterfields and low tables,
    *  round booths, high tables, the second fire and its wing chairs; the jukebox */
   bar2: Rect; lane2: Rect; flap2: Rect; gantry2: Rect; barmaid: { x: number; z: number; yaw: number };
-  darts: { board: { x: number; y: number; z: number }; face: [number, number]; oche: number; booth: Rect; podium: { x: number; z: number }; ledge: Rect }[];
-  poolArea: Rect; pools: { x: number; z: number; w: number; d: number }[];
+  darts: { board: { x: number; y: number; z: number }; face: [number, number]; faceX: number; oche: number; booth: Rect; ledge: Rect }[];
+  poolArea: Rect; pools: { x: number; z: number; w: number; d: number }[]; poolLedge: Rect;
   sofas: { x: number; z: number; w: number; d: number; yaw: number }[]; lowTables: { x: number; z: number; r: number }[];
   roundBooths: { x: number; z: number; r: number; a0: number; a1: number }[]; highTables: { x: number; z: number }[];
   fire2: { x: number; z: number }; wings: { x: number; z: number; yaw: number }[]; jukebox: { x: number; z: number; yaw: number };

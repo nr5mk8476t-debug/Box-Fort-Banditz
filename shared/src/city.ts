@@ -3121,20 +3121,29 @@ export function buildTrashington(): ArenaLayout {
     posts.push({ kind: "barmaid", x: barmaid.x, z: barmaid.z, yaw: barmaid.yaw, y: U });
     for (let x = HB2.minX + 1.1; x < HB2.maxX - 1.0; x += 0.9) if (!taps2.some((t) => t.face[1] && Math.abs(t.x - x) < 0.85)) disc(x, HB2.minZ - 0.5, 0.2, U, 0.72, "table", { hide: true, deco: "barstool2" });
     for (let z = HB2.minZ + 1.2; z < HB2.maxZ - 1.0; z += 0.9) { disc(HB2.minX - 0.5, z, 0.2, U, 0.72, "table", { hide: true, deco: "barstool2" }); if (Math.abs(z - 14.5) > 0.6 && Math.abs(z - 15.2) > 0.6) disc(HB2.maxX + 0.5, z, 0.2, U, 0.72, "table", { hide: true, deco: "barstool2" }); }
-    // ---- the darts: two booths down the west wall, like Flight Club: the board on the wall, stained-glass screens
-    //      either side, the oche 2.37 m out, a scoring podium, a long glowing ledge behind the thrower ----
+    // ---- the darts: two booths down the west wall, like Flight Club: the board in a mahogany cabinet on the back wall,
+    //      stained-glass screens either side, the oche, the drinkers' ledge behind the thrower.
+    //      R12.3: real throwing distances: the board's FACE (on its cabinet, 7 cm off the wall) to the oche's front edge
+    //      is 2.37 m (it was 2.37 m from the wall: 16.5 cm short); the bull 1.73 m up. The podium's gone (the scores
+    //      are on a board over the cabinet) ----
     const darts = [R(IN.minX, IN.minX + 3.0, 8.4, 14.2), R(IN.minX, IN.minX + 3.0, 15.4, 21.2)].map((b) => {
-      const zc = (b.minZ + b.maxZ) / 2;
+      const zc = (b.minZ + b.maxZ) / 2, faceX = IN.minX + 0.07;
       for (const z of [b.minZ, b.maxZ]) wb(b.minX, b.maxX, z - 0.05, z + 0.05, U, U + 2.6, "wall", { hide: true, deco: "dartscreen" });
+      wb(IN.minX, faceX, zc - 0.4, zc + 0.4, U + 1.3, U + 2.15, "shelf", { hide: true, deco: "dartcabinet" });
       const ledge = R(IN.minX + 4.3, IN.minX + 4.9, b.minZ + 1.0, b.maxZ - 1.0);
       wb(ledge.minX, ledge.maxX, ledge.minZ, ledge.maxZ, U, U + 1.05, "table", { hide: true, deco: "dartledge" });
-      const podium = { x: IN.minX + 2.9, z: b.minZ + 0.6 };
-      wb(podium.x - 0.25, podium.x + 0.25, podium.z - 0.2, podium.z + 0.2, U, U + 1.1, "table", { hide: true, deco: "dartpodium" });
-      return { board: { x: IN.minX, y: U + 1.73, z: zc }, face: [1, 0] as [number, number], oche: IN.minX + 2.37, booth: b, podium, ledge };
+      return { board: { x: faceX, y: U + 1.73, z: zc }, face: [1, 0] as [number, number], faceX, oche: faceX + 2.37, booth: b, ledge };
     });
-    // ---- the pool area (back right, open to the front room): two tables, long along z ----
-    const pools = [{ x: -81.3, z: 27.9, w: 1.2, d: 2.2 }, { x: -77.0, z: 27.9, w: 1.2, d: 2.2 }];
-    for (const q of pools) wb(q.x - q.w / 2, q.x + q.w / 2, q.z - q.d / 2, q.z + q.d / 2, U, U + 0.82, "table", { hide: true, deco: "pooltable" });
+    darts.forEach((d, i) => props.push({ id: `dartsoche${i + 1}`, kind: "dartsoche", x: d.oche + 0.3, y: U + 1.0, z: d.board.z, yaw: -PI / 2, hw: 0.45, hd: 1.4 }));
+    // ---- the pool area (back right, open to the front room): two UK 7 ft pub tables, long along z, the baulk end
+    //      towards the room. R12.3: moved apart (3.75 m between them, ~2.2 m to each wall) so two people can shoot at
+    //      once with full-length cues: nobody's butt end meets a wall or the other table's shooter ----
+    const pools = [{ x: -81.6, z: 27.9, w: 1.19, d: 2.11 }, { x: -76.65, z: 27.9, w: 1.19, d: 2.11 }];
+    for (const q of pools) wb(q.x - q.w / 2, q.x + q.w / 2, q.z - q.d / 2, q.z + q.d / 2, U, U + 0.85, "table", { hide: true, deco: "pooltable" });
+    pools.forEach((q, i) => props.push({ id: `pooltable${i + 1}`, kind: "pooltable", x: q.x, y: U + 0.85, z: q.z, yaw: 0, hw: q.w / 2, hd: q.d / 2 }));
+    // the spectators' drinks ledge along the snug wall (drinks well away from the cloth), the cue rack on the back wall
+    const poolLedge = R(POOLA.minX, POOLA.minX + 0.25, 24.6, 31.6);
+    wb(poolLedge.minX, poolLedge.maxX, poolLedge.minZ, poolLedge.maxZ, U + 0.95, U + 1.1, "shelf", { hide: true, deco: "poolledge" });
     // ---- the lounge: two pairs of chesterfields round low tables; two round high-backed booths on the east wall; high
     //      tables by the darts and the pool; the second fire (on the snug's front wall) and its wing chairs; the jukebox ----
     const sofas: { x: number; z: number; w: number; d: number; yaw: number }[] = [], lowTables: { x: number; z: number; r: number }[] = [];
@@ -3148,7 +3157,7 @@ export function buildTrashington(): ArenaLayout {
     //  to the wall and it opens to the room, bigger, with a small table in the middle and room to walk in round it)
     const roundBooths = [13.6, 20.0].map((z) => ({ x: IN.maxX - 2.15, z, r: 2.1, a0: -2.0, a1: 2.0 }));
     for (const b of roundBooths) { for (let q = 0; q < 4; q++) ring(b.x, b.z, b.r - 0.55, b.r, b.a0 + q * ((b.a1 - b.a0) / 4), b.a0 + (q + 1) * ((b.a1 - b.a0) / 4), U, 0.46, "sofa", { hide: true, deco: "roundbooth" }); disc(b.x, b.z, 0.35, U, 0.76, "table", { hide: true, deco: "boothtable" }); }
-    const highTables = [{ x: -96.0, z: 9.6 }, { x: -96.0, z: 14.8 }, { x: -96.0, z: 20.0 }, { x: -83.4, z: 24.4 }, { x: -75.0, z: 24.4 }];
+    const highTables = [{ x: -96.0, z: 9.6 }, { x: -96.0, z: 14.8 }, { x: -96.0, z: 20.0 }, { x: -83.9, z: 24.2 }, { x: -74.7, z: 24.2 }]; // (R12.3: the pool pair out of the shooting room)
     for (const t of highTables) disc(t.x, t.z, 0.32, U, 1.1, "table", { hide: true, deco: "hightable" });
     const FIRE2 = { x: -88.8, z: BW - 0.3 };
     wb(FIRE2.x - 1.4, FIRE2.x + 1.4, BW - 0.55, BW, U, UC, "wall", { hide: true, deco: "chimney3" });
@@ -3158,7 +3167,7 @@ export function buildTrashington(): ArenaLayout {
     wb(JUKE.x - 0.45, JUKE.x + 0.45, BW - 0.62, BW, U, U + 1.6, "shelf", { hide: true, deco: "jukebox" });
     props.push({ id: "jukebox1", kind: "jukebox", x: JUKE.x, y: U + 1.0, z: JUKE.z - 0.3, yaw: JUKE.yaw });
     // a few drinkers up here too: at the darts' high tables, leaning on the bar, watching the pool
-    [{ x: -96.0, z: 10.3, yaw: -PI / 2 }, { x: -95.4, z: 20.4, yaw: -PI / 2 }, { x: -84.3, z: 15.2, yaw: -PI / 2 }, { x: -75.0, z: 25.1, yaw: PI }].forEach((q, k) => posts.push({ kind: "patron", x: q.x, z: q.z, yaw: q.yaw, y: U, v: [2, 4, 5, 7][k] }));
+    [{ x: -96.0, z: 10.3, yaw: -PI / 2 }, { x: -95.4, z: 20.4, yaw: -PI / 2 }, { x: -84.3, z: 15.2, yaw: -PI / 2 }, { x: -74.5, z: 24.9, yaw: -2.6 }] /* (R12.3: BIG DINNY at the darts' high table; HUGHIE by the pool) */.forEach((q, k) => posts.push({ kind: "patron", x: q.x, z: q.z, yaw: q.yaw, y: U, v: [2, 4, 5, 7][k] }));
     // the balcony: French doors in the cut corner, a wrought-iron balcony round the corner and along both fronts a bit
     {
       const L = CH * S2, sd0 = 0.5 - 1.1 / L, sd1 = 0.5 + 1.1 / L;
@@ -3198,7 +3207,7 @@ export function buildTrashington(): ArenaLayout {
       door2: SD, out2: { x: (SD.minX + SD.maxX) / 2, z: P.minZ - 1.3, yaw: 0 },
       bar: HB, flap: FLAP, gantry: GT, lane: LANE, taps, stairs: ST, snugs, fire: FIRE, stage: STAGE, tables, rounds, windowSeat: WS, outside, stools, barman, bays,
       balcony: BAL.parts, balTables, snug2: SNUG2, hall: HALL, seamus: SEAMUS, buddies, dancer: DANCER, snugFire: SNUGFIRE, readers,
-      bar2: HB2, lane2: LANE2, flap2: FLAP2, gantry2: GT2, barmaid, darts, poolArea: POOLA, pools, sofas, lowTables, roundBooths, highTables, fire2: FIRE2, wings, jukebox: JUKE,
+      bar2: HB2, lane2: LANE2, flap2: FLAP2, gantry2: GT2, barmaid, darts, poolArea: POOLA, pools, poolLedge, sofas, lowTables, roundBooths, highTables, fire2: FIRE2, wings, jukebox: JUKE,
     };
   }
 

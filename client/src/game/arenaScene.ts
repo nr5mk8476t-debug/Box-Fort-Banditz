@@ -21,6 +21,7 @@ import { CarRenderer } from "./carRenderer.ts";
 import { CopCarRenderer } from "./copCarRenderer.ts";
 import { LockpickUI, PintUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
+import { PubGamesView } from "./pubGames.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
   footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
@@ -54,6 +55,7 @@ const PROP_NAMES: Record<string, string> = {
   // C5a: the lobby squat
   dummy: "Practice Dummy", throwgame: "THROW-O-MATIC", racegame: "TROLLEY GRAND PRIX",
   // C5b: Chinatown's stalls
+  pooltable: "the Pool Table", dartsoche: "the Oche",
   mocktail: "the Mocktail Bar", pinttap: "the GUZZLE'S Tap", pubboard: "the Chalkboard", seamus: "Seamus O'Shortly", jukebox: "the Jukebox", steamer: "Dumpling Steamer", trinkets: "Souvenir Stall", fishtank: "Seafood Tank",
   // R4: Little Italy's
   pizzacart: "Pizza Cart", gelato: "Gelato Cart", ricordi: "Souvenir Stall", deli: "Deli Counter",
@@ -295,6 +297,8 @@ export class ArenaScene {
   private sirens = new Map<string, Mesh>();
   private propState = new Map<string, boolean>(); // prop id -> ready
   useTarget: UseTarget | null = null;
+  /** R12.3: the pub's games (the tables, the boards, your shots and throws) */
+  pg!: PubGamesView;
   /** a shop till in reach (HOLD R for a hold-up) */
   robTarget: UseTarget | null = null;
   /** seconds left before respawning after a car hit (0 = fine) */
@@ -400,6 +404,8 @@ export class ArenaScene {
     input.jailMouse = (dx, dy) => this.lock.mouse(dx, dy);
     this.pint = new PintUI(document.getElementById("hud") ?? document.body);
     this.pint.onGulp = (hold) => this.onAction?.({ a: "gulp", hold });
+    // R12.3: pool and darts upstairs at the Soggy Shamrock
+    this.pg = new PubGamesView(scene, arena, { act: (a) => this.onAction?.(a as never), feedback: (t, k) => this.onFeedback?.(t, k) });
     this.npcs.pubPosts = (arena.posts ?? []).filter((q) => ["regular", "trad_band", "barman", "patron", "barmaid", "leprechaun", "lep_buddy", "drunk_dancer"].includes(q.kind)); // (R12.1; R12.2: upstairs too)
 
     this.remotes = new RemotePlayers(scene);
@@ -554,6 +560,7 @@ export class ArenaScene {
       this.propsR.sync(id, pv); this.propState.set(id, pv.ready);
       if (pv.note !== undefined && id.startsWith("pubboard")) this.city.setPubBoard(pv.note); // (R12.1: the chalkboard)
       if (pv.note !== undefined && id.startsWith("jukebox")) { const k = Number(pv.note) || 0; if (k !== this.jukeTune) { this.jukeTune = k; this.city.setJukebox(k); } } // (R12.2b)
+      if (pv.note !== undefined && (id.startsWith("pooltable") || id.startsWith("dartsoche"))) this.pg.setNote(id, pv.note, this.match.lightT ?? 0); // (R12.3)
       if (pv.note !== undefined && id.startsWith("pawncase")) { try { this.pawnCase = pv.note ? JSON.parse(pv.note) : []; } catch { this.pawnCase = []; } } // (C5c.3)
       // C4a: smashed things vanish and stop blocking (repaired at dawn)
       const bd = this.brkBox.get(id);
@@ -588,6 +595,7 @@ export class ArenaScene {
     const cam = this.camera.position;
     const gainAt = (x: number, y: number, z: number) => 1 / (1 + Math.hypot(x - cam.x, y - cam.y, z - cam.z) / 8);
     for (const e of events) {
+      if (e.t === "pgShot" || e.t === "pgDart" || e.t === "pgMsg" || e.t === "pgEnd") { this.pg.onEvent(e as never, me); this.evTail.push(e.t + ((e as any).who === me || (e as any).to === me ? "*" : "")); if (this.evTail.length > 30) this.evTail.shift(); } // (R12.3)
       if (e.t === "jukebox" || e.t === "dance" || e.t === "seamus" || e.t === "lepSwarm") { this.evTail.push(e.t + ((e as any).p === me ? "*" : "")); if (this.evTail.length > 30) this.evTail.shift(); } // (for tests)
       switch (e.t) {
         case "grab":
@@ -1302,6 +1310,7 @@ export class ArenaScene {
     }
     if (a === "grab" && this.tug) { this.onAction?.({ a: "tug" }); sfx.tugPull(); this.viewmodel.kick(0.25); return; }
     if (a === "grab") this.updateLookTarget();
+    if (a === "grab" && !this.lookTarget && this.useTarget && (this.useTarget.kind === "pooltable" || this.useTarget.kind === "dartsoche")) { this.pg.use(this.useTarget.id); return; } // (R12.3: its menu, or your shot)
     if (a === "grab" && !this.lookTarget && this.useTarget) {
       const u = this.useTarget;
       if (u.empty && u.kind !== "door") { sfx.full(); /* (R9: an open door is "empty" but E shuts it) */ this.onFeedback?.(u.kind === "washer" || u.kind === "dryer" ? "Already emptied today." : u.kind === "djdecks" ? "The decks are still warm. Give DJ Crunch a minute." : u.kind === "pawncase" ? "The case is smashed. Sal's boarding it up till dawn." : u.kind === "clubsafe" ? "Cleaned out. The takings start again tomorrow." : "Already searched. It'll refill later.", "info"); return; }
@@ -1629,6 +1638,10 @@ export class ArenaScene {
       if (!this.pint.open || !p.taps.some((t) => Math.hypot(t.x - x, t.z - z) < 3.2 && Math.abs(t.y - this.cur.y) < 2.5)) { this.pint.close(); this.input.gulp = null; }
     } else if (this.input.gulp) this.input.gulp = null;
     this.city.updatePub(dt, this.night.level, this.camera.position.x, this.camera.position.z);
+    // R12.3: the games: replay shots, darts in the boards, the scoreboards; your controls when you're up
+    const others: { x: number; y: number; z: number }[] = []; for (const o of this.others.values()) others.push({ x: o.x, y: o.y, z: o.z });
+    this.pg.update(dt, { me: this.myId, x, y: this.cur.y, z, clock: this.match.lightT ?? 0, pints: this.cur.pints ?? 0, tipsy: tipsyAmount(this.cur), others, hurt: this.cur.knockT > 0 || this.jailT > 0 || (this.cur.stunT ?? 0) > 0 });
+    this.input.game = this.pg.active ? this.pg.input : null;
   }
   /** R12.1: for tests: the pint close-up, the session */
   /** R12.2b: the jukebox's tune (from its prop note), how loud it's asked to be here (for tests) */
@@ -1856,7 +1869,9 @@ export class ArenaScene {
     if (this.fortView) this.aimAtFort();
     const co = this.camOverride;
     if (co) { this.camera.position.set(co.x, co.y, co.z); this.camera.rotation.set(co.pitch, co.yaw, 0); }
-    this.viewmodel.setVisible(!this.fortView && !co);
+    const pgc = this.pg.cam; // (R12.3: crouched over the cue ball / steady at the oche)
+    if (pgc && !co) { this.camera.position.set(pgc.x, pgc.y, pgc.z); this.camera.rotation.set(pgc.pitch, pgc.yaw, 0); this.camera.fov = pgc.fov; }
+    this.viewmodel.setVisible(!this.fortView && !co && !pgc);
     if (!Number.isFinite(this.camera.position.y) || !Number.isFinite(this.camera.rotation.z) || !Number.isFinite(this.camera.rotation.x)) {
       // last line of defence: never leave the camera broken
       this.camera.position.set(px, py + PLAYER.eyeHeight, pz);

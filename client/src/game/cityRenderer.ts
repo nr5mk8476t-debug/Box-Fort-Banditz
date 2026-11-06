@@ -7,8 +7,9 @@ import {
   type ShadowGenerator,
 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
-import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
+import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_POCKETS, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
+import { drawDartboard, drawChalkDoor, drawCloth, drawHouseRules, drawLeaguePhoto, notice, wornFloor } from "./pubGames.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
 
 
@@ -4190,6 +4191,7 @@ export class CityRenderer {
     // landing, MAMMY MOLONEY's whiskey snug, the corner balcony
     {
       const U = Y2, UC = P.roofY - 0.35;
+      const wornTex = texMat("worn", 256, 256, (c) => wornFloor(c, 256), 0.25, true); // (R12.3: worn boards where people stand)
       // the partitions: mahogany panelling to the dado on both faces (the walls themselves are red damask)
       for (const b of this.arena.boxes) if (b.deco === "pubwall2" && b.y - b.h / 2 < U + 0.1) {
         const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2, alongX = b.w > b.d;
@@ -4208,7 +4210,6 @@ export class CityRenderer {
       const globe2 = (x: number, z: number, drop: number) => { cyl(0.02, drop, x, UC - drop / 2, z, BRASS, 0, 4); cyl(0.2, 0.08, x, UC - drop - 0.02, z, BRASS, 0.004, 10, 0.12); const g = MB.CreateSphere("pbGlobe2", { diameter: 0.42, segments: 10 }, sc); g.position.set(x, UC - drop - 0.22, z); g.scaling.y = 1.1; globes2.push(g); };
       for (const [x, z] of [[-80, 13.4], [-80, 19.4], [-96, 9.6], [-96, 20.0], [-88.8, 21.0], [-98.5, 25.5], [-89, 28], [-76.2, 9.6], [-76.0, 16.8], [-83.4, 24.4], [-75.0, 24.4], [-95.6, 14.8]]) globe2(x, z, 1.0);
       { const gmat = new StandardMaterial("pbGlobeMat2", sc); gmat.disableLighting = true; gmat.emissiveColor = Color3.FromHexString("#fff6e8"); const gm = Mesh.MergeMeshes(globes2, true, true); if (gm) { gm.material = gmat; gm.parent = this.root; gm.isPickable = false; } }
-      const glowBox = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, rx = 0, rz = 0) => { const m = MB.CreateBox("pbGlowBox", { width: w, height: h, depth: d }, sc); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); return keepM(m, glow(col)); };
       // ---------------------------------------------------------------- THE ISLAND BAR (drawn like the horseshoe), under a
       // carved canopy: a red fascia with gold, ringed top and bottom with warm marquee bulbs, a cream crown above with its
       // own ring of bulbs, brass rods to the ceiling, the pub's name in gold on green both sides; pendants over the counter
@@ -4235,66 +4236,153 @@ export class CityRenderer {
         for (const sx of [-1, 1]) sheet(2.4, 0.46, (sx < 0 ? B2.minX - 0.35 : B2.maxX + 0.35) + sx * 0.05, (cy0 + cy1) / 2, (B2.minZ + B2.maxZ) / 2, sx, 0, nb3);
         for (let x = B2.minX + 1.3; x < B2.maxX - 1.0; x += 1.4) for (const z of [B2.maxZ - 0.4]) { /* (R12.2c: the south row went: it hung through the glass rack) */ cyl(0.015, UC - (U + 2.62), x, (U + 2.62 + UC) / 2, z, BLACK, 0, 4); cyl(0.26, 0.18, x, U + 2.55, z, "#1f4a2e", 0.004, 12, 0.1); gsph(0.12, x, U + 2.45, z, "#ffd890"); }
       }
-      // ---------------------------------------------------------------- THE DARTS: two booths down the west wall, like
-      // Flight Club: panelled mahogany, a red-and-cream ringed board inside a ring of bulbs, a screen over it, stained-glass
-      // screens either side (lit, with bulbs down their posts), the oche glowing on the floor, a scoring podium, the ledge
-      const dartTex = texMat("dartboard3", 256, 256, (c) => { c.fillStyle = "#141010"; c.beginPath(); c.arc(128, 128, 126, 0, 6.3); c.fill(); for (let k = 0; k < 20; k++) { const a0 = (k / 20) * 2 * PI - PI / 20, a1 = a0 + PI / 10; for (const [r0, r1, ca, cb] of [[16, 95, "#141010", "#f4e8c8"], [95, 105, "#c41e1e", "#1f8a3a"], [58, 66, "#c41e1e", "#1f8a3a"]] as [number, number, string, string][]) { c.fillStyle = k % 2 ? ca : cb; c.beginPath(); c.arc(128, 128, r1, a0, a1); c.arc(128, 128, r0, a1, a0, true); c.fill(); } } c.fillStyle = "#1f8a3a"; c.beginPath(); c.arc(128, 128, 16, 0, 6.3); c.fill(); c.fillStyle = "#c41e1e"; c.beginPath(); c.arc(128, 128, 7, 0, 6.3); c.fill(); c.fillStyle = "#e8dcc4"; c.font = "bold 13px Arial"; c.textAlign = "center"; c.textBaseline = "middle"; const nums = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]; nums.forEach((n, k) => { const u = -PI / 2 + (k / 20) * 2 * PI; c.fillText(String(n), 128 + Math.cos(u) * 116, 128 + Math.sin(u) * 116); }); }, 0.45, true);
-      const screenTex = texMat("dartscreen", 512, 288, (c) => { const g = c.createLinearGradient(0, 0, 0, 288); g.addColorStop(0, "#22123a"); g.addColorStop(1, "#0a0614"); c.fillStyle = g; c.fillRect(0, 0, 512, 288); for (const [r2, col] of [[72, "#ff5aa0"], [52, "#fff4f8"], [32, "#ff5aa0"], [12, "#fff4f8"]] as [number, string][]) { c.fillStyle = col; c.beginPath(); c.arc(256, 104, r2, 0, 6.3); c.fill(); } c.fillStyle = "#ffffff"; c.font = "bold 46px Georgia, serif"; c.textAlign = "center"; c.fillText("BULLSEYE BAR", 256, 224); c.fillStyle = "#ffe2a0"; c.font = "bold 26px Georgia, serif"; c.fillText("501 · COMING SOON", 256, 266); }, 0.95);
-      const glassTex = texMat("dartglass", 256, 512, (c) => { c.fillStyle = "#e89a2a"; c.fillRect(0, 0, 256, 512); for (let k = 0; k < 70; k++) { c.fillStyle = `rgba(255,${200 + Math.random() * 55},${120 + Math.random() * 80},${0.15 + Math.random() * 0.2})`; c.fillRect(Math.random() * 256, Math.random() * 512, 30 + Math.random() * 40, 20 + Math.random() * 40); } c.strokeStyle = "#2a1408"; c.lineWidth = 6; for (let y = 120; y <= 512; y += 64) { c.beginPath(); c.moveTo(0, y); c.lineTo(256, y); c.stroke(); } for (const x of [0, 85, 171, 256]) { c.beginPath(); c.moveTo(x, 120); c.lineTo(x, 512); c.stroke(); } c.fillStyle = "#2a1408"; for (let y = 152; y < 512; y += 64) for (const x of [42, 128, 214]) { c.beginPath(); for (let q = 0; q < 10; q++) { const u = -PI / 2 + (q / 10) * 2 * PI, rr2 = q % 2 ? 7 : 17; c.lineTo(x + Math.cos(u) * rr2, y + Math.sin(u) * rr2); } c.fill(); } c.fillStyle = "#f8e8c0"; c.fillRect(10, 10, 236, 100); c.strokeStyle = "#8e1414"; c.lineWidth = 5; c.strokeRect(14, 14, 228, 92); c.fillStyle = "#8e1414"; c.textAlign = "center"; c.font = "italic bold 36px Georgia, serif"; c.fillText("Three Darts", 128, 54); c.font = "italic 24px Georgia, serif"; c.fillText("~ good luck ~", 128, 90); }, 0.8);
+      // ---------------------------------------------------------------- THE DARTS (R12.3 rebuild): two booths down the west
+      // wall (the Flight Club layout kept: walled booths, leaded-glass screens, the drinkers' ledge behind), but a proper pub
+      // oche now: a bristle board (WDF sizes, drawn from the same numbers the scoring uses) in a mahogany cabinet with its
+      // doors open (chalk scores inside), two brass picture lights, a framed scoreboard above, a brass toe-bar 2.37 m from
+      // the board's face, worn boards where people stand. No bulbs, no glow.
+      const boardTex = texMat("dartboardR123", 1024, 1024, (c) => { c.fillStyle = "#121010"; c.fillRect(0, 0, 1024, 1024); drawDartboard(c, 1024); }, 0.6);
+      const doorTex = (k: number) => texMat("dartdoor" + k, 256, 512, (c) => drawChalkDoor(c, k), 0.3);
+      const leadTex = texMat("dartlead", 256, 512, (c) => { c.fillStyle = "#c8862a"; c.fillRect(0, 0, 256, 512); const g = c.createRadialGradient(128, 200, 20, 128, 256, 300); g.addColorStop(0, "rgba(255,226,150,0.55)"); g.addColorStop(1, "rgba(90,40,10,0.35)"); c.fillStyle = g; c.fillRect(0, 0, 256, 512);
+        // leaded diamonds, a few bottle-green and oxblood quarries, a border
+        for (let y = -64; y < 576; y += 64) for (let x = -64; x < 320; x += 64) { const q = ((x + y) / 64) % 5; if (q === 0) { c.fillStyle = "rgba(30,90,50,0.55)"; c.beginPath(); c.moveTo(x + 32, y); c.lineTo(x + 64, y + 32); c.lineTo(x + 32, y + 64); c.lineTo(x, y + 32); c.fill(); } else if (q === 3) { c.fillStyle = "rgba(120,20,20,0.45)"; c.beginPath(); c.moveTo(x + 32, y); c.lineTo(x + 64, y + 32); c.lineTo(x + 32, y + 64); c.lineTo(x, y + 32); c.fill(); } }
+        c.strokeStyle = "#2a1408"; c.lineWidth = 5; for (let k = -10; k < 20; k++) { c.beginPath(); c.moveTo(k * 64, 0); c.lineTo(k * 64 + 512, 512); c.stroke(); c.beginPath(); c.moveTo(k * 64, 0); c.lineTo(k * 64 - 512, 512); c.stroke(); }
+        c.lineWidth = 16; c.strokeRect(8, 8, 240, 496); }, 0.42);
       P.darts.forEach((d, di) => {
-        const b = d.booth, zc = d.board.z, wx = IN.minX, by = d.board.y;
+        const b = d.booth, zc = d.board.z, wx = IN.minX, by = d.board.y, F = d.faceX;
         // the back wall: mahogany panels to 1.2 m, oxblood above, a cornice; the booth's number on it
         sbx(wx, wx + 0.04, U, U + 1.2, b.minZ + 0.06, b.maxZ - 0.06, "mahogany", MAH, 0.006);
         sbx(wx, wx + 0.03, U + 1.2, U + 3.0, b.minZ + 0.06, b.maxZ - 0.06, "panel", "#5a1010", 0.004);
         for (let z = b.minZ + 0.55; z < b.maxZ - 0.3; z += 0.95) sbx(wx + 0.04, wx + 0.06, U + 0.2, U + 1.0, z - 0.33, z + 0.33, "mahogany", "#320e08", 0.003);
         sbx(wx, wx + 0.16, U + 3.0, U + 3.2, b.minZ + 0.06, b.maxZ - 0.06, "mahogany", MAH2, 0.006);
         sheet(1.0, 0.18, wx + 0.17, U + 3.1, zc, 1, 0, texMat("oche" + di, 256, 48, (c) => { c.fillStyle = "#141010"; c.fillRect(0, 0, 256, 48); lettering(c, "OCHE " + (di + 1), 256, 48); }, 0.6));
-        // the board: a mahogany surround, a red ring and a cream ring, the board (1.73 m to the bull), a ring of bulbs
-        cyl(1.5, 0.06, wx + 0.07, by, zc, MAH, 0.006, 28, undefined, 0, PI / 2);
-        cyl(1.25, 0.05, wx + 0.11, by, zc, "#b8141c", 0.004, 28, undefined, 0, PI / 2);
-        cyl(0.98, 0.04, wx + 0.14, by, zc, CREAM, 0.003, 28, undefined, 0, PI / 2);
-        sheet(0.46, 0.46, wx + 0.165, by, zc, 1, 0, dartTex);
-        for (let k = 0; k < 30; k++) { const u = (k / 30) * 2 * PI; gsph(0.07, wx + 0.12, by + Math.sin(u) * 0.69, zc + Math.cos(u) * 0.69, bulb); }
-        // the screen over it, on a bracket
-        box(0.32, 0.06, 0.06, wx + 0.18, U + 2.82, zc, BLACK, 0);
-        box(0.06, 0.56, 0.98, wx + 0.36, U + 2.82, zc, BLACK, 0.006);
-        sheet(0.9, 0.5, wx + 0.42, U + 2.82, zc, 1, 0, screenTex);
-        // the stained-glass screens (both sides of the booth), lit, with a turned post and bulbs down its front
+        // the cabinet: a mahogany box round the board (its back a black surround that catches the strays), the board
+        // itself (451 mm, its face exactly at faceX), the two doors folded flat open with chalk scores inside them
+        const cw = 0.8, ch = 0.85, cy0 = by - ch / 2;
+        sbx(wx + 0.02, F, cy0, cy0 + 0.05, zc - cw / 2, zc + cw / 2, "mahogany", MAH2, 0.006); sbx(wx + 0.02, F, cy0 + ch - 0.05, cy0 + ch, zc - cw / 2, zc + cw / 2, "mahogany", MAH2, 0.006);
+        for (const e of [-1, 1]) sbx(wx + 0.02, F, cy0, cy0 + ch, zc + e * cw / 2 - (e > 0 ? 0.05 : 0), zc + e * cw / 2 + (e < 0 ? 0.05 : 0), "mahogany", MAH2, 0.006);
+        box(0.012, ch - 0.1, cw - 0.1, wx + 0.036, by, zc, "#121010", 0);
+        { const disc = MB.CreateCylinder("pbBoard", { diameter: 0.451, height: 0.04, tessellation: 40 }, sc); disc.rotation.z = PI / 2; disc.position.set(F - 0.021, by, zc); this.add(disc, "#1a1410", 0, false); } // (no ink outline: it stood proud of the face and hid it)
+        sheet(0.451, 0.451, F + 0.001, by, zc, 1, 0, boardTex);
+        for (const e of [-1, 1]) { const z0 = zc + e * cw / 2, z1 = z0 + e * 0.4; sbx(wx + 0.02, wx + 0.05, cy0, cy0 + ch, Math.min(z0, z1), Math.max(z0, z1), "mahogany", MAH2, 0.006); sheet(0.34, 0.76, wx + 0.052, by, (z0 + z1) / 2, 1, 0, doorTex(e > 0 ? 1 : 0)); box(0.03, 0.06, 0.02, wx + 0.06, by, z1 - e * 0.03, BRASS, 0); }
+        // two brass picture lights over the cabinet, angled down at the board (warm, even; no bulbs round it)
+        for (const e of [-0.22, 0.22]) {
+          cyl(0.03, 0.06, wx + 0.05, cy0 + ch + 0.08, zc + e, BRASS, 0.002, 8, undefined, 0, PI / 2);
+          tube([new Vector3(wx + 0.05, cy0 + ch + 0.08, zc + e), new Vector3(wx + 0.3, cy0 + ch + 0.2, zc + e)], 0.012, BRASS, 0.002, 6);
+          const sh = MB.CreateCylinder("pbDartShade", { diameterTop: 0.035, diameter: 0.11, height: 0.09, tessellation: 14 }, sc); sh.rotation.z = 0.85; sh.position.set(wx + 0.31, cy0 + ch + 0.17, zc + e); this.add(sh, "#8a6a22", 0.003, false);
+          { const g = MB.CreateDisc("pbDartLampGlow", { radius: 0.045, tessellation: 14 }, sc); g.rotation.set(0, -PI / 2, -0.72); g.position.set(wx + 0.335, cy0 + ch + 0.14, zc + e); keepM(g, glow("#fff0c8")); }
+        }
+        // the scoreboard over it: a mahogany frame round a bottle-green board (the live scores are drawn on it by the games)
+        sbx(wx + 0.03, wx + 0.09, U + 2.2, U + 2.92, zc - 0.74, zc + 0.74, "mahogany", MAH2, 0.006);
+        box(0.02, 0.05, 1.5, wx + 0.1, U + 2.93, zc, BRASS, 0);
+        // the leaded-glass screens (both sides of the booth), softly lit from behind; turned posts with brass knobs
         for (const z of [b.minZ, b.maxZ]) {
           sbx(wx, wx + 3.0, U, U + 0.9, z - 0.05, z + 0.05, "mahogany", MAH, 0.006);
           sbx(wx, wx + 3.0, U + 2.5, U + 2.62, z - 0.06, z + 0.06, "mahogany", MAH2, 0.006);
           for (let x = wx + 0.75; x < wx + 2.9; x += 0.75) sbx(x - 0.04, x + 0.04, U + 0.9, U + 2.5, z - 0.05, z + 0.05, "mahogany", MAH2, 0.004);
-          for (const nz of [-1, 1]) for (let k = 0; k < 4; k++) sheet(0.67, 1.56, wx + 0.375 + k * 0.75, U + 1.7, z + nz * 0.052, 0, nz, glassTex);
+          for (const nz of [-1, 1]) for (let k = 0; k < 4; k++) sheet(0.67, 1.56, wx + 0.375 + k * 0.75, U + 1.7, z + nz * 0.052, 0, nz, leadTex);
           cyl(0.14, 2.75, wx + 3.0, U + 1.37, z, MAH2, 0.006, 10); ball(0.17, wx + 3.0, U + 2.82, z, BRASS);
-          for (let y = U + 0.35; y < U + 2.5; y += 0.2) gsph(0.07, wx + 3.09, y, z, bulb);
         }
-        // the throwing lane: a dark runner, the oche (a brass bar with a glowing strip), the podium, the ledge
-        box(d.oche - wx + 0.1, 0.006, 1.5, (wx + d.oche) / 2 + 0.05, U + 0.004, zc, "#2a1612", 0);
-        box(0.05, 0.03, 1.0, d.oche, U + 0.015, zc, BRASS, 0); glowBox(0.03, 0.01, 1.0, d.oche + 0.05, U + 0.006, zc, "#ffcf6a");
-        { const q = d.podium; sb(0.48, 1.0, 0.38, q.x, U + 0.5, q.z, "mahogany", MAH, 0.008); box(0.56, 0.05, 0.44, q.x, U + 1.04, q.z, MAH2, 0.004, 0, 0, 0.3); glowBox(0.4, 0.012, 0.3, q.x + 0.01, U + 1.075, q.z, "#7ad8ff", 0, 0.3); box(0.04, 0.6, 0.3, q.x - 0.2, U + 1.35, q.z, BLACK, 0.004); }
+        // the oche: a brass toe-bar (its front edge exactly 2.37 m from the board's face), a dark worn runner up to it
+        box(0.05, 0.03, 0.62, d.oche + 0.025, U + 0.015, zc, BRASS, 0.002);
+        box(d.oche - wx + 0.5, 0.004, 1.1, (wx + d.oche + 0.5) / 2, U + 0.003, zc, "#241008", 0);
+        sheet(1.4, 1.2, d.oche + 0.5, U + 0.006, zc, 0, 0, wornTex).rotation.x = PI / 2;
+        // a notice on the panelling (the owner's)
+        sheet(0.36, 0.26, wx + 0.065, U + 1.62, zc + (di ? -1.7 : 1.7), 1, 0, texMat("dartnote" + di, 256, 184, (c) => notice(c, di ? ["MIND THE GAP", "2.37 m. We measured.", "Twice."] : ["DARTS ARE FOR", "THE BOARD.", "Not for settling", "arguments."]), 0.35));
+        // the ledge behind the thrower: drinks on beer mats, a brass foot rail (no glow)
         { const L = d.ledge; sbx(L.minX - 0.05, L.maxX + 0.05, U + 0.98, U + 1.05, L.minZ, L.maxZ, "mahogany", MAH2, 0.008); sbx(L.minX + 0.06, L.maxX - 0.06, U, U + 0.98, L.minZ + 0.1, L.maxZ - 0.1, "mahogany", MAH, 0.008);
-          glowBox(0.03, 0.03, L.maxZ - L.minZ - 0.1, L.minX - 0.06, U + 1.0, (L.minZ + L.maxZ) / 2, "#ffd890");
           tube([new Vector3(L.minX - 0.18, U + 0.18, L.minZ + 0.1), new Vector3(L.minX - 0.18, U + 0.18, L.maxZ - 0.1)], 0.025, BRASS, 0, 8);
-          for (let z = L.minZ + 0.45; z < L.maxZ - 0.3; z += 0.85) { const x = (L.minX + L.maxX) / 2; cyl(0.085, 0.15, x, U + 1.13, z, "#1b0a06", 0.003, 10, 0.09); cyl(0.095, 0.025, x, U + 1.21, z, "#f2e2bc", 0, 10); }
-          for (let k = 0; k < 3; k++) { cyl(0.012, 0.16, (L.minX + L.maxX) / 2 + 0.12, U + 1.13, L.maxZ - 0.35 + k * 0.03, "#c8c8d0", 0, 4); box(0.05, 0.03, 0.005, (L.minX + L.maxX) / 2 + 0.12, U + 1.22, L.maxZ - 0.35 + k * 0.03, ["#c41e1e", "#1f8a3a", "#e8c050"][k], 0); } }
+          for (let z = L.minZ + 0.45; z < L.maxZ - 0.3; z += 0.85) { const x = (L.minX + L.maxX) / 2; cyl(0.11, 0.004, x, U + 1.052, z, z % 2 > 1 ? "#e8dcc4" : "#1f4a2e", 0, 12); cyl(0.085, 0.15, x, U + 1.13, z, "#1b0a06", 0.003, 10, 0.09); cyl(0.095, 0.025, x, U + 1.21, z, "#f2e2bc", 0, 10); } }
       });
-      // ---------------------------------------------------------------- THE POOL AREA (back right, open to the front room):
-      // two tables (mahogany, green baize, leather pockets, a rack of reds and yellows and the black), a lamp over each, a
-      // cue rack, the chalkboard (WINNER STAYS ON), frames
-      const baize = texMat("baize", 256, 256, (c) => { c.fillStyle = "#1f7a3a"; c.fillRect(0, 0, 256, 256); for (let k = 0; k < 1200; k++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`; c.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); } }, 0.35);
+      // ---------------------------------------------------------------- THE POOL AREA (R12.3 rebuild): two UK 7 ft pub
+      // tables, drawn from the same numbers the simulation uses: a mahogany cabinet on a plinth, cloth with the light pooled
+      // under the lamp, real cushions and jaws, six pockets you can see down into (leather cups, brass corner caps), a
+      // ball-collection window at the foot end, a coin mech; a three-shade billiard lamp low over each (1 m off the cloth).
+      // Round them: the spectators' ledge (drinks well away from the cloth), the cue rack, the live chalk scoreboards, the
+      // house rules, league photos and the trophy shelf, worn boards where people stand.
+      const CL = U + POOL.cloth, hw = POOL.W / 2, hl = POOL.L / 2, CU = POOL.cushion, RL = POOL.rail;
+      const cloth = (() => { const t = new DynamicTexture("pbCloth", { width: 512, height: 1024 }, sc, true); const c = t.getContext() as unknown as CanvasRenderingContext2D; drawCloth(c, 512, 1024); t.hasAlpha = true; t.update(); const m = new StandardMaterial("pbClothMat", sc); m.diffuseTexture = t; m.useAlphaFromDiffuseTexture = false; m.transparencyMode = 1; m.alphaCutOff = 0.5; m.emissiveColor = new Color3(0.42, 0.42, 0.42); m.specularColor = Color3.Black(); m.backFaceCulling = false; return m; })();
+      const cushMat = "#1d6a34", LEATHER2 = "#2a170e";
       for (const PT of P.pools) {
-        sbx(PT.x - PT.w / 2, PT.x + PT.w / 2, U + 0.12, U + 0.7, PT.z - PT.d / 2, PT.z + PT.d / 2, "mahogany", MAH, 0.01);
-        { const g = MB.CreateGround("pbBaize", { width: PT.w - 0.2, height: PT.d - 0.2 }, sc); g.position.set(PT.x, U + 0.82, PT.z); keepM(g, baize); }
-        for (const [x0, x1, z0, z1] of [[PT.x - PT.w / 2, PT.x + PT.w / 2, PT.z - PT.d / 2, PT.z - PT.d / 2 + 0.12], [PT.x - PT.w / 2, PT.x + PT.w / 2, PT.z + PT.d / 2 - 0.12, PT.z + PT.d / 2], [PT.x - PT.w / 2, PT.x - PT.w / 2 + 0.12, PT.z - PT.d / 2, PT.z + PT.d / 2], [PT.x + PT.w / 2 - 0.12, PT.x + PT.w / 2, PT.z - PT.d / 2, PT.z + PT.d / 2]] as [number, number, number, number][]) sbx(x0, x1, U + 0.7, U + 0.86, z0, z1, "mahogany", MAH2, 0.006);
-        for (const [px, pz] of [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]]) cyl(0.11, 0.03, PT.x + px * (PT.w / 2 - 0.1), U + 0.865, PT.z + pz * (PT.d / 2 - 0.1), "#0e0a0a", 0, 10);
-        for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cyl(0.16, 0.14, PT.x + lx * (PT.w / 2 - 0.15), U + 0.06, PT.z + lz * (PT.d / 2 - 0.15), MAH2, 0.004, 8);
-        // the rack (reds and yellows, the black in the middle of the third row) and the white
-        { const z0 = PT.z + 0.45, dd = 0.058; let k = 0; for (let row = 0; row < 5; row++) for (let q = 0; q <= row; q++) { const x = PT.x + (q - row / 2) * dd, z = z0 + row * dd * 0.87, col = row === 2 && q === 1 ? "#0e0a0a" : k++ % 2 ? "#e8c020" : "#c41e1e"; ball(0.055, x, U + 0.85, z, col, 0, 6); } ball(0.055, PT.x, U + 0.85, PT.z - 0.55, "#f4f1ea", 0, 6); }
-        box(0.42, 0.18, 1.6, PT.x, UC - 0.9, PT.z, "#1f4a2e", 0.006); for (const dz of [-0.5, 0, 0.5]) gsph(0.12, PT.x, UC - 1.02, PT.z + dz, "#fff0d0"); for (const dz of [-0.7, 0.7]) cyl(0.015, 0.8, PT.x, UC - 0.45, PT.z + dz, BRASS, 0, 4);
+        const X = PT.x, Z = PT.z;
+        // the plinth, the legs, the cabinet
+        sbx(X - 0.42, X + 0.42, U, U + 0.1, Z - 0.85, Z + 0.85, "mahogany", MAH2, 0.006);
+        for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cyl(0.15, 0.16, X + lx * (PT.w / 2 - 0.13), U + 0.08, Z + lz * (PT.d / 2 - 0.13), MAH2, 0.004, 10);
+        sbx(X - PT.w / 2 + 0.025, X + PT.w / 2 - 0.025, U + 0.16, U + 0.74, Z - PT.d / 2 + 0.025, Z + PT.d / 2 - 0.025, "mahogany", MAH, 0.008);
+        box(PT.w + 0.01, 0.03, PT.d + 0.01, X, U + 0.745, Z, MAH2, 0.004); // (the moulding under the rail)
+        // the cloth (holes at the pockets: you look down into the cups)
+        { const g = MB.CreateGround("pbClothG", { width: POOL.W + 2 * CU, height: POOL.L + 2 * CU }, sc); g.position.set(X, CL, Z); keepM(g, cloth); }
+        // the cushions (cloth-covered rubber along every cushion line) and the jaws, from the simulation's own segments
+        POOL_SEGS.forEach((sg, k) => {
+          const mx = (sg.ax + sg.bx) / 2, mz = (sg.az + sg.bz) / 2, len = Math.hypot(sg.bx - sg.ax, sg.bz - sg.az), yaw = Math.atan2(sg.bx - sg.ax, sg.bz - sg.az);
+          const jaw = k % 7 >= 3;
+          // which way is "behind the cushion" (away from the bed / the pocket's mouth)
+          let ox = sg.bz - sg.az, oz = -(sg.bx - sg.ax); const on = Math.hypot(ox, oz); ox /= on; oz /= on;
+          const ref = jaw ? (Math.abs(mz) < 0.2 ? { x: Math.sign(mx) * (hw + 0.02), z: 0 } : { x: Math.sign(mx) * (hw - POOL.corner / 2 + POOL.jaw / 2), z: Math.sign(mz) * (hl - POOL.corner / 2 + POOL.jaw / 2) }) : { x: 0, z: 0 };
+          if ((mx + ox - ref.x) ** 2 + (mz + oz - ref.z) ** 2 < (mx - ox - ref.x) ** 2 + (mz - oz - ref.z) ** 2) { ox = -ox; oz = -oz; }
+          const th = jaw ? 0.022 : CU;
+          const m = MB.CreateBox("pbCush", { width: th, height: 0.04, depth: len + (jaw ? 0 : 0.004) }, sc); m.position.set(X + mx + ox * th / 2, CL + 0.02, Z + mz + oz * th / 2); m.rotation.y = yaw; this.add(m, cushMat, 0.003, false);
+        });
+        // the wooden rail round the top (gaps at the pockets), mother-of-pearl sights, brass caps at the pockets
+        const ry = CL + 0.0425, rh = 0.015 + 0.04;
+        for (const s2 of [-1, 1]) {
+          for (const [z0, z1] of [[-hl + 0.07, -0.07], [0.07, hl - 0.07]]) sbx(X + s2 * (hw + CU) - (s2 < 0 ? RL : 0), X + s2 * (hw + CU) + (s2 > 0 ? RL : 0), ry - rh / 2 - 0.02, ry + 0.005, Z + z0, Z + z1, "mahogany", MAH2, 0.006);
+          sbx(X - hw + 0.07, X + hw - 0.07, ry - rh / 2 - 0.02, ry + 0.005, Z + s2 * (hl + CU) - (s2 < 0 ? RL : 0), Z + s2 * (hl + CU) + (s2 > 0 ? RL : 0), "mahogany", MAH2, 0.006);
+          for (const f of [0.25, 0.5, 0.75]) { for (const zz of [-hl + f * (hl - 0.07), 0.07 + f * (hl - 0.07)]) cyl(0.014, 0.003, X + s2 * (hw + CU + RL / 2), ry + 0.006, Z + zz, "#f0ece0", 0, 8); cyl(0.014, 0.003, X - hw + f * 2 * hw, ry + 0.006, Z + s2 * (hl + CU + RL / 2), "#f0ece0", 0, 8); }
+        }
+        // the pockets: leather cups you see down into, a leather lip, brass caps on the rail round the corners
+        for (const pk of POOL_POCKETS) {
+          const px = X + Math.sign(pk.x) * (hw + (pk.corner ? 0.016 : 0.034)), pz = Z + (pk.corner ? Math.sign(pk.z) * (hl + 0.016) : 0);
+          const cup = MB.CreateCylinder("pbPocket", { diameter: 0.105, height: 0.15, tessellation: 18, cap: 0 }, sc); cup.position.set(px, CL - 0.074, pz); this.add(cup, "#0a0604", 0, false);
+          cyl(0.1, 0.004, px, CL - 0.148, pz, "#050302", 0, 14);
+          const lip = MB.CreateTorus("pbLip", { diameter: 0.112, thickness: 0.014, tessellation: 18 }, sc); lip.position.set(px, CL + 0.004, pz); this.add(lip, LEATHER2, 0, false);
+          if (pk.corner) { for (const [a2, b2] of [[1, 0], [0, 1]]) box(a2 ? 0.12 : 0.02, 0.006, b2 ? 0.12 : 0.02, X + Math.sign(pk.x) * (hw + CU + RL - (a2 ? 0.06 : 0.012)), ry + 0.003, Z + Math.sign(pk.z) * (hl + CU + RL - (b2 ? 0.06 : 0.012)), "#9a7a2a", 0); }
+          else box(0.02, 0.006, 0.14, X + Math.sign(pk.x) * (hw + CU + RL - 0.012), ry + 0.003, Z, "#9a7a2a", 0);
+        }
+        // the foot end: the collection window (the potted balls line up in it); the head end: the coin mech
+        box(0.6, 0.1, 0.012, X, U + 0.52, Z + PT.d / 2 + 0.004, "#0a0606", 0); box(0.64, 0.016, 0.02, X, U + 0.58, Z + PT.d / 2 + 0.006, BRASS, 0); box(0.64, 0.016, 0.02, X, U + 0.46, Z + PT.d / 2 + 0.006, BRASS, 0);
+        box(0.3, 0.12, 0.02, X, U + 0.55, Z - PT.d / 2 - 0.006, "#b8b4a8", 0.002); box(0.06, 0.012, 0.022, X - 0.07, U + 0.57, Z - PT.d / 2 - 0.008, "#2a2420", 0); box(0.05, 0.05, 0.026, X + 0.08, U + 0.55, Z - PT.d / 2 - 0.01, "#2a2420", 0);
+        // the lamp: three green-and-brass shades on a brass bar, 1.0 m off the cloth, on chains to the ceiling
+        const LY = CL + 1.12; // (the shades' rims 1.12 m off the cloth: low and warm, just above a standing player's eyes)
+        box(0.04, 0.04, 1.3, X, LY + 0.2, Z, BRASS, 0.004);
+        for (const dz of [-0.62, 0.62]) { cyl(0.012, UC - (LY + 0.2), X, (LY + 0.2 + UC) / 2, Z + dz * 0.8, BRASS, 0, 4); cyl(0.1, 0.03, X, UC - 0.015, Z + dz * 0.8, BRASS, 0.002, 10); }
+        for (const dz of [-0.55, 0, 0.55]) {
+          const sh = MB.CreateCylinder("pbPoolShade", { diameterTop: 0.08, diameter: 0.3, height: 0.16, tessellation: 20 }, sc); sh.position.set(X, LY + 0.085, Z + dz); this.add(sh, "#1f4a2e", 0.004, false);
+          const rim = MB.CreateTorus("pbShadeRim", { diameter: 0.3, thickness: 0.012, tessellation: 20 }, sc); rim.position.set(X, LY, Z + dz); this.add(rim, BRASS, 0, false);
+          cyl(0.02, 0.03, X, LY + 0.185, Z + dz, BRASS, 0, 6);
+          { const g = MB.CreateDisc("pbShadeGlow", { radius: 0.15, tessellation: 20 }, sc); g.rotation.x = -PI / 2; g.position.set(X, LY + 0.02, Z + dz); keepM(g, glow("#fff2d0")); }
+        }
+        // the worn boards round the table (where everyone stands to shoot)
+        sheet(PT.w + 2.2, PT.d + 2.2, X, U + 0.005, Z, 0, 0, wornTex).rotation.x = PI / 2;
+        // its chalk scoreboard on the back wall (the games write on it), in a mahogany frame
+        sbx(X - 0.58, X + 0.58, U + 1.38, U + 2.18, IN.maxZ - 0.07, IN.maxZ - 0.02, "mahogany", MAH2, 0.006);
       }
-      { const ex = IN.maxX; sbx(ex - 0.12, ex - 0.02, U + 0.9, U + 2.0, 26.6, 28.8, "mahogany", MAH, 0.006); for (let k = 0; k < 7; k++) box(0.03, 1.45, 0.03, ex - 0.2, U + 1.05, 26.8 + k * 0.3, "#c8a070", 0.002, 0, 0, 0.04); box(0.08, 0.05, 0.08, ex - 0.2, U + 1.95, 26.75, "#3a7ad8", 0); }
-      sheet(1.3, 0.9, -79.2, U + 1.9, IN.maxZ - 0.06, 0, -1, texMat("poolboard", 256, 180, (c) => { c.fillStyle = "#1e2a22"; c.fillRect(0, 0, 256, 180); c.strokeStyle = "#5a2a12"; c.lineWidth = 12; c.strokeRect(0, 0, 256, 180); c.fillStyle = "#f4f1ea"; c.font = "bold 28px 'Comic Sans MS', cursive"; c.textAlign = "center"; c.fillText("POOL", 128, 44); c.font = "20px 'Comic Sans MS', cursive"; c.fillText("winner stays on", 128, 84); c.fillStyle = "#ffe14a"; c.fillText("8-ball: coming soon", 128, 130); }, 0.35));
-      { const y = U + 2.1; for (const [x, z, nx, nz] of [[-83.2, IN.maxZ - 0.06, 0, -1], [-75.4, IN.maxZ - 0.06, 0, -1], [-84.42, 26.0, 1, 0], [-84.42, 29.5, 1, 0]] as [number, number, number, number][]) { box(nx ? 0.05 : 0.9, 0.7, nx ? 0.9 : 0.05, x, y, z, BRASS, 0.004); box(nx ? 0.06 : 0.76, 0.58, nx ? 0.76 : 0.06, x + nx * 0.006, y, z + nz * 0.006, ["#4a3a2a", "#2a4a3a", "#5a3a3a", "#3a3a5a"][Math.abs(Math.round(x + z)) % 4], 0); } }
+      // the cue rack on the back wall between the scoreboards: six cues and a short one (for the tight shots), chalk, the brush
+      { const x = (P.pools[0].x + P.pools[1].x) / 2, zw = IN.maxZ;
+        sbx(x - 0.5, x + 0.5, U + 0.15, U + 0.3, zw - 0.14, zw - 0.02, "mahogany", MAH2, 0.006); sbx(x - 0.5, x + 0.5, U + 1.45, U + 1.55, zw - 0.1, zw - 0.02, "mahogany", MAH2, 0.006);
+        for (let k = 0; k < 7; k++) { const cx = x - 0.4 + k * 0.13, len = k === 6 ? 1.22 : 1.45; const cue = MB.CreateCylinder("pbCue", { diameterTop: 0.011, diameter: 0.03, height: len, tessellation: 8 }, sc); cue.position.set(cx, U + 0.22 + len / 2, zw - 0.08); cue.rotation.x = -0.03; this.add(cue, k % 3 ? "#c89a5a" : "#b07a3a", 0.002, false); box(0.032, 0.25, 0.032, cx, U + 0.36, zw - 0.08, "#2a140a", 0); }
+        for (let k = 0; k < 4; k++) box(0.022, 0.022, 0.022, x - 0.12 + k * 0.08, U + 1.57, zw - 0.06, "#2a6ad8", 0);
+        box(0.06, 0.03, 0.3, x + 0.62, U + 1.2, zw - 0.05, "#3a2410", 0.003, 0, 0, 0); box(0.05, 0.02, 0.28, x + 0.62, U + 1.18, zw - 0.05, "#d8ccb4", 0);
+        sheet(0.34, 0.24, x, U + 1.85, zw - 0.035, 0, -1, texMat("poolnote", 256, 180, (c) => notice(c, ["NO DRINK ON", "THE CLOTH.", "The cloth has", "suffered enough."]), 0.35));
+      }
+      // the spectators' ledge along the snug wall: mahogany on brackets, beer mats, a couple of pints, the house rules and
+      // the league photos above it
+      { const L = P.poolLedge, x1 = L.maxX;
+        sbx(L.minX, x1, U + 1.04, U + 1.1, L.minZ, L.maxZ, "mahogany", MAH2, 0.006);
+        for (let z = L.minZ + 0.3; z < L.maxZ; z += 1.2) box(0.2, 0.18, 0.03, L.minX + 0.1, U + 0.96, z, MAH2, 0);
+        for (const [z, pint] of [[25.3, 1], [26.6, 0], [29.4, 1], [30.8, 0]] as [number, number][]) { cyl(0.1, 0.004, (L.minX + x1) / 2, U + 1.102, z, "#e8dcc4", 0, 12); if (pint) { cyl(0.08, 0.15, (L.minX + x1) / 2, U + 1.18, z, "#1b0a06", 0.003, 10, 0.09); cyl(0.09, 0.025, (L.minX + x1) / 2, U + 1.26, z, "#f2e2bc", 0, 10); } }
+        const wxw = L.minX + 0.01;
+        sheet(0.8, 1.0, wxw + 0.02, U + 1.85, 28.0, 1, 0, texMat("houserules", 320, 400, (c) => drawHouseRules(c, 320, 400), 0.38));
+        box(0.03, 1.06, 0.86, wxw + 0.01, U + 1.85, 28.0, MAH2, 0.004);
+        for (const [z, k] of [[25.9, 0], [26.9, 1], [29.1, 2], [30.1, 3]] as [number, number][]) { box(0.03, 0.42, 0.56, wxw + 0.01, U + 1.75, z, BRASS, 0.003); sheet(0.48, 0.34, wxw + 0.03, U + 1.75, z, 1, 0, texMat("league" + k, 256, 180, (c) => drawLeaguePhoto(c, 256, 180, k), 0.3)); }
+        sheet(0.34, 0.24, wxw + 0.03, U + 1.3, 31.2, 1, 0, texMat("betnote", 256, 180, (c) => notice(c, ["LOST A BET?", "Seamus accepts gold.", "Hughie accepts", "excuses."]), 0.35));
+      }
+      // the trophy shelf in the corner: a few modest cups, a pennant
+      { const zw = IN.maxZ, x = IN.maxX - 0.75;
+        sbx(x - 0.55, x + 0.55, U + 1.5, U + 1.55, zw - 0.22, zw - 0.02, "mahogany", MAH2, 0.006);
+        for (const [dx, h] of [[-0.38, 0.22], [-0.12, 0.3], [0.15, 0.18], [0.38, 0.24]] as [number, number][]) { cyl(0.07, 0.04, x + dx, U + 1.57, zw - 0.12, MAH2, 0, 8); cyl(0.05, h * 0.6, x + dx, U + 1.59 + h * 0.3, zw - 0.12, BRASS, 0.002, 8, 0.03); cyl(0.11, h * 0.35, x + dx, U + 1.59 + h * 0.6 + h * 0.17, zw - 0.12, BRASS, 0.002, 12, 0.07); }
+        sheet(0.7, 0.3, x, U + 1.95, zw - 0.03, 0, -1, texMat("pennant", 256, 110, (c) => { c.fillStyle = "#1f4a2e"; c.beginPath(); c.moveTo(0, 0); c.lineTo(256, 55); c.lineTo(0, 110); c.fill(); c.fillStyle = "#e8c050"; c.font = "bold 22px Georgia, serif"; c.fillText("SHAMROCK A", 14, 50); c.font = "16px Georgia, serif"; c.fillText("DIV. 2  '94", 14, 74); }, 0.3, true));
+      }
       // ---------------------------------------------------------------- THE LOUNGE: chesterfields (deep buttoned oxblood
       // leather, rolled arms) round low tables on rugs; round high-backed booths on the east wall; high tables and stools
       const rug3 = texMat("rug3", 256, 320, (c) => { c.fillStyle = "#5a1616"; c.fillRect(0, 0, 256, 320); c.strokeStyle = GOLD; c.lineWidth = 8; c.strokeRect(12, 12, 232, 296); c.strokeStyle = "#1f3a5a"; c.lineWidth = 14; c.strokeRect(34, 34, 188, 252); c.fillStyle = "#1f3a5a"; c.beginPath(); c.ellipse(128, 160, 50, 80, 0, 0, 6.3); c.fill(); }, 0.25);
@@ -4362,7 +4450,7 @@ export class CityRenderer {
         ["#ff7a3a", "#ffd54a", "#5ad87a"].forEach((col, k) => { const rr2 = 0.4 - k * 0.06, path: Vector3[] = []; for (let q = 0; q <= 16; q++) { const u = (q / 16) * PI; path.push(new Vector3(J.x + Math.cos(u) * rr2, U + 1.1 + Math.sin(u) * rr2, fz - 0.02)); } path.unshift(new Vector3(J.x + rr2, U + 0.25, fz - 0.02)); path.push(new Vector3(J.x - rr2, U + 0.25, fz - 0.02)); keepM(MB.CreateTube("pbJukeTube", { path, radius: 0.017, tessellation: 6 }, sc), glow(col)); });
         box(0.5, 0.36, 0.03, J.x, U + 0.5, fz - 0.01, "#2a1a10", 0); for (let k = 0; k < 6; k++) box(0.46, 0.015, 0.02, J.x, U + 0.36 + k * 0.055, fz - 0.03, BRASS, 0);
         const jt = new DynamicTexture("pbJuke", { width: 256, height: 96 }, sc, true);
-        const jm = unlitTextured(sc, jt, "pbJukeMat"); const p2 = MB.CreatePlane("pbJukeP", { width: 0.5, height: 0.19 }, sc); p2.position.set(J.x, U + 0.86, fz - 0.03); p2.rotation.y = PI; p2.material = jm; p2.parent = this.root; p2.isPickable = false;
+        const jm = unlitTextured(sc, jt, "pbJukeMat"); const p2 = MB.CreatePlane("pbJukeP", { width: 0.5, height: 0.19 }, sc); p2.position.set(J.x, U + 0.86, fz - 0.03); p2.rotation.y = 0; p2.material = jm; // (R12.3: it faced the wall: the name read backwards) p2.parent = this.root; p2.isPickable = false;
         this.pubJuke = jt; const k0 = this.jukeK; this.jukeK = -1; this.setJukebox(k0);
       }
       // the French doors in the cut corner (folded open), glazed

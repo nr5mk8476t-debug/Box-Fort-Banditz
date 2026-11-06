@@ -189,6 +189,14 @@ export const sfx = {
   gulp(on: boolean) { if (on) for (let i = 0; i < 4; i++) blip(150 + i * 12, 0.09, "sine", 0.12, 90, i * 0.32); else blip(320, 0.08, "sine", 0.06, 500); },
   cheer(g = 1) { noise(1.4, 0.16 * g, 1200, 0, 0.5); noise(1.0, 0.1 * g, 2400, 0.15, 0.7); for (let i = 0; i < 5; i++) blip(380 + i * 70, 0.2, "triangle", 0.05 * g, 520 + i * 90, 0.05 + i * 0.12); },
   /** R12.2b: the jukebox: a clunk and a needle drop */
+  // R12.3: the pub's games (quiet: it's a pub, not an arcade)
+  cueStrike(power = 1) { blip(1500, 0.03, "square", 0.05 + 0.05 * power, 900); noise(0.025, 0.06 + 0.06 * power, 2600); },
+  ballClick(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.04) return; blip(2400 + Math.random() * 300, 0.025, "sine", 0.09 * g, 1800); noise(0.015, 0.05 * g, 5200); },
+  cushion(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.05) return; blip(140, 0.07, "sine", 0.1 * g, 90); noise(0.04, 0.05 * g, 700); },
+  pocketDrop() { blip(260, 0.06, "sine", 0.08, 180); noise(0.12, 0.07, 500, 0.05, 0.8); blip(160, 0.1, "sine", 0.06, 110, 0.12); },
+  dartThunk(gain = 1) { noise(0.03, 0.12 * gain, 1800); blip(340, 0.06, "sine", 0.08 * gain, 220); },
+  dartWhoosh() { sweepNoise(0.12, 0.04, 2400, 900); },
+  checkout() { [659, 784, 988, 1318].forEach((f, i) => blip(f, 0.12, "triangle", 0.07, undefined, i * 0.08)); },
   juke() { blip(120, 0.12, "square", 0.08, 80); noise(0.08, 0.08, 2400, 0.1); blip(880, 0.08, "triangle", 0.05, 1320, 0.2); },
   cash() { blip(1568, 0.06, "square", 0.08); blip(2093, 0.18, "square", 0.08, undefined, 0.06); noise(0.08, 0.06, 5000, 0.02); },
   lost() { [392, 330, 262].forEach((f, i) => blip(f, 0.22, "triangle", 0.1, f * 0.9, i * 0.18)); },

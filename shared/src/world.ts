@@ -26,6 +26,7 @@ import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, 
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
 import { PoliceSystem, type PoliceEvent } from "./police.js";
 import type { LockRun } from "./lockpick.js";
+import { PubGames, PUBGAMES, type PubEvent, type PubAction, type StationGeom, type StationKind } from "./pubgames.js";
 
 /** C4a: how far away a pedestrian notices you breaking something (they also need a clear line of sight) */
 export const WITNESS_RANGE = 20;
@@ -52,6 +53,8 @@ export const ITEM_TARGET = 55; // loose items the World tries to keep in the cit
 export const ITEM_TARGET_NIGHT = 22; // night: loot is scarce (but worth double)
 /** R12.3: fresh x2 loot that appears round the city as night falls (no wipe any more) */
 export const NIGHT_TOPUP = 14;
+/** R12.3: what to tell a player whose pub-game action was refused */
+const PG_WHY: Record<string, string> = { "not your turn": "Not your turn.", "balls still rolling": "Wait for the balls to stop.", "spectator": "You're watching this one.", "too far": "Get closer.", "busy": "Someone's already on it.", "bad spot": "Not there: behind the baulk line, clear of the other balls.", "you're already playing": "You're already in a game." };
 export const ITEM_MAX = 95;
 export const GIANT_MAX = 2;
 /** Slice 2A: shop shelves are stocked on top of the loose-loot cap (15 shops) */
@@ -181,6 +184,7 @@ export interface PlayerSim {
 }
 
 export type WorldEvent =
+  | PubEvent // R12.3: the pub's games (a shot, a dart, a message, a result)
   | { t: "grab"; p: string; item: string; to: "hand" | "pocket" | "carry" }
   | { t: "whiff"; p: string; reason: "taken" | "far" | "full" | "hands" | "cooldown" | "locked" }
   | { t: "drop"; p: string; item: string }
@@ -292,6 +296,7 @@ export type WorldEvent =
   | LobbyEvent;
 
 export type WorldAction =
+  | ({ a: "pg" } & PubAction) // R12.3: pool and darts upstairs at the Soggy Shamrock
   | { a: "grab"; item: string }
   // C4b: spray a tag (hold the use key on a blank wall with a can out)
   | { a: "tagStart" }
@@ -356,6 +361,8 @@ export class World {
   readonly police: PoliceSystem;
   readonly pawn: PawnSystem;
   readonly lobby: LobbySystem;
+  /** R12.3: pool and darts upstairs at the Soggy Shamrock */
+  readonly pubGames: PubGames;
 
   constructor(opts: WorldOptions = {}) {
     this.arena = opts.arena ?? buildTrashington();
@@ -370,6 +377,7 @@ export class World {
     this.police = new PoliceSystem(this);
     this.pawn = new PawnSystem(this);
     this.lobby = new LobbySystem(this);
+    this.pubGames = this.makePubGames();
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
@@ -799,6 +807,14 @@ export class World {
     if (act.a === "haggle") { if (this.match.phase === "shop") this.pawn.haggle(p, String((act as any).item ?? "")); return; }
     if (act.a === "sellAll") { if (this.match.phase === "shop") this.pawn.sellAll(p); return; }
     if (act.a === "ready") { this.match.setReady(p); return; }
+    if (act.a === "pg") { // (R12.3: the pub's games; the station checks turns, values and seats itself)
+      const op = (act as any).op;
+      if ((op === "shot" || op === "dart") && (p.jailT > 0 || p.move.knockT > 0 || p.move.stunT > 0 || p.respawnT > 0)) { this.emit({ t: "pgMsg", st: String((act as any).st ?? ""), msg: "You can't play from the floor.", to: p.id }); return; }
+      const err = this.pubGames.act(p.id, act as any);
+      // (tell the player why not: "not your turn", "balls still rolling"... a repeat of the same shot/dart says nothing)
+      if (err && err !== "duplicate") this.emit({ t: "pgMsg", st: String((act as any).st ?? ""), msg: PG_WHY[err] ?? "", to: p.id });
+      return;
+    }
     if (p.jailT > 0) { // locked up: pick the lock; R6 (the holding cell): also walk about, flush the toilet, start a fight
       if (act.a === "pick") { this.police.pick(p, Number((act as any).pin), Number((act as any).t)); return; }
       if (act.a === "pickStop") { this.police.stopPick(p); return; }
@@ -1276,6 +1292,117 @@ export class World {
     return "Quiet day. The good stuff turns up at night, in the forts. You didn't hear it from me.";
   }
   /** R12.2c: trouble in his pub: Seamus sends the lads. They pop out round you and nip at you for SWARM.t seconds */
+  // ---------------------------------------------------------------- R12.3: pool and darts upstairs
+  /** the four stations, from the pub's layout (none in a city without the pub) */
+  private makePubGames(): PubGames {
+    const pb = this.arena.pub, host = this, stations: StationGeom[] = [];
+    if (pb) {
+      const U = pb.y2, PI = Math.PI;
+      const hughie = { x: -74.5, z: 24.9 }, dinny = { x: -96.0, z: 10.3 };
+      pb.pools.forEach((q, i) => stations.push({
+        id: `pooltable${i + 1}`, kind: "pool", idx: i, x: q.x, z: q.z, y: U, npcHome: hughie,
+        npcPath: i === 0 ? [{ x: -75.5, z: 25.3 }, { x: -79.1, z: 25.3 }] : [{ x: -74.6, z: 25.6 }],
+        wait: i === 0 ? [{ x: -79.1, z: 30.0, yaw: -PI / 2 }, { x: -83.7, z: 26.0, yaw: PI / 2 }] : [{ x: -79.1, z: 26.0, yaw: PI / 2 }, { x: -74.6, z: 30.0, yaw: -PI / 2 }],
+      }));
+      pb.darts.forEach((d, i) => { const zc = d.board.z; stations.push({
+        id: `dartsoche${i + 1}`, kind: "darts", idx: i, x: d.oche + 0.3, z: zc, y: d.board.y, face: d.faceX, oche: d.oche, npcHome: dinny,
+        npcPath: i === 0 ? [{ x: -96.8, z: 10.3 }, { x: -96.8, z: 8.9 }, { x: -99.0, z: 8.9 }] : [{ x: -96.8, z: 10.3 }, { x: -96.8, z: 15.0 }, { x: -99.0, z: 15.0 }],
+        wait: [{ x: d.oche + 0.9, z: zc - 1.6, yaw: -PI / 2 - 0.5 }, { x: d.oche + 0.9, z: zc + 1.6, yaw: -PI / 2 + 0.5 }],
+      }); });
+    }
+    return new PubGames({
+      get time() { return host.traffic.clock; },
+      rng: () => host.rng(),
+      player: (id) => { const p = host.players.get(id); return p ? { id, name: p.name, cash: p.cash, x: p.move.x, z: p.move.z, y: p.move.y, connected: p.connected, jailed: p.jailT > 0 } : null; },
+      addCash: (id, v) => { const p = host.players.get(id); if (p) p.cash = Math.max(0, p.cash + v); },
+      closed: () => host.pubClosed(),
+      place: (id, x, z, yaw) => { const p = host.players.get(id); if (p && pb) host.debugTeleport(id, x, z, yaw, pb.y2); },
+      npcGo: (k, path, yaw) => host.pubNpcGo(k, path, yaw),
+      npcHome: (k) => host.pubNpcHome(k),
+      npcSay: (k, line) => { const n = host.pubNpc(k); if (n) host.npc.sayText(n, line); },
+      emit: (e) => host.emit(e),
+    }, stations);
+  }
+  /** "" when a new game may start; else why not (last orders before sunrise; no games between rounds) */
+  pubClosed(): string {
+    const m = this.match;
+    if (m.phase === "lobby") return "";
+    if (!m.scavenging) return "The tables are closed between rounds.";
+    if (m.scavengeLeft < PUBGAMES.lastOrders) return "LAST ORDERS: no new games this close to sunrise.";
+    return "";
+  }
+  /** the regular who plays (HUGHIE by the pool; BIG DINNY at the darts' high table): found by where he lives */
+  private pubNpcHomes: Record<StationKind, { x: number; z: number; yaw: number; y?: number } | null> = { pool: null, darts: null };
+  private pubNpcRoute: Record<StationKind, { x: number; z: number; yaw: number }[]> = { pool: [], darts: [] };
+  pubNpc(k: StationKind) {
+    const home = k === "pool" ? { x: -74.5, z: 24.9 } : { x: -96.0, z: 10.3 };
+    const kept = this.pubNpcHomes[k];
+    for (const n of this.npc.npcs.values()) {
+      if (n.kind !== "patron") continue;
+      const h = kept && n.post && (n as any).pubGame === k ? kept : n.post;
+      if (h && Math.hypot(h.x - home.x, h.z - home.z) < 0.3) return n;
+    }
+    return null;
+  }
+  private pubNpcGo(k: StationKind, path: { x: number; z: number }[], yaw: number) {
+    const n = this.pubNpc(k), pb = this.arena.pub; if (!n || !n.post || !pb) return;
+    if (!this.pubNpcHomes[k]) this.pubNpcHomes[k] = { ...n.post };
+    (n as any).pubGame = k;
+    let pts = path.map((q) => ({ ...q, yaw }));
+    // round the table, not through it
+    if (k === "pool" && pts.length === 1) pts = this.roundTable(n.move.x, n.move.z, pts[0]);
+    this.pubNpcRoute[k] = pts;
+    const first = pts.shift()!; n.post = { x: first.x, z: first.z, yaw: first.yaw, y: pb.y2 };
+    if (n.state !== "ko") n.state = "work";
+  }
+  private pubNpcHome(k: StationKind) {
+    const n = this.pubNpc(k), home = this.pubNpcHomes[k], pb = this.arena.pub; if (!n || !home || !pb) return;
+    const st = [...this.pubGames.geom.values()].find((g) => g.kind === k && Math.hypot(g.x - n.move.x, g.z - n.move.z) < 6);
+    const back = st ? [...st.npcPath].reverse() : [];
+    let pts = [...back.map((q) => ({ ...q, yaw: home.yaw })), { x: home.x, z: home.z, yaw: home.yaw }];
+    if (k === "pool" && st) pts = [...this.roundTable(n.move.x, n.move.z, pts[0]), ...pts.slice(1)];
+    this.pubNpcRoute[k] = pts;
+    const first = pts.shift()!; n.post = { x: first.x, z: first.z, yaw: first.yaw, y: pb.y2 };
+    if (!pts.length) { (n as any).pubGame = undefined; this.pubNpcHomes[k] = null; }
+  }
+  /** a walk from (x, z) to `to` that goes round the pool table in the way (via its corners, 0.6 m out) */
+  private roundTable(x: number, z: number, to: { x: number; z: number; yaw: number }) {
+    const pb = this.arena.pub!; const q = pb.pools.reduce((a, b) => (Math.hypot(b.x - to.x, b.z - to.z) < Math.hypot(a.x - to.x, a.z - to.z) ? b : a));
+    const hx = q.w / 2, hz = q.d / 2, ox = hx + 0.6, oz = hz + 0.6;
+    const hits = (ax: number, az: number, bx: number, bz: number) => { for (let t = 0; t <= 1; t += 0.05) { const px = ax + (bx - ax) * t - q.x, pz = az + (bz - az) * t - q.z; if (Math.abs(px) < hx + 0.25 && Math.abs(pz) < hz + 0.25) return true; } return false; };
+    if (!hits(x, z, to.x, to.z)) return [to];
+    const C = [[-ox, -oz], [ox, -oz], [ox, oz], [-ox, oz]].map(([a, b]) => ({ x: q.x + a, z: q.z + b, yaw: to.yaw }));
+    let best: { x: number; z: number; yaw: number }[] = [to], bl = 1e9;
+    for (let i = 0; i < 4; i++) for (const j of [-1, i, (i + 1) % 4, (i + 3) % 4]) {
+      const via = j < 0 || j === i ? [C[i]] : [C[i], C[j]];
+      const pts = [{ x, z }, ...via, to]; let ok = true, L = 0;
+      for (let k = 0; k + 1 < pts.length; k++) { if (hits(pts[k].x, pts[k].z, pts[k + 1].x, pts[k + 1].z)) { ok = false; break; } L += Math.hypot(pts[k + 1].x - pts[k].x, pts[k + 1].z - pts[k].z); }
+      if (ok && L < bl) { bl = L; best = [...via, to]; }
+    }
+    return best;
+  }
+  private pubPhase = "";
+  private pubTick(dt: number) {
+    // a new cycle: the NPCs' kitties refill; the end of the scavenge (sunrise), or the match moving on: games called off
+    const ph = this.match.phase;
+    if (ph !== this.pubPhase) {
+      const was = this.pubPhase; this.pubPhase = ph;
+      if (ph === "intro") this.pubGames.newCycle();
+      else if (ph === "dawn" || ph === "over" || (ph === "lobby" && was && was !== "lobby")) this.pubGames.voidAll("Sunrise: game called off, stakes back.");
+    }
+    this.pubGames.tick(dt);
+    // the regulars walking over to play (and back): next waypoint when they get there
+    const pb = this.arena.pub;
+    for (const k of ["pool", "darts"] as StationKind[]) {
+      const route = this.pubNpcRoute[k]; if (!route.length || !pb) continue;
+      const n = this.pubNpc(k); if (!n || !n.post) continue;
+      if (Math.hypot(n.move.x - n.post.x, n.move.z - n.post.z) < 0.35) {
+        const nx = route.shift()!; n.post = { x: nx.x, z: nx.z, yaw: nx.yaw, y: pb.y2 };
+        if (!route.length && !this.pubGames.stationOf("npc:" + k)) { const home = this.pubNpcHomes[k]; if (home && Math.hypot(home.x - nx.x, home.z - nx.z) < 0.05) { n.post = { ...home }; (n as any).pubGame = undefined; this.pubNpcHomes[k] = null; } }
+      }
+    }
+  }
+
   private swarms = new Map<string, number>();
   swarm(pid: string) {
     const p = this.players.get(pid), pb = this.arena.pub;
@@ -1646,6 +1773,7 @@ export class World {
     this.clubTick();
     this.feverTick(SIM_DT);
     this.swarmTick(); // (R12.2c)
+    this.pubTick(SIM_DT); // (R12.3)
     // C1.1: fall in the canal and whatever's in your hands floats off
     for (const p of this.players.values()) {
       if (p.hand && inDeepWater(this.arena, p.move.x, p.move.z, p.move.y)) {

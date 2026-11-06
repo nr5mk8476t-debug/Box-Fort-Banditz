@@ -347,6 +347,8 @@ export class NpcSystem {
   /** R5: have this NPC say one of their lines out loud (e.g. Meat Locker's warning) */
   sayLine(id: string, key: keyof (typeof NPC_DEFS)["tourist"]["lines"]) { const n = this.npcs.get(id); if (n) this.say(n, (NPC_DEFS[n.kind].lines as Record<string, string[] | undefined>)[key], true); }
 
+  /** R12.3: one particular line, now (the pub's games: HUGHIE and BIG DINNY) */
+  sayText(n: NpcSimData, line: string) { n.sayCd = 4; this.host.npcEvent({ t: "npcSay", npc: n.id, line }); }
   private say(n: NpcSimData, list: string[] | undefined, force = false) {
     if (!force && n.sayCd > 0) return;
     const line = pickLine(list, () => this.rng());
