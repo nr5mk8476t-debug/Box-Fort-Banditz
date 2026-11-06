@@ -151,6 +151,7 @@ export class MatchSystem {
   /** Host pressed START (also used to restart after the final results). */
   start(): boolean {
     if (this.phase !== "lobby" && this.phase !== "over") return false;
+    this.w.pubGames?.voidAll("The match is starting: game called off, stakes back."); // (R12.3: before the cash resets)
     for (const p of this.w.players.values()) p.cash = 0;
     this.w.lobby.matchStart(); // (C5a: off the roof; aura starts at 0)
     this.w.pubBoard.length = 0; // (R12.1: a clean chalkboard every match)

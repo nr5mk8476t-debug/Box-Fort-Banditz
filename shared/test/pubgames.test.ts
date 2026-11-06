@@ -301,6 +301,7 @@ test("stations: interruptions: last orders; a dropped player's seat held 45 s th
   setClosed("LAST ORDERS: no new games."); assert.notEqual(pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 0 }), ""); setClosed("");
   pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 10 }); pg.act("b", { op: "join", st: "darts1" });
   const s = pg.st.get("darts1")!;
+  s.darts!.turn = s.seats.findIndex((q) => q.id === "b"); // (b's up when b drops: b's clock waits too)
   b.connected = false; tick(PUBGAMES.dropHold - 1); assert.equal(s.phase, "play", "seat held");
   b.connected = true; tick(1); b.connected = false; tick(PUBGAMES.dropHold + 0.5);
   assert.equal(s.phase, "over"); assert.equal(s.end, "void"); assert.equal(a.cash, 50); assert.equal(b.cash, 50, "stakes back");
@@ -326,4 +327,121 @@ test("stations: pool shots: only the shooter, one at a time, nothing while the b
   tick(s.shot!.dur + 0.2);
   assert.equal(s.shot, null); assert.equal(P.shots, 1); assert.ok(!P.breakShot);
   void h;
+});
+test("stations: AFK: two pool shots timed out in a row, or a whole visit of darts thrown by the clock, and you forfeit", () => {
+  const { pg, add, tick } = harness();
+  add("a", 50, 0, 0); add("b", 50, 0, 0);
+  pg.act("a", { op: "open", st: "pool1", vs: "mate", stake: 10 }); pg.act("b", { op: "join", st: "pool1" });
+  const s = pg.st.get("pool1")!, idle = s.seats[s.pool!.turn].id, other = s.seats[1 - s.pool!.turn].id;
+  tick(POOL.clock + 0.5); assert.equal(s.phase, "play"); assert.equal(s.seats[s.pool!.turn].id, other, "time-out: a foul, two visits to the other");
+  // the other plays a quick legal shot so it comes back round, then the idler times out again
+  for (let k = 0; k < 6 && s.phase === "play" && s.seats[s.pool!.turn].id === other; k++) { const cue = s.pool!.balls.find((b) => b.id === 0)!, t = s.pool!.balls.find((b) => !b.down && b.id !== 0 && b.id !== 8)!; pg.act(other, { op: "shot", st: "pool1", n: s.pool!.shots, dx: t.x - cue.x, dz: t.z - cue.z, v: 0.6, ...(s.pool!.inHand ? { cx: cue.x, cz: cue.z } : {}) }); tick((s.shot?.dur ?? 0) + 0.2); }
+  if (s.phase === "play" && s.seats[s.pool!.turn].id === idle) { tick(POOL.clock + 0.5); assert.equal(s.end, "forfeit"); assert.equal(s.winner, other); }
+  const d = harness(); d.add("a", 50, 20, 0); d.add("b", 50, 20, 0);
+  d.pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 0 }); d.pg.act("b", { op: "join", st: "darts1" });
+  const ds = d.pg.st.get("darts1")!, up = ds.seats[ds.darts!.turn].id;
+  d.tick(DARTS.clock * 3 + 1); assert.equal(ds.end, "forfeit", "a whole visit on the clock"); assert.notEqual(ds.winner, up);
+});
+test("stations: fetching a pint from the bar mid-game is fine; going downstairs isn't", () => {
+  const { pg, add, tick } = harness();
+  const a = add("a", 50, 0, 0); add("b", 50, 0, 0);
+  pg.act("a", { op: "open", st: "pool1", vs: "mate", stake: 0 }); pg.act("b", { op: "join", st: "pool1" });
+  const s = pg.st.get("pool1")!;
+  a.x = 18; tick(PUBGAMES.leaveT + 2); assert.equal(s.phase, "play", "18 m off, same floor: still in");
+  a.x = 0; a.y = -4.8; tick(PUBGAMES.leaveT + 0.5); assert.equal(s.end, "forfeit", "downstairs: forfeit");
+});
+
+// ============================================================================== in the real pub (the World)
+import { World, setCityMap, INTRO_TIME, ROUND_TIME, DUSK_TIME, NIGHT_TIME, type MoveInput } from "../src/index.js";
+const winp = (seq: number): MoveInput => ({ seq, mx: 0, mz: 0, yaw: 0, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false });
+function pub() {
+  setCityMap("new");
+  const w = new World({ seed: 4, npcs: 0, spawnLoot: false });
+  const run = (sec: number) => { for (let i = 0; i < Math.round(sec * 60); i++) { for (const p of w.players.values()) w.pushInputs(p.id, [winp(p.lastSeq + 1)]); w.tick(); w.takeEvents(); } };
+  return { w, run, pb: w.arena.pub! };
+}
+test("in the pub: Hughie and Big Dinny walk over to play (round the table, not through it) and go home after", () => {
+  const { w, run, pb } = pub();
+  w.addPlayer("me", "ME"); const T = pb.pools[1];
+  w.debugTeleport("me", T.x, T.z - T.d / 2 - 0.8, 0, pb.y2);
+  const hughie = [...w.npc.npcs.values()].find((n) => n.kind === "patron" && n.post && Math.hypot(n.post.x - -74.5, n.post.z - 24.9) < 0.3)!;
+  assert.ok(hughie, "Hughie's by the pool");
+  assert.equal(w.pubGames.act("me", { op: "open", st: "pooltable2", vs: "npc", stake: 0 }), "");
+  let minRail = 9, moved = 0; const x0 = hughie.move.x, z0 = hughie.move.z;
+  for (let k = 0; k < 60 * 25; k++) { run(1 / 60); const dx = Math.abs(hughie.move.x - T.x) - T.w / 2, dz = Math.abs(hughie.move.z - T.z) - T.d / 2; minRail = Math.min(minRail, Math.max(dx, dz)); moved = Math.max(moved, Math.hypot(hughie.move.x - x0, hughie.move.z - z0)); }
+  assert.ok(moved > 2, `he came over (${moved.toFixed(1)} m)`);
+  assert.ok(minRail > 0.05, `never through the table (closest ${minRail.toFixed(2)} m outside it)`);
+  w.pubGames.act("me", { op: "leave", st: "pooltable2" });
+  run(25);
+  assert.ok(Math.hypot(hughie.move.x - -74.5, hughie.move.z - 24.9) < 0.6, `back by the high table (${hughie.move.x.toFixed(1)}, ${hughie.move.z.toFixed(1)})`);
+  // Big Dinny: the oche
+  const D = pb.darts[0];
+  w.debugTeleport("me", D.oche + 0.6, D.board.z, -Math.PI / 2, pb.y2);
+  const dinny = [...w.npc.npcs.values()].find((n) => n.kind === "patron" && n.post && Math.hypot(n.post.x - -96.0, n.post.z - 10.3) < 0.3)!;
+  assert.equal(w.pubGames.act("me", { op: "open", st: "dartsoche1", vs: "npc", stake: 0 }), "");
+  run(20);
+  assert.ok(dinny.move.x < D.booth.maxX + 0.6, `Dinny's at the booth (${dinny.move.x.toFixed(1)}, ${dinny.move.z.toFixed(1)})`);
+});
+test("in the pub: the 8-minute scavenge: last orders 90 s from the end; at sunrise games are called off and stakes refunded", () => {
+  const { w, run, pb } = pub();
+  const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
+  w.startMatch(); run(INTRO_TIME + 0.1); w.match.cancelPlannedEvents();
+  const D = pb.darts[1];
+  for (const p of [a, b]) { w.debugTeleport(p.id, D.oche + 0.8, D.board.z, -Math.PI / 2, pb.y2); p.cash = 100; }
+  assert.equal(w.pubGames.act("a", { op: "open", st: "dartsoche2", vs: "mate", stake: 20 }), "");
+  assert.equal(w.pubGames.act("b", { op: "join", st: "dartsoche2" }), "");
+  assert.equal(a.cash, 80);
+  // through sunset into the night: the game carries on
+  w.match.timeLeft = 0.01; run(0.1); assert.equal(w.match.phase, "dusk"); run(DUSK_TIME + 0.1); assert.equal(w.match.phase, "night");
+  assert.equal(w.pubGames.st.get("dartsoche2")!.phase, "play", "still playing at night");
+  // last orders: nobody new can start
+  w.match.timeLeft = 80; w.debugTeleport("a", pb.pools[0].x, pb.pools[0].z - 1.6, 0, pb.y2);
+  assert.match(w.pubGames.act("a", { op: "open", st: "pooltable1", vs: "npc", stake: 0 }), /already|LAST ORDERS/);
+  w.addPlayer("c", "C"); w.debugTeleport("c", pb.pools[0].x, pb.pools[0].z - 1.6, 0, pb.y2);
+  assert.match(w.pubGames.act("c", { op: "open", st: "pooltable1", vs: "npc", stake: 0 }), /LAST ORDERS/);
+  // sunrise: called off, both stakes back
+  w.match.timeLeft = 0.01; run(0.2);
+  assert.equal(w.match.phase, "dawn"); assert.equal(w.pubGames.st.get("dartsoche2")!.end, "void"); assert.equal(a.cash, 100); assert.equal(b.cash, 100);
+  void ROUND_TIME; void NIGHT_TIME;
+});
+test("in the pub: all four stations at once (Hughie at one table, two mates at the other, Big Dinny at one oche, two mates at the other): nothing crosses over", () => {
+  const { w, run, pb } = pub();
+  const ids = ["a", "b", "c", "d", "e", "f"]; for (const id of ids) { const p = w.addPlayer(id, id.toUpperCase()); p.cash = 100; }
+  const at = (id: string, x: number, z: number) => w.debugTeleport(id, x, z, 0, pb.y2);
+  const [t1, t2] = pb.pools, [d1, d2] = pb.darts;
+  at("a", t1.x, t1.z - 1.7); at("b", t2.x, t2.z - 1.7); at("c", t2.x + 1, t2.z - 1.7); at("d", d1.oche + 0.6, d1.board.z); at("e", d2.oche + 0.6, d2.board.z); at("f", d2.oche + 0.9, d2.board.z + 1);
+  assert.equal(w.pubGames.act("a", { op: "open", st: "pooltable1", vs: "npc", stake: 10 }), "");
+  assert.equal(w.pubGames.act("b", { op: "open", st: "pooltable2", vs: "mate", stake: 5 }), ""); assert.equal(w.pubGames.act("c", { op: "join", st: "pooltable2" }), "");
+  assert.equal(w.pubGames.act("d", { op: "open", st: "dartsoche1", vs: "npc", stake: 0 }), "");
+  assert.equal(w.pubGames.act("e", { op: "open", st: "dartsoche2", vs: "mate", stake: 20 }), ""); assert.equal(w.pubGames.act("f", { op: "join", st: "dartsoche2" }), "");
+  const S = (id: string) => w.pubGames.st.get(id)!;
+  for (const id of ["pooltable1", "pooltable2", "dartsoche1", "dartsoche2"]) assert.equal(S(id).phase, "play", id);
+  // play for a minute of game time: the humans take quick legal shots / throw at the treble 20 when they're up
+  const before2 = JSON.stringify(S("pooltable2").pool!.balls);
+  for (let sec = 0; sec < 90; sec++) {
+    for (const id of ["pooltable2"]) { const s = S(id); if (s.phase !== "play" || s.shot) continue; const P = s.pool!, who = s.seats[P.turn].id, cue = P.balls.find((b) => b.id === 0)!; const g = P.groups[P.turn]; const t = P.balls.find((b) => !b.down && b.id !== 0 && (P.breakShot ? b.id === 1 : g ? ballColour(b.id) === g : b.id !== 8)) ?? P.balls.find((b) => b.id === 8)!; w.pubGames.act(who, { op: "shot", st: id, n: P.shots, dx: t.x - cue.x, dz: t.z - cue.z, v: P.breakShot ? 6 : 1.8, ...(P.inHand ? { cx: cue.x, cz: cue.z } : {}) }); }
+    { const s = S("pooltable1"); if (s.phase === "play" && !s.shot && !s.seats[s.pool!.turn].npc) { const P = s.pool!, cue = P.balls.find((b) => b.id === 0)!, t = P.balls.find((b) => !b.down && b.id !== 0 && b.id !== 8 && (P.breakShot ? b.id === 1 : !P.groups[P.turn] || ballColour(b.id) === P.groups[P.turn]))!; if (t) w.pubGames.act("a", { op: "shot", st: "pooltable1", n: P.shots, dx: t.x - cue.x, dz: t.z - cue.z, v: P.breakShot ? 6 : 1.8, ...(P.inHand ? { cx: cue.x, cz: cue.z } : {}) }); } }
+    for (const id of ["dartsoche1", "dartsoche2"]) { const s = S(id); if (s.phase !== "play") continue; const D = s.darts!, seat = s.seats[D.turn]; if (!seat.npc) { const t = dartTarget(20, 3); w.pubGames.act(seat.id, { op: "dart", st: id, n: D.thrown, u: t.u, v: t.v }); } }
+    run(1);
+  }
+  const p1 = S("pooltable1"), p2 = S("pooltable2"), x1 = S("dartsoche1"), x2 = S("dartsoche2");
+  assert.ok(p1.pool === null || p1.pool.shots >= 3 || p1.phase !== "play", "table 1 (v Hughie) moved on");
+  assert.notEqual(JSON.stringify(p2.pool?.balls ?? []), before2, "table 2 moved on");
+  assert.ok((x1.darts?.thrown ?? 99) >= 6 || x1.phase !== "play", "oche 1 (v Dinny) moved on");
+  assert.ok((x2.darts?.thrown ?? 99) >= 6 || x2.phase !== "play", "oche 2 moved on");
+  // money: every stake is held once, and the sums add up (nothing created or lost)
+  const total = ids.reduce((sum, id) => sum + w.players.get(id)!.cash, 0);
+  const held = [p1, p2, x1, x2].reduce((sum, s) => sum + (s.phase === "play" ? s.seats.filter((q) => q.paid && !q.npc).reduce((a2, q) => a2 + q.stake, 0) : 0), 0);
+  const npcNet = (PUBGAMES.npcKitty - w.pubGames.kitty.pool) + (PUBGAMES.npcKitty - w.pubGames.kitty.darts);
+  assert.equal(total + held, 600 + npcNet, `cash in hand ${total} + held ${held} = 600 + what the NPCs lost (${npcNet})`);
+  assert.equal(w.pubGames.stationOf("a"), p1.phase === "play" ? "pooltable1" : "");
+});
+test("in the pub: a game going when the host starts the match is called off before the cash resets (no stake leaks into the match)", () => {
+  const { w, pb } = pub();
+  const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B"); a.cash = 50; b.cash = 50;
+  const D = pb.darts[0]; for (const p of [a, b]) w.debugTeleport(p.id, D.oche + 0.7, D.board.z, -Math.PI / 2, pb.y2);
+  w.pubGames.act("a", { op: "open", st: "dartsoche1", vs: "mate", stake: 20 }); w.pubGames.act("b", { op: "join", st: "dartsoche1" });
+  assert.equal(a.cash, 30);
+  assert.ok(w.startMatch());
+  assert.equal(w.pubGames.st.get("dartsoche1")!.end, "void"); assert.equal(a.cash, 0); assert.equal(b.cash, 0);
 });

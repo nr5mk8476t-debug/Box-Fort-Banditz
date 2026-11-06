@@ -1778,11 +1778,170 @@ try {
         await R3.evaluate((o) => window.__bfb.camAt(o.x + 9, 2.0, o.z - 9, -Math.PI / 4, -0.2), pb.out); await sleep(3000); await hideOverlays(R3);
         await shot(R3, "r122b-balcony-night.png");
         await R3.evaluate(() => { window.__bfb.forceNight(false); window.__bfb.camFree(); });
+        // ================================================================ R12.3: pool and darts upstairs (solo)
+        console.log("\n# R12.3 pool + darts upstairs (solo)");
+        await R3.evaluate(() => window.__bfb.setTimeLeft(300)); // (plenty of scavenge left: before last orders)
+        const pg = () => R3.evaluate(() => window.__bfb.pg());
+        const T1 = pb.pools[0], T2 = pb.pools[1], O1 = pb.darts[0];
+        ok(Math.abs(O1.oche - O1.faceX - 2.37) < 1e-6 && Math.abs(O1.board.y - y2 - 1.73) < 1e-6, "the oche is 2.37 m from the board's face, the bull 1.73 m up");
+        ok((T2.x - T2.w / 2) - (T1.x + T1.w / 2) > 2.9, `room for two shooters between the tables (${((T2.x - T2.w / 2) - (T1.x + T1.w / 2)).toFixed(2)} m)`);
+        // the room from eye height (1.65 m): the approach, both tables, both booths, the pockets, a tight shooting spot
+        const shots3 = [
+          ["r123-approach.png", { x: -79.1, y: y2 + 1.65, z: 21.2, yaw: 0, pitch: 0.12 }],
+          ["r123-pool-room.png", { x: -84.0, y: y2 + 1.65, z: 24.6, yaw: 0.75, pitch: 0.2 }],
+          ["r123-booths.png", { x: -95.6, y: y2 + 1.65, z: 23.0, yaw: -2.65, pitch: 0.05 }],
+          ["r123-pockets.png", { x: T1.x + 0.75, y: y2 + 1.25, z: T1.z + T1.d / 2 + 0.55, yaw: Math.PI + 0.85, pitch: 0.7 }],
+          ["r123-cramped.png", { x: T2.x + T2.w / 2 + 1.35, y: y2 + 1.55, z: T2.z + 0.4, yaw: -Math.PI / 2, pitch: 0.35 }],
+        ];
+        for (const [name, c] of shots3) { await R3.evaluate((o) => window.__bfb.camAt(o.x, o.y, o.z, o.yaw, o.pitch), c); await sleep(2500); await hideOverlays(R3); await shot(R3, name); }
+        await R3.evaluate(() => window.__bfb.camFree());
+        // ---- pool v HUGHIE: E at the table, the menu, play him for nothing
+        await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, 0); window.__bfb.setPitch(0.5); }, { x: T2.x, y: y2, z: T2.z - T2.d / 2 - 0.7 });
+        ok(await R3.waitForFunction(() => /Pool table 2/.test(window.__bfb.promptText()), null, { timeout: 30000 }).then(() => true, () => false), `the table's prompt: "${(await R3.evaluate(() => window.__bfb.promptText())).slice(0, 60)}"`);
+        await R3.keyboard.press("e");
+        ok(await R3.waitForFunction(() => window.__bfb.pg()?.mode === "menu" && /Play HUGHIE/.test(document.getElementById("pg-menu")?.textContent ?? ""), null, { timeout: 15000 }).then(() => true, () => false), "E: the table's menu (play HUGHIE / wait for a mate, a stake)");
+        await R3.keyboard.press("Digit1");
+        ok(await R3.waitForFunction(() => window.__bfb.pg()?.pooltable2?.ph === "play", null, { timeout: 30000 }).then(() => true, () => false), "1: a game of pool v HUGHIE");
+        ok((await pg()).mode === "" || (await pg()).mode === "place" || (await pg()).mode === "aim", "the menu's closed");
+        // play it: our shots go through our own controls (aim + power); his through the same shot system
+        let mine = 0, his = 0, sawRoll = false, sawHughie = false;
+        for (let k = 0; k < 40; k++) {
+          const q = (await pg()).pooltable2; if (q.ph !== "play") break;
+          const me = q.seats.findIndex((n) => n !== "HUGHIE");
+          if (q.turn === me && !q.rolling) {
+            const P = q.pool, cue = P.b.find((b) => b[0] === 0), g = P.g[me];
+            const t = P.b.filter(([id, , , d]) => !d && id !== 0 && (P.brk ? id === 1 : g ? (g === "red" ? id <= 7 : id >= 9) : id !== 8)).sort((a, b) => Math.hypot(a[1] - cue[1], a[2] - cue[2]) - Math.hypot(b[1] - cue[1], b[2] - cue[2]))[0] ?? P.b.find((b) => b[0] === 8);
+            if (mine === 0) {
+              await R3.evaluate(() => window.__bfb.pgUse("pooltable2")); await sleep(600);
+              if ((await pg()).mode === "place") { await R3.evaluate(() => { const g2 = window.__bfb; g2.pgLeave(); }); }
+              else { await sleep(1800); await hideOverlays(R3); await shot(R3, "r123-pool-aim.png"); const cm = (await pg()).cam; ok(cm && cm.y > y2 + 0.85 && cm.y < y2 + 2.2, `crouched over the cue ball, behind it (camera ${cm?.y.toFixed(2)} m up)`); await R3.evaluate(() => window.__bfb.pgLeave()); }
+            }
+            await R3.evaluate(([a, pw, h, c]) => window.__bfb.pgShot("pooltable2", a, pw, h ? { x: c[1], z: c[2] } : undefined), [Math.atan2(t[1] - cue[1], t[2] - cue[2]), P.brk ? 0.95 : 0.45, P.hand, cue]);
+            mine++;
+          } else if (q.turn !== me && !q.rolling) his = his || 1;
+          if ((await pg()).pooltable2.rolling) { sawRoll = true; if (his) sawHughie = true; }
+          await R3.waitForFunction(() => !window.__bfb.pg().pooltable2.rolling, null, { timeout: 90000 }).catch(() => {});
+          await sleep(800);
+          if (mine >= 3 && sawHughie) break;
+        }
+        const q2 = (await pg()).pooltable2;
+        ok(mine >= 2, `took ${mine} shots through the controls`);
+        ok(sawRoll, "the balls roll for everyone (a replay of the host's shot)");
+        ok(Math.abs(q2.ballY - (y2 + 0.8 + 0.0254)) < 0.002 || q2.pool?.b[1][3], `the balls sit on the cloth (y ${q2.ballY.toFixed(3)})`);
+        ok(/HUGHIE|again|visit|Potted|to play|on the/.test(q2.msg), `the table says what happened: "${q2.msg}"`);
+        await R3.evaluate((o) => window.__bfb.camAt(o.x - 1.7, o.y + 1.65, o.z - 1.9, 0.6, 0.35), { ...T2, y: y2 }); await sleep(2000); await hideOverlays(R3);
+        await shot(R3, "r123-pool-game.png"); await R3.evaluate(() => window.__bfb.camFree());
+        // out of turn (Hughie's) and spectating are refused; then concede (twice: it asks first)
+        await R3.evaluate(() => window.__bfb.pgAct({ op: "leave", st: "pooltable2" }));
+        ok(await R3.waitForFunction(() => window.__bfb.pg()?.pooltable2?.end === "forfeit", null, { timeout: 20000 }).then(() => true, () => false), "conceded: HUGHIE wins");
+        ok(await R3.waitForFunction(() => window.__bfb.pg()?.pooltable2?.ph === "free", null, { timeout: 60000 }).then(() => true, () => false), "the table frees up after the result's been up a moment");
+        // ---- darts v BIG DINNY
+        await R3.evaluate((o) => { window.__bfb.teleportY(o.x, o.y + 0.25, o.z, -Math.PI / 2); window.__bfb.setPitch(0.0); }, { x: O1.oche + 0.5, y: y2, z: O1.board.z });
+        await sleep(1200);
+        await R3.evaluate(() => window.__bfb.pgAct({ op: "open", st: "dartsoche1", vs: "npc", stake: 0 }));
+        ok(await R3.waitForFunction(() => window.__bfb.pg()?.dartsoche1?.ph === "play", null, { timeout: 30000 }).then(() => true, () => false), "a game of 301 v BIG DINNY");
+        let threw = 0, gotT20 = false;
+        for (let k = 0; k < 40 && threw < 3; k++) {
+          const d = (await pg()).dartsoche1; if (d.ph !== "play") break;
+          const me = d.seats.findIndex((n) => n !== "BIG DINNY");
+          if (d.turn !== me) { await sleep(1500); continue; }
+          if (threw === 0) {
+            await R3.evaluate(() => window.__bfb.pgUse("dartsoche1")); await sleep(2500); await hideOverlays(R3); await shot(R3, "r123-oche-view.png");
+            const r1 = await R3.evaluate(() => window.__bfb.pgRing()); await sleep(700); const r2 = await R3.evaluate(() => window.__bfb.pgRing());
+            ok(Math.hypot(r1.u - r2.u, r1.v - r2.v) > 0.0005 && Math.hypot(r1.u - r2.u, r1.v - r2.v) < 0.04, `the ring sways gently (${(Math.hypot(r1.u - r2.u, r1.v - r2.v) * 1000).toFixed(1)} mm in 0.7 s)`);
+          }
+          const n0 = d.darts.n;
+          await R3.evaluate(() => window.__bfb.pgDart("dartsoche1", 0, 0.1034)); // (the middle of the treble 20)
+          ok(await R3.waitForFunction((n) => (window.__bfb.pg().dartsoche1.darts?.n ?? 0) > n, n0, { timeout: 20000 }).then(() => true, () => false), `dart ${threw + 1} lands`);
+          const dd = (await pg()).dartsoche1.darts; const last = dd.d[dd.d.length - 1] ?? dd.last?.d[dd.last.d.length - 1];
+          if (last && last[2] === "T20" && last[3] === 60) gotT20 = true;
+          threw++; await sleep(500);
+        }
+        ok(gotT20, "aimed at the treble 20, scored T20 = 60 (the ring is where it lands)");
+        await sleep(800); await hideOverlays(R3); await shot(R3, "r123-darts-board.png");
+        await R3.evaluate(() => window.__bfb.pgLeave());
+        ok((await pg()).mode === "", "E / step back: normal controls again");
+        // watch BIG DINNY throw from the ledge, then the scoreboard close up
+        ok(await R3.waitForFunction(() => { const d = window.__bfb.pg().dartsoche1; return d.ph !== "play" || d.seats[d.turn] === "BIG DINNY"; }, null, { timeout: 40000 }).then(() => true, () => false), "BIG DINNY's turn");
+        await R3.evaluate((o) => window.__bfb.camAt(o.oche + 3.3, o.y + 1.65, o.board.z + 1.7, -Math.PI / 2 - 0.45, 0.05), { ...O1, y: y2 }); await sleep(3500); await hideOverlays(R3);
+        await shot(R3, "r123-darts-spectate.png");
+        await R3.evaluate((o) => window.__bfb.camAt(o.oche + 1.0, o.y + 2.2, o.board.z, -Math.PI / 2, -0.15), { ...O1, y: y2 }); await sleep(2000); await hideOverlays(R3);
+        await shot(R3, "r123-scoreboard.png");
+        // the lamps on at night
+        await R3.evaluate(() => window.__bfb.forceNight(true));
+        await R3.evaluate((c) => window.__bfb.camAt(c.x, c.y, c.z, c.yaw, c.pitch), shots3[1][1]); await sleep(3000); await hideOverlays(R3); await shot(R3, "r123-pool-night.png");
+        await R3.evaluate((c) => window.__bfb.camAt(c.x, c.y, c.z, c.yaw, c.pitch), shots3[2][1]); await sleep(3000); await hideOverlays(R3); await shot(R3, "r123-booths-night.png");
+        await R3.evaluate(() => { window.__bfb.forceNight(false); window.__bfb.camFree(); window.__bfb.pgAct({ op: "leave", st: "dartsoche1" }); });
       }
     }
   }
   ok(r3errs.length === 0, `new city: no JS errors${r3errs.length ? " -> " + r3errs.slice(0, 3).join(" | ") : ""}`);
   await R3.context().close();
+
+  // ================================================================ R12.3 online: two players upstairs, two games at once,
+  // then a stakes game between them; a spectator's view; a reload mid-game; sunrise calls it off (stakes back)
+  if (!process.env.SKIP_PUB_ONLINE) {
+    console.log("\n# R12.3 pool + darts (online, the new city)");
+    const H = await openPage("A", "?test=1&map=new");
+    await H.evaluate(() => window.__bfb.setLowGraphics(true));
+    await H.fill("#name-input", "Hana"); await H.click("#btn-create");
+    await H.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 240000 });
+    const pcode = (await info(H)).roomCode;
+    const G = await openPage("B", `?room=${pcode}&test=1&map=new`);
+    await G.fill("#name-input", "Gus"); await G.click("#btn-accept-invite");
+    await G.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 1500000 });
+    await G.evaluate(() => window.__bfb.setLowGraphics(true));
+    for (const p of [H, G]) await p.evaluate(() => window.__bfb.testInput(true));
+    const pb3 = await H.evaluate(() => window.__bfb.pub()), Y3 = pb3.y2;
+    const gpg = (p) => p.evaluate(() => window.__bfb.pg());
+    const put = (p, x, z, yaw) => p.evaluate(([x, y, z, yaw]) => window.__bfb.teleportY(x, y, z, yaw), [x, Y3 + 0.25, z, yaw]);
+    // two games at once: Hana v HUGHIE (table 1), Gus v BIG DINNY (oche 1)
+    await put(H, pb3.pools[0].x, pb3.pools[0].z - 1.7, 0); await put(G, pb3.darts[0].oche + 0.6, pb3.darts[0].board.z, -Math.PI / 2);
+    await sleep(2500);
+    await H.evaluate(() => window.__bfb.pgAct({ op: "open", st: "pooltable1", vs: "npc", stake: 0 }));
+    await G.evaluate(() => window.__bfb.pgAct({ op: "open", st: "dartsoche1", vs: "npc", stake: 0 }));
+    ok(await G.waitForFunction(() => window.__bfb.pg()?.pooltable1?.ph === "play" && window.__bfb.pg()?.dartsoche1?.ph === "play", null, { timeout: 60000 }).then(() => true, () => false), "two games at once, and each window sees both");
+    ok(await H.waitForFunction(() => window.__bfb.pg()?.dartsoche1?.seats.includes("Gus"), null, { timeout: 30000 }).then(() => true, () => false), "Hana's window sees Gus at the oche (a spectator gets the real game)");
+    await H.evaluate(() => window.__bfb.pgAct({ op: "open", st: "pooltable2", vs: "mate", stake: 0 }));
+    ok(await H.waitForFunction(() => /already in a game/.test(window.__bfb.pg()?.lastMsg ?? ""), null, { timeout: 20000 }).then(() => true, () => false), "one game at a time (Hana can't open table 2 too)");
+    // Gus throws at the oche when he's up; Hana tries to throw at Gus's board: refused (spectator)
+    await G.waitForFunction(() => { const d = window.__bfb.pg().dartsoche1; return d.seats[d.turn] === "Gus"; }, null, { timeout: 60000 }).catch(() => {});
+    const gn = (await gpg(G)).dartsoche1.darts.n;
+    await G.evaluate(() => window.__bfb.pgDart("dartsoche1", 0, 0.1034));
+    ok(await H.waitForFunction((n) => (window.__bfb.pg().dartsoche1.darts?.n ?? 0) > n, gn, { timeout: 30000 }).then(() => true, () => false), "Gus's dart shows up in Hana's window");
+    await H.evaluate(() => window.__bfb.pgAct({ op: "dart", st: "dartsoche1", n: 99, u: 0, v: 0 }));
+    ok(await H.waitForFunction(() => /watching/.test(window.__bfb.pg()?.lastMsg ?? ""), null, { timeout: 20000 }).then(() => true, () => false), "a spectator's dart is refused");
+    for (const [p, st] of [[H, "pooltable1"], [G, "dartsoche1"]]) await p.evaluate((s) => window.__bfb.pgAct({ op: "leave", st: s }), st);
+    await H.waitForFunction(() => window.__bfb.pg().pooltable1.ph === "free" && window.__bfb.pg().dartsoche1.ph === "free", null, { timeout: 60000 }).catch(() => {});
+    // a stakes game between them: $10 each, taken once when Gus joins
+    for (const p of [H, G]) await p.evaluate(() => window.__bfb.setCash(50));
+    await put(H, pb3.darts[1].oche + 0.6, pb3.darts[1].board.z - 1.2, -Math.PI / 2); await put(G, pb3.darts[1].oche + 0.8, pb3.darts[1].board.z + 1.2, -Math.PI / 2);
+    await sleep(2500);
+    await H.evaluate(() => window.__bfb.pgAct({ op: "open", st: "dartsoche2", vs: "mate", stake: 10 }));
+    ok(await G.waitForFunction(() => window.__bfb.pg()?.dartsoche2?.ph === "waiting", null, { timeout: 30000 }).then(() => true, () => false), "Hana's waiting for a mate at oche 2 (Gus sees it)");
+    await G.evaluate(() => window.__bfb.pgAct({ op: "join", st: "dartsoche2" }));
+    ok(await H.waitForFunction(() => window.__bfb.pg()?.dartsoche2?.ph === "play" && window.__bfb.match().scores?.every?.((s) => s.cash === 40) !== false, null, { timeout: 30000 }).then(() => true, () => false), "Gus joins: $10 each held");
+    const cashOf = async () => (await H.evaluate(() => window.__bfb.match().scores ?? [])).map((s) => s.cash);
+    ok((await cashOf()).every((c) => c === 40), `both stakes taken once (${JSON.stringify(await cashOf())})`);
+    // out of turn: whoever's not up tries to throw
+    const s2 = (await gpg(H)).dartsoche2, upName = s2.seats[s2.turn], up = upName === "Hana" ? H : G, down = up === H ? G : H;
+    await down.evaluate(() => window.__bfb.pgAct({ op: "dart", st: "dartsoche2", n: 0, u: 0, v: 0 }));
+    ok(await down.waitForFunction(() => /Not your turn/.test(window.__bfb.pg()?.lastMsg ?? ""), null, { timeout: 20000 }).then(() => true, () => false), "out of turn: refused");
+    await up.evaluate(() => window.__bfb.pgDart("dartsoche2", 0, 0.1034));
+    await down.waitForFunction(() => (window.__bfb.pg().dartsoche2.darts?.n ?? 0) >= 1, null, { timeout: 30000 }).catch(() => {});
+    // Gus reloads the tab mid-game: back in, he gets the whole game (scores, darts already thrown) and keeps his seat
+    await G.reload({ waitUntil: "domcontentloaded" });
+    await G.waitForFunction(() => window.__bfb?.info().screen === "title" || window.__bfb?.info().screen === "playing", null, { timeout: 480000 });
+    if ((await info(G)).screen !== "playing") { await G.click("#btn-accept-invite").catch(() => {}); await G.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 1500000 }); }
+    ok(await G.waitForFunction(() => { const d = window.__bfb.pg()?.dartsoche2; return d && d.ph === "play" && (d.darts?.n ?? 0) >= 1; }, null, { timeout: 120000 }).then(() => true, () => false), "after a reload Gus sees the game as it stands (the dart already thrown)");
+    ok((await gpg(H)).dartsoche2.ph === "play", "his seat was held while he was gone");
+    // sunrise mid-game: called off, both stakes back
+    await H.evaluate(() => window.__bfb.startMatch());
+    ok(await H.waitForFunction(() => window.__bfb.pg()?.dartsoche2?.end === "void", null, { timeout: 120000 }).then(() => true, () => false), "a new cycle (the match starts): the game's called off");
+    ok(await H.waitForFunction(() => (window.__bfb.match().scores ?? []).length === 2, null, { timeout: 30000 }).then(() => true, () => false) && (await cashOf()).every((c) => c === 0 || c === 50), `stakes back before the match resets cash (${JSON.stringify(await cashOf())})`);
+    for (const p of [H, G]) { const errs = p.errors.filter((e) => !/favicon|fonts\.g/.test(e)); ok(errs.length === 0, `R12.3 ${p.label}: no JS errors${errs.length ? " -> " + errs.slice(0, 3).join(" | ") : ""}`); }
+    await H.context().close(); await G.context().close();
+  }
 
 } catch (e) {
   ok(false, "test crashed: " + (e?.stack ?? e));

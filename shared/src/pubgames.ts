@@ -373,8 +373,9 @@ export const PUBGAMES = {
   lastOrders: 90,
   /** a dropped connection's seat is held this long, then the game's called off */
   dropHold: 45,
-  /** walk this far from your station and you have this long to come back, or you forfeit */
-  leaveR: 12, leaveT: 10,
+  /** leave the floor (go downstairs, out of the pub) or get this far from your station, and you have this long to
+   *  come back or you forfeit (fetching a pint from the island bar while they shoot is fine) */
+  leaveR: 30, leaveT: 10,
   /** how long a finished game's result stays up before the station frees */
   overT: 7,
   /** NPC thinking time (s), per shot / per dart */
@@ -398,7 +399,7 @@ export interface StationGeom {
   wait: { x: number; z: number; yaw: number }[];
 }
 export type StationPhase = "free" | "waiting" | "play" | "over";
-export interface Seat { id: string; name: string; npc: boolean; stake: number; paid: boolean; away: number; drop: number; }
+export interface Seat { id: string; name: string; npc: boolean; stake: number; paid: boolean; away: number; drop: number; /** darts: darts in a row thrown for you by the clock */ idle?: number; }
 export interface StationState {
   phase: StationPhase;
   seats: Seat[];
@@ -641,8 +642,9 @@ export class PubGames {
     this.throwDart(id, u, v);
     return "";
   }
-  private throwDart(id: string, u: number, v: number) {
+  private throwDart(id: string, u: number, v: number, byClock = false) {
     const s = this.st.get(id)!, D = s.darts!, me = D.turn, seat = s.seats[me];
+    if (!byClock) seat.idle = 0;
     const r = dartsThrow(D, u, v);
     s.clock = DARTS.clock; s.npcT = 0;
     this.h.emit({ t: "pgDart", st: id, who: seat.id, label: r.hit.label, value: r.hit.value, bust: r.bust, u, v });
@@ -695,7 +697,7 @@ export class PubGames {
         q.drop = 0;
         const other2 = s.seats[1 - k];
         if (p.jailed) { if (s.phase === "waiting" || !other2) this.finish(id, "", "void", `${q.name} got lifted.`); else this.finish(id, other2.id, "forfeit", `${q.name} got lifted by the guards: ${other2.name} wins.`); ended = true; continue; }
-        const far = Math.hypot(p.x - g.x, p.z - g.z) > PUBGAMES.leaveR;
+        const far = Math.hypot(p.x - g.x, p.z - g.z) > PUBGAMES.leaveR || Math.abs(p.y - (g.kind === "darts" ? g.y - DARTS.height : g.y)) > 2.5;
         q.away = far ? q.away + dt : 0;
         if (q.away >= PUBGAMES.leaveT) { if (s.phase === "waiting" || !other2) this.finish(id, "", "void", `${q.name} wandered off.`); else this.finish(id, other2.id, "forfeit", `${q.name} walked away: ${other2.name} wins.`); ended = true; }
       }
@@ -715,6 +717,7 @@ export class PubGames {
       if (s.npcT >= think) { const sh = npcPoolShot(P, this.h.rng); if (P.inHand) { const cue = P.balls.find((b) => b.id === 0)!; cue.x = sh.cx; cue.z = sh.cz; } this.startShot(id, sh.dx, sh.dz, sh.v); }
       return;
     }
+    if (seat.drop > 0) return; // (their connection dropped: the seat's held, and so is the clock)
     s.clock -= dt;
     if (s.clock <= 0) { this.settle(id, true); }
   }
@@ -726,8 +729,14 @@ export class PubGames {
       if (s.npcT >= wait) { const t = npcDart(D.scores[D.turn], 3 - D.darts.length, this.h.rng); this.throwDart(id, t.u, t.v); }
       return;
     }
+    if (seat.drop > 0) return; // (their connection dropped: the seat's held, and so is the clock)
     s.clock -= dt;
-    if (s.clock <= 0) this.throwDart(id, 0.4, 0.4); // (out of time: that dart's a miss)
+    if (s.clock <= 0) {
+      // out of time: that dart's a miss; a whole visit missed on the clock and you've wandered off: forfeit
+      seat.idle = (seat.idle ?? 0) + 1;
+      if (seat.idle >= 3) { const w = s.seats[1 - D.turn]; this.finish(id, w.id, "forfeit", `${seat.name} let the clock throw a whole visit: ${w.name} wins.`); return; }
+      this.throwDart(id, 0.4, 0.4, true);
+    }
   }
 
   private msg(id: string, msg: string, to?: string) { this.h.emit({ t: "pgMsg", st: id, msg, to }); }
