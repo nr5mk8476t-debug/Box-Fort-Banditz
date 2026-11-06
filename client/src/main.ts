@@ -286,8 +286,8 @@ function updateMatchHud(a: ArenaScene) {
 
   // home compass (during the round, when you're away from your fort)
   const h = a.home();
-  const showHome = m.phase === "night" && !h.inside; // (R12.3: carried loot is only lost at the end of the night)
-  const hSig = showHome ? `${Math.round(h.dist)}|${Math.round(h.bearing * 20)}|${m.timeLeft <= 30}` : "";
+  const showHome = (m.phase === "scavenge" || m.phase === "dusk" || m.phase === "night") && !h.inside; // (R12.3: the whole 8-minute scavenge)
+  const hSig = showHome ? `${Math.round(h.dist)}|${Math.round(h.bearing * 20)}|${m.phase === "night" && m.timeLeft <= 30}` : "";
   if (hSig !== homeSig) {
     homeSig = hSig;
     show("home-arrow", showHome);
@@ -295,7 +295,7 @@ function updateMatchHud(a: ArenaScene) {
       $("ha-arrow").style.transform = `rotate(${h.bearing}rad)`;
       $("home-arrow").style.setProperty("--home", PLAYER_COLORS[a.myColorIdx % PLAYER_COLORS.length]);
       $("ha-text").textContent = `HOME ${Math.round(h.dist)} m`;
-      $("home-arrow").classList.toggle("urgent", m.timeLeft <= 30);
+      $("home-arrow").classList.toggle("urgent", m.phase === "night" && m.timeLeft <= 30);
     }
   }
 

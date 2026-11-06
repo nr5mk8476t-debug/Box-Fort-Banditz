@@ -857,7 +857,7 @@ try {
   ok((await M()).home.inside, "a cycle starts at home");
   ok(await waitPhase("scavenge", 90000), "intro -> scavenge"); // (C3: 5 s of game time; the heavier city draws slower on this CPU-only box)
   await A.evaluate(() => window.__bfb.noEvents());
-  ok(/^[23]:\d\d$/.test(await A.textContent("#mh-time")) && /DAY 1/.test(await A.textContent("#mh-round")), `day timer shows ${await A.textContent("#mh-round")} ${await A.textContent("#mh-time")}`);
+  ok(/^[78]:\d\d$/.test(await A.textContent("#mh-time")) && /DAY 1/.test(await A.textContent("#mh-round")), `day timer shows ${await A.textContent("#mh-round")} ${await A.textContent("#mh-time")}`);
   ok(await A.isVisible("#scores"), "scoreboard shows during the round");
   // bank a TV: drop it in the yard and wait 10 s
   const yardPos = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z, yaw: m.yaw }; });
@@ -909,6 +909,9 @@ try {
   ok(await waitPhase("night", 150000), "sunset -> night"); // (C5c.2: game time can run up to ~10x slower on this box)
   ok(await A.waitForFunction(() => window.__bfb.night().level > 0.9 && window.__bfb.night().body, null, { timeout: 20000 }).then(() => true, () => false), "the city goes dark (night visuals)");
   ok(/NIGHT 1/.test(await A.textContent("#mh-round")) && /^[0-2]:\d\d$/.test(await A.textContent("#mh-time")), `night timer: ${await A.textContent("#mh-time")}`);
+  // (R12.3: nobody's sent home at sunset any more: walk back to the fort to look at what's banked there)
+  await A.evaluate(([x, z]) => window.__bfb.teleport(x, z, 0), [yardPos.x, yardPos.z]);
+  await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "crt_tv" && i.lock === 100), null, { timeout: 30000 }).catch(() => {});
   const nightItems = await A.evaluate(() => window.__bfb.items().filter((i) => i.mode === "free"));
   const tvStill = nightItems.find((i) => i.type === "crt_tv" && i.lock === 100);
   ok(!!tvStill, "your banked TV is still in the fort at night");
