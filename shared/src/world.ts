@@ -50,6 +50,8 @@ export const THROW_MIN_SPEED = 5;
 export const THROW_MAX_SPEED = 16;
 export const ITEM_TARGET = 55; // loose items the World tries to keep in the city (200 m city)
 export const ITEM_TARGET_NIGHT = 22; // night: loot is scarce (but worth double)
+/** R12.3: fresh x2 loot that appears round the city as night falls (no wipe any more) */
+export const NIGHT_TOPUP = 14;
 export const ITEM_MAX = 95;
 export const GIANT_MAX = 2;
 /** Slice 2A: shop shelves are stocked on top of the loose-loot cap (15 shops) */
@@ -1812,6 +1814,14 @@ export class World {
       const it = this.items.get(id);
       if (it) it.body.rot = j.yaw ?? 0;
     }
+  }
+
+  /** R12.3: night falls in the middle of the scavenge (no wipe): a handful of fresh x2 loot appears round the
+   *  city, the big shots come sooner, and (via match.night) raids, double heat and tougher cops switch on */
+  nightFalls() {
+    this.npc.nightMode = true; this.npc.bigShotT = Math.min(this.npc.bigShotT, 4 + this.rng() * 8);
+    if (!this.spawnLoot) return;
+    for (let i = 0; i < NIGHT_TOPUP && this.looseCount() < ITEM_MAX; i++) this.spawnOne();
   }
 
   private topUpLoot(n: number) {

@@ -23,7 +23,7 @@ import { LockpickUI, PintUI } from "./lockpickUI.ts";
 import { NightRenderer } from "./nightRenderer.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, BUFFS, PUB, tipsyAmount, JUKEBOX, type PropDef,
+  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -497,8 +497,10 @@ export class ArenaScene {
     // round loop + event state
     const mv = view as unknown as Record<string, any>;
     for (const k of Object.keys(this.match) as (keyof MatchHud)[]) if (mv[k] !== undefined) (this.match as any)[k] = mv[k];
-    const isNight = this.match.phase === "dusk" || this.match.phase === "night";
-    this.night.night = isNight || this.forceNight;
+    const isNight = this.match.phase === "night" || (this.match.phase === "dusk" && this.match.timeLeft < DUSK_TIME / 2);
+    // (R12.3: the sun goes down over the 30 s sunset while everyone keeps playing)
+    if (this.forceNight) this.night.night = true;
+    else this.night.darkness = this.match.phase === "night" ? 1 : this.match.phase === "dusk" ? 1 - this.match.timeLeft / DUSK_TIME : 0;
     this.npcs.night = isNight;
     if (this.firstWorld) { this.firstWorld = false; this.night.snap(); }
     const scores: ScoreLine[] = [];
@@ -1106,15 +1108,14 @@ export class ArenaScene {
 
   private onRound(phase: string, round: number) {
     switch (phase) {
-      case "intro": sfx.roundIntro(); this.onBanner?.(`CYCLE ${round} OF ${this.match.rounds}`, "Scavenge by day, raid by night, sell at the pawn shop", "info"); break;
-      case "scavenge": sfx.roundStart(); this.onBanner?.("SCAVENGE!", "Bring loot home: it banks in your fort after 10 s", "good"); break;
+      case "intro": sfx.roundIntro(); this.onBanner?.(`CYCLE ${round} OF ${this.match.rounds}`, "8 minutes: scavenge by day, raid by night, sell at the pawn shop", "info"); break;
+      case "scavenge": sfx.roundStart(); this.onBanner?.("SCAVENGE!", "Bring loot home: it banks in your fort after 10 s. Night falls in 6 minutes.", "good"); break;
       case "hurry":
         sfx.hurry();
-        if (this.match.phase === "night") this.onBanner?.("15 SECONDS!", "Get home before sunrise!", "bad");
-        else this.onBanner?.("30 SECONDS!", "Get home, or lose whatever you're carrying!", "bad");
+        this.onBanner?.("30 SECONDS TO SUNRISE!", "Get home, or lose whatever you're carrying!", "bad");
         break;
-      case "dusk": sfx.timeUp(); setTimeout(() => sfx.nightfall(), 600); this.onBanner?.("NIGHT FALLS...", "Scarce loot worth DOUBLE. Forts can be RAIDED. Twice the cops.", "info"); break;
-      case "night": sfx.roundStart(); this.onBanner?.("NIGHT SCAVENGE!", "1 minute. Raid a fort or grab the x2 loot. Guard your own!", "good"); break;
+      case "dusk": sfx.nightfall(); this.onBanner?.("THE SUN'S GOING DOWN...", "30 seconds to nightfall. Then: x2 loot, fort raids, twice the cops.", "info"); break;
+      case "night": sfx.roundStart(); this.onBanner?.("NIGHT FALLS!", "2 minutes. Raid a fort or grab the x2 loot. Get home before sunrise!", "good"); break;
       case "dawn": sfx.timeUp(); this.onBanner?.("SUNRISE", "Time to sell your loot at the pawn shop", "info"); break;
       case "shop": sfx.shopBell(); break;
       case "upgrades": sfx.uiClick(); break;
@@ -1197,7 +1198,7 @@ export class ArenaScene {
   /** Round countdown ticks, garbage truck rumble. */
   private matchSounds(dt: number) {
     const m = this.match;
-    if ((m.phase === "scavenge" || m.phase === "night") && m.timeLeft <= 10 && m.timeLeft > 0) {
+    if (m.phase === "night" && m.timeLeft <= 10 && m.timeLeft > 0) {
       const sec = Math.ceil(m.timeLeft);
       if (sec !== this.lastTickSec) { this.lastTickSec = sec; sfx.tick(sec <= 3); }
     } else this.lastTickSec = -1;
@@ -1437,7 +1438,7 @@ export class ArenaScene {
       if (iv.mode === "pocket") continue;
       if (id === inv.hand || inv.pockets.includes(id)) continue;
       let note = "";
-      const night = this.match.phase === "night" || this.match.phase === "dusk";
+      const night = this.match.phase === "night";
       if (iv.lock >= 100) note = night ? (iv.fort === this.myColorIdx ? "" : "RAID:" + iv.fort) : "LOCKED:" + iv.fort;
       if (iv.mode === "held") {
         if (this.npcs.kindOf(iv.holder)) continue; // being carried off by a raccoon: bonk it instead

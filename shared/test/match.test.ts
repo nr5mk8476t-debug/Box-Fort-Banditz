@@ -46,7 +46,7 @@ test("fort yards: each contains its pad, no loot spawns inside, fortAt finds the
   assert.equal(fortAt(city, 0, 0), -1);
 });
 
-test("cycle: intro -> scavenge (3 min) -> dusk -> night (1 min) -> dawn -> shop -> upgrades, x3 -> over; START resets", () => {
+test("cycle (R12.3): intro -> one 8-min scavenge (5.5 min day -> 30 s sunset -> 2 min night) -> dawn -> shop -> upgrades, x3 -> over; START resets", () => {
   const { w, ps } = quiet(2);
   assert.equal(w.match.phase, "lobby");
   w.debugTeleport("p0", 0, 0, 0);
@@ -54,14 +54,20 @@ test("cycle: intro -> scavenge (3 min) -> dusk -> night (1 min) -> dawn -> shop 
   const pad = yard(w, ps[0].colorIdx);
   assert.ok(Math.hypot(ps[0].move.x - pad.padX, ps[0].move.z - pad.padZ) < 0.5, "a cycle starts at home");
   const ev: WorldEvent[] = [];
-  run(w, ROUND_TIME - 29, ev);
-  assert.ok(ev.some((e) => e.t === "round" && e.phase === "hurry"), "30 s warning");
-  run(w, 30);
+  assert.equal(ROUND_TIME + DUSK_TIME + NIGHT_TIME, 480, "8 minutes of scavenging");
+  assert.ok(Math.abs(w.match.scavengeLeft - 480) < 0.1);
+  run(w, ROUND_TIME + 0.05, ev);
   assert.equal(w.match.phase, "dusk");
-  assert.ok(w.match.night, "night falls");
-  run(w, DUSK_TIME + 0.05);
+  assert.ok(!w.match.night && w.match.scavenging, "the sunset: still day for the rules, still scavenging");
+  assert.ok(!ev.some((e) => e.t === "round" && e.phase === "hurry"), "no hurry at sunset: nothing's lost");
+  run(w, DUSK_TIME / 2);
+  assert.ok(w.match.darkness > 0.4 && w.match.darkness < 0.6, `half way down (${w.match.darkness})`);
+  run(w, DUSK_TIME / 2 + 0.05);
   assert.equal(w.match.phase, "night");
-  run(w, NIGHT_TIME + 0.05);
+  assert.ok(w.match.night, "night falls");
+  run(w, NIGHT_TIME - 29, ev);
+  assert.ok(ev.some((e) => e.t === "round" && e.phase === "hurry"), "30 s to sunrise");
+  run(w, 30);
   assert.equal(w.match.phase, "dawn");
   assert.ok(!w.match.night);
   run(w, DAWN_TIME + 0.05);
@@ -125,7 +131,7 @@ test("loot in an empty (unowned) fort yard doesn't bank", () => {
   assert.equal(w.items.get(id)!.locked, false);
 });
 
-test("time's up: carried loot away from home is LOST; at home it lands in your yard; the fort keeps it through the night", () => {
+test("time's up (end of the night): carried loot away from home is LOST; at home it lands in your yard", () => {
   const { w, ps } = quiet(2);
   toScavenge(w);
   const [a, b] = ps;
@@ -146,9 +152,13 @@ test("time's up: carried loot away from home is LOST; at home it lands in your y
   const ev: WorldEvent[] = [];
   run(w, w.match.timeLeft + 0.1, ev);
   assert.equal(w.match.phase, "dusk");
+  assert.equal(a.hand, heldTv, "R12.3: sunset isn't time-up: you keep what you carry");
+  assert.ok(!ev.some((e) => e.t === "lost"));
+  run(w, DUSK_TIME + NIGHT_TIME + 0.1, ev);
+  assert.equal(w.match.phase, "dawn");
   assert.equal(a.cash, 0, "loot isn't cash until you sell it");
   assert.equal(a.hand, "");
-  for (const id of [yardTv, yardChicken, heldTv]) assert.ok(w.items.get(id)?.locked, `${id} banked in a's fort through the night`);
+  for (const id of [yardTv, yardChicken, heldTv]) assert.ok(w.items.get(id)?.locked, `${id} banked in a's fort at sunrise`);
   assert.equal(w.match.bankedValue(a), expectA);
   assert.ok(ev.some((e) => e.t === "lost" && e.p === b.id && e.count === 1), "b lost the TV");
   assert.ok(!w.items.has(bTv));
@@ -156,18 +166,23 @@ test("time's up: carried loot away from home is LOST; at home it lands in your y
   assert.equal(w.match.results.find((l) => l.id === b.id)!.lost, 1);
 });
 
-test("night: loot is scarce and worth x2, heat builds twice as fast", () => {
+test("night (R12.3): no wipe at nightfall: the day's loot stays, fresh x2 loot appears, heat builds twice as fast", () => {
   const w = new World({ seed: 5, npcs: 0, spawnLoot: true });
   const p = w.addPlayer("p0", "A");
   w.startMatch(); run(w, INTRO_TIME + 0.05);
   w.match.cancelPlannedEvents();
-  const dayFree = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk).length; // (C4a: street junk isn't loot)
+  const loose = () => [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk);
+  const day = new Set(loose().map((it) => it.id));
   w.match.timeLeft = 0.01; run(w, 0.05);
   assert.equal(w.match.phase, "dusk");
-  const night = [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk);
-  assert.ok(night.length <= ITEM_TARGET_NIGHT && night.length < dayFree, `scarce: ${night.length} vs ${dayFree} by day`);
-  assert.ok([...w.items.values()].every((it) => it.mult === 2), "night loot is worth double");
   run(w, DUSK_TIME + 0.05);
+  assert.equal(w.match.phase, "night");
+  const now = loose();
+  assert.ok([...day].every((id) => w.items.has(id)), "nothing wiped at nightfall");
+  const fresh = now.filter((it) => !day.has(it.id));
+  assert.ok(fresh.length >= 8, `fresh night loot appears (${fresh.length})`);
+  assert.ok(fresh.every((it) => it.mult === 2), "night loot is worth double");
+  assert.ok(ITEM_TARGET_NIGHT < day.size, "and it doesn't keep refilling at night (scarce)");
   p.notoriety = 0; w.addHeat(p, 10);
   assert.equal(p.notoriety, 20, "heat x2 at night");
 });

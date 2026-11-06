@@ -1,7 +1,10 @@
 // Phase 5A: the cycle loop. Runs inside the World (host browser + solo).
 //
-//   lobby --START--> [ intro (5 s) -> scavenge (3 min, day) -> dusk (5 s) -> night (1 min)
+//   lobby --START--> [ intro (5 s) -> scavenge (5.5 min, day) -> dusk (30 s sunset, still playing) -> night (2 min)
 //                      -> dawn (results) -> shop (60 s, pawn shop) -> upgrades (60 s) ] x 3 -> over
+// R12.3 (Blake: "instead of a day cycle, then a night cycle... day turning into night, 8 minutes for the whole
+// scavenge"): one 8-minute scavenge. The sun goes down while you play (no city wipe at dusk, you keep what you
+// carry); night tops the city up with x2 loot, turns fort raids on, and the cops get tougher.
 //
 // Banking: loot resting in YOUR fort yard locks in 10 s after you drop it there (anyone can steal it
 // back before that). At NIGHT even locked loot can be taken (fort raids). When a scavenge ends,
@@ -35,16 +38,18 @@ export const FESTA = {
 export const CYCLES = 3;
 /** (kept for older code: a "round" is now a whole cycle) */
 export const ROUNDS = CYCLES;
-export const ROUND_TIME = 180;
-export const NIGHT_TIME = 60;
+export const ROUND_TIME = 330;
+export const NIGHT_TIME = 120;
 export const INTRO_TIME = 5;
-export const DUSK_TIME = 5;
+export const DUSK_TIME = 30;
+/** R12.3: the whole scavenge (day + sunset + night) */
+export const SCAVENGE_TOTAL = ROUND_TIME + DUSK_TIME + NIGHT_TIME;
 export const DAWN_TIME = 8;
 export const SHOP_TIME = 60;
 export const UPGRADE_TIME = 60;
 export const LOCK_TIME = 10;
 export const HOME_WARNING = 30;
-export const NIGHT_WARNING = 15;
+export const NIGHT_WARNING = 30;
 /** kept for older tests: the results pause after the night round */
 export const TALLY_TIME = DAWN_TIME;
 
@@ -134,10 +139,14 @@ export class MatchSystem {
   private get happyZones() { return this.w.arena.happyZones ?? DEFAULT_HAPPY_ZONES; }
   private get airdropSpots() { return this.w.arena.airdropSpots ?? DEFAULT_AIRDROP_SPOTS; }
 
-  /** Night round (and the dusk before it): dark city, x2 loot, tougher cops, fort raids. */
-  get night() { return this.phase === "night" || this.phase === "dusk"; }
-  /** A scavenge round is running (day or night). */
-  get scavenging() { return this.phase === "scavenge" || this.phase === "night"; }
+  /** Night: dark city, x2 loot, tougher cops, fort raids. (R12.3: the sunset before it is still day for the rules) */
+  get night() { return this.phase === "night"; }
+  /** A scavenge is running (day, sunset or night). */
+  get scavenging() { return this.phase === "scavenge" || this.phase === "dusk" || this.phase === "night"; }
+  /** R12.3: seconds left in the whole 8-minute scavenge (0 outside one) */
+  get scavengeLeft() { return this.phase === "scavenge" ? this.timeLeft + DUSK_TIME + NIGHT_TIME : this.phase === "dusk" ? this.timeLeft + NIGHT_TIME : this.phase === "night" ? this.timeLeft : 0; }
+  /** R12.3: 0 = day .. 1 = night (the sunset in between) */
+  get darkness() { return this.phase === "night" ? 1 : this.phase === "dusk" ? Math.max(0, Math.min(1, 1 - this.timeLeft / DUSK_TIME)) : 0; }
 
   /** Host pressed START (also used to restart after the final results). */
   start(): boolean {
@@ -182,11 +191,12 @@ export class MatchSystem {
       case "scavenge":
         this.bankTick(dt);
         this.eventTick(dt);
-        if (!this.warned && this.timeLeft <= HOME_WARNING) { this.warned = true; this.w.emit({ t: "round", phase: "hurry", round: this.round }); }
-        if (this.timeLeft <= 0) this.endScavenge(false);
+        if (this.timeLeft <= 0) this.go("dusk", DUSK_TIME); // (R12.3: the sun starts going down; nothing's lost, nothing's wiped)
         break;
       case "dusk":
-        if (this.timeLeft <= 0) this.go("night", NIGHT_TIME);
+        this.bankTick(dt);
+        this.eventTick(dt);
+        if (this.timeLeft <= 0) { this.stopEvent(); this.go("night", NIGHT_TIME); this.w.nightFalls(); }
         break;
       case "night":
         this.bankTick(dt);
@@ -291,12 +301,8 @@ export class MatchSystem {
       if (slot >= 0 && this.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; }
     }
     this.results = this.lines();
-    if (!night) {
-      this.go("dusk", DUSK_TIME);
-      this.w.resetCity(true); // night falls: fresh (scarce, x2) loot; your fort keeps its loot
-    } else {
-      this.go("dawn", DAWN_TIME);
-    }
+    void night;
+    this.go("dawn", DAWN_TIME);
   }
 
   private lines(): RoundLine[] {

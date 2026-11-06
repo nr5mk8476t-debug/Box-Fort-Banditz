@@ -8,7 +8,7 @@ import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, SEAMUS, JUKEBOX } from "@bfb/shared";
+import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
@@ -229,13 +229,14 @@ function updateMatchHud(a: ArenaScene) {
   let round = "", time = "", sub = "", cls = "mh-time";
   if (m.phase === "lobby") { time = "LOBBY"; sub = starter ? "Press ENTER to start the match" : "Waiting for the host to start"; }
   else if (m.phase === "intro") { round = `CYCLE ${m.round}/${m.rounds}`; time = String(Math.max(1, Math.ceil(m.timeLeft))); sub = "Get ready!"; }
-  else if (m.phase === "scavenge") {
-    round = `DAY ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft);
-    if (m.timeLeft <= 10) cls += " danger"; else if (m.timeLeft <= 30) cls += " warn";
-  } else if (m.phase === "dusk") { round = `CYCLE ${m.round}/${m.rounds}`; time = "NIGHTFALL"; sub = `Night scavenge in ${Math.max(1, Math.ceil(m.timeLeft))}`; }
-  else if (m.phase === "night") {
-    round = `NIGHT ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "x2 loot / forts can be raided";
-    if (m.timeLeft <= 10) cls += " danger"; else if (m.timeLeft <= 15) cls += " warn";
+  else if (m.phase === "scavenge" || m.phase === "dusk" || m.phase === "night") {
+    // R12.3: one 8-minute scavenge, one clock: day, then the sun goes down while you play, then night
+    const left = m.phase === "scavenge" ? m.timeLeft + DUSK_TIME + NIGHT_TIME : m.phase === "dusk" ? m.timeLeft + NIGHT_TIME : m.timeLeft;
+    time = fmtTime(left);
+    if (m.phase === "scavenge") { round = `DAY ${m.round}/${m.rounds}`; if (m.timeLeft <= 30) sub = `Sunset in ${Math.max(1, Math.ceil(m.timeLeft))}`; }
+    else if (m.phase === "dusk") { round = `SUNSET ${m.round}/${m.rounds}`; sub = `Night falls in ${Math.max(1, Math.ceil(m.timeLeft))}`; }
+    else { round = `NIGHT ${m.round}/${m.rounds}`; sub = "x2 loot / forts can be raided"; }
+    if (m.phase === "night" && m.timeLeft <= 10) cls += " danger"; else if (m.phase === "night" && m.timeLeft <= 30) cls += " warn";
   } else if (m.phase === "dawn") { round = `CYCLE ${m.round}/${m.rounds}`; time = "SUNRISE"; sub = "The pawn shop opens soon"; }
   else if (m.phase === "shop") { round = `CYCLE ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "PAWN SHOP"; }
   else if (m.phase === "upgrades") { round = `CYCLE ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "UPGRADES"; }
@@ -285,8 +286,8 @@ function updateMatchHud(a: ArenaScene) {
 
   // home compass (during the round, when you're away from your fort)
   const h = a.home();
-  const showHome = (m.phase === "scavenge" || m.phase === "night") && !h.inside;
-  const hSig = showHome ? `${Math.round(h.dist)}|${Math.round(h.bearing * 20)}|${m.timeLeft <= (m.phase === "night" ? 15 : 30)}` : "";
+  const showHome = m.phase === "night" && !h.inside; // (R12.3: carried loot is only lost at the end of the night)
+  const hSig = showHome ? `${Math.round(h.dist)}|${Math.round(h.bearing * 20)}|${m.timeLeft <= 30}` : "";
   if (hSig !== homeSig) {
     homeSig = hSig;
     show("home-arrow", showHome);
@@ -294,7 +295,7 @@ function updateMatchHud(a: ArenaScene) {
       $("ha-arrow").style.transform = `rotate(${h.bearing}rad)`;
       $("home-arrow").style.setProperty("--home", PLAYER_COLORS[a.myColorIdx % PLAYER_COLORS.length]);
       $("ha-text").textContent = `HOME ${Math.round(h.dist)} m`;
-      $("home-arrow").classList.toggle("urgent", m.timeLeft <= (m.phase === "night" ? 15 : 30));
+      $("home-arrow").classList.toggle("urgent", m.timeLeft <= 30);
     }
   }
 
@@ -315,7 +316,7 @@ function updateMatchHud(a: ArenaScene) {
     show("tally", showTally);
     if (showTally) renderTally(a, starter);
   }
-  document.body.classList.toggle("night", m.phase === "night" || m.phase === "dusk");
+  document.body.classList.toggle("night", m.phase === "night" || (m.phase === "dusk" && m.timeLeft < DUSK_TIME / 2));
 
   // Phase 5A: pawn shop + upgrades screens (the mouse is released while they're open)
   const ov = m.phase === "shop" ? "shop" : m.phase === "upgrades" ? "upgrades" : "";

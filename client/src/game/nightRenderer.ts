@@ -89,6 +89,8 @@ export class NightRenderer {
 
   /** Night on / off (fades over ~3 s). */
   set night(on: boolean) { this.target = on ? 1 : 0; }
+  /** R12.3: the sunset: any level in between (0 day .. 1 night), followed at the same ~3 s rate */
+  set darkness(v: number) { this.target = Math.max(0, Math.min(1, v)); }
   get night() { return this.target > 0; }
 
   /** Jump straight to day or night (entering a game already at night). */

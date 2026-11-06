@@ -900,21 +900,25 @@ try {
   ok(await waitInv("v.pockets.some(Boolean)"), "pocketed a chicken out in the city");
   ok(await A.isVisible("#home-arrow") && /HOME \d+ m/.test(await A.textContent("#home-arrow")), `home compass: "${await A.textContent("#home-arrow")}"`);
   await A.evaluate(() => window.__bfb.setTimeLeft(2));
-  ok(await waitPhase("dusk", 30000), "time's up -> nightfall");
-  ok(await waitInv("v.pockets.every((x) => !x)", 5000), "the chicken is gone (lost)");
-  ok(/NIGHT FALLS/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
-  ok(await waitPhase("night", 150000), "dusk -> night scavenge"); // (C5c.2: 5 s of GAME time: up to ~10x slower on this box)
+  // R12.3: one 8-minute scavenge: the sun goes down while you play (nothing's lost at sunset), then night
+  ok(await waitPhase("dusk", 30000), "day -> sunset (still scavenging)");
+  ok(await waitInv("v.pockets.some(Boolean)", 3000), "R12.3: sunset isn't time-up: still carrying the chicken");
+  ok(/SUN'S GOING DOWN/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
+  ok(/SUNSET 1/.test(await A.textContent("#mh-round")) && /^[0-2]:\d\d$/.test(await A.textContent("#mh-time")), `one clock through the sunset: ${await A.textContent("#mh-round")} ${await A.textContent("#mh-time")}`);
+  await A.evaluate(() => window.__bfb.setTimeLeft(1));
+  ok(await waitPhase("night", 150000), "sunset -> night"); // (C5c.2: game time can run up to ~10x slower on this box)
   ok(await A.waitForFunction(() => window.__bfb.night().level > 0.9 && window.__bfb.night().body, null, { timeout: 20000 }).then(() => true, () => false), "the city goes dark (night visuals)");
-  ok(/NIGHT 1/.test(await A.textContent("#mh-round")) && /^[01]:\d\d$/.test(await A.textContent("#mh-time")), `night timer: ${await A.textContent("#mh-time")}`);
+  ok(/NIGHT 1/.test(await A.textContent("#mh-round")) && /^[0-2]:\d\d$/.test(await A.textContent("#mh-time")), `night timer: ${await A.textContent("#mh-time")}`);
   const nightItems = await A.evaluate(() => window.__bfb.items().filter((i) => i.mode === "free"));
   const tvStill = nightItems.find((i) => i.type === "crt_tv" && i.lock === 100);
   ok(!!tvStill, "your banked TV is still in the fort at night");
-  ok(nightItems.filter((i) => i.type !== "crt_tv").every((i) => i.mult === 2), "night loot is worth x2");
+  ok(nightItems.some((i) => i.mult === 2), `fresh x2 loot appears as night falls (${nightItems.filter((i) => i.mult === 2).length})`);
   await A.evaluate(() => { const l = window.__bfb.landmarks().martDoor; window.__bfb.teleport(l.x - Math.sin(l.yaw) * 9, l.z - Math.cos(l.yaw) * 9, l.yaw); window.__bfb.setPitch(0.05); }); // (C1: the Yards shops at night)
   await sleep(1500); await hide();
   await shot(A, "37-night.png");
   await A.evaluate(() => window.__bfb.setTimeLeft(1));
   ok(await waitPhase("dawn", 30000), "night -> sunrise");
+  ok(await waitInv("v.pockets.every((x) => !x)", 5000), "the chicken is gone (lost: still out in the city at sunrise)");
   ok(await A.isVisible("#tally") && /SUNRISE/.test(await A.textContent("#tally")), "sunrise results card");
   const res = JSON.parse((await M()).results)[0];
   ok(res.lost >= 1 && res.banked >= 1, `results: fort loot ${res.banked} ($${res.bankedValue}), lost ${res.lost}`);
@@ -1348,6 +1352,8 @@ try {
   const tvId = await A.waitForFunction(() => window.__bfb.items().find((i) => i.type === "crt_tv" && i.lock === 100)?.id, null, { timeout: 40000 }).then((h) => h.jsonValue(), () => null);
   ok(!!tvId, "A banks a TV in their fort");
   await A.evaluate(() => window.__bfb.setTimeLeft(0.3));
+  await B.waitForFunction(() => window.__bfb.match().phase === "dusk", null, { timeout: 40000 }).catch(() => {});
+  await A.evaluate(() => window.__bfb.setTimeLeft(0.3)); // (R12.3: skip the 30 s sunset)
   ok(await B.waitForFunction(() => window.__bfb.match().phase === "night", null, { timeout: 40000 }).then(() => true, () => false), "night falls for everyone");
   ok(await B.waitForFunction(() => window.__bfb.night().level > 0.5, null, { timeout: 20000 }).then(() => true, () => false), "B's city goes dark too");
   const tvNow2 = await B.evaluate((id) => window.__bfb.items().find((i) => i.id === id), tvId);
