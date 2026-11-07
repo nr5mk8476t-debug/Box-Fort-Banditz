@@ -56,6 +56,8 @@ export class ItemRenderer {
 
   constructor(private scene: Scene, private arena: ArenaLayout) {}
 
+  /** R12.5: make every rarity's sparkle while the game loads (making one is a canvas encode and a texture upload) */
+  prewarm() { for (const c of new Set(Object.values(RARITY_COLOR))) this.sparkleMat(c); }
   /** A 4-point cartoon star with a soft glow, one material per rarity colour. */
   private sparkleMat(color: string): StandardMaterial {
     let m = this.sparkleMats.get(color);

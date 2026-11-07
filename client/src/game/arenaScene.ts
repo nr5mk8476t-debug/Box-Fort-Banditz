@@ -438,6 +438,8 @@ export class ArenaScene {
     this.scene.render();
     this.city.warmGroups(false);
     cam.position.copyFrom(pos); cam.rotation.copyFrom(rot); cam.fov = fov; cam.maxZ = maxZ;
+    this.npcs.buildCap = 2; // (R12.5: everyone there at the start is built; from now on, newcomers 2 a frame)
+    this.items.prewarm(); // (R12.5: the loot sparkles' textures, now rather than when the first rare thing turns up)
   }
 
   applyFov() {
@@ -579,6 +581,7 @@ export class ArenaScene {
     if (view.npcs) {
       const seen = this.npcIds;
       seen.clear();
+      this.npcs.newFrame();
       view.npcs.forEach((n, id) => { seen.add(id); this.npcs.sync(id, n, now); });
       this.npcs.retain(seen);
     }

@@ -567,9 +567,15 @@ export class NpcRenderer {
     };
   }
 
+  /** R12.5: building a character is a few ms (dozens of parts merged); once the game's running, at most `buildCap` a frame
+   *  (the next ones wait a frame: new passers-by appear away from the players). Loading builds everyone at once. */
+  buildCap = Infinity;
+  private builtNow = 0;
+  /** call once a frame (before the syncs) */
+  newFrame() { this.builtNow = 0; }
   sync(id: string, v: NpcView, now: number) {
     let n = this.map.get(id);
-    if (!n) { n = this.build(id, v); this.map.set(id, n); }
+    if (!n) { if (this.builtNow >= this.buildCap) return; this.builtNow++; n = this.build(id, v); this.map.set(id, n); }
     n.view.state = v.state; n.view.target = v.target; n.view.robbed = v.robbed; n.view.kind = v.kind;
     n.snaps.push({ t: now, x: v.x, y: v.y, z: v.z, yaw: v.yaw });
     if (n.snaps.length > 16) n.snaps.splice(0, n.snaps.length - 16);

@@ -123,6 +123,10 @@ function farFromAll(x: number, z: number, players: { x: number; z: number }[], r
   for (const p of players) if ((p.x - x) * (p.x - x) + (p.z - z) * (p.z - z) < r * r) return false;
   return true;
 }
+function nearRoad(a: ArenaLayout, x: number, z: number, m: number): boolean {
+  for (const r of a.roads ?? []) if (x > r.minX - m && x < r.maxX + m && z > r.minZ - m && z < r.maxZ + m) return true;
+  return false;
+}
 function hashSlot(id: string): number { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return Math.abs(h) % NPC_LOD.every; }
 export const NPC_STEP = SIM_DT * 2; // pedestrians think + move at 30 Hz (cheap, smooth enough)
 export const PUNCH_RANGE = 1.9;
@@ -706,7 +710,8 @@ export class NpcSystem {
       // keep their pace, only less often. Anyone else (near anyone, chasing, fleeing, shops, cops, characters) is
       // updated every step as before.
       let dt = dt0;
-      if (!SPECIAL_KINDS.has(n.kind) && (n.state === "walk" || n.state === "idle") && !n.leader && !n.detour && farFromAll(n.move.x, n.move.z, players, NPC_LOD.far)) {
+      // (and never at a kerb: within 1.5 m of a road it's every step, so crossing the road waits for gaps exactly as before)
+      if (!SPECIAL_KINDS.has(n.kind) && (n.state === "walk" || n.state === "idle") && !n.leader && !n.detour && farFromAll(n.move.x, n.move.z, players, NPC_LOD.far) && !nearRoad(this.host.arena, n.move.x, n.move.z, 1.5)) {
         n.lodAcc = (n.lodAcc ?? 0) + dt0;
         if ((n.lodSlot ??= hashSlot(n.id)) !== slot) continue;
         dt = n.lodAcc; n.lodAcc = 0;

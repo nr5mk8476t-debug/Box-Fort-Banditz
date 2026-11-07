@@ -4682,9 +4682,9 @@ export class CityRenderer {
     this.pubT += dt;
     const t = this.pubT;
     for (const f of this.pubFire) { const k = 0.75 + 0.25 * Math.sin(t * 9 * f.s + f.ph) + 0.12 * Math.sin(t * 23 + f.ph * 2); f.m.scaling.set(1 + 0.15 * Math.sin(t * 7 + f.ph), k * 1.15, 1); f.m.position.y = (f.y0 ?? P.y1) + 0.3 + k * 0.12; }
-    if (this.pubFireMat) { const k = 0.85 + 0.15 * Math.sin(t * 13); this.pubFireMat.emissiveColor = new Color3(1, 0.45 + 0.15 * k, 0.12 * k); }
-    for (const m of this.pubLamps) { const k = 0.75 + night * 0.25; m.emissiveColor = new Color3(1 * k, 0.82 * k, 0.55 * k); }
-    if (this.pubFairy) { const k = 0.45 + night * 0.55, tw = 0.92 + 0.08 * Math.sin(t * 3.1); (this.pubFairy.material as StandardMaterial).emissiveColor = new Color3(1 * k * tw, 0.88 * k * tw, 0.62 * k * tw); }
+    if (this.pubFireMat) { const k = 0.85 + 0.15 * Math.sin(t * 13); this.pubFireMat.emissiveColor.set(1, 0.45 + 0.15 * k, 0.12 * k); } // (R12.5: set in place: no new colour every frame)
+    for (const m of this.pubLamps) { const k = 0.75 + night * 0.25; m.emissiveColor.set(1 * k, 0.82 * k, 0.55 * k); }
+    if (this.pubFairy) { const k = 0.45 + night * 0.55, tw = 0.92 + 0.08 * Math.sin(t * 3.1); (this.pubFairy.material as StandardMaterial).emissiveColor.set(1 * k * tw, 0.88 * k * tw, 0.62 * k * tw); }
     // R12.4: the lamps: on all day (it's a pub), warmer and stronger at night; the fires flicker
     for (const L of this.pubLights) L.l.intensity = L.base * (0.5 + 1.1 * night) * (L.flick ? 0.85 + 0.1 * Math.sin(t * 11) + 0.05 * Math.sin(t * 27 + 1.3) : 1);
     if (this.pubSpill) this.pubSpill.alpha = 0.95 * night;

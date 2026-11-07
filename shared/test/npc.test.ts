@@ -364,18 +364,21 @@ test("pedestrians step around players instead of walking through them", () => {
 test("pedestrians ease into walking and curve around corners (no instant 90-degree snaps)", () => {
   const w = new World({ seed: 4, spawnLoot: false });
   let maxTurn = 0, maxAccel = 0;
-  const prev = new Map<string, { yaw: number; v: number }>();
+  const prev = new Map<string, { yaw: number; v: number; t: number }>();
   for (let i = 0; i < 20 * 60; i++) {
     w.tick(); w.takeEvents();
     if (i % 2) continue; // pedestrians update at 30 Hz
+    const t = i / 60;
     for (const n of w.npc.npcs.values()) {
       if (n.state !== "walk") { prev.delete(n.id); continue; }
       const v = n.curSpeed, o = prev.get(n.id); // intended walking speed (bumping a wall can still stop you dead)
+      if (o && n.move.yaw === o.yaw && v === o.v) continue; // (R12.5: a far passer-by updates less often: measure over the time since its last update)
       if (o) {
         let d = Math.abs(n.move.yaw - o.yaw); if (d > Math.PI) d = Math.PI * 2 - d;
-        maxTurn = Math.max(maxTurn, d * 30); maxAccel = Math.max(maxAccel, Math.abs(v - o.v) * 30);
+        const dt = Math.max(1 / 30, t - o.t);
+        maxTurn = Math.max(maxTurn, d / dt); maxAccel = Math.max(maxAccel, Math.abs(v - o.v) / dt);
       }
-      prev.set(n.id, { yaw: n.move.yaw, v });
+      prev.set(n.id, { yaw: n.move.yaw, v, t });
     }
   }
   assert.ok(maxTurn <= 3.3, `walking turn rate peaked at ${maxTurn.toFixed(2)} rad/s`);

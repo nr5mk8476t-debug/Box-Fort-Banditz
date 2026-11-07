@@ -307,12 +307,14 @@ export class TrafficSystem {
     if (!R) return;
     const inR = (x: number, z: number, m = 0) => x > R.minX - m && x < R.maxX + m && z > R.minZ - m && z < R.maxZ + m;
     const road = this.lanes.filter((l) => !l.conn && l.len > 14);
+    // (R12.5: clear of the police cars too: a tow used to drop a car right on top of a passing cruiser)
+    const free = (x: number, z: number) => this.cars.every((o) => Math.hypot(o.x - x, o.z - z) > 14) && (this.w.police?.cars ?? []).every((o) => Math.hypot(o.x - x, o.z - z) > 20);
     for (const car of this.cars) {
       if (!inR(car.x, car.z)) continue;
       const pick = road.find((l, i) => {
         const p = laneAt(l, l.len * 0.5);
-        return !inR(p.x, p.z, 10) && (i + this.cars.indexOf(car)) % 3 === 0 && this.cars.every((o) => Math.hypot(o.x - p.x, o.z - p.z) > 14);
-      }) ?? road.find((l) => { const p = laneAt(l, l.len * 0.5); return !inR(p.x, p.z, 10) && this.cars.every((o) => Math.hypot(o.x - p.x, o.z - p.z) > 14); });
+        return !inR(p.x, p.z, 10) && (i + this.cars.indexOf(car)) % 3 === 0 && free(p.x, p.z);
+      }) ?? road.find((l) => { const p = laneAt(l, l.len * 0.5); return !inR(p.x, p.z, 10) && free(p.x, p.z); });
       if (!pick) continue;
       const p = laneAt(pick, pick.len * 0.5);
       Object.assign(car, { lane: pick.id, s: pick.len * 0.5, v: 0, x: p.x, z: p.z, yaw: p.yaw, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0 });
