@@ -574,9 +574,9 @@ Every new test below was run against the code before the fix first (a worktree o
 | Pavement walking | round the roundabout on the join, along a diagonal, across its cuts: feet at 0.15 m, no snag | shared unit | (passed before too: a guard) | pass |
 | Pavement look | from above and at eye height, before and after: the diagonal, the ring's join, an off-grid kerb | screenshots | ink lines on joins, overlaps flickering | one smooth surface, kerb lines only |
 | HUD | lobby (card shown), scavenge (card gone), pool aiming at 1280×720, 960×540, 800×600 (panel top-right, out of the shot; help then H), darts aiming | screenshots | the card stayed all game; the panel sat over the shot and the board | reviewed |
-| Everything | 298 shared + 12 client unit; typecheck; matchmaking + server smoke | full suite | | pass: 298/298 and 12/12; typecheck clean; smokes SMOKE_RESULT |
-| | full browser e2e, normal | e2e | | E2E_NORMAL |
-| | full browser e2e, 110 ms lag | e2e | | E2E_LAG |
+| Everything | 298 shared + 12 client unit; typecheck; matchmaking + server smoke | full suite | | pass: 298/298 and 12/12; typecheck clean; both smokes pass |
+| | full browser e2e, normal | e2e | | pass, 437/437 |
+| | full browser e2e, 110 ms lag | e2e | | pass, 437/437 (third run). The first was cut off by a container restart. The second failed one check, 435/436: the classic city's sunrise card showed the carried chicken not lost. In the night screenshot the player still has it, with a foot cop at the door (heat left from the 3-star section; the box drawing at 2 fps). It passed in the 7 other runs, so it looks like a timing flake in an area this round didn't change. |
 | Speed | the same five views, the R12.3 build against this one, alternating, twice each | fps (scratch script) | | the same or a touch better: street 1.1 → 1.2, ring 1.4 → 1.4, a junction 2.7 → 2.8, pool 1.3 → 1.4, darts 1.8 → 1.9 fps. (This container draws at 1-3 fps, slower than R12.3's: the numbers only compare the two builds.) |
 
 ## Manual checklist for Blake (R12.3b)
