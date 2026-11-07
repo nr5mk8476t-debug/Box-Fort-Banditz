@@ -12,6 +12,7 @@ let unlocked = false;
 const unlockListeners: (() => void)[] = [];
 /** R12.4 (clips with sound): when sounds are rendered offline, each is placed at its game time */
 let tOff = 0;
+let clickWin = -1, clickN = 0;
 const now = () => ctx!.currentTime + tOff;
 
 function applyVolumes() {
@@ -206,7 +207,9 @@ export const sfx = {
   // partials), a dull rubber thump off the cushions, the drop into the pocket and the rattle down the return; the dart's
   // whoosh, its thwack into the sisal, a little ding for a treble, a double or the bull, a clatter off the wall for a miss
   cueStrike(power = 1) { blip(1150, 0.035, "triangle", 0.07 + 0.08 * power, 700); blip(430, 0.06, "sine", 0.06 + 0.07 * power, 300); noise(0.02, 0.05 + 0.07 * power, 3200, 0, 2); },
-  ballClick(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.04) return; blip(2900 + Math.random() * 400, 0.035, "sine", 0.12 * g, 2600); blip(5300 + Math.random() * 500, 0.02, "sine", 0.04 * g); noise(0.012, 0.06 * g, 6000, 0, 2); },
+  ballClick(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.04 || !ctx) return;
+    // (the break: thirty touches at once: at most 4 clicks in any 30 ms, or it's a harsh blast)
+    const n0 = now(); if (n0 - clickWin > 0.03) { clickWin = n0; clickN = 0; } if (++clickN > 4) return; blip(2900 + Math.random() * 400, 0.035, "sine", 0.12 * g, 2600); blip(5300 + Math.random() * 500, 0.02, "sine", 0.04 * g); noise(0.012, 0.06 * g, 6000, 0, 2); },
   cushion(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.05) return; blip(120, 0.08, "sine", 0.13 * g, 80); noise(0.05, 0.06 * g, 600, 0, 0.8); },
   pocketDrop() { blip(220, 0.07, "sine", 0.1, 150); noise(0.06, 0.08, 800, 0, 1.5); for (let i = 0; i < 3; i++) blip(330 - i * 40, 0.04, "triangle", 0.05 - i * 0.012, undefined, 0.1 + i * 0.09); noise(0.3, 0.04, 420, 0.12, 0.7); },
   dartThunk(gain = 1) { noise(0.025, 0.16 * gain, 2400, 0, 1.2); blip(260, 0.07, "sine", 0.12 * gain, 180); noise(0.08, 0.05 * gain, 700, 0.01, 0.8); },
@@ -787,9 +790,9 @@ export async function renderSfxOffline(log: { t: number; name: string; args: unk
   const off = new OfflineAudioContext(2, Math.ceil(44100 * dur), 44100);
   const comp = off.createDynamicsCompressor(); comp.threshold.value = -10; comp.ratio.value = 6;
   const bus = off.createGain(); bus.gain.value = 0.8; bus.connect(comp).connect(off.destination);
-  ctx = off as unknown as AudioContext; sfxBus = bus; noiseBuf = null;
+  ctx = off as unknown as AudioContext; sfxBus = bus; noiseBuf = null; clickWin = -1;
   try { for (const e of log) { tOff = e.t; (sfx as unknown as Record<string, (...a: unknown[]) => void>)[e.name]?.(...e.args); } }
-  finally { tOff = 0; ctx = keep.ctx; sfxBus = keep.sfxBus; noiseBuf = keep.noiseBuf; }
+  finally { tOff = 0; clickWin = -1; ctx = keep.ctx; sfxBus = keep.sfxBus; noiseBuf = keep.noiseBuf; }
   const buf = await off.startRendering();
   return [buf.getChannelData(0), buf.getChannelData(1)];
 }

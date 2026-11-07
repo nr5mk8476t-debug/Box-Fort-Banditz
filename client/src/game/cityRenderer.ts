@@ -3728,11 +3728,11 @@ export class CityRenderer {
       const [gx, gz] = mid(P.gantry), [g2x, g2z] = mid(P.gantry2);
       const px = P.pools.reduce((a, t) => a + t.x, 0) / P.pools.length, pz = P.pools.reduce((a, t) => a + t.z, 0) / P.pools.length;
       const dx = P.darts.reduce((a, d) => a + (d.booth.minX + d.booth.maxX) / 2, 0) / P.darts.length, dz = P.darts.reduce((a, d) => a + (d.booth.minZ + d.booth.maxZ) / 2, 0) / P.darts.length;
-      lamp("pubLampBar", gx, P.y1 + 2.7, gz, "#ffc883", 12, 1.0, 0, down);
-      lamp("pubLampFire", P.fire.x, P.y1 + 0.9, P.fire.z + (P.fire.z > gz ? -0.8 : 0.8), "#ff8a3c", 8, 1.1, 1, down);
-      lamp("pubLampPool", px, P.y2 + 2.5, pz, "#fff0c4", 9, 0.9, 0, up);
-      lamp("pubLampDarts", dx, P.y2 + 2.5, dz, "#ffe0a8", 8, 0.8, 0, up);
-      lamp("pubLampBar2", g2x, P.y2 + 2.7, g2z, "#ffc883", 10, 0.9, 0, up);
+      lamp("pubLampBar", gx, P.y1 + 2.7, gz, "#ffc883", 16, 1.0, 0, down);
+      lamp("pubLampFire", P.fire.x, P.y1 + 0.9, P.fire.z + (P.fire.z > gz ? -0.8 : 0.8), "#ff8a3c", 10, 1.1, 1, down);
+      lamp("pubLampPool", px, P.y2 + 2.5, pz, "#fff0c4", 12, 1.0, 0, up);
+      lamp("pubLampDarts", dx, P.y2 + 2.5, dz, "#ffe0a8", 10, 0.9, 0, up);
+      lamp("pubLampBar2", g2x, P.y2 + 2.7, g2z, "#ffc883", 13, 0.9, 0, up);
     }
     // the spill: soft warm pools on the pavement out of the front door and under each bay window
     const t = new DynamicTexture("pubSpill", { width: 128, height: 128 }, sc, false), c = t.getContext() as CanvasRenderingContext2D;
@@ -3741,8 +3741,8 @@ export class CityRenderer {
     const m = new StandardMaterial("pubSpillMat", sc); m.disableLighting = true; m.emissiveTexture = t; m.opacityTexture = t; m.alpha = 0; m.zOffset = -2; m.backFaceCulling = false;
     this.pubSpill = m;
     const parts: Mesh[] = [];
-    const pool = (x: number, z: number, w: number, d: number) => { const p = MeshBuilder.CreateGround("pubSpillP", { width: w, height: d }, sc); p.position.set(x, 0.035, z); parts.push(p); };
-    { const [x, z] = mid(P.door); pool(P.out.x * 0.6 + x * 0.4, P.out.z * 0.6 + z * 0.4, 7, 7); }
+    const pool = (x: number, z: number, w: number, d: number) => { const p = MeshBuilder.CreateGround("pubSpillP", { width: w, height: d }, sc); p.position.set(x, 0.165, z); parts.push(p); }; // (just above the pavement, 0.15 m up)
+    { const [x, z] = mid(P.door); pool(P.out.x * 0.6 + x * 0.4, P.out.z * 0.6 + z * 0.4, 10, 10); }
     for (const b of P.bays) { const [x, z] = mid(b); pool(x, z, Math.max(4, b.maxX - b.minX + 2.5), Math.max(4, b.maxZ - b.minZ + 2.5)); }
     const all = Mesh.MergeMeshes(parts, true, true);
     if (all) { all.material = m; all.isPickable = false; all.parent = this.pubDyn ?? this.root; }
@@ -4648,10 +4648,10 @@ export class CityRenderer {
     for (const m of this.pubLamps) { const k = 0.75 + night * 0.25; m.emissiveColor = new Color3(1 * k, 0.82 * k, 0.55 * k); }
     if (this.pubFairy) { const k = 0.45 + night * 0.55, tw = 0.92 + 0.08 * Math.sin(t * 3.1); (this.pubFairy.material as StandardMaterial).emissiveColor = new Color3(1 * k * tw, 0.88 * k * tw, 0.62 * k * tw); }
     // R12.4: the lamps: on all day (it's a pub), warmer and stronger at night; the fires flicker
-    for (const L of this.pubLights) L.l.intensity = L.base * (0.45 + 0.55 * night) * (L.flick ? 0.85 + 0.1 * Math.sin(t * 11) + 0.05 * Math.sin(t * 27 + 1.3) : 1);
-    if (this.pubSpill) this.pubSpill.alpha = 0.75 * night;
+    for (const L of this.pubLights) L.l.intensity = L.base * (0.5 + 1.1 * night) * (L.flick ? 0.85 + 0.1 * Math.sin(t * 11) + 0.05 * Math.sin(t * 27 + 1.3) : 1);
+    if (this.pubSpill) this.pubSpill.alpha = 0.95 * night;
     // (at night the walls glow less of their own now (was 1 + 1.3 x): the lamps do the lighting, so there's some contrast)
-    const kn = 1 + night * (this.pubLights.length ? 0.6 : 1.3); for (const s of this.pubSkins) s.m.emissiveColor.copyFromFloats(Math.min(1, s.base.r * kn), Math.min(1, s.base.g * kn), Math.min(1, s.base.b * kn));
+    const kn = 1 + night * (this.pubLights.length ? 0.15 : 1.3); for (const s of this.pubSkins) s.m.emissiveColor.copyFromFloats(Math.min(1, s.base.r * kn), Math.min(1, s.base.g * kn), Math.min(1, s.base.b * kn));
   }
 
   /** R11: the DROP: confetti from the rig, smoke off the stages, everybody jumps */
