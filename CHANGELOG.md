@@ -2,6 +2,40 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.4: no freeze on the way to the pub, a fair Split the G, pub sounds, lit nights, small windows (2026-11-07)
+
+**Fixed**
+- **The freeze walking to the pub:** the pub's insides used to be built the moment you came within 100 m, about at the first road from the fort, in one frame of nearly 4 s on a slow machine.
+  - Now it's built while the city loads, and its two floors are only drawn when you could see them.
+  - On the test box the walk's worst frame went from 2.5 s to 1.4 s, and the pub's views draw up to 40% fewer meshes.
+  - Loading takes a little longer instead.
+- **Pool:** a newer shot that finished while you were still watching an older one used to vanish. Shots now wait in line and play in order.
+- **Pool stand-up:** after your shot the camera holds for a moment, then rises smoothly back to you with the table still in view. Moving hands control straight back.
+- **Darts:** after your third dart you step back from the oche as soon as it lands. A dart thrown at the other board no longer holds up yours.
+- **Leaving a game** you joined over the internet no longer tries to reconnect you a few seconds later.
+
+**Changed**
+- **Split the G (Blake's choice: "visible G, fair & skilled"):**
+  - The G faces you.
+  - One smooth drink, with no hidden surges.
+  - When you put the glass down the head settles a touch further, the same way every time, so the trick is letting go just above the bar.
+  - Perfect is within 1.5 mm (the gold bar is exactly that thick), close within 5 mm.
+  - Same prices: $6 a pint, $15 for a perfect, your $6 back for a close.
+  - The result's marked on the glass.
+- **Sound:**
+  - Pool: a woody cue strike, sharper ball clicks, cushion thumps, and a ball dropping and rattling down the pocket.
+  - Darts: a thwack when the dart lands, a ding for a treble, double or bull, and a clatter for a miss.
+  - Split the G: swallows, the glass going down, the head fizzing, then a cheer, an "ooh" or a groan.
+- **Night:**
+  - The pub has five lamps: the bar, the fire (it flickers), the pool tables, the darts and the upstairs bar. It's darker and warmer, with light where you play.
+  - Warm light spills onto the pavement from the door and the bay windows.
+  - The street lamps' pools of light show on the pavement now; before, they were hidden under it.
+  - Performance mode keeps the old look.
+- **Small windows (800×600, 960×540):**
+  - The controls line folds to "H: controls" after 20 s, and H opens it.
+  - While you drink, the slots step aside.
+  - The pool and darts rules don't pop up over the table; press H for them.
+
 ## R12.3b: pool shots play out, timers tell the truth, traffic keeps moving, pavements join cleanly (2026-11-07)
 
 **Fixed**

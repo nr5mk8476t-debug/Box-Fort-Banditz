@@ -62,8 +62,8 @@ export class NightRenderer {
       const b = MeshBuilder.CreateBox("bulb", { width: 0.6, height: 0.06, depth: 0.28 }, scene);
       b.position.set(d.x, 5.23, d.z);
       bulbs.push(b);
-      const p = MeshBuilder.CreateGround("pool", { width: 9, height: 9 }, scene);
-      p.position.set(d.x, 0.03, d.z);
+      const p = MeshBuilder.CreateGround("pool", { width: 11, height: 11 }, scene);
+      p.position.set(d.x, 0.165, d.z); // (R12.4: just above the pavement (0.15 m): at 0.03 the pavement hid most of each pool)
       pools.push(p);
     }
     if (bulbs.length) { this.bulbs = Mesh.MergeMeshes(bulbs, true, true); if (this.bulbs) { this.bulbs.material = this.bulbMat; this.bulbs.isPickable = false; } }
@@ -119,7 +119,7 @@ export class NightRenderer {
     sc.fogColor = sky;
     sc.fogStart = this.fogStartDay * (1 - 0.35 * n) * this.far;
     sc.fogEnd = this.fogEndDay * (1 - 0.3 * n) * this.far;
-    this.poolMat.alpha = 0.6 * n;
+    this.poolMat.alpha = 0.8 * n;
     this.pools?.setEnabled(n > 0.01);
     this.moon.setEnabled(n > 0.05);
     this.bulbMat.emissiveColor = Color3.Lerp(Color3.FromHexString("#d8cfa0"), Color3.FromHexString("#fff6c8"), n);

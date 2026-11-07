@@ -546,6 +546,39 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.4: pub games, the approach freeze, sound, Split the G, night lighting, small windows (2026-11-07)
+
+The regression tests below were run against the R12.3b code first (a worktree of cc18e62) and failed for the reason given.
+Performance numbers are from the CPU-only test box (SwiftShader, about 1–2 fps), the same route and cameras on both builds.
+
+| Area | Check | How | Before the fix | Result |
+|---|---|---|---|---|
+| Pool queue | a delayed window: an older shot still playing while a newer one settles; the newer one plays next, in order; at most 2 waiting, the rest reported missed | shared unit (StationFeed) + client unit | the newer shot vanished | pass |
+| Darts handover | your third dart lands, the turn's gone over: you step back 0.7 s later without a new message | client unit | stuck at the oche till the next message | pass |
+| Darts flights | a dart in the air at the other board doesn't block your throw | client unit | blocked | pass |
+| Peer leave | leaving cancels the reconnect attempt and its retry timer; a late link is closed, not adopted | client unit (fake link) | reconnected a few seconds after leaving | pass (3 tests) |
+| Stand-up | 0.3 s hold, 0.65 s rise, table in view, release swallowed, WASD hands back | clip (film mode, 30 fps), Blake's review | (new) | approved (v3) |
+| Approach freeze | the first walk fort → pub, worst frame | perf script (compositing off) | 2,506 ms (4,477 with compositing on; the pub build) | 1,382 ms (median 1,090, was 1,106) |
+| Pub draw | active meshes / draw calls per view, day and night, 8 views | perf script | downstairs bar 361 / 499 | 221 / 467; every view the same speed or a little faster |
+| Load | solo click → playing | perf script | 21–23 s | 30–32 s (the pub build + warm-up views; on a real GPU about 1.5 s more) |
+| First frame | the 4–7 s frame after loading | CPU profile; `--disable-gpu-compositing` | 4.4 s (old build too) | not the game: the main thread is idle and it goes away without GPU compositing (the test box drawing the HUD) |
+| Split the G | smooth (always down, speed never jumps), 2–3.5 s to the G, the settle 2–3.5 mm, no jump on letting go, settled in 0.6 s, 1.5 mm perfect, 5 mm close, the perfect window 0.12–0.22 s, no surges in the pint event | shared unit | (rules changed) | pass |
+| Split the G in the game | a perfect (let go 2.7 mm high: "dead on the bar", +$15) and an instinctive one (let go on the bar: 2.9 mm low, NEARLY) | clips | | as designed |
+| Sound | pool, darts and Split the G effects in clips, rendered from the game's own sound log | clips with sound, Blake's review | | approved ("all of those look really good") |
+| Night lighting | 8 views before/after, night (and day) | screenshots, Blake's review | flat; pavement pools hidden under the pavement | warmer inside with lamp contrast, spill at the door and bays; approved |
+| Small windows | 800×600 and 960×540: street (controls open, then folded), pint, pool, darts | screenshots | the controls line over the slots and bars; the pint text over the slots; the pool rules over half the table | reviewed |
+| Everything | 299 shared + 18 client unit; typecheck; matchmaking + server smoke | full suite | | pass: 299/299 and 18/18; typecheck clean; both smokes pass |
+| | full browser e2e, normal | e2e | | E2E_NORMAL |
+| | full browser e2e, 110 ms lag | e2e | | E2E_LAG |
+
+## Manual checklist for Blake (R12.4)
+
+- [ ] Walk from the fort to the pub on your PC: any freeze left? How long does loading take now?
+- [ ] Split the G: does the settle feel fair once you've learnt it? Is 1.5 mm too tight or about right?
+- [ ] Pool, darts and the pint with sound on: anything too loud, too quiet or annoying after a while?
+- [ ] Night in the pub and outside the door: warm enough? Anywhere too dark to play?
+- [ ] A small window (or a laptop): does "H: controls" make sense? Anything still overlapping?
+
 ## R12.3b: pool playback, timers, stations, police traffic, pavement, the HUD (2026-11-07)
 
 Every new test below was run against the code before the fix first (a worktree of R12.3) and failed for the reason given.

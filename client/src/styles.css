@@ -117,6 +117,15 @@ input:focus-visible { box-shadow: 0 0 0 3px var(--go), 3px 3px 0 var(--ink); }
 .debug { position: absolute; right: 14px; bottom: 40px; background: rgba(0,0,0,0.6); color: #aef; font: 12px monospace; padding: 6px 8px; border-radius: 6px; white-space: pre; }
 .controls-hint { position: absolute; bottom: 8px; left: 50%; max-width: min(760px, 62vw); text-align: center; font-size: 12px !important; transform: translateX(-50%); color: #fff; font-weight: 800; font-size: 13px; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); opacity: 0.85; }
 
+/* R12.4: small windows: the controls fold away (H), and open as a panel above the slots; the pint and a station's help fit */
+.controls-hint.min { opacity: 0.7; font-size: 12px; }
+body.pint-on #pockets, body.pint-on #controls-hint { display: none; } /* (drinking: nothing in your hands, the glass needs the room) */
+@media (max-width: 1100px), (max-height: 680px) {
+  .controls-hint.open { bottom: 122px; max-width: min(620px, 92vw); background: rgba(20, 14, 26, 0.84); padding: 8px 12px; border-radius: 10px; opacity: 1; }
+  .pint { top: 44%; }
+  .pint canvas { width: min(220px, 30vw, 36vh); }
+  .pint-help { font-size: 13px; max-width: min(260px, 34vw); }
+}
 /* ---------- Pause + Settings ---------- */
 .pause-card, .settings-card { display: flex; flex-direction: column; gap: 10px; width: min(380px, 92vw); }
 .settings-card { width: min(520px, 94vw); max-height: 90vh; overflow: auto; }

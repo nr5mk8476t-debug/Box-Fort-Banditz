@@ -570,7 +570,7 @@ document.addEventListener("pointerlockchange", () => {
     lastLockTime = performance.now();
     show("pause", false);
     show("controls-hint", true);
-    $("controls-hint").textContent = CONTROLS_TEXT;
+    ctlHint(true, true);
   } else {
     input.clear();
     if (screen === "playing" && $("settings").classList.contains("hidden") && !overlayOpen) showPause(true);
@@ -580,7 +580,7 @@ function enterDragLook() {
   input.dragLook = true;
   input.enabled = true;
   show("pause", false);
-  $("controls-hint").textContent = "HOLD LEFT MOUSE + DRAG to look / " + CONTROLS_TEXT;
+  ctlHint(true, true);
   canvas.focus();
 }
 
@@ -781,6 +781,25 @@ function toggleMap(force?: boolean) {
 }
 window.addEventListener("keydown", (e) => { // (C5c.1: held down for the cops: SPACE wriggles)
   if (e.code === "Space" && !e.repeat && screen === "playing" && arena?.pinBy) arena.struggle();
+});
+// R12.4 (UI at small sizes): the controls line runs over the slots and the bars on a small window, so there it shows for
+// the first 20 s, then folds to "H: controls"; H opens and closes it (a station's own H help comes first)
+let ctlOpen = true, ctlTimer = 0;
+const smallScreen = () => innerWidth <= 1100 || innerHeight <= 680;
+function ctlHint(open: boolean, fresh = false) {
+  const el = $("controls-hint"), small = smallScreen();
+  ctlOpen = open || !small;
+  el.textContent = ctlOpen ? (input.dragLook ? "HOLD LEFT MOUSE + DRAG to look / " : "") + CONTROLS_TEXT + (small ? " / H hide" : "") : "H: controls";
+  el.classList.toggle("open", ctlOpen && small); el.classList.toggle("min", !ctlOpen);
+  clearTimeout(ctlTimer);
+  if (fresh && small) ctlTimer = window.setTimeout(() => ctlHint(false), 20000);
+}
+addEventListener("resize", () => ctlHint(ctlOpen));
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "KeyH" || e.repeat || screen !== "playing" || !arena || arena.pg.mode) return;
+  const tgt = e.target as HTMLElement | null;
+  if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA")) return;
+  ctlHint(!ctlOpen);
 });
 window.addEventListener("keydown", (e) => {
   if (e.code !== "KeyM" || e.repeat || screen !== "playing" || !arena) return;

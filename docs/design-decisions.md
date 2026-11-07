@@ -1860,3 +1860,65 @@ For comparison, the longest car stop with no police at all is 26–69 s, at five
 - **Pockets:** the holes in the cloth, and the cups under them, are now exactly where the simulation pots a ball. Each hole's edge is on the mouth: the corner jaws' line, or the middle pocket's cushion line. The middle holes used to start 1.85 cm out on the playing surface. The cups are double-sided: you used to see through an open cup's far wall to the cloth.
 - **Ball in hand:** the white stays where you put it while you aim. It used to jump back.
 - **Walkthrough:** the tables, lamps, cue rack, chalkboards, booths, oche and bar all checked from eye height. Nothing else needed changing. Material and decor changes were left for a later round: functional fixes first.
+
+## R12.4: reliable pub games, no freeze on the way to the pub, sound, a fair Split the G, lit nights (Blake, 2026-11-07)
+
+Blake's brief: the pub minigames should be reliable, performance smoother, the audio satisfying, Split the G better, and
+the city properly lit at night. Show the real game at milestones (before/after with matched cameras, clips with sound).
+
+### Blake's decisions (asked as numbered questions)
+1. **Split the G:** "visible G, fair & skilled". The G faces you, the drink is smooth (no hidden surges), and the skill comes from a tight tolerance and a short, predictable settle. (Recommended; chosen.)
+2. **Pints:** one continuous drink per pint, same prices: $6 a pint, $15 for a perfect, your $6 back for a close, cut off at 6. (Recommended; chosen.)
+3. **Pool camera:** no reduce-motion toggle for the stand-up.
+4. **Night lighting:** baked lighting plus a few real lights (no shadows); Performance mode has no real lights. (Recommended; chosen.)
+5. **Stand-up:** clip v3 approved ("it looks really good"): a 0.3 s hold on the shot, then a 0.65 s rise.
+
+### Pool and darts reliability
+- **Queued shots:** a window behind the host keeps an ordered line of shots (at most 2 waiting; older ones are reported missed). A newer shot that settles while an older one is still playing keeps its place and plays next: it used to vanish. Your turn comes only once the line is played out.
+- **Stand-up after a shot:** the camera holds on the shot for 0.3 s, then rises smoothly (0.65 s, smoothstep, frame-rate independent) into your normal view, with the table kept in view. The mouse release that played the shot is swallowed; WASD hands control straight back.
+- **Darts handover:** when your third dart lands and the turn's gone over, you step back from the oche 0.7 s later. You no longer wait for the next message from the host.
+- **Per-board flights:** each oche has its own dart in flight, so a dart thrown at the other board no longer blocks yours.
+- **Leaving a peer game:** leaving cancels any reconnect attempt in progress and its retry timer. A leave used to be followed by a reconnect a few seconds later.
+
+### The freeze on the way to the pub
+- **Cause (measured):** the pub's insides were built the moment you came within 100 m, about at the first road from the fort: one frame of 3.8–4.0 s on the test box (the CPU profile shows the build; +3 shaders, +65 textures).
+- **Fix:** the pub is built while the city loads (the loading screen's up anyway) and drawn once from inside, downstairs and up, so its shaders and first draws happen there.
+- **Visibility groups:** the pub's insides are split into downstairs and upstairs, sorted by where each piece sits. From outside both floors show within 60 m (you see through the windows); inside, only your own floor (both near the stairs). The shell, the signs and the front stay in the city as before. The 208 back-bar bottles were separate instances seen from anywhere in the city; they're merged per colour into each floor's group.
+- **Result (same route, both builds, compositing off):** the first walk's worst frame is 1,382 ms (was 2,506; 4,477 with compositing on), with a median of 1,090 ms (was 1,106). Downstairs-bar active meshes are 221 (was 361), pub views are the same speed or a little faster, and draw calls are down 5–15%.
+- **Cost:** loading takes longer on the test box (about 21–23 s → 30–32 s): the build plus four extra warm-up views. On a real GPU the views are a few ms each; the build is about 1.5 s.
+- **Not the game:** the 4–7 s first frame after loading (old build 4.4 s, new 6–7 s) happens with the main thread idle, and goes away with `--disable-gpu-compositing`. It's the test box's software GPU compositing the HUD, so it's left alone.
+
+### Split the G
+- **The G faces you the whole time.** The gold bar is drawn exactly as thick as a perfect (1.5 mm either side), with ticks at 5 mm (close).
+- **The drink:** it eases in over 0.25 s, then the line goes down at the pint's own steady rate (0.10–0.12 of the glass a second, about 2–2.5 s to the G). There are no surges.
+- **The settle:** let go and the head settles. The line slows to a stop exponentially (time constant 0.15 s), carrying on 2–3 mm, the same way every pint. The skill is letting go just above the bar.
+- **Judged:** the World uses the same `pintSettled` curve. The perfect window is about 0.15 s; let go right on the bar and you're about 3 mm low (close).
+- **The result** shows once the head's settled: a marker on the glass, "SPLIT THE G! / NEARLY! / MISSED IT", and how far above or below the bar.
+
+### Sound
+- **Pool:** a woody "tock" off the cue tip; a hard, bright ball click (two partials), at most 4 in any 30 ms so the break doesn't blast; a rubber thump off the cushions; the drop into the pocket and a rattle down the return.
+- **Darts:** a whoosh on the throw. The thwack into the sisal now comes when the dart lands, not when the message arrives. A ding for a treble, a double or the bull; a clatter off the wall for a miss.
+- **Split the G:** a swallow every 0.42 s while you drink (deeper as the glass empties), a clink as the glass goes down, a soft fizz as the head settles, then the result: a bright run (perfect), an "ooh" (close) or a groan (miss), the till, and the pub's cheer. The cheer used to come before you could see the result.
+- **Clips with sound:** the test clips log every sound at its game time and render the same synth offline into the clip, so what you hear in a clip is the game's own sound.
+
+### Night lighting
+- **Inside the pub:** five real lamps (point lights, no shadows), each lighting only its own floor's pieces:
+  - the bar, and the fire (it flickers), downstairs;
+  - the pool tables, the darts and the island bar, upstairs.
+  - The rest of the city's shaders don't change.
+- **The lamps:** they're on all day (it's a pub), and warmer and stronger at night. At night the walls glow less of their own light (was 1 + 1.3 × night, now 1 + 0.15 × night), so the lamps make some contrast.
+- **Performance mode:** no real lamps, and the old look.
+- **Outside (baked):** warm light spills onto the pavement out of the front door and under each bay window, drawn at night.
+- **The street lamps' pools of light:** they sat at 3 cm, under the 15 cm pavement, so most of each pool was hidden. They're now just above the pavement, a little bigger and stronger.
+- **Measured:** pub views are within the noise of before (for example downstairs-bar night 1.37 → 1.42 fps, pool 1.53 → 1.59).
+
+### UI at small sizes (800×600, 960×540)
+- **The controls line** (WASD…) ran over the slots and the health and stamina bars. On a small window (≤ 1100 wide or ≤ 680 high) it shows as a panel above the slots for the first 20 s, then folds to "H: controls"; H opens and closes it. A station's own H help comes first.
+- **While you drink:** the slots and the controls hide.
+- **The pint:** it scales with the window's height.
+- **Pool and darts rules:** on a small window they don't open by themselves (they covered half the table); H shows them.
+
+### Left for later
+- The pub brawl, the quiz and the G-split champ; then R13 (the alleys and fire escapes).
+- Street lighting beyond the lamp pools (lit windows spilling onto the street elsewhere, shop fronts).
+- The band and the background noise aren't in the test clips' sound yet (effects only).

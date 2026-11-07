@@ -329,7 +329,7 @@ export class PintUI {
   start(rate: number) {
     this.rate = rate; this.hold = 0; this.since = 0; this.stung = false; this.holding = false; this.sent = false; this.verdict = null; this.verdictT = 0; this.tip = 0;
     this.help.innerHTML = "<b>HOLD CLICK</b> (or <b>SPACE</b>) to drink. Let go just above the <b>G</b>'s bar: the head settles a touch after.";
-    this.root.classList.remove("hidden");
+    this.root.classList.remove("hidden"); document.body.classList.add("pint-on");
   }
   /** mouse / SPACE down or up */
   press(down: boolean) {
@@ -347,7 +347,7 @@ export class PintUI {
     const { mm, grade, won } = this.verdict!;
     if (!this.stung) { this.stung = true; sfx.pintResult(grade); if (grade !== "miss") sfx.cash(); if (grade === "perfect") sfx.cheer(1); }
     this.help.innerHTML = grade === "perfect" ? `<b>SPLIT IT!</b> ${mm.toFixed(1)} mm off. +$${won}` : grade === "close" ? `So close: ${mm.toFixed(1)} mm. Your $${won} back.` : `Missed by ${mm.toFixed(1)} mm.`; }
-  close() { this.rate = 0; this.holding = false; this.root.classList.add("hidden"); }
+  close() { this.rate = 0; this.holding = false; this.root.classList.add("hidden"); document.body.classList.remove("pint-on"); }
   update(dt: number) {
     if (!this.open) return;
     this.t += dt;

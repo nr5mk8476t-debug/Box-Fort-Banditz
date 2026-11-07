@@ -724,7 +724,8 @@ export class PubGamesView {
         keys = "Aim · HOLD SHIFT steady · CLICK throw · E back · H help";
         help = "The ring is exactly where the dart will land; your hand sways (more after a few pints).<br>HOLD SHIFT to steady it for a couple of seconds; it needs a moment to recover after.<br>301, double out: finish exactly on zero with a double (the outer ring) or the bull. Go below zero, or leave 1, and it's a bust: your score goes back.";
       }
-      const k = s.kind, first = (this.helpSeen[k] ?? 0) <= 2;
+      // (R12.4: on a small window the rules don't open by themselves: they'd cover the table; H shows them)
+      const k = s.kind, first = (this.helpSeen[k] ?? 0) <= 2 && (typeof innerWidth === "undefined" || (innerWidth > 1100 && innerHeight > 680));
       html = `<div class="pg-line">${who}${n.stake ? ` · $${n.stake}` : ""}</div><div class="pg-score">${score}</div>`
         + `<div class="pg-clock${mine && cd > 0 && cd <= 10 ? " low" : ""}">${mine ? `YOUR ${pool ? "SHOT" : "THROW"}${cd ? ` · ${cd}s` : ""}` : "WAIT"}</div>${meter}`
         + (n.msg ? `<div class="pg-msg">${esc(n.msg)}</div>` : "")
