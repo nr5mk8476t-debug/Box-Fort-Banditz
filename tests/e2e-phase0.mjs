@@ -966,25 +966,9 @@ try {
   await shot(A, "02-solo-arena.png");
   await A.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
   await shot(A, "07-pause-menu.png");
-  // R12.5: leave in the middle of a pint (the glass up, the mouse held down): nothing of the game stays on the page
-  const pubA = await A.evaluate(() => window.__bfb.pub());
-  let pintUp = false;
-  if (pubA) {
-    const tp = pubA.taps[0];
-    await A.evaluate((t) => { window.__bfb.teleportY(t.x + t.face[0] * 0.85, 0.25, t.z + t.face[1] * 0.85, Math.atan2(-t.face[0], -t.face[1])); window.__bfb.setCash(40); }, tp);
-    await A.waitForFunction(() => /GUZZLE/.test(window.__bfb.promptText()), null, { timeout: 60000 }).catch(() => {});
-    await A.keyboard.press("e");
-    pintUp = await A.waitForFunction(() => window.__bfb.pubInfo()?.open, null, { timeout: 60000 }).then(() => true, () => false);
-    await A.evaluate(() => window.__bfb.pintPress(true));
-    await A.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
-  }
   await A.click("#btn-leave");
   await A.waitForFunction(() => window.__bfb.info().screen === "title");
   ok(true, "leave from solo returns to title");
-  if (pubA) {
-    const left = await A.evaluate(() => ({ pint: document.querySelectorAll("#pint").length, pg: document.querySelectorAll("#pg-hud, #pg-menu").length, cls: document.body.className, buffs: document.querySelectorAll("#hud-buffs").length }));
-    ok(pintUp && left.pint === 0 && left.pg === 0 && left.buffs === 0 && !/pint-on|pg-on/.test(left.cls), `R12.5: left mid-pint: no glass, panels or body classes left behind (${JSON.stringify(left)})`);
-  }
 
   console.log("\n# Create room");
   // (D1: the host window switches to Performance mode for the online part. On this CPU-only box a full-detail host
@@ -1908,6 +1892,22 @@ try {
     }
   }
   ok(r3errs.length === 0, `new city: no JS errors${r3errs.length ? " -> " + r3errs.slice(0, 3).join(" | ") : ""}`);
+  // R12.5: leave in the middle of a pint (the glass up, the mouse held down): nothing of the game stays on the page
+  {
+    const pubR = await R3.evaluate(() => window.__bfb.pub());
+    const tp = pubR.taps[0];
+    await R3.evaluate(() => { window.__bfb.forceNight(false); window.__bfb.camFree?.(); window.__bfb.pgLeave?.(); });
+    await R3.evaluate((t) => { window.__bfb.teleportY(t.x + t.face[0] * 0.85, 0.25, t.z + t.face[1] * 0.85, Math.atan2(-t.face[0], -t.face[1])); window.__bfb.setCash(40); }, tp);
+    await R3.waitForFunction(() => /GUZZLE/.test(window.__bfb.promptText()), null, { timeout: 60000 }).catch(() => {});
+    let pintUp = false;
+    for (let k = 0; k < 3 && !pintUp; k++) { await R3.keyboard.press("e"); pintUp = await R3.waitForFunction(() => window.__bfb.pubInfo()?.open, null, { timeout: 30000 }).then(() => true, () => false); } // (one pint at a time: the last may still be pouring)
+    await R3.evaluate(() => window.__bfb.pintPress(true));
+    await R3.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
+    await R3.click("#btn-leave");
+    await R3.waitForFunction(() => window.__bfb.info().screen === "title", null, { timeout: 60000 });
+    const left = await R3.evaluate(() => ({ pint: document.querySelectorAll("#pint").length, pg: document.querySelectorAll("#pg-hud, #pg-menu").length, cls: document.body.className, buffs: document.querySelectorAll("#hud-buffs").length }));
+    ok(pintUp && left.pint === 0 && left.pg === 0 && left.buffs === 0 && !/pint-on|pg-on/.test(left.cls), `R12.5: left mid-pint: no glass, panels or body classes left behind (${JSON.stringify({ pintUp, ...left })})`);
+  }
   await R3.context().close();
 
   // ================================================================ R12.3 online: two players upstairs, two games at once,
