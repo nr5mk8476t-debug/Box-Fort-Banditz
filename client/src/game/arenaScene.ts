@@ -446,6 +446,8 @@ export class ArenaScene {
     this.scene.render();
     this.city.warmGroups(false);
     cam.position.copyFrom(pos); cam.rotation.copyFrom(rot); cam.fov = fov; cam.maxZ = maxZ;
+    // (R12.5: a friend's avatar: built in front of you for one render under the loading screen, so its shaders are ready)
+    { const f = this.camera.getDirection(Vector3.Forward()); const unwarm = this.remotes.warm(pos.x + f.x * 3, pos.y - 1.6, pos.z + f.z * 3); this.scene.render(); unwarm(); }
     this.npcs.buildCap = 2; // (R12.5: everyone there at the start is built; from now on, newcomers 2 a frame)
     this.items.prewarm(); // (R12.5: the loot sparkles' textures, now rather than when the first rare thing turns up)
   }

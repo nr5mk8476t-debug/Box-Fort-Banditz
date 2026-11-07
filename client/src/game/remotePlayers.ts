@@ -145,6 +145,13 @@ export class RemotePlayers {
   }
 
   /** Remove players no longer in the room. */
+  /** R12.5: one avatar for the loading screen's warm-up render (its shaders compile there: hosting, they used to compile
+   *  the first time a friend came into view, a hitch). Returns the clean-up. */
+  warm(x: number, y: number, z: number): () => void {
+    const r = this.build("__warm", { x, y, z, yaw: 0, pitch: 0, colorIdx: 0, name: "" } as unknown as RemoteInfo);
+    r.root.position.set(x, y, z);
+    return () => r.root.dispose(false, true);
+  }
   retain(ids: Set<string>) {
     for (const [id, r] of this.map) {
       if (!ids.has(id)) {
