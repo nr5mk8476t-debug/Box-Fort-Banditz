@@ -568,8 +568,8 @@ Performance numbers are from the CPU-only test box (SwiftShader, about 1–2 fps
 | Night lighting | 8 views before/after, night (and day) | screenshots, Blake's review | flat; pavement pools hidden under the pavement | warmer inside with lamp contrast, spill at the door and bays; approved |
 | Small windows | 800×600 and 960×540: street (controls open, then folded), pint, pool, darts | screenshots | the controls line over the slots and bars; the pint text over the slots; the pool rules over half the table | reviewed |
 | Everything | 299 shared + 18 client unit; typecheck; matchmaking + server smoke | full suite | | pass: 299/299 and 18/18; typecheck clean; both smokes pass |
-| | full browser e2e, normal | e2e | | E2E_NORMAL |
-| | full browser e2e, 110 ms lag | e2e | | E2E_LAG |
+| | full browser e2e, normal | e2e | | pending: pushed to main first at Blake's request, run straight after |
+| | full browser e2e, 110 ms lag | e2e | | pending: run after the normal-speed run |
 
 ## Manual checklist for Blake (R12.4)
 
