@@ -560,15 +560,15 @@ relative CPU/draw cost, NOT a real graphics card's frame rate. GPU time: unavail
 | Triangles | same views | views.mjs | 975k / 1,267k / 1,474k / 1,050k / 1,611k / 902k | 417k / 549k / 839k / 408k / 964k / 524k |
 | First walk to the pub | worst frame | BENCHMARK | 2,835 ms (median 925) | 1,286 ms (median 580) |
 | Loading | the scene's own build work | CPU profile of the loading | ~7.1 s (5 s of it material scans) | ~3.2 s; wall-clock loading on this box is noisy (21–33 s both builds) |
-| Hosting | the host's World, network handling | BENCHMARK, MP=host | 1.3 ms a tick, 0.1 ms a message | HOST_RESULT |
+| Hosting | the host's window with a joiner: whole route; the host's World; the first walk's render call | BENCHMARK, MP=host (`base-host` → `after-host`) | median 2,349 ms, worst 7,231 ms; World 1.3 ms a tick; render call 667 ms | median 1,692 ms (−28%), worst 3,709 ms; World 1.2 ms a tick; render call 218 ms. The profile showed a friend's avatar shaders compiling mid-game (~3.6 s here): now compiled under the loading screen (not re-measured on MP yet) |
 | Looks | 9 views by day and night: the façade, the balcony floor and from below, the entrance and flowers, Little Italy's gate and festoons, Chinatown's lanterns, the bar, the darts, street outlines | matched screenshots, both builds | | the same (only passing cars differ) |
 | Small sphere detail | flowers, beads, fairy lights, festoons | the screenshots above | | no visible change |
 | NPC levels | a far passer-by updates one step in three and still walks; next to the SECOND player it updates every step | shared unit (new) | | pass |
 | NPC levels | pedestrians ease into walking (now measured over each one's own update time); traffic soaks with police (4 seeds), chases, parade | shared unit (existing) | failed with the levels on: seed 2 overlap 1.9 m | pass: the cause was a parade tow dropping a car on a police car (fixed); kerbside walkers stay at full rate |
 | Interior areas | floors, the outside gap (no switching when pacing the edge), stairs, the light budget, the pub within it | client unit (new) | | pass (4 tests) |
 | Leaving mid-pint | no glass, panels, buffs or body classes left | e2e (new check) | the glass and `pint-on` stayed; panels piled up | E2E_PINT |
-| Stress (SYNTHETIC) | stacked buildings (city2), double passers-by (npcs2) | BENCHMARK with STRESS | | STRESS_RESULT |
-| Everything | shared + client unit; typecheck; smokes | full suite | | UNIT_RESULT |
+| Stress (SYNTHETIC) | every building stacked on itself (about twice the façades) + twice the passers-by (77 → 98 NPCs), same build | BENCHMARK with STRESS=city2,npcs2 | normal: median 612 ms | draw calls 0 to +7% outdoors (tiles absorb it), triangles +20–39%, outdoor medians +18–60%, indoors ~0; the World's CPU +22%; loading +9 s. The next limit for a denser city: detailed façade geometry in view, not draw calls |
+| Everything | shared + client unit; typecheck; smokes | full suite | | pass: 300/300 shared, 22/22 client; typecheck clean; both smokes pass |
 | | full browser e2e, normal / 110 ms | e2e | | E2E_RESULT |
 
 ## Manual checklist for Blake (R12.5)
