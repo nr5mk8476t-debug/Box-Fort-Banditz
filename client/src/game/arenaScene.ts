@@ -438,11 +438,6 @@ export class ArenaScene {
     this.scene.render();
     this.city.warmGroups(false);
     cam.position.copyFrom(pos); cam.rotation.copyFrom(rot); cam.fov = fov; cam.maxZ = maxZ;
-    // R12.4: and one real frame from where you'll actually stand, still under the loading screen (that first frame
-    // was a 4-6 s freeze on the test box once you could see the game)
-    this.update(0, performance.now());
-    await this.scene.whenReadyAsync();
-    this.scene.render();
   }
 
   applyFov() {

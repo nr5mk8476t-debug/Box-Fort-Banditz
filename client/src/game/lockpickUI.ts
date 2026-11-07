@@ -361,9 +361,9 @@ export class PintUI {
     g.save();
     // lifted towards you while you drink (a small lean, so the line still reads against the G); tipsy: it sways
     const sway = this.wobble * (Math.sin(t * 1.7) * 0.07 + Math.sin(t * 3.1) * 0.03);
-    g.translate(PW / 2 + Math.sin(t * 1.3) * 14 * this.wobble, PH - 30 - tip * 26);
+    g.translate(PW / 2 + Math.sin(t * 1.3) * 14 * this.wobble, PH - 22 - tip * 16);
     g.rotate(sway - tip * 0.1);
-    const sc = 1 + tip * 0.06; g.scale(sc, sc);
+    const sc = 0.92 * (1 + tip * 0.04); g.scale(sc, sc);
     // the glass (a tulip pint): y up from its foot, 0..H
     const H = 360, top = 100, foot = 72, bulge = 112, mmPx = H / PUB.glassMm;
     const half = (u: number) => u < 0.72 ? foot + (bulge - foot) * Math.sin((u / 0.72) * Math.PI / 2) : bulge - (bulge - top * 0.95) * ((u - 0.72) / 0.28);
@@ -390,15 +390,16 @@ export class PintUI {
       // the result on the glass: an arrow where the line stopped, and how far off
       const v = this.verdict, col = v.grade === "perfect" ? "#7dff9a" : v.grade === "close" ? "#ffe14a" : "#ff8a7a", ly = -lvl * H, ex = half(lvl) + 6;
       g.fillStyle = col; g.beginPath(); g.moveTo(ex, ly); g.lineTo(ex + 12, ly - 7); g.lineTo(ex + 12, ly + 7); g.closePath(); g.fill();
-      g.font = "bold 15px sans-serif"; g.textAlign = "left"; g.lineWidth = 4; g.strokeStyle = "#1b1420";
-      const lab = `${v.mm.toFixed(1)} mm ${lvl > PUB.g ? "high" : "low"}`; g.strokeText(lab, ex + 15, ly + 5); g.fillText(lab, ex + 15, ly + 5);
     }
     g.restore();
     if (this.verdict && this.settled) {
       const v = this.verdict, col = v.grade === "perfect" ? "#7dff9a" : v.grade === "close" ? "#ffe14a" : "#ff8a7a";
       g.fillStyle = col; g.font = "26px Bungee, sans-serif"; g.textAlign = "center";
       g.lineWidth = 6; g.strokeStyle = "#1b1420"; const txt = v.grade === "perfect" ? "SPLIT THE G!" : v.grade === "close" ? "NEARLY!" : "MISSED IT";
-      g.strokeText(txt, PW / 2, 40); g.fillText(txt, PW / 2, 40);
+      g.strokeText(txt, PW / 2, 34); g.fillText(txt, PW / 2, 34);
+      // how far off, and which way (the arrow on the glass shows where)
+      const lab = v.mm < 0.05 ? "dead on the bar" : `${v.mm.toFixed(1)} mm ${this.level > PUB.g ? "above" : "below"} the bar`;
+      g.font = "bold 16px sans-serif"; g.lineWidth = 4; g.strokeText(lab, PW / 2, 58); g.fillText(lab, PW / 2, 58);
     }
   }
 }
