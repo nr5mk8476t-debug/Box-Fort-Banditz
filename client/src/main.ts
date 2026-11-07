@@ -994,9 +994,11 @@ let netOut: MoveInput[] = [];
 let lastNetSend = 0;
 const perf = { update: 0, world: 0, apply: 0, events: 0, render: 0, hud: 0, frame: 0 };
 let fpsSmooth = 60;
-engine.runRenderLoop(() => {
-  const dt = engine.getDeltaTime() / 1000;
-  const now = performance.now();
+/** R12.4 (tests: clips): "film" mode: the live loop stops and the tests step the game a fixed time per frame (the
+ *  same code, a steady clock), so a clip shows motion at its real speed on a machine that can't draw it live */
+let filming = false, filmNow = 0;
+engine.runRenderLoop(() => { if (!filming) frame(engine.getDeltaTime() / 1000, performance.now()); });
+function frame(dt: number, now: number) {
   if (dt > 0) fpsSmooth += (1 / Math.max(dt, 1e-3) - fpsSmooth) * 0.05;
   if (title) {
     title.update(dt);
@@ -1045,7 +1047,7 @@ engine.runRenderLoop(() => {
   } else {
     engine.clear(null as any, true, true);
   }
-});
+}
 window.addEventListener("resize", () => engine.resize());
 // Performance mode renders at a lower resolution (big win on older laptops / integrated graphics)
 const applyScaling = () => engine.setHardwareScalingLevel(settings.lowGraphics ? 1.5 : 1);
@@ -1104,6 +1106,9 @@ enterTitle();
     lobby: () => { const me = netView()?.players?.get(myPlayerId()); const m = arena?.moveState; return { phase: arena?.match.phase ?? null, onRoof: !!(arena && m && inLobby(arena.arenaLayout, m.x, m.z, 3) && m.y > 20), y: m?.y ?? null, tb: me?.tb ?? 0, rb: me?.rb ?? 0, lg: me?.lg ?? "", hud: !$("lobby-hud").classList.contains("hidden") }; },
     mapOpen: () => mapOpen,
     forceNight: (on: boolean) => { if (arena) arena.forceNight = on; },
+    /** R12.4 (clips): stop the live loop / step it a fixed dt (s) per call */
+    film: (on: boolean) => { filming = on; filmNow = performance.now(); },
+    filmStep: (dt: number, n = 1) => { for (let k = 0; k < n; k++) { filmNow += dt * 1000; frame(dt, filmNow); } },
     toggleMap: (on?: boolean) => toggleMap(on),
     lobbyNpc: () => { const out: any[] = []; netView()?.npcs?.forEach((n: any, id: string) => { if (n.kind === "uncle_dumpster") out.push({ id, x: n.x, y: n.y, z: n.z, state: n.state }); }); return out[0] ?? null; },
     // C4b: tags on walls, my aura, and a noise (solo) to wake the old lady
@@ -1137,6 +1142,7 @@ enterTitle();
     pg: () => arena?.pg.info() ?? null,
     pgAct: (act: any) => arena?.onAction?.({ a: "pg", ...act }),
     pgUse: (id: string) => arena?.pg.use(id),
+    pgAim: (angle: number) => arena?.pg.testAim(angle),
     pgShot: (id: string, angle: number, power: number, place?: { x: number; z: number }) => arena?.pg.testShot(id, angle, power, place),
     pgDart: (id: string, u: number, v: number) => arena?.pg.testDart(id, u, v),
     pgRing: () => arena?.pg.ring() ?? null,

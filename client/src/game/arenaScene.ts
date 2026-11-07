@@ -1871,7 +1871,22 @@ export class ArenaScene {
     if (co) { this.camera.position.set(co.x, co.y, co.z); this.camera.rotation.set(co.pitch, co.yaw, 0); }
     const pgc = this.pg.cam; // (R12.3: crouched over the cue ball / steady at the oche)
     if (pgc && !co) { this.camera.position.set(pgc.x, pgc.y, pgc.z); this.camera.rotation.set(pgc.pitch, pgc.yaw, 0); this.camera.fov = pgc.fov; }
-    this.viewmodel.setVisible(!this.fortView && !co && !pgc);
+    // R12.4: after a pool shot: from the shooting view up to your own eyes, eased, in real time (any frame rate); it
+    // chases your view as it is each frame, so walking off or looking round during it hands over smoothly
+    const bl = this.pg.blend;
+    if (bl && !pgc && !co) {
+      if (!bl.init) { bl.init = true; this.input.yaw = bl.from.yaw; this.input.pitch = Math.min(0.6, Math.max(0.25, this.input.pitch)); } // (facing the way you shot, looking down at the table)
+      bl.t += dt / bl.dur;
+      if (bl.t >= 1) this.pg.blend = null;
+      else {
+        const k = bl.t * bl.t * (3 - 2 * bl.t), f = bl.from, cp = this.camera.position, cr = this.camera.rotation;
+        let dy = cr.y - f.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+        cp.set(f.x + (cp.x - f.x) * k, f.y + (cp.y - f.y) * k, f.z + (cp.z - f.z) * k);
+        cr.set(f.pitch + (cr.x - f.pitch) * k, f.yaw + dy * k, cr.z * k);
+        this.camera.fov = f.fov + (this.camera.fov - f.fov) * k;
+      }
+    }
+    this.viewmodel.setVisible(!this.fortView && !co && !pgc && !this.pg.blend);
     if (!Number.isFinite(this.camera.position.y) || !Number.isFinite(this.camera.rotation.z) || !Number.isFinite(this.camera.rotation.x)) {
       // last line of defence: never leave the camera broken
       this.camera.position.set(px, py + PLAYER.eyeHeight, pz);

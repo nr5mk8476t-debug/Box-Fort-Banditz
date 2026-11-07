@@ -128,7 +128,11 @@ interface Note {
 }
 export interface PgCtx { me: string; x: number; y: number; z: number; clock: number; pints: number; tipsy: number; others: { x: number; y: number; z: number }[]; hurt: boolean; }
 export interface PgHooks { act(a: Record<string, unknown>): void; feedback(t: string, k: "good" | "bad" | "info"): void; }
-type Mode = "" | "menu" | "place" | "aim" | "draw" | "darts";
+type Mode = "" | "menu" | "place" | "aim" | "draw" | "darts" | "follow";
+/** R12.4 (Blake: "taking a shot feels like being kicked off the table"): after you strike, the shooting view holds a
+ *  moment so you see the cue go through and the balls start, then the camera rises to your normal eye level over
+ *  STANDUP.rise seconds (the arena blends it), and you're walking again while the balls finish rolling */
+export const STANDUP = { hold: 0.3, rise: 0.65 };
 
 const BALL_COL: Record<string, string> = { cue: "#f4f1ea", red: "#c41e1e", yellow: "#e8c020", black: "#141414" };
 const SEAT_FLIGHT = ["#1f8a3a", "#8e1f2e"];
@@ -143,6 +147,9 @@ class Station {
   balls: Mesh[] = []; ballQ: Quaternion[] = []; ballPos: { x: number; z: number; down: boolean }[] = [];
   sim: PoolSim | null = null; simT = 0; key = ""; dur = 0; why = ""; drop: Map<number, number> = new Map();
   cue: TransformNode | null = null; cueT = -1; cueDir = { x: 0, z: 1 }; cueFrom = { x: 0, z: 0 };
+  /** (R12.4: when you struck it here yourself: the stroke and its sound are shown at once, not again when the host's
+   *  copy of the shot comes back) */
+  struckAt = -1e9;
   // darts
   darts: TransformNode[] = []; dartIn: number[] = []; flash = { label: "", t: 0 };
   /** R12.4: the dart in the air at THIS board (each board its own: one board's dart never holds up the other's throw) */
@@ -162,6 +169,9 @@ export class PubGamesView {
   mode: Mode = ""; at = "";
   /** the camera while you play (null = the normal first-person view) */
   cam: { x: number; y: number; z: number; yaw: number; pitch: number; fov: number } | null = null;
+  /** R12.4: the stand-up after a pool shot: the shooting view to blend from, how far through (the arena runs it) */
+  blend: { from: { x: number; y: number; z: number; yaw: number; pitch: number; fov: number }; t: number; dur: number; init?: boolean } | null = null;
+  private follow: { st: Station; t: number; from: { x: number; y: number; z: number; yaw: number; pitch: number; fov: number } } | null = null;
   private U = 0; private wallZ = 0; private wx = 0;
   private root: TransformNode;
   private mats = new Map<string, StandardMaterial>();
@@ -276,6 +286,9 @@ export class PubGamesView {
     // (only what's going on HERE moves you: another table or board finishing never touches your aim, your throw or a
     //  menu you've got open elsewhere)
     if (this.at !== id) return;
+    // (R12.4: the moment after your pool shot: the hold and the stand-up see themselves out; the turn passing because
+    //  of that very shot doesn't cut it short)
+    if (this.mode === "follow") return;
     // (your own dart still in the air at this board: you see it land first, the checkout or the bust included)
     if (r.ended && this.mode === "darts" && s.fly?.mine) { this.handover = { st: s, t: 0.9 }; return; }
     if (!mine && this.mode !== "menu" && (this.mode !== "darts" || !s.fly)) this.leave();
@@ -298,7 +311,8 @@ export class PubGamesView {
     s.sim.onHit = (k, sp) => { if (!this.near(s, 14)) return; if (k === "ball") sfx.ballClick(sp); else if (k === "cushion") sfx.cushion(sp); else sfx.pocketDrop(); };
     for (const b of start) s.ballPos[b.id] = { x: b.x, z: b.z, down: b.down };
     s.drop.clear();
-    if (plan.at < 0.3) { const cue = start.find((b) => b.id === 0)!; s.cueT = 0; s.cueDir = { x: sh.dx, z: sh.dz }; s.cueFrom = { x: cue.x, z: cue.z }; if (this.near(s, 14)) sfx.cueStrike(sh.v / POOL.vMax); }
+    const own = performance.now() - s.struckAt < 3000; s.struckAt = -1e9;
+    if (plan.at < 0.3 && !own) { const cue = start.find((b) => b.id === 0)!; s.cueT = 0; s.cueDir = { x: sh.dx, z: sh.dz }; s.cueFrom = { x: cue.x, z: cue.z }; if (this.near(s, 14)) sfx.cueStrike(sh.v / POOL.vMax); }
     this.showBalls(s, s.sim.balls.map((b) => ({ id: b.id, x: b.x, z: b.z, down: b.down })));
   }
   /** is it my turn at this station (a game on, my seat, nothing rolling on the host)? */
@@ -500,12 +514,13 @@ export class PubGamesView {
       if (P.hand) { this.place = { x: c.x, z: c.z }; this.mode = "place"; } else this.mode = "aim";
     } else { this.mode = "darts"; this.aim = { u: 0, v: 0.103 }; this.swayPh = [Math.random() * 6, Math.random() * 6, Math.random() * 6, Math.random() * 6]; this.steady = { on: false, t: 0, cool: 0, f: 1 }; }
   }
-  leave() { if (this.mode === "menu") this.closeMenu(); this.mode = ""; this.at = ""; this.cam = null; this.drawD = 0; if (this.guide) this.guide.setEnabled(false); if (this.marker) this.marker.setEnabled(false); }
+  leave() { this.follow = null; if (this.mode === "menu") this.closeMenu(); this.mode = ""; this.at = ""; this.cam = null; this.drawD = 0; if (this.guide) this.guide.setEnabled(false); if (this.marker) this.marker.setEnabled(false); }
   get active() { return this.mode !== ""; }
 
   // ---------------------------------------------------------------- input (while you're at a table / the oche)
   readonly input = {
     mouse: (dx: number, dy: number) => {
+      if (this.mode === "follow") return; // (the hold: the view stays put; your look's yours again in a moment)
       const s = this.st.get(this.at); if (!s) return;
       const k = settings.mouseSensitivity;
       if (this.mode === "place") { this.place.x = clamp(this.place.x + dx * 0.0011 * k, -POOL.W / 2 + POOL.RC, POOL.W / 2 - POOL.RC); this.place.z = clamp(this.place.z - dy * 0.0011 * k, -POOL.L / 2 + POOL.RC, -POOL.L / 2 + POOL.baulk); }
@@ -514,6 +529,7 @@ export class PubGamesView {
       else if (this.mode === "darts") { this.aim.u = clamp(this.aim.u + dx * 0.00028 * k, -0.3, 0.3); this.aim.v = clamp(this.aim.v - dy * 0.00028 * k * (settings.invertY ? -1 : 1), -0.3, 0.3); }
     },
     button: (b: number, down: boolean) => {
+      if (this.mode === "follow") return; // (the release that struck the shot, or a click right after, never becomes a punch)
       const s = this.st.get(this.at); if (!s) return;
       if (this.mode === "place" && b === 0 && down) { if (cueSpotOk(this.ballsOf(s), this.place.x, this.place.z)) { this.mode = "aim"; sfx.uiClick(); } else { sfx.error(); this.hooks.feedback("Not there: behind the baulk line, clear of the other balls.", "bad"); } }
       else if (this.mode === "aim" && b === 0 && down) { this.mode = "draw"; this.drawD = 0; }
@@ -523,6 +539,8 @@ export class PubGamesView {
     },
     key: (code: string, down: boolean): boolean => {
       if (this.mode === "menu") { if (down) this.menuKey(code); return true; }
+      // (setting off during the hold: you stand up at once and the key moves you)
+      if (this.mode === "follow") { if (down && /^Key[WASD]$|^Arrow/.test(code)) { this.standUp(); return false; } return !/^Key[WASD]$|^Arrow|^Shift/.test(code); }
       if (code === "ShiftLeft" || code === "ShiftRight") { this.fine = down; if (this.mode === "darts") this.steadyKey(down); return true; }
       if (!down) return true;
       if (code === "KeyE" || code === "Backspace") { this.leave(); return true; }
@@ -542,8 +560,20 @@ export class PubGamesView {
     const P = s.note?.pool; if (!P) return;
     const a: Record<string, unknown> = { a: "pg", op: "shot", st: s.id, n: P.n, dx: d.x, dz: d.z, v };
     if (P.hand) { a.cx = this.place.x; a.cz = this.place.z; }
-    this.hooks.act(a); this.mode = "aim"; this.drawD = 0;
+    this.hooks.act(a); this.drawD = 0;
+    // (R12.4: the cue goes through the white right now, here (just the look of it and its sound: the shot itself is
+    //  the host's, played out when it comes back); the view holds, then you stand up)
+    const c = this.cueBall(s); s.cueT = 0; s.cueDir = { x: d.x, z: d.z }; s.cueFrom = { x: c.x, z: c.z }; s.struckAt = performance.now();
+    sfx.cueStrike(v / POOL.vMax);
+    if (this.cam) { this.mode = "follow"; this.follow = { st: s, t: 0, from: { ...this.cam } }; if (this.guide) this.guide.setEnabled(false); }
+    else this.leave();
+  }
+  /** the hold's over (or you set off walking): back to your own feet, the camera rising from the shot */
+  private standUp() {
+    const f = this.follow; if (!f) return;
+    this.follow = null;
     this.leave();
+    this.blend = { from: f.from, t: 0, dur: STANDUP.rise };
   }
   private throwDart(s: Station) {
     const D = s.note?.darts; if (!D || s.fly || this.handover || (this.thrownN === D.n && performance.now() - this.thrownAt < 1500)) return;
@@ -562,6 +592,11 @@ export class PubGamesView {
 
   // ---------------------------------------------------------------- the camera and the aim guide
   private updateCam(dt: number) {
+    if (this.mode === "follow" && this.follow) {
+      const f = this.follow; f.t += dt; this.cam = { ...f.from };
+      if (f.t >= STANDUP.hold || this.ctx.hurt) this.standUp();
+      return;
+    }
     const s = this.st.get(this.at);
     if (!s || this.mode === "" || this.mode === "menu") { this.cam = null; if (this.guide) this.guide.setEnabled(false); if (this.marker) this.marker.setEnabled(false); return; }
     const base = (settings.fov * Math.PI) / 180;
@@ -715,6 +750,8 @@ export class PubGamesView {
     this.aimA = angle; this.drawD = clamp(power, 0, 1) * 0.3; this.mode = "draw";
     this.shoot(s, this.dir(), this.power()); return "";
   }
+  /** (tests / clips) turn your aim to an angle (radians) at the table you're at */
+  testAim(angle: number) { this.aimA = angle; }
   /** (tests) throw a dart at (u, v) with no sway */
   testDart(id: string, u: number, v: number) { const s = this.st.get(id); if (!s) return; this.enter(s); this.aim = { u, v }; this.steady.f = 0; this.throwDart(s); }
   /** (tests) the aim ring's position (board metres) right now */
