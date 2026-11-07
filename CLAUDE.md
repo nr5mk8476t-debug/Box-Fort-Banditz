@@ -12,7 +12,8 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 - Cartoon parody brands only. No real pub or brand names. The pub is THE SOGGY SHAMROCK; its drinks are GUZZLE'S, KILLKENNEL, HARPY LAGER and O'BINLID'S.
 - No real-money monetization; in-game cash only. No realistic drug presentation.
 - Don't add landmarks unless Blake asks.
-- Keep the repo to 100 tracked files of code and docs. `CHANGELOG.md`, `CLAUDE.md` and `screenshots/` don't count towards the cap.
+- The old 100-file cap is lifted (Blake, R12.5: "if you need to add more files more than 100, do so, and add accordingly to github"). Add files where they make the code clearer, commit them, and don't pad the repo.
+- New content follows `docs/content-guide.md` and stays inside `docs/perf-budget.md` (check with the BENCHMARK and `tests/perf-compare.mjs`).
 
 ## Every update ("slice")
 1. Unit tests: `npm test` (shared + client), and `npm run typecheck`.

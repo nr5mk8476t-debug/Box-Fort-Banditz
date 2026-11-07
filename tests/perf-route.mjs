@@ -11,7 +11,7 @@ const exe = fs.existsSync("/opt/pw-browsers/chromium") && !process.env.PW_OWN ? 
 const browser = await chromium.launch({ ...exe, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-precise-memory-info", ...(process.env.XARGS ? process.env.XARGS.split(" ") : [])] });
 const open = async () => { const p = await (await browser.newContext({ viewport: { width: W, height: H } })).newPage(); p.on("pageerror", (e) => console.log("page error:", String(e))); return p; };
 const page = await open();
-await page.goto(`${base}/?test=1`, { timeout: 480000 });
+await page.goto(`${base}/?test=1${process.env.STRESS ? "&stress=" + process.env.STRESS : ""}`, { timeout: 480000 }); // (STRESS=city2,npcs2: SYNTHETIC stress, labelled in the report)
 await page.waitForFunction(() => window.__bfb?.info().screen === "title", null, { timeout: 480000 });
 await page.mouse.click(200, H - 100);
 const t0 = Date.now();

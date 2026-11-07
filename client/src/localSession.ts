@@ -20,8 +20,8 @@ export class LocalSession {
   private acc = 0;
 
   /** `id` is the local player's id (a browser host uses its own id, solo uses "me"). */
-  constructor(name: string, readonly id = SOLO_ID) {
-    this.world = new World({ seed: (Math.random() * 2 ** 31) | 0, lobby: true });
+  constructor(name: string, readonly id = SOLO_ID, npcs?: number) {
+    this.world = new World({ seed: (Math.random() * 2 ** 31) | 0, lobby: true, npcs });
     this.world.addPlayer(id, name);
     this.view = { players: this.players, items: this.items, npcs: this.npcs, props: this.propsV, cars: this.carsV, copCars: this.copCarsV, tags: this.tagsV, phase: "arena", ownerId: id, code: "" };
     this.refresh();

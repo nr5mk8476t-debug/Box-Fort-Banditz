@@ -16,7 +16,7 @@ import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
 } from "./net.ts";
 import {
-  MSG, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington, setCityMap, cityMap, nearBoxes, inFoot,
+  MSG, NPC_COUNT, PLAYER_COLORS, normalizeRoomCode, isValidRoomCode, sanitizeName, randomBanditName, buildTrashington, setCityMap, cityMap, nearBoxes, inFoot,
   lootDef, RARITY_COLOR, starsOf, type MoveInput, pinPos as pinPosOf, type WorldView, type WorldEvent,
 } from "@bfb/shared";
 
@@ -34,6 +34,15 @@ const CITY = buildTrashington();
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const show = (id: string, on = true) => $(id).classList.toggle("hidden", !on);
 const TEST_MODE = new URLSearchParams(location.search).has("test");
+// R12.5: SYNTHETIC STRESS TESTS (test mode only; never real content): ?stress=city2 stacks a copy of every building on
+// top of itself (about twice the façade detail in view); ?stress=npcs2 / npcs3 doubles / triples the passers-by (solo)
+const STRESS = TEST_MODE ? (new URLSearchParams(location.search).get("stress") ?? "") : "";
+if (STRESS.includes("city2")) {
+  const extra = CITY.boxes.filter((b) => b.kind === "building" || b.kind === "tower").map((b) => ({ ...b, y: b.y + b.h, sign: undefined }));
+  CITY.boxes.push(...extra);
+  console.warn(`[stress] SYNTHETIC: +${extra.length} stacked buildings`);
+}
+const STRESS_NPCS = /npcs(\d)/.exec(STRESS)?.[1] ? Number(/npcs(\d)/.exec(STRESS)![1]) * NPC_COUNT : undefined;
 
 function toast(text: string, ms = 2600) {
   const el = document.createElement("div");
@@ -162,7 +171,7 @@ async function startSolo() {
   leaveTitle();
   mode = "solo";
   room = null;
-  local = new LocalSession(name);
+  local = new LocalSession(name, undefined, STRESS_NPCS);
   arena = new ArenaScene(engine, input, CITY, 0);
   wireArena(arena);
   arena.applyWorld(local.view, SOLO_ID, performance.now());
@@ -718,7 +727,7 @@ async function startBench() {
     startGames: local ? () => { a.onAction?.({ a: "pg", op: "open", st: "pooltable2", vs: "npc", stake: 0 } as any); a.onAction?.({ a: "pg", op: "open", st: "dartsoche1", vs: "npc", stake: 0 } as any); } : undefined,
     gamesActive: () => { const i = a.pg.info() as any; return ["pooltable2", "dartsoche1"].map((k) => `${k}: ${i?.[k]?.ph ?? "-"}${i?.[k]?.rolling ? " (rolling)" : ""}`).join(", "); },
     settings: { lowGraphics: settings.lowGraphics, fov: settings.fov, showFps: settings.showFps },
-    build: __BFB_BUILD__, pubSeen: () => a.city.pubSeen,
+    build: __BFB_BUILD__ + (STRESS ? ` SYNTHETIC STRESS: ${STRESS}` : ""), pubSeen: () => a.city.pubSeen,
     status: (s) => { $("bench-status").textContent = s; },
   });
   show("bench-status", false); document.body.classList.remove("benching");

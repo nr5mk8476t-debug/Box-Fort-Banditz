@@ -4,12 +4,15 @@ import { CellMaterial, Color3, DynamicTexture, Mesh, VertexBuffer, type Scene, t
 import { tierAt, type ArenaLayout } from "@bfb/shared";
 
 const cache = new Map<string, CellMaterial>();
+const cachedScenes = new Set<string>();
 
 /** Cel-shaded material (hard light/shadow bands = cartoon look). Cached per colour. */
 export function toon(scene: Scene, hex: string, name = "toon"): CellMaterial {
   const key = scene.uid + hex + name;
   let m = cache.get(key);
   if (!m) {
+    // (R12.5: forget a scene's materials when the scene goes: the cache used to keep every game's, one set per game played)
+    if (!cachedScenes.has(scene.uid)) { cachedScenes.add(scene.uid); scene.onDisposeObservable.addOnce(() => { cachedScenes.delete(scene.uid); for (const k of [...cache.keys()]) if (k.startsWith(scene.uid)) cache.delete(k); }); }
     m = new CellMaterial(`${name}-${hex}`, scene);
     m.diffuseColor = Color3.FromHexString(hex);
     m.computeHighLevel = true;
