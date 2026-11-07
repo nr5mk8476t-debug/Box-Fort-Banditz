@@ -2182,22 +2182,28 @@ test("R11.4 the goods' timers sync packed in one number (the player schema is at
 });
 
 // ---- R12.1: THE SOGGY SHAMROCK ----
-import { PUB, pintLevel, pintMissMm, pintGrade, pintHoldFor, tipsyDrift, tipsyAmount } from "../src/index.js";
-test("R12.2c split the G (hard): the line drops faster the longer you gulp, surging and slackening on each pint's own rhythm (always down); stopping on the G's bar is perfect; 2 mm is perfect, 6 mm close", () => {
-  for (const [rate, w, ph] of [[PUB.rateMin, PUB.wMin, 0], [0.08, 2.5, 1.7], [PUB.rateMax, PUB.wMax, 4.4]]) {
-    for (let t = 0; t < 8; t += 0.05) assert.ok(pintLevel(t + 0.05, rate, w, ph) <= pintLevel(t, rate, w, ph), "always going down");
-    const t = pintHoldFor(PUB.g, rate, w, ph);
-    assert.ok(t > 1.2 && t < 4.5, `about 1-4 s of gulping (${t.toFixed(2)} s)`);
-    assert.ok(pintMissMm(t, rate, w, ph) < 0.01);
-    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 1.5 / PUB.glassMm, rate, w, ph), rate, w, ph)), "perfect");
-    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 4 / PUB.glassMm, rate, w, ph), rate, w, ph)), "close");
-    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 8 / PUB.glassMm, rate, w, ph), rate, w, ph)), "miss");
-    // tight: the perfect window is only a moment long
-    const win = pintHoldFor(PUB.g - 2 / PUB.glassMm, rate, w, ph) - pintHoldFor(PUB.g + 2 / PUB.glassMm, rate, w, ph);
-    assert.ok(win > 0.05 && win < 0.4, `the perfect window: ${(win * 1000).toFixed(0)} ms`);
+import { PUB, pintLevel, pintSpeed, pintSettled, pintMissMm, pintGrade, pintHoldFor, tipsyDrift, tipsyAmount } from "../src/index.js";
+test("R12.4 split the G (visible, fair, skilled): a smooth drink (eases in, then steady, always down, no surges); the head settles a set amount after you let go; 1.5 mm perfect, 5 mm close; a short window", () => {
+  for (const rate of [PUB.rateMin, 0.11, PUB.rateMax]) {
+    for (let t = 0; t < 8; t += 0.05) assert.ok(pintLevel(t + 0.05, rate) <= pintLevel(t, rate) && pintSettled(t + 0.05, rate) <= pintSettled(t, rate), "always going down");
+    // smooth: the speed never jumps (no surges): it only ever rises, by less than a 30th of a frame's worth
+    for (let t = 0.5; t < 6; t += 1 / 60) { const a = pintSpeed(t, rate), b = pintSpeed(t + 1 / 60, rate); assert.ok(b >= a && b - a < rate * 0.01, `steady at ${t.toFixed(2)} s`); }
+    const t = pintHoldFor(PUB.g, rate);
+    assert.ok(t > 1.5 && t < 3.5, `about 2-3 s of drinking (${t.toFixed(2)} s)`);
+    assert.ok(pintMissMm(t, rate) < 0.01);
+    // the settle: the same short carry-on every time (let go ~2-3 mm above the bar), smooth (no jump), done in half a second
+    const carry = (pintLevel(t, rate) - pintSettled(t, rate)) * PUB.glassMm;
+    assert.ok(carry > 2 && carry < 3.5, `the head settles ${carry.toFixed(2)} mm`);
+    assert.ok(Math.abs(pintSettled(t, rate, 0) - pintLevel(t, rate)) < 1e-9, "no jump when you let go");
+    assert.ok((pintSettled(t, rate, 0.6) - pintSettled(t, rate)) * PUB.glassMm < 0.1, "settled in about half a second");
+    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 1.2 / PUB.glassMm, rate), rate)), "perfect");
+    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g + 1.2 / PUB.glassMm, rate), rate)), "perfect");
+    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 4 / PUB.glassMm, rate), rate)), "close");
+    assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 6 / PUB.glassMm, rate), rate)), "miss");
+    // skilled: the perfect window is short
+    const win = pintHoldFor(PUB.g - 1.5 / PUB.glassMm, rate) - pintHoldFor(PUB.g + 1.5 / PUB.glassMm, rate);
+    assert.ok(win > 0.12 && win < 0.22, `the perfect window: ${(win * 1000).toFixed(0)} ms`);
   }
-  // the surge changes when the G comes: the same rate, two rhythms, different holds
-  assert.ok(Math.abs(pintHoldFor(PUB.g, 0.08, 2.0, 0) - pintHoldFor(PUB.g, 0.08, 2.0, 3.1)) > 0.12, "you can't just count");
 });
 test("R12.1 THE SOGGY SHAMROCK: $6 a pint at the tap (broke: no pint); split the G for $15, close gets your $6 back; the chalkboard keeps the best 5 of the match; one pint at a time", () => {
   const { w, ps: [a, b] } = hotWorld(2);
@@ -2214,8 +2220,8 @@ test("R12.1 THE SOGGY SHAMROCK: $6 a pint at the tap (broke: no pint); split the
   w.props.use(a, tap.id);
   assert.ok(w.takeEvents().some((e) => e.t === "pintNo" && (e as any).reason === "busy"), "one at a time");
   // a perfect split
-  const hold = (e: any, mm = 0) => pintHoldFor(PUB.g - mm / PUB.glassMm, e.rate, e.w, e.ph); // (R12.2c: past the G by mm)
-  assert.ok(ev.w >= PUB.wMin && ev.w <= PUB.wMax && ev.ph >= 0 && ev.ph < 6.3, "its own surges");
+  const hold = (e: any, mm = 0) => pintHoldFor(PUB.g - mm / PUB.glassMm, e.rate); // (settling past the G by mm)
+  assert.ok(!("w" in ev) && !("ph" in ev), "R12.4: no hidden surges");
   w.action(a.id, { a: "gulp", hold: hold(ev) });
   const d1 = w.takeEvents().find((e) => e.t === "pintDone") as any;
   assert.ok(d1 && d1.grade === "perfect" && d1.won === PUB.prize && d1.best, `split it (${JSON.stringify(d1)})`);

@@ -3,8 +3,8 @@
 // ink outlines, grimy-bright colours, shop signs, parody ads, windows.
 // Performance: static meshes are merged by material, so the whole city is a few dozen draw calls.
 import {
-  Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer, Vector3, VertexData, Quaternion,
-  type ShadowGenerator,
+  Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer, Vector3, VertexData, Quaternion, PointLight,
+  type ShadowGenerator, type CellMaterial,
 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
 import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
@@ -435,10 +435,15 @@ export class CityRenderer {
   private group = -1;
   private unitMeshes = new Map<number, Mesh[]>();
   /** R7: interiors that aren't units (the station's two floors, the pawn shops): drawn only near the camera too */
-  private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number; dist?: number }[] = [];
+  private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number; dist?: number; vis?: (x: number, y: number, z: number) => boolean; noBoxes?: boolean }[] = [];
+  /** R12.4: while the pub's being built: which visibility group each piece goes in (by where it is) */
+  private pubZone: ((m: Mesh) => number) | null = null;
+  private zoneOf(m: Mesh): number { return this.group >= 0 || !this.pubZone ? this.group : this.pubZone(m); }
+  private intoGroup(m: Mesh, g: number) { (this.unitMeshes.get(g) ?? this.unitMeshes.set(g, []).get(g)!).push(m); m.setEnabled(false); this.unitOn.set(g, false); }
   private groupOfBox(b: Box): number {
     if (b.unit !== undefined) return b.unit;
     for (const g of this.extraGroups) {
+      if (g.noBoxes) continue;
       const r = g.rect;
       if (b.x > r.minX && b.x < r.maxX && b.z > r.minZ && b.z < r.maxZ && b.y > g.y0 && b.y < g.y1 && b.kind !== "roof" && b.kind !== "glass" && b.kind !== "sidewalk" && b.kind !== "curb" && b.kind !== "plaza" && b.deco !== "shell") return g.id; // (R8: never the pavement);
     }
@@ -612,7 +617,7 @@ export class CityRenderer {
 
   // ---- R11.5: textured skins (the club and its alley)
   private skinMats = new Map<string, StandardMaterial>();
-  private skinLists = new Map<StandardMaterial, { meshes: Mesh[]; outline: number }>();
+  private skinLists = new Map<string, { mat: StandardMaterial; meshes: Mesh[]; outline: number; grp: number }>();
   private skinTex = new Map<string, Texture>();
   skinMat(skin: string, col: string): StandardMaterial {
     const key = skin + "|" + col;
@@ -630,16 +635,17 @@ export class CityRenderer {
   }
   private skinPush(m: Mesh, skin: string, col: string, outline: number) {
     worldUV(m, SKINS[skin].tile);
-    const mat = this.skinMat(skin, col);
-    const l = this.skinLists.get(mat) ?? this.skinLists.set(mat, { meshes: [], outline }).get(mat)!;
+    const mat = this.skinMat(skin, col), grp = this.zoneOf(m), key = mat.uniqueId + "|" + grp;
+    const l = this.skinLists.get(key) ?? this.skinLists.set(key, { mat, meshes: [], outline, grp }).get(key)!;
     l.meshes.push(m); m.isPickable = false;
   }
   private flushSkins() {
-    for (const [mat, l] of this.skinLists) for (let i = 0; i < l.meshes.length; i += 600) {
+    for (const l of this.skinLists.values()) for (let i = 0; i < l.meshes.length; i += 600) {
       const mm = Mesh.MergeMeshes(l.meshes.slice(i, i + 600), true, true);
       if (!mm) continue;
-      mm.material = mat; mm.parent = this.root; mm.isPickable = false; mm.freezeWorldMatrix();
+      mm.material = l.mat; mm.parent = this.root; mm.isPickable = false; mm.freezeWorldMatrix();
       if (l.outline > 0) ink(mm, l.outline);
+      if (l.grp >= 0) this.intoGroup(mm, l.grp);
     }
     this.skinLists.clear();
   }
@@ -674,9 +680,10 @@ export class CityRenderer {
 
   /** Queue a static mesh for merging (grouped by colour). */
   private add(m: Mesh, color: string, outline = 0.04, castShadow = true) {
-    if (this.group >= 0) castShadow = false; // interiors: no shadow casting (they're drawn on and off)
+    const grp = this.zoneOf(m);
+    if (grp >= 0) castShadow = false; // interiors: no shadow casting (they're drawn on and off)
     if (this.brk) { m.metadata = { brk: this.brk }; castShadow = false; } // (C4a: breakables: the shadow map is drawn once)
-    const key = color + "|" + outline + "|" + (castShadow ? 1 : 0) + "|" + this.group;
+    const key = color + "|" + outline + "|" + (castShadow ? 1 : 0) + "|" + grp;
     (this.byMaterial.get(key) ?? this.byMaterial.set(key, []).get(key)!).push(m);
     m.isPickable = false;
   }
@@ -776,11 +783,12 @@ export class CityRenderer {
   }
 
   /** Slice 2A: draw building interiors only near the camera. Call every frame. */
-  update(camX: number, camZ: number) {
+  update(camX: number, camZ: number, camY = 1.7) {
     if (this.neon.length || this.stationLights) this.updateNeon();
     this.updateHeli(Math.min(0.1, (performance.now() - this.lastUpd) / 1000)); this.lastUpd = performance.now();
     for (const u of [...(this.arena.units ?? []), ...this.extraGroups]) {
-      const on = Math.hypot(u.x - camX, u.z - camZ) < ((u as { dist?: number }).dist ?? INTERIOR_DRAW_DIST);
+      const vis = (u as { vis?: (x: number, y: number, z: number) => boolean }).vis;
+      const on = vis ? vis(camX, camY, camZ) : Math.hypot(u.x - camX, u.z - camZ) < ((u as { dist?: number }).dist ?? INTERIOR_DRAW_DIST);
       if (this.unitOn.get(u.id) === on) continue;
       this.unitOn.set(u.id, on);
       for (const m of this.unitMeshes.get(u.id) ?? []) m.setEnabled(on);
@@ -788,6 +796,14 @@ export class CityRenderer {
     }
   }
 
+  /** R12.4: for the loading screen's warm-up renders: every interior group (and the pub's moving bits) on, so their first
+   *  draw happens there, not on the walk; off again after (the next frame puts back what should be showing) */
+  warmGroups(on: boolean) {
+    for (const ms of this.unitMeshes.values()) for (const m of ms) m.setEnabled(on);
+    for (const ms of this.unitPlanes.values()) for (const m of ms) m.setEnabled(on);
+    this.pubDyn?.setEnabled(on);
+    this.unitOn.clear(); this.pubNear = on;
+  }
   /** How many building interiors are being drawn right now (tests / perf overlay). */
   get interiorsDrawn() { let n = 0; for (const v of this.unitOn.values()) if (v) n++; return n; }
 
@@ -3636,6 +3652,11 @@ export class CityRenderer {
   private pubFire: { m: Mesh; ph: number; s: number; y0?: number }[] = [];
   private pubFireMat: StandardMaterial | null = null;
   private pubLamps: StandardMaterial[] = [];
+  /** R12.4 night lighting (Blake: "baked + a few real lights"): five real lamps in the pub (no shadows), each lighting
+   *  only its own floor's pieces; Performance mode has none. `flick`: a fire's flicker */
+  private pubLights: { l: PointLight; base: number; flick: number }[] = [];
+  /** R12.4: the warm light on the pavement (out of the door, under the bay windows): baked, drawn at night */
+  private pubSpill: StandardMaterial | null = null;
   private pubBoard: { tex: DynamicTexture; note: string } | null = null;
   /** the pub's surfaces: brighter at night (the lamps are on inside) */
   private pubSkins: { m: StandardMaterial; base: Color3 }[] = [];
@@ -3671,6 +3692,62 @@ export class CityRenderer {
     b.tex.update();
   }
   private buildPub() {
+    // R12.4: the pub's insides in two groups by floor, drawn by where the camera is: outside, both within 60 m (the
+    // windows); inside on one floor, not the other (only near the stairs, where you see up and down). The shell, the
+    // signs and the front stay in the city as before.
+    {
+      const P0 = this.arena.pub!, R = P0.rect, y2 = P0.y2, cx = (R.minX + R.maxX) / 2, cz = (R.minZ + R.maxZ) / 2, st = P0.stairs;
+      const inside = (x: number, z: number) => x > R.minX + 0.2 && x < R.maxX - 0.2 && z > R.minZ + 0.2 && z < R.maxZ - 0.2;
+      const nearStairs = (x: number, z: number) => x > st.minX - 5 && x < st.maxX + 5 && z > st.minZ - 7 && z < st.maxZ + 3;
+      const far = (x: number, z: number) => Math.hypot(x - cx, z - cz) > 60;
+      this.extraGroups.push(
+        { id: 9301, x: cx, z: cz, rect: R, y0: -1, y1: y2, noBoxes: true, vis: (x, y, z) => !far(x, z) && !(inside(x, z) && y > y2 + 0.4 && !nearStairs(x, z)) },
+        { id: 9302, x: cx, z: cz, rect: R, y0: y2, y1: 20, noBoxes: true, vis: (x, y, z) => !far(x, z) && !(inside(x, z) && y < y2 - 0.3 && !nearStairs(x, z)) },
+      );
+      this.pubZone = (m) => {
+        m.computeWorldMatrix(true); const c = m.getBoundingInfo().boundingBox.centerWorld;
+        if (c.x < R.minX + 0.35 || c.x > R.maxX - 0.35 || c.z < R.minZ + 0.35 || c.z > R.maxZ - 0.35) return -1;
+        return c.y < y2 - 0.05 ? 9301 : 9302;
+      };
+    }
+    try { this.buildPubInner(); } finally { this.pubZone = null; this.flush(); }
+    this.pubLighting();
+  }
+  /** R12.4: the pub's real lamps and the baked spill of light outside */
+  private pubLighting() {
+    const P = this.arena.pub!, sc = this.scene, mid = (r: Rect) => [(r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2] as const;
+    if (this.detail) {
+      const down = this.unitMeshes.get(9301) ?? [], up = this.unitMeshes.get(9302) ?? [];
+      const lamp = (name: string, x: number, y: number, z: number, col: string, range: number, base: number, flick: number, meshes: Mesh[]) => {
+        const l = new PointLight(name, new Vector3(x, y, z), sc);
+        l.diffuse = Color3.FromHexString(col); l.specular = Color3.Black(); l.range = range; l.intensity = 0;
+        l.includedOnlyMeshes = meshes; // (only this floor's pieces: the rest of the city's shaders don't change)
+        for (const m of meshes) { const mt = m.material as { maxSimultaneousLights?: number } | null; if (mt && (mt.maxSimultaneousLights ?? 4) < 6) mt.maxSimultaneousLights = 6; }
+        this.pubLights.push({ l, base, flick });
+      };
+      const [gx, gz] = mid(P.gantry), [g2x, g2z] = mid(P.gantry2);
+      const px = P.pools.reduce((a, t) => a + t.x, 0) / P.pools.length, pz = P.pools.reduce((a, t) => a + t.z, 0) / P.pools.length;
+      const dx = P.darts.reduce((a, d) => a + (d.booth.minX + d.booth.maxX) / 2, 0) / P.darts.length, dz = P.darts.reduce((a, d) => a + (d.booth.minZ + d.booth.maxZ) / 2, 0) / P.darts.length;
+      lamp("pubLampBar", gx, P.y1 + 2.7, gz, "#ffc883", 12, 1.0, 0, down);
+      lamp("pubLampFire", P.fire.x, P.y1 + 0.9, P.fire.z + (P.fire.z > gz ? -0.8 : 0.8), "#ff8a3c", 8, 1.1, 1, down);
+      lamp("pubLampPool", px, P.y2 + 2.5, pz, "#fff0c4", 9, 0.9, 0, up);
+      lamp("pubLampDarts", dx, P.y2 + 2.5, dz, "#ffe0a8", 8, 0.8, 0, up);
+      lamp("pubLampBar2", g2x, P.y2 + 2.7, g2z, "#ffc883", 10, 0.9, 0, up);
+    }
+    // the spill: soft warm pools on the pavement out of the front door and under each bay window
+    const t = new DynamicTexture("pubSpill", { width: 128, height: 128 }, sc, false), c = t.getContext() as CanvasRenderingContext2D;
+    const g = c.createRadialGradient(64, 64, 2, 64, 64, 64); g.addColorStop(0, "rgba(255,200,120,0.85)"); g.addColorStop(0.45, "rgba(255,180,100,0.35)"); g.addColorStop(1, "rgba(255,170,90,0)");
+    c.fillStyle = g; c.fillRect(0, 0, 128, 128); t.update(); t.hasAlpha = true;
+    const m = new StandardMaterial("pubSpillMat", sc); m.disableLighting = true; m.emissiveTexture = t; m.opacityTexture = t; m.alpha = 0; m.zOffset = -2; m.backFaceCulling = false;
+    this.pubSpill = m;
+    const parts: Mesh[] = [];
+    const pool = (x: number, z: number, w: number, d: number) => { const p = MeshBuilder.CreateGround("pubSpillP", { width: w, height: d }, sc); p.position.set(x, 0.035, z); parts.push(p); };
+    { const [x, z] = mid(P.door); pool(P.out.x * 0.6 + x * 0.4, P.out.z * 0.6 + z * 0.4, 7, 7); }
+    for (const b of P.bays) { const [x, z] = mid(b); pool(x, z, Math.max(4, b.maxX - b.minX + 2.5), Math.max(4, b.maxZ - b.minZ + 2.5)); }
+    const all = Mesh.MergeMeshes(parts, true, true);
+    if (all) { all.material = m; all.isPickable = false; all.parent = this.pubDyn ?? this.root; }
+  }
+  private buildPubInner() {
     const P = this.arena.pub;
     if (!P) return;
     const sc = this.scene, MB = MeshBuilder, r = P.rect, Y1 = P.y1, Y2 = P.y2, S2 = Math.SQRT2, T = 0.3, CEIL = Y2 - 0.35, PI = Math.PI;
@@ -3692,8 +3769,8 @@ export class CityRenderer {
     const glowCache = new Map<string, StandardMaterial>();
     const glow = (col: string, alpha = 1) => { const k = col + alpha; let m = glowCache.get(k); if (!m) { m = new StandardMaterial("pbGlow" + k, sc); m.disableLighting = true; m.emissiveColor = Color3.FromHexString(col); m.diffuseColor = Color3.Black(); if (alpha < 1) { m.alpha = alpha; m.backFaceCulling = false; } glowCache.set(k, m); } return m; };
     // glowing bits and textured sheets, merged per material at the end
-    const lit = new Map<StandardMaterial, Mesh[]>();
-    const keepM = <M extends Mesh>(m: M, mat: StandardMaterial): M => { m.material = mat; m.isPickable = false; (lit.get(mat) ?? lit.set(mat, []).get(mat)!).push(m); return m; };
+    const lit = new Map<string, { mat: StandardMaterial; grp: number; list: Mesh[] }>();
+    const keepM = <M extends Mesh>(m: M, mat: StandardMaterial): M => { m.material = mat; m.isPickable = false; const grp = this.zoneOf(m), k = mat.uniqueId + "|" + grp; (lit.get(k) ?? lit.set(k, { mat, grp, list: [] }).get(k)!).list.push(m); return m; };
     const gsph = (d: number, x: number, y: number, z: number, col: string) => keepM(Object.assign(MB.CreateSphere("pbg", { diameter: d, segments: 5 }, sc), {}), glow(col)).position.set(x, y, z);
     const sheet = (w: number, h: number, x: number, y: number, z: number, nx: number, nz: number, mat: StandardMaterial) => { const p = MB.CreatePlane("pbq", { width: w, height: h }, sc); p.position.set(x, y, z); p.rotation.y = Math.atan2(-nx, -nz); return keepM(p, mat); };
     const texMat = (name: string, W: number, H: number, draw: (c: CanvasRenderingContext2D) => void, emissive = 0.35, alpha = false) => {
@@ -4519,7 +4596,7 @@ export class CityRenderer {
       { const y = U + 2.3; for (const [x, z, nx, nz] of [[-88.6, IN.maxZ - 0.58, 0, -1], [-84.7, 26.5, -1, 0], [-84.7, 29.3, -1, 0]] as [number, number, number, number][]) { box(nx ? 0.05 : 1.0, 0.75, nx ? 1.0 : 0.05, x, y, z, BRASS, 0.004); box(nx ? 0.06 : 0.86, 0.62, nx ? 0.86 : 0.06, x + nx * 0.006, y, z + nz * 0.006, ["#4a3a2a", "#3a4a3a", "#5a4a3a"][Math.abs(Math.round(z)) % 3], 0); } }
     }
     // ---------------------------------------------------------------- merge everything glowing / textured, per material
-    for (const [mat, list] of lit) for (let i = 0; i < list.length; i += 500) { const m = Mesh.MergeMeshes(list.slice(i, i + 500), true, true); if (m) { m.material = mat; m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix(); } }
+    for (const { mat, grp, list } of lit.values()) for (let i = 0; i < list.length; i += 500) { const m = Mesh.MergeMeshes(list.slice(i, i + 500), true, true); if (m) { m.material = mat; m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix(); if (grp >= 0) this.intoGroup(m, grp); } }
     this.pubBottleFlush();
     for (const [key, m] of this.skinMats) if (/^(boards|mahogany|damask|tin|leather|stone|greentile|crate\|#4a2a14|plaster\|#e8d8b8)/.test(key)) this.pubSkins.push({ m, base: m.emissiveColor.clone() });
     this.flushSkins();
@@ -4531,10 +4608,26 @@ export class CityRenderer {
   private pubBottle(x: number, y: number, z: number, k: number) { this.pubBottles.push({ x, y, z, k }); }
   private pubBottleFlush() {
     const sc = this.scene, cols = ["#2f7a46", "#8a4a1a", "#d8c890", "#5a1a1a", "#3a6a8a", "#c8a040", "#1b0a06", "#e8e2d4"];
-    const proto = cols.map((c, i) => { const m = i % 3 === 2 ? MeshBuilder.CreateCylinder("pbBottleSq", { diameter: 0.1, height: 0.24, tessellation: 4 }, sc) : MeshBuilder.CreateCylinder("pbBottle", { diameterBottom: 0.08, diameterTop: 0.05, height: 0.28, tessellation: 8 }, sc); const mat = toon(sc, c); m.material = mat; m.parent = this.root; m.isPickable = false; m.setEnabled(false); return m; });
-    for (const b of this.pubBottles) { const m = proto[(((b.k * 5 + Math.round(Math.abs(b.x) * 13)) % proto.length) + proto.length) % proto.length].createInstance("pbB"); m.parent = this.root; m.position.set(b.x, b.y + 0.14 * (0.8 + (b.k % 4) * 0.08), b.z); m.scaling.y = 0.8 + (b.k % 4) * 0.08; m.rotation.y = b.k; m.isPickable = false; }
-    for (const p of proto) p.setEnabled(true), p.scaling.setAll(0.0001);
+    // R12.4: merged per colour and floor (they were 200-odd instances, each one looked at every frame from anywhere in
+    // the city); now a handful of meshes in the pub's floor groups, drawn only when the floor is
+    const mats = cols.map((c) => toon(sc, c)), sets = new Map<string, { mat: CellMaterial; grp: number; list: Mesh[] }>();
+    for (const b of this.pubBottles) {
+      const i = (((b.k * 5 + Math.round(Math.abs(b.x) * 13)) % cols.length) + cols.length) % cols.length;
+      const m = i % 3 === 2 ? MeshBuilder.CreateCylinder("pbBottleSq", { diameter: 0.1, height: 0.24, tessellation: 4 }, sc) : MeshBuilder.CreateCylinder("pbBottle", { diameterBottom: 0.08, diameterTop: 0.05, height: 0.28, tessellation: 8 }, sc);
+      m.position.set(b.x, b.y + 0.14 * (0.8 + (b.k % 4) * 0.08), b.z); m.scaling.y = 0.8 + (b.k % 4) * 0.08; m.rotation.y = b.k;
+      const grp = this.zoneOf(m), key = i + "|" + grp;
+      (sets.get(key) ?? sets.set(key, { mat: mats[i], grp, list: [] }).get(key)!).list.push(m);
+    }
+    for (const { mat, grp, list } of sets.values()) { const m = Mesh.MergeMeshes(list, true, true); if (!m) continue; m.material = mat; m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix(); if (grp >= 0) this.intoGroup(m, grp); }
     this.pubBottles = [];
+  }
+  /** R12.4 (Blake: "a brief freeze around the first road" walking from the fort to the pub): the pub's insides are
+   *  built while the city loads (the loading screen's up anyway), not the moment you come within 100 m: that build was
+   *  3.8-4.0 s in one frame on the test box. Its shaders and textures are warmed in the same loading pass. */
+  prebuildPub(): boolean {
+    if (this.pubDyn || !this.arena.pub) return false;
+    const t0 = performance.now(); this.buildPub(); this.pubBuildMs = performance.now() - t0;
+    return true;
   }
   /** R12.1: the pub's moving bits (the fire, the lamps at night); its insides only when you're near */
   updatePub(dt: number, night: number, camX: number, camZ: number) {
@@ -4542,11 +4635,11 @@ export class CityRenderer {
     if (!P0) return;
     // (R12.1: built once you're within 100 m, not while the city's loading: it's ~7% of the city's build on a slow box;
     // the brick shell's there from the start)
-    if (!this.pubDyn) { if ((this.pubWait += dt) < 1.0 || Math.hypot(camX - (P0.rect.minX + P0.rect.maxX) / 2, camZ - (P0.rect.minZ + P0.rect.maxZ) / 2) > 100) return; const t0 = performance.now(); this.buildPub(); this.flush(); this.pubBuildMs = performance.now() - t0; }
+    if (!this.pubDyn) { if ((this.pubWait += dt) < 1.0 || Math.hypot(camX - (P0.rect.minX + P0.rect.maxX) / 2, camZ - (P0.rect.minZ + P0.rect.maxZ) / 2) > 100) return; const t0 = performance.now(); this.buildPub(); this.pubBuildMs = performance.now() - t0; }
     const P = P0, dyn = this.pubDyn;
     if (!dyn) return;
     const near = Math.hypot(camX - (P.rect.minX + P.rect.maxX) / 2, camZ - (P.rect.minZ + P.rect.maxZ) / 2) < 90;
-    if (near !== this.pubNear) { this.pubNear = near; dyn.setEnabled(near); }
+    if (near !== this.pubNear) { this.pubNear = near; dyn.setEnabled(near); if (!near) for (const L of this.pubLights) L.l.intensity = 0; }
     if (!near) return;
     this.pubT += dt;
     const t = this.pubT;
@@ -4554,7 +4647,11 @@ export class CityRenderer {
     if (this.pubFireMat) { const k = 0.85 + 0.15 * Math.sin(t * 13); this.pubFireMat.emissiveColor = new Color3(1, 0.45 + 0.15 * k, 0.12 * k); }
     for (const m of this.pubLamps) { const k = 0.75 + night * 0.25; m.emissiveColor = new Color3(1 * k, 0.82 * k, 0.55 * k); }
     if (this.pubFairy) { const k = 0.45 + night * 0.55, tw = 0.92 + 0.08 * Math.sin(t * 3.1); (this.pubFairy.material as StandardMaterial).emissiveColor = new Color3(1 * k * tw, 0.88 * k * tw, 0.62 * k * tw); }
-    const kn = 1 + night * 1.3; for (const s of this.pubSkins) s.m.emissiveColor.copyFromFloats(Math.min(1, s.base.r * kn), Math.min(1, s.base.g * kn), Math.min(1, s.base.b * kn));
+    // R12.4: the lamps: on all day (it's a pub), warmer and stronger at night; the fires flicker
+    for (const L of this.pubLights) L.l.intensity = L.base * (0.45 + 0.55 * night) * (L.flick ? 0.85 + 0.1 * Math.sin(t * 11) + 0.05 * Math.sin(t * 27 + 1.3) : 1);
+    if (this.pubSpill) this.pubSpill.alpha = 0.75 * night;
+    // (at night the walls glow less of their own now (was 1 + 1.3 x): the lamps do the lighting, so there's some contrast)
+    const kn = 1 + night * (this.pubLights.length ? 0.6 : 1.3); for (const s of this.pubSkins) s.m.emissiveColor.copyFromFloats(Math.min(1, s.base.r * kn), Math.min(1, s.base.g * kn), Math.min(1, s.base.b * kn));
   }
 
   /** R11: the DROP: confetti from the rig, smoke off the stages, everybody jumps */

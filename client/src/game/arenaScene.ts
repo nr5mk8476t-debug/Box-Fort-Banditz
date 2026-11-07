@@ -426,14 +426,23 @@ export class ArenaScene {
     const pos = cam.position.clone(), rot = cam.rotation.clone(), fov = cam.fov, maxZ = cam.maxZ;
     cam.maxZ = 1000;
     cam.fov = 1.6;
-    for (const [x, y, z, rx] of [[0, 150, -130, 0.85], [0, 150, 130, 0.85], [0, 6, 0, 0.2], [-13, 2, -40, 0.1]]) {
+    // (R12.4: the pub's insides too, built now, and looked at from inside, downstairs and up: no freeze on the walk there)
+    const built = this.city.prebuildPub(); this.city.warmGroups(true);
+    const pub = this.arena.pub, inPub = built && pub ? [[(pub.rect.minX + pub.rect.maxX) / 2, pub.y1 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, 0], [(pub.rect.minX + pub.rect.maxX) / 2, pub.y1 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, Math.PI], [(pub.rect.minX + pub.rect.maxX) / 2, pub.y2 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, 0], [(pub.rect.minX + pub.rect.maxX) / 2, pub.y2 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, Math.PI]] : [];
+    for (const [x, y, z, rx, ry] of [[0, 150, -130, 0.85, 0], [0, 150, 130, 0.85, Math.PI], [0, 6, 0, 0.2, 0], [-13, 2, -40, 0.1, 0], ...inPub]) {
       cam.position.set(x, y, z);
-      cam.rotation.set(rx, z > 0 ? Math.PI : 0, 0);
+      cam.rotation.set(rx, ry, 0);
       this.scene.render();
     }
     await this.scene.whenReadyAsync();
     this.scene.render();
+    this.city.warmGroups(false);
     cam.position.copyFrom(pos); cam.rotation.copyFrom(rot); cam.fov = fov; cam.maxZ = maxZ;
+    // R12.4: and one real frame from where you'll actually stand, still under the loading screen (that first frame
+    // was a 4-6 s freeze on the test box once you could see the game)
+    this.update(0, performance.now());
+    await this.scene.whenReadyAsync();
+    this.scene.render();
   }
 
   applyFov() {
@@ -877,7 +886,7 @@ export class ArenaScene {
         case "mocktail": if (e.p === me) { sfx.cash(); this.onFeedback?.(`One ${e.drink}, glowing. $${e.paid}. Dance energy for ${FEVER.boost} s!`, "good"); } break;
         case "mocktailNo": if (e.p === me) this.onFeedback?.(`"That's $${FEVER.mocktail}, champ." You're short.`, "info"); break;
         // R12.1: THE SOGGY SHAMROCK
-        case "pint": if (e.p === me) { sfx.pour(); this.pint.start(e.rate, e.w, e.ph); this.onFeedback?.(`A pint of GUZZLE'S, $${e.paid}. Now split the G!`, "good"); } break;
+        case "pint": if (e.p === me) { sfx.pour(); this.pint.start(e.rate); this.onFeedback?.(`A pint of GUZZLE'S, $${e.paid}. Now split the G!`, "good"); } break;
         case "pintNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"That's $${PUB.price}, pal." You're short.` : e.reason === "cutoff" ? `"You've had plenty, pal." Fergal won't serve you till you've sobered up.` : "Finish the one you've got first.", "info"); break;
         case "pintDone": {
           const pub = this.arena.pub, near = !!pub && Math.hypot(this.cur.x - (pub.rect.minX + pub.rect.maxX) / 2, this.cur.z - (pub.rect.minZ + pub.rect.maxZ) / 2) < 22;
@@ -1649,7 +1658,7 @@ export class ArenaScene {
   jukeGain = 0;
   /** for tests: the last few pub events (mine starred) */
   evTail: string[] = [];
-  pubInfo() { return { gShown: this.pint.gShown, evTail: this.evTail.join(","), clock: this.clubClock, juke: jukeboxMusicOn(), jukeGain: this.jukeGain, jukeTune: this.jukeTune, open: this.pint.open, rate: this.pint.rate, level: this.pint.open ? this.pint.level : -1, holding: this.pint.holding, music: pubMusicOn(), gain: this.pubGain, level2: this.pubLevel, pints: this.cur.pints, tipsyT: this.cur.tipsyT }; }
+  pubInfo() { return { gShown: this.pint.gShown, settled: this.pint.settled, evTail: this.evTail.join(","), clock: this.clubClock, juke: jukeboxMusicOn(), jukeGain: this.jukeGain, jukeTune: this.jukeTune, open: this.pint.open, rate: this.pint.rate, level: this.pint.open ? this.pint.level : -1, holding: this.pint.holding, music: pubMusicOn(), gain: this.pubGain, level2: this.pubLevel, pints: this.cur.pints, tipsyT: this.cur.tipsyT }; }
 
   /** R11.4: SKETCHY STEVE's goods on the HUD (what's left), the comedown's wobble */
   private buffEl: HTMLDivElement | null = null;
@@ -1920,7 +1929,7 @@ export class ArenaScene {
     });
     this.npcs.update(now, dt, this.camera);
     this.night.update(dt);
-    this.city.update(this.camera.position.x, this.camera.position.z);
+    this.city.update(this.camera.position.x, this.camera.position.z, this.camera.position.y);
     // C3: the park's pigeons scatter from anyone who comes close (only worth checking near the park)
     if (Math.hypot(this.camera.position.x, this.camera.position.z) < 60) {
       const threats: { x: number; z: number; speed: number }[] = [{ x: this.cur.x, z: this.cur.z, speed: Math.hypot(this.cur.vx, this.cur.vz) }];

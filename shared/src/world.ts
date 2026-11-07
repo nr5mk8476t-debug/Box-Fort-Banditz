@@ -210,7 +210,7 @@ export type WorldEvent =
   | { t: "mocktailNo"; p: string; reason: "broke" }
   // R12.1: THE SOGGY SHAMROCK: a pint poured (its gulp rate: the client draws the same line the World checks), no
   // pint (broke, cut off, one on the go already), the gulp's verdict (how far off the G's bar, mm)
-  | { t: "pint"; p: string; paid: number; rate: number; w: number; ph: number }
+  | { t: "pint"; p: string; paid: number; rate: number }
   | { t: "pintNo"; p: string; reason: "broke" | "cutoff" | "busy" }
   | { t: "pintDone"; p: string; mm: number; grade: "perfect" | "close" | "miss"; won: number; pints: number; best: boolean }
   // R12.2: the céilí (you joined the dance: when it starts on the city clock (mod 600); you tripped; how you did) and
@@ -1197,7 +1197,7 @@ export class World {
   }
   // ---------------------------------------------------------------- R12.1: THE SOGGY SHAMROCK
   /** a pint on the go: its gulp rate, when it was poured (it goes flat after PUB.pour s) */
-  private pints = new Map<string, { rate: number; w: number; ph: number; at: number }>();
+  private pints = new Map<string, { rate: number; at: number }>();
   /** the chalkboard: the best splits of the match (closest first) */
   readonly pubBoard: { name: string; mm: number }[] = [];
   pubBoardNote(): string { return this.pubBoard.map((b) => `${b.name.replace(/[|;]/g, "")}|${b.mm.toFixed(1)}`).join(";"); }
@@ -1211,10 +1211,9 @@ export class World {
     if (p.cash < PUB.price) return this.emit({ t: "pintNo", p: p.id, reason: "broke" });
     p.cash -= PUB.price;
     const rate = Math.round((PUB.rateMin + this.rng() * (PUB.rateMax - PUB.rateMin)) * 1000) / 1000;
-    const w = Math.round((PUB.wMin + this.rng() * (PUB.wMax - PUB.wMin)) * 1000) / 1000, ph = Math.round(this.rng() * 2 * Math.PI * 1000) / 1000; // (R12.2c: this pint's surges)
-    this.pints.set(p.id, { rate, w, ph, at: this.time });
+    this.pints.set(p.id, { rate, at: this.time });
     this.npc.pubSay(this.serverOf(p), "pour");
-    this.emit({ t: "pint", p: p.id, paid: PUB.price, rate, w, ph });
+    this.emit({ t: "pint", p: p.id, paid: PUB.price, rate });
   }
   /** let go of the gulp: how close to the G's bar? */
   gulpPint(p: PlayerSim, hold: number) {
@@ -1222,7 +1221,7 @@ export class World {
     if (!cur || !Number.isFinite(hold)) return;
     this.pints.delete(p.id);
     if (this.time - cur.at > PUB.pour) return; // (gone flat)
-    const mm = Math.round(pintMissMm(Math.max(0, Math.min(60, hold)), cur.rate, cur.w, cur.ph) * 10) / 10, grade = pintGrade(mm);
+    const mm = Math.round(pintMissMm(Math.max(0, Math.min(60, hold)), cur.rate) * 10) / 10, grade = pintGrade(mm);
     const won = grade === "perfect" ? PUB.prize : grade === "close" ? PUB.price : 0;
     p.cash += won;
     const m = p.move;

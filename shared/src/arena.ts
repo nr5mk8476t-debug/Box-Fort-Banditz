@@ -796,24 +796,33 @@ export interface PubDef {
  *  (`rate` differs pint to pint); let go on the bar. Perfect (4 mm): $15 and the room cheers; close (12 mm): your $6
  *  back; the best 5 of the match on the chalkboard. Every pint makes you tipsier (45 s more, 3 min at most); after 6,
  *  Fergal cuts you off till you're sober */
-export const PUB = { price: 6, glassMm: 160, start: 0.86, g: 0.62, accel: 0.03, rateMin: 0.06, rateMax: 0.11, perfectMm: 2, closeMm: 6, prize: 15,
+export const PUB = { price: 6, glassMm: 160, start: 0.86, g: 0.62, rateMin: 0.1, rateMax: 0.12, perfectMm: 1.5, closeMm: 5, prize: 15,
   pour: 30, tipsyAdd: 45, tipsyMax: 180, cutoff: 6, boardN: 5, bpm: 116,
-  /** R12.2c (Blake: "too easy... in real life you actually cannot see where the G is... needs to be a hard game to win"):
-   *  2 mm perfect, 6 mm close; and every pint gulps unevenly: the rate surges and slackens by up to `surge` (45%) on its
-   *  own rhythm (`w` rad/s, from wMin..wMax, starting at phase `ph`), so you can't just count */
-  surge: 0.45, wMin: 1.6, wMax: 3.4 };
-/** where the line is after holding the gulp `t` seconds (0..1 of the glass). R12.2c: with `w` > 0 the gulp surges:
- *  the rate is rate * (1 + surge * sin(w t + ph)), always forward (surge < 1), integrated exactly */
-export function pintLevel(t: number, rate: number, w = 0, ph = 0): number {
-  const drunk = w > 0 ? t - (PUB.surge / w) * (Math.cos(w * t + ph) - Math.cos(ph)) : t;
-  return Math.max(0, PUB.start - rate * drunk - 0.5 * PUB.accel * t * t);
+  /** R12.4 (Blake chose "visible G, fair & skilled"): the G faces you the whole time and the drink is smooth: it
+   *  eases in over `ease` s, then the line goes down at the pint's own steady `rate` (shown: you see it move), no
+   *  hidden surges. When you put it down the head settles: the line carries on a touch, the same way every time (it
+   *  slows to a stop, `settle` s worth of the speed it had), so the skill is letting go just before the bar. Perfect
+   *  is within 1.5 mm (the gold bar's drawn exactly that thick), close within 5 mm */
+  ease: 0.25, settle: 0.15 };
+/** where the line is after drinking for `t` seconds (0..1 of the glass): a smooth ease-in, then steady */
+export function pintLevel(t: number, rate: number): number {
+  const E = PUB.ease;
+  return Math.max(0, PUB.start - rate * (t - E * (1 - Math.exp(-t / E))));
 }
-/** how far off the G's bar you stopped (mm) */
-export function pintMissMm(t: number, rate: number, w = 0, ph = 0): number { return Math.abs(pintLevel(t, rate, w, ph) - PUB.g) * PUB.glassMm; }
-/** R12.2c: how long a gulp takes to bring the line to `level` (for tests and the reveal): the curve only goes down */
-export function pintHoldFor(level: number, rate: number, w = 0, ph = 0): number {
+/** how fast the line's going down after `t` seconds (glass per second) */
+export function pintSpeed(t: number, rate: number): number { return rate * (1 - Math.exp(-t / PUB.ease)); }
+/** R12.4: where the line ends up once the head's settled, after letting go at `hold` s; and, `since` s after letting
+ *  go, where it is on its way there (it slows exponentially: no jump, done in about half a second) */
+export function pintSettled(hold: number, rate: number, since = Infinity): number {
+  const l = pintLevel(hold, rate), drop = pintSpeed(hold, rate) * PUB.settle;
+  return Math.max(0, l - drop * (1 - Math.exp(-since / PUB.settle)));
+}
+/** how far off the G's bar the line settled (mm) */
+export function pintMissMm(hold: number, rate: number): number { return Math.abs(pintSettled(hold, rate) - PUB.g) * PUB.glassMm; }
+/** how long to drink so the line settles at `level` (tests, the NPCs): the settled level only goes down with time */
+export function pintHoldFor(level: number, rate: number): number {
   let lo = 0, hi = 60;
-  for (let k = 0; k < 60; k++) { const m = (lo + hi) / 2; if (pintLevel(m, rate, w, ph) > level) lo = m; else hi = m; }
+  for (let k = 0; k < 60; k++) { const m = (lo + hi) / 2; if (pintSettled(m, rate) > level) lo = m; else hi = m; }
   return (lo + hi) / 2;
 }
 export function pintGrade(mm: number): "perfect" | "close" | "miss" { return mm <= PUB.perfectMm ? "perfect" : mm <= PUB.closeMm ? "close" : "miss"; }

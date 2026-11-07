@@ -1657,11 +1657,11 @@ try {
       await R3.waitForFunction(() => (window.__bfb.pubInfo()?.level ?? 1) < 0.66, null, { timeout: 30000 }).catch(() => {});
       const mid = await R3.evaluate(() => window.__bfb.pubInfo());
       ok(mid.holding && mid.level < 0.7, `gulping: the line's dropping (${mid.level.toFixed(2)})`);
-      ok(!mid.gShown, "R12.2c: drinking, you can't see the G (it's on the far side)");
+      ok(mid.gShown, "R12.4: the G faces you while you drink");
       await hideOverlays(R3); await shot(R3, "r122c-pint-drinking.png");
       await R3.evaluate(() => window.__bfb.pintPress(false));
-      ok(await R3.waitForFunction(() => /G!|Close|Missed/.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false), "the verdict comes back");
-      ok(await R3.waitForFunction(() => window.__bfb.pubInfo()?.gShown, null, { timeout: 10000 }).then(() => true, () => false), "R12.2c: then the glass turns round and there's the G");
+      ok(await R3.waitForFunction(() => /G!|SPLIT IT|close|Missed/i.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false), "the verdict comes back");
+      ok(await R3.waitForFunction(() => window.__bfb.pubInfo()?.settled, null, { timeout: 10000 }).then(() => true, () => false), "R12.4: the head settles and the result's marked on the glass");
       await hideOverlays(R3); await shot(R3, "r122c-pint-reveal.png");
       ok(await R3.waitForFunction(() => window.__bfb.move().pints === 1 && window.__bfb.move().tipsyT > 30, null, { timeout: 30000 }).then(() => true, () => false), "one pint in you (the sober-up timer's running)");
       { const pi = await R3.evaluate(() => window.__bfb.pubInfo()); ok(pi.gain > 0.4, `the session's loud in here (gain ${pi.gain.toFixed(2)}; audio running: ${pi.music})`); }
@@ -1695,7 +1695,7 @@ try {
         for (let k = 0; k < 6 && !open2; k++) { await R3.keyboard.press("e"); open2 = await R3.waitForFunction(() => window.__bfb.pubInfo()?.open, null, { timeout: 8000 }).then(() => true, () => false); }
         ok(open2, "a pint upstairs: the close-up's up");
         await R3.evaluate(() => window.__bfb.pintPress(true)); await sleep(1500); await R3.evaluate(() => window.__bfb.pintPress(false));
-        ok(await R3.waitForFunction(() => /G!|Close|Missed/.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false), "split the G upstairs: the verdict comes back");
+        ok(await R3.waitForFunction(() => /G!|SPLIT IT|close|Missed/i.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false), "split the G upstairs: the verdict comes back");
         await sleep(3000);
         // the jukebox
         const jb = pb.jukebox;
