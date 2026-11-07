@@ -66,6 +66,16 @@ export const POOL_POCKETS: { x: number; z: number; corner: boolean }[] = (() => 
   for (const s of [-1, 1]) { for (const t of [-1, 1]) out.push({ x: s * (hw + k), z: t * (hl + k), corner: true }); out.push({ x: s * (hw + 0.03), z: 0, corner: false }); }
   return out;
 })();
+/** R12.3b: the holes drawn in the cloth and the cups under them (table-local centres, radius POOL_HOLE): each hole's
+ *  inner edge sits exactly on the pocket's mouth as the simulation has it (the line between a corner's jaw points; a
+ *  middle pocket's cushion line), so a ball looks over the hole exactly when it drops, never while it's still in play.
+ *  (They used to start 1.9 cm out on the bed at the middle pockets.) */
+export const POOL_HOLE = 0.0525;
+export const POOL_HOLES: { x: number; z: number; corner: boolean }[] = (() => {
+  const hw = POOL.W / 2, hl = POOL.L / 2, kc = -POOL.corner / 2 + POOL_HOLE / Math.SQRT2, out: { x: number; z: number; corner: boolean }[] = [];
+  for (const s of [-1, 1]) { for (const t of [-1, 1]) out.push({ x: s * (hw + kc), z: t * (hl + kc), corner: true }); out.push({ x: s * (hw + POOL_HOLE), z: 0, corner: false }); }
+  return out;
+})();
 const radius = (id: number) => (id === 0 ? POOL.RC : POOL.R);
 
 /** the break: the pack's apex on the foot spot (a quarter of the way from the foot cushion), the black in the middle */

@@ -229,7 +229,7 @@ test("pub games (R12.3b): the shot clock counts down in the window even when not
   const before = s.clock;
   await playOut(rig, { sec: 5, fps: 30, lat: 0.11, me: up === "me" ? "gus" : "me" });
   assert.ok(Math.abs(s.clock - before) < 1e-6, "the host's clock waits for a dropped player");
-  assert.equal(shownLeft(), Math.ceil(before), "the window shows the stopped clock");
+  assert.equal((view.info() as any).pooltable2.clock, Math.ceil(before), "the window shows the stopped clock (to the other player too)");
   const hud = (view as any).hud.innerHTML as string;
   assert.match(hud, /reconnecting: (39|4\d)s/, `the window shows the held seat counting down: ${hud.slice(0, 160)}`);
 });

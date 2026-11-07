@@ -7,7 +7,7 @@ import {
   type ShadowGenerator,
 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
-import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_POCKETS, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
+import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
 import { drawDartboard, drawChalkDoor, drawCloth, drawHouseRules, drawLeaguePhoto, notice, wornFloor } from "./pubGames.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
@@ -476,6 +476,7 @@ export class CityRenderer {
     winMat.zOffsetUnits = -4;
     const windowPlanes: Mesh[] = [];
     const glassPanes: Mesh[] = [];
+    const pave: { P: [number, number][]; y0: number; y1: number; color: string }[] = [];
 
     // C4a: which boxes are breakable props (their pieces are tagged so they can vanish when smashed)
     const brkOfBox = new Map<number, string>();
@@ -500,6 +501,11 @@ export class CityRenderer {
       if (b.pump) continue; // (C5c.3: THE COMPACTOR's crusher bed moves: buildClub draws it)
       if (b.chain) { this.chainFences.push(b); continue; }
       this.group = this.groupOfBox(b);
+      // R12.3b: the street pavement is drawn together below (seams between pieces without ink lines)
+      if (b.kind === "sidewalk" && this.group < 0 && !this.brk && b.y - b.h / 2 < 0.01 && b.y + b.h / 2 < 0.2) {
+        pave.push({ P: b.poly ?? [[b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z + b.d / 2], [b.x - b.w / 2, b.z + b.d / 2]], y0: b.y - b.h / 2, y1: b.y + b.h / 2, color: b.color ?? KIND_COLOR.sidewalk ?? "#b3aebb" });
+        continue;
+      }
       if (b.kind === "glass") {
         // Slice 2A: big see-through shop windows (they still block you)
         const g = MeshBuilder.CreateBox("glass", { width: b.w, height: b.h, depth: b.d }, scene);
@@ -535,6 +541,7 @@ export class CityRenderer {
     }
     this.group = -1;
     this.brk = "";
+    this.buildPavement(pave);
     this.flushSkins();
     if (glassPanes.length) {
       const ranges = this.rangesOf(glassPanes);
@@ -4331,11 +4338,13 @@ export class CityRenderer {
           for (const f of [0.25, 0.5, 0.75]) { for (const zz of [-hl + f * (hl - 0.07), 0.07 + f * (hl - 0.07)]) cyl(0.014, 0.003, X + s2 * (hw + CU + RL / 2), ry + 0.006, Z + zz, "#f0ece0", 0, 8); cyl(0.014, 0.003, X - hw + f * 2 * hw, ry + 0.006, Z + s2 * (hl + CU + RL / 2), "#f0ece0", 0, 8); }
         }
         // the pockets: leather cups you see down into, a leather lip, brass caps on the rail round the corners
-        for (const pk of POOL_POCKETS) {
-          const px = X + Math.sign(pk.x) * (hw + (pk.corner ? 0.016 : 0.034)), pz = Z + (pk.corner ? Math.sign(pk.z) * (hl + 0.016) : 0);
-          const cup = MB.CreateCylinder("pbPocket", { diameter: 0.105, height: 0.15, tessellation: 18, cap: 0 }, sc); cup.position.set(px, CL - 0.074, pz); this.add(cup, "#0a0604", 0, false);
-          cyl(0.1, 0.004, px, CL - 0.148, pz, "#050302", 0, 14);
-          const lip = MB.CreateTorus("pbLip", { diameter: 0.112, thickness: 0.014, tessellation: 18 }, sc); lip.position.set(px, CL + 0.004, pz); this.add(lip, LEATHER2, 0, false);
+        for (const pk of POOL_HOLES) {
+          // (R12.3b: under the cloth's holes, which sit where the simulation's pockets are)
+          const px = X + pk.x, pz = Z + pk.z;
+          // (both sides of the leather: looking down into an open cup you saw straight through its far wall to the cloth)
+          const cup = MB.CreateCylinder("pbPocket", { diameter: 2 * POOL_HOLE, height: 0.15, tessellation: 18, cap: 0, sideOrientation: Mesh.DOUBLESIDE }, sc); cup.position.set(px, CL - 0.074, pz); this.add(cup, "#0a0604", 0, false);
+          cyl(2 * POOL_HOLE - 0.005, 0.004, px, CL - 0.148, pz, "#050302", 0, 14);
+          const lip = MB.CreateTorus("pbLip", { diameter: 2 * POOL_HOLE + 0.007, thickness: 0.014, tessellation: 18 }, sc); lip.position.set(px, CL + 0.004, pz); this.add(lip, LEATHER2, 0, false);
           if (pk.corner) { for (const [a2, b2] of [[1, 0], [0, 1]]) box(a2 ? 0.12 : 0.02, 0.006, b2 ? 0.12 : 0.02, X + Math.sign(pk.x) * (hw + CU + RL - (a2 ? 0.06 : 0.012)), ry + 0.003, Z + Math.sign(pk.z) * (hl + CU + RL - (b2 ? 0.06 : 0.012)), "#9a7a2a", 0); }
           else box(0.02, 0.006, 0.14, X + Math.sign(pk.x) * (hw + CU + RL - 0.012), ry + 0.003, Z, "#9a7a2a", 0);
         }
@@ -6091,6 +6100,73 @@ export class CityRenderer {
       const on = Math.floor(t * 2.5) % 2 === 0;
       this.stationLights.red.emissiveColor.set(on ? 1 : 0.25, on ? 0.16 : 0.04, on ? 0.23 : 0.06);
       this.stationLights.blue.emissiveColor.set(on ? 0.04 : 0.16, on ? 0.1 : 0.42, on ? 0.25 : 1);
+    }
+  }
+
+  /**
+   * R12.3b (Blake: "some sidewalk sections overlap or clip over one another"): the street pavement, all its pieces.
+   * Each piece's top, and side walls only where its edge isn't against another piece: the kerb, a step, the edge of a
+   * plaza. Where two pieces meet there's no wall, so the ink outline draws the kerbs and not every seam between the
+   * pieces (the pavement's cut exactly round the roundabout and the diagonals now: lots of pieces, one smooth surface).
+   */
+  private buildPavement(pave: { P: [number, number][]; y0: number; y1: number; color: string }[]) {
+    if (!pave.length) return;
+    // every edge, on its line (direction mod 180 deg, and how far the line is from the origin)
+    type E = { k: number; t0: number; t1: number; piece: number; ax: number; az: number; bx: number; bz: number; key: string; dx: number; dz: number };
+    const lines = new Map<string, E[]>(), edges: E[] = [];
+    pave.forEach((q, piece) => {
+      let A2 = 0; for (let i = 0; i < q.P.length; i++) { const [x1, z1] = q.P[i], [x2, z2] = q.P[(i + 1) % q.P.length]; A2 += x1 * z2 - x2 * z1; }
+      if (A2 < 0) q.P = [...q.P].reverse(); // (one winding throughout: positive area, like polyBox)
+      for (let i = 0; i < q.P.length; i++) {
+        const [ax, az] = q.P[i], [bx, bz] = q.P[(i + 1) % q.P.length], L = Math.hypot(bx - ax, bz - az);
+        if (L < 1e-4) continue;
+        let dx = (bx - ax) / L, dz = (bz - az) / L; if (dz < -1e-9 || (Math.abs(dz) <= 1e-9 && dx < 0)) { dx = -dx; dz = -dz; }
+        const ang = Math.round(Math.atan2(dz, dx) * 2000), off = Math.round((-dz * ax + dx * az) * 400);
+        const t0 = ax * dx + az * dz, t1 = bx * dx + bz * dz;
+        const e: E = { k: i, t0: Math.min(t0, t1), t1: Math.max(t0, t1), piece, ax, az, bx, bz, key: ang + "|" + off, dx, dz };
+        edges.push(e);
+        (lines.get(e.key) ?? lines.set(e.key, []).get(e.key)!).push(e);
+      }
+    });
+    // the stretch of each edge no other piece's edge covers: that's a wall (the rest is a seam: no wall)
+    const near = (e: E) => { const [a, o] = e.key.split("|").map(Number), out: E[] = []; for (const da of [-1, 0, 1]) for (const dof of [-1, 0, 1]) { const l = lines.get((a + da) + "|" + (o + dof)); if (l) out.push(...l); } return out; };
+    const wallSegs: { piece: number; ax: number; az: number; bx: number; bz: number }[] = [];
+    for (const e of edges) {
+      const cover: [number, number][] = [];
+      for (const o of near(e)) if (o.piece !== e.piece && Math.abs(o.dx * e.dx + o.dz * e.dz) > 0.9999) { const a = Math.max(e.t0, o.t0), b = Math.min(e.t1, o.t1); if (b - a > 1e-4) cover.push([a, b]); }
+      cover.sort((p, q) => p[0] - q[0]);
+      let t = e.t0;
+      const free: [number, number][] = [];
+      for (const [a, b] of cover) { if (a > t + 1e-3) free.push([t, a]); t = Math.max(t, b); }
+      if (e.t1 > t + 1e-3) free.push([t, e.t1]);
+      // (back to points on the edge, kept in the edge's own direction so the wall faces out)
+      const sx = e.ax, sz = e.az, fwd = (e.bx - e.ax) * e.dx + (e.bz - e.az) * e.dz > 0;
+      for (const [a, b] of free) {
+        const pa = { x: sx + e.dx * (a - (sx * e.dx + sz * e.dz)), z: sz + e.dz * (a - (sx * e.dx + sz * e.dz)) }, pb = { x: sx + e.dx * (b - (sx * e.dx + sz * e.dz)), z: sz + e.dz * (b - (sx * e.dx + sz * e.dz)) };
+        wallSegs.push(fwd ? { piece: e.piece, ax: pa.x, az: pa.z, bx: pb.x, bz: pb.z } : { piece: e.piece, ax: pb.x, az: pb.z, bx: pa.x, bz: pa.z });
+      }
+    }
+    // one mesh per colour: the tops (a fan per piece) and the walls
+    const byCol = new Map<string, { pos: number[]; idx: number[]; uv: number[] }>();
+    const bucket = (c: string) => byCol.get(c) ?? byCol.set(c, { pos: [], idx: [], uv: [] }).get(c)!;
+    pave.forEach((q) => {
+      const B = bucket(q.color), o = B.pos.length / 3;
+      for (const [x, z] of q.P) { B.pos.push(x, q.y1, z); B.uv.push(x, z); }
+      for (let i = 1; i < q.P.length - 1; i++) B.idx.push(o, o + i, o + i + 1);
+    });
+    for (const w of wallSegs) {
+      const q = pave[w.piece], B = bucket(q.color), o = B.pos.length / 3;
+      B.pos.push(w.ax, q.y0, w.az, w.bx, q.y0, w.bz, w.bx, q.y1, w.bz, w.ax, q.y1, w.az);
+      const L = Math.hypot(w.bx - w.ax, w.bz - w.az); B.uv.push(0, 0, L, 0, L, 1, 0, 1);
+      B.idx.push(o, o + 1, o + 2, o, o + 2, o + 3); // (wound like footPrism's sides: the outside faces out)
+    }
+    for (const [col, B] of byCol) {
+      // (in chunks: a mesh with tens of thousands of vertices is fine, but keep each index range friendly)
+      const normals: number[] = [];
+      VertexData.ComputeNormals(B.pos, B.idx, normals);
+      const vd = new VertexData(); vd.positions = B.pos; vd.indices = B.idx; vd.normals = normals; vd.uvs = B.uv;
+      const m = new Mesh("pavement", this.scene); vd.applyToMesh(m);
+      this.add(m, col, 0.02, false);
     }
   }
 

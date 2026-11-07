@@ -516,3 +516,32 @@ test("R12.3b: the note only changes when something happens: a running clock goes
   assert.equal(n1, n0, "3 s of the shot clock running: the same note");
   const d = JSON.parse(n1); assert.ok(Math.abs(timeLeftAt(d.dl, h.time % 600) - (POOL.clock - 3.3)) < 0.06, `${timeLeftAt(d.dl, h.time % 600)} s left`);
 });
+import { POOL_HOLES, POOL_HOLE, PoolSim as PS } from "../src/index.js";
+test("R12.3b: the holes in the cloth are where the simulation's pockets are: a ball looks over a hole exactly when it drops", () => {
+  const hw = POOL.W / 2, hl = POOL.L / 2;
+  for (const h of POOL_HOLES) {
+    if (!h.corner) {
+      assert.ok(Math.abs(Math.abs(h.x) - POOL_HOLE - hw) < 1e-9, "a middle hole's edge is the cushion line");
+      // a ball in play against the cushion, in the mouth: its centre isn't over the hole
+      for (const z of [-POOL.middle, 0, POOL.middle]) assert.ok(Math.hypot(Math.sign(h.x) * (hw - POOL.R) - h.x, z - h.z) >= POOL_HOLE, "a ball still in play isn't drawn over the hole");
+    } else {
+      // the mouth: the line between the jaw points; the hole's edge touches it
+      const sx = Math.sign(h.x), sz = Math.sign(h.z), d = ((Math.abs(h.x) - hw) + (Math.abs(h.z) - hl) + POOL.corner) / Math.SQRT2;
+      assert.ok(Math.abs(d - POOL_HOLE) < 1e-9, `a corner hole's edge is on the mouth (${d})`); void sx; void sz;
+    }
+  }
+  // roll balls into every pocket: the moment each drops, its centre is over that pocket's hole
+  let n = 0;
+  for (const h of POOL_HOLES) {
+    const start = h.corner ? { x: h.x * 0.6, z: h.z * 0.9 } : { x: h.x * 0.4, z: 0.02 };
+    // (the white, rolled straight at the hole)
+    const sim = new PS([{ id: 0, x: start.x, z: start.z, vx: 0, vz: 0, down: false }], h.x - start.x, h.z - start.z, 1.2);
+    const b = sim.balls[0];
+    let was = { x: b.x, z: b.z };
+    for (let k = 0; k < 2000 && !b.down; k++) { was = { x: b.x, z: b.z }; sim.runTo(sim.t + POOL.dt); }
+    assert.ok(b.down, "it went in");
+    assert.ok(Math.hypot(was.x - h.x, was.z - h.z) < POOL_HOLE, `at the moment it dropped its centre was over the hole (${Math.hypot(was.x - h.x, was.z - h.z).toFixed(4)} m from its middle)`);
+    n++;
+  }
+  assert.equal(n, 6);
+});

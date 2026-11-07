@@ -1741,3 +1741,122 @@ Nothing was playable. The tables and booths were decoration, with "coming soon" 
 - `client/src/game/pubGames.ts`: the textures, the live games and the controls.
 - `shared/test/pubgames.test.ts`: the tests.
 - **Changed:** the World glue (`world.ts`), the layout (`city.ts`), the static room (`cityRenderer.ts`), input capture (`input.ts`), the scene hooks (`arenaScene.ts`), the prompt and test hooks (`main.ts`), the 8-minute cycle (`match.ts`, `nightRenderer.ts`, HUD and banners), and the sounds.
+
+## R12.3b: bug fixes and polish: pool playback, timers, stations, police traffic, pavement, the HUD (Blake, 2026-11-07)
+
+Blake's brief: pool shots sometimes skip, police cars and cars jam, pavement sections overlap or clip, the HUD overlaps
+the games. Fix the causes, prove each one, and keep 301, the 8-minute scavenge, the pub's look and the house rules.
+
+### Blake's decisions (asked as numbered questions)
+1. **Disconnects:** a forfeit after the 45 s hold if the other player's still there. If both are gone, or the host's gone, the game's called off and refunded. (Recommended; chosen.)
+2. **A police car dropping an officer off:** it pulls in, waits about 8 s and moves on, circling with its siren on, and never drops off another officer. (Recommended; chosen.)
+3. **Instructions:** a compact panel always; the full instructions for your first two games of each kind, then with H. (Recommended; chosen.)
+4. **While aiming, hide:** the home arrow and the cash list. The match clock stays. Inventory and the controls line were already hidden while aiming, and the brief asks for that clutter to go, so they stay hidden.
+
+### Pool: why shots skipped (three causes, each reproduced)
+- **The shared clock is rounded.** The wrapped clock clients see (`lightT`) goes out at 0.1 s; a shot's start (`t0`) at 1 ms.
+  - When the first state carrying a shot had the clock rounded to just before `t0`, the client worked out `((clock - t0) mod 600)` as about 599.95 s, decided the shot was long over and started the replay at its last frame.
+  - Simulated over 100,000 shots: 24.6% started at the end. This is the "sometimes".
+- **Shot numbers start again every game.** The client only remembered the last shot number it had replayed, so a new game's shot with that number was never played.
+- **The re-rack** (black potted on the break) reset the shot count to 0 mid-game. The new break had the same number as the shot just played.
+
+**The fix:**
+- **A name for every shot:** game id plus shot number (`gid:n`). Game ids are never reused, and the shot count carries on through a re-rack.
+- **Timing (`StationFeed`, `replayStep`, shared and pure):**
+  - The replay works with a signed, wrap-aware difference, so "a hair before the start" means "just started".
+  - It stays in step with the host's clock, never ahead of it and never backwards.
+  - Behind by more than 0.3 s, it plays at 2.5× until it's caught up.
+- **Which shots get replayed:**
+  - A window seeing a station for the first time joins mid-shot.
+  - A window that was watching but heard late plays from the start and catches up.
+  - A shot that came and went between two looks (a stalled frame, a background tab) is replayed quickly from a copy the host keeps (`last`).
+  - More than one missed shot is reported ("Missed 2 shots…"), never silently skipped.
+- **Your turn:** you step up only once your window has finished showing the last shot. The host refuses a shot while its own shot is rolling, as before.
+- **Settled positions:** the replay ends where the host settled the balls, to 0.2 mm (tested). Then the host's table is shown.
+- **What a new game resets:** the replay, the cue stroke, the drops, whose turn it was, a dart in flight and the cabinet doors' running scores.
+- **Diagnostics:** `?pgdebug` in the address logs every game id, shot name, host start, heard-at clock, elapsed time, how the replay started, and when the shot settled. Off by default.
+
+### Countdowns and status
+- The note was only taken in when its revision changed, and the host doesn't bump the revision for a ticking clock, a drop or a walk-off. Now every changed note is taken in. Only names (game id, shot name) decide whether something new happened, so status changes never restart a replay.
+- Clocks go out as when they run out, on the shared clock (`dl`), or what's left when stopped (`left`). The same goes for a held seat and for a player who walked off. So the note doesn't change every second (less to send), and a window counts down truthfully between messages. The window shows the whole seconds left, never more than the host has.
+
+### Stations stay independent
+The client called `leave()` whenever any station went from playing to over. Now a station's changes only move you if you're at that station. Another table or board finishing, or freeing up, never touches your aim, your throw, or a menu you have open elsewhere (tested mid-draw, mid-throw and with a menu open).
+
+### Police and traffic: the deadlock
+**Reproduced on the new city, 3 seeds:**
+- Patrol cruisers drove down the road's centre line and ignored lanes and lights.
+- Cars stopped for any cop car ahead within 2.6 m sideways; a cruiser stopped for any car ahead within 1.8 m sideways.
+- Within 30–60 s a cruiser and a car were nose to nose, each waiting for the other. Queues then backed across junctions, and cars stood still for 460 of 480 s.
+- In chases, cop cars drove through traffic: 1,900–5,800 overlap samples per 5 minutes. Parked cop cars sat in the middle of the road until the chase ended.
+
+**First attempt:** patching the free-driving cop cars (looking along their real path, keeping right, a turning circle, backing up). Each fix moved the problem; overlaps and standoffs stayed in the hundreds.
+
+**The fix: every cop car drives in the traffic's lanes (`TrafficSystem.riders`).**
+- **Siren off** (patrol, heading off): ordinary traffic, with the same lanes, lights, give-way and following distance.
+- **Siren on** (chasing):
+  - It ignores red lights and give-way, but still needs a clear junction box and room on the road out.
+  - Cars coming up to a junction hold back for a siren approaching it.
+  - It picks its way to its target over the lane network (distances worked out backwards from the lanes that pass near the target).
+- **Dropping an officer off:**
+  - It stops in its own lane, on a road, never in a junction, close to the player or as near as the road gets. It tucks toward the kerb.
+  - After 8 s it moves on and circles the area at 25–60 m.
+- **Spawning:** cop cars start in a lane, never on top of another car.
+- **Merging:** an old merge fault was also fixed. Two cars from different approaches could commit to the same exit lane in the same instant. Committed cars now count as occupying it.
+
+**Result (5 chase seeds, 4 patrol seeds):**
+
+| | Before | After |
+|---|---|---|
+| Overlaps | 1,900–5,800 samples per 5 minutes | 0 |
+| Cop cars off the road | 0–12 samples | 0 |
+| Mutual waits | the whole run | none |
+| Longest car stop | 238–296 s in chases | 25–51 s |
+
+For comparison, the longest car stop with no police at all is 26–69 s, at five-way traffic lights where a queue backs up a short link road. That isn't a deadlock and it clears.
+
+**Diagnostics:** each car keeps why it's stopped and what's holding it up:
+- a queue behind a car;
+- a junction: no room on the road out, the box occupied, giving way, a red light, a ring car or a siren;
+- a pedestrian, the police, the garbage truck or the parade.
+
+`traffic.waits(s)` lists every vehicle stopped longer than `s` seconds.
+
+**Tests** (they fail before the fix: cars stood 224 s, 178 s, 104 s, and 120 s in the parade test):
+- four patrol seeds;
+- three chase seeds;
+- the exact reproduced jam;
+- a parade closing a street with the police about.
+
+### Pavement
+**Measured:** 400 overlapping pairs of ground surfaces, 427 m² in all.
+- **222 at the same height**, where the square pavement grid ran 0.6 m into the curved pieces round the roundabout (they flickered).
+- **178 under the smooth strips** laid 2 cm above the 0.5 m stepped collision along the two diagonals. What you saw wasn't what you walked on.
+- **1,349 points along kerbs with no pavement** in the gap check. This includes a 17 cm strip beside kerbs that aren't on the 0.5 m grid (e.g. x = −70.33), where the straddling cell counted as road.
+
+**The fix:**
+- **Cutting:** a cell the road, a diagonal (its rounded ends included) or the curved band only partly covers is laid, then cut exactly against them. The cut pieces are convex, so they work as collision too.
+- **The curved band:** its pieces are cut the same way. A piece whose middle was on a road used to go entirely, leaving a hole.
+- **The diagonal strips are gone.** One height (0.15 m) everywhere.
+
+**Drawing:**
+- The first build showed ink lines on every join between pieces. They used to be hidden under the diagonal strips, and drew faintly elsewhere.
+- The pavement is now drawn as each piece's top plus walls only where an edge isn't against another piece: the kerb.
+- The ink outline therefore draws the kerbs and nothing else. The faint seam lines elsewhere in the city are gone too.
+
+**Results:**
+- 0 overlapping pairs.
+- No new gaps; 335 old unpaved points are now paved city-wide. The rest are at the map's edge, beyond the grid.
+- Walking along and across the joins: no snag, no step, no sinking (tested).
+- Pieces: 349 → 2,373. Building the city takes about 0.2 s longer.
+
+### The HUD and the pub
+- The lobby card shows only in the lobby.
+- Aiming:
+  - the compact top-right panel, outside the shot (full width, low, on narrow windows);
+  - first-time help, then H;
+  - the home arrow, cash list and mode badge hide;
+  - health, heat and the match clock stay.
+- **Pockets:** the holes in the cloth, and the cups under them, are now exactly where the simulation pots a ball. Each hole's edge is on the mouth: the corner jaws' line, or the middle pocket's cushion line. The middle holes used to start 1.85 cm out on the playing surface. The cups are double-sided: you used to see through an open cup's far wall to the cloth.
+- **Ball in hand:** the white stays where you put it while you aim. It used to jump back.
+- **Walkthrough:** the tables, lamps, cue rack, chalkboards, booths, oche and bar all checked from eye height. Nothing else needed changing. Material and decor changes were left for a later round: functional fixes first.

@@ -2,6 +2,44 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.3b: pool shots play out, timers tell the truth, traffic keeps moving, pavements join cleanly (2026-11-07)
+
+**Fixed**
+- **Pool shots skipping:** sometimes the balls jumped straight to where they stopped. There were three causes:
+  - The game's shared clock is sent rounded to 0.1 s. About 1 shot in 4 began just after a rounding step, looked 599.9 s old, and started at its last frame.
+  - Shot numbers start again every game, so the first shot of a new game with the same number as one you'd already watched was skipped.
+  - A black on the break re-racked with the shot count back at 0.
+
+  Now each shot has its own name (game + shot), the timing copes with the clock wrapping and rounding, and a window that falls behind plays the shot from the start a bit faster until it catches up. If your tab was in the background and a whole shot came and went, it's replayed quickly. If more than one did, the game tells you how many you missed.
+- **Your turn waits for the replay:** you step up to the table only once your window has finished showing the last shot.
+- **Countdowns:** the shot and throw clocks, the "reconnecting" and "walked off" timers now count down on screen. They used to freeze until something else happened at the table.
+- **One game finishing doesn't touch another:** a game ending at table 1 (or a board) used to pull you off your cue at table 2, or close your menu.
+- **Ball in hand:** the white now stays where you put it while you aim. It used to jump back, away from the cue.
+- **Pockets:** the holes in the cloth sit exactly where the balls drop. The middle ones used to start 2 cm out on the playing surface. You can also no longer see through the pocket cups to the cloth.
+- **Police jams:** patrol cars and ordinary cars used to sit nose to nose, each waiting for the other, and within a minute the jam spread over the whole city for the rest of the game.
+  - Police cars now drive in the lanes with everyone else. With the siren on they get through junctions first and pick their way to you.
+  - A car that drops an officer off stops in its own lane, waits about 8 s and moves on, circling the area.
+  - No more clipping through cars, driving on the pavement or blocking a road for good.
+- **Two cars merging into the same lane** at the same moment no longer drive into each other.
+- **Pavements:** they used to overlap or clip:
+  - round the roundabout the square pavement ran 0.6 m into the curved pieces, at the same height, so it flickered;
+  - along the two diagonal roads a smooth strip sat 2 cm above the stepped pavement you actually walk on;
+  - beside some kerbs there was a thin strip with no pavement.
+
+  Every piece is now cut to meet the next edge to edge, at one height, and the ink line only draws the kerbs, not every join.
+- **The HUD:** the "SOLO SCAVENGE / Press ENTER to start" card no longer stays up for the whole game.
+
+**Changed**
+- **Pool and darts HUD:** a compact panel in the top-right corner while you aim, showing:
+  - who's playing and whose turn it is;
+  - the colours left, or the darts scores;
+  - the clock, and your power or steadiness;
+  - the keys in one line.
+
+  The full instructions show for your first two games, then with **H**. While you aim, the home arrow, cash list and inventory step aside. Health, heat and the match clock stay, because the pub isn't a safe zone.
+- **Disconnects (Blake's call):** a dropped player's seat is still held 45 s. If they're still gone after that and the other player's still here, it's a forfeit, so pulling the plug can't dodge a losing bet. If both are gone, or the host's gone, the game's called off and stakes come back. Stakes are still taken and paid out exactly once.
+- **Police cars arrive a few seconds later** than before, because they now drive round the corners instead of cutting across.
+
 ## R12.3: pool and darts upstairs at THE SOGGY SHAMROCK, and one 8-minute scavenge (2026-11-06)
 
 **Added**

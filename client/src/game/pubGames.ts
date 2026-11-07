@@ -2,7 +2,7 @@
 // the same numbers the scoring uses; the cloth with its pocket holes; chalkboards, notices, league photos), and the
 // live games: the balls replaying each shot, the cues, the darts in the board, the scoreboards, and your controls at
 // the table (aim, pull back, strike) and at the oche (aim, steady, release).
-import { DARTS, POOL } from "@bfb/shared";
+import { DARTS, POOL, POOL_HOLES, POOL_HOLE } from "@bfb/shared";
 
 type C2D = CanvasRenderingContext2D;
 const CHALK = "#efeae0", HAND = "'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive";
@@ -59,12 +59,9 @@ export function drawCloth(c: C2D, w: number, h: number) {
   // the baulk line and the black's spot
   c.strokeStyle = "rgba(235,240,225,0.55)"; c.lineWidth = Math.max(1, K * 0.003); c.beginPath(); c.moveTo(X(-POOL.W / 2), Y(-POOL.L / 2 + POOL.baulk)); c.lineTo(X(POOL.W / 2), Y(-POOL.L / 2 + POOL.baulk)); c.stroke();
   c.fillStyle = "rgba(235,240,225,0.6)"; c.beginPath(); c.arc(X(0), Y(POOL.L / 4), K * 0.006, 0, 2 * Math.PI); c.fill();
-  // the pocket holes
+  // the pocket holes (where the simulation's pockets are: R12.3b)
   c.globalCompositeOperation = "destination-out";
-  for (const s of [-1, 1]) {
-    for (const t of [-1, 1]) { c.beginPath(); c.arc(X(s * (POOL.W / 2 + 0.016)), Y(t * (POOL.L / 2 + 0.016)), 0.0525 * K, 0, 2 * Math.PI); c.fill(); }
-    c.beginPath(); c.arc(X(s * (POOL.W / 2 + 0.034)), Y(0), 0.0525 * K, 0, 2 * Math.PI); c.fill();
-  }
+  for (const h of POOL_HOLES) { c.beginPath(); c.arc(X(h.x), Y(h.z), POOL_HOLE * K, 0, 2 * Math.PI); c.fill(); }
   c.globalCompositeOperation = "source-over";
 }
 
@@ -567,8 +564,9 @@ export class PubGamesView {
       this.fov += (base * 0.92 - (this.fov || base)) * Math.min(1, dt * 6) + (this.fov ? 0 : base);
       this.cam = { ...cam, fov: this.fov };
       this.drawGuide(s);
-      // the cue ball where you're placing it
-      if (this.mode === "place") { const m = s.balls[0]; m.position.set(X + this.place.x, cl + POOL.RC, Z + this.place.z); m.setEnabled(true); }
+      // the cue ball where you're placing it (and, ball in hand, where you put it while you aim: R12.3b, it used to jump
+      // back to where it had been, away from the cue and the aiming line)
+      if (this.mode === "place" || (s.note?.pool?.hand && !s.sim && (this.mode === "aim" || this.mode === "draw"))) { const m = s.balls[0]; m.position.set(X + this.place.x, cl + POOL.RC, Z + this.place.z); m.setEnabled(true); }
     } else {
       const fx = s.g.faceX!, by = s.g.by!, ex = (s.g.oche ?? fx + 2.37) + 0.22, ey = this.U + 1.62;
       this.swayT += dt;

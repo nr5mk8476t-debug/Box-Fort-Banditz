@@ -546,6 +546,48 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.3b: pool playback, timers, stations, police traffic, pavement, the HUD (2026-11-07)
+
+Every new test below was run against the code before the fix first (a worktree of R12.3) and failed for the reason given.
+
+| Area | Check | How | Before the fix | Result |
+|---|---|---|---|---|
+| Pool playback | every shot a window is shown plays out (more than one frame mid-roll): two tables at once, games conceded and reopened, 150 s, at 60 fps / 50 ms, 12 fps / 110 ms, 30 fps / 300 ms with stalled spells, 5 fps / 200 ms, and 20 fps / 900 ms with a 6 s stall (a background tab) | client unit (real World host + real PubGamesView, pretend network) | 3, 2, 2 of 72 shots jumped to the end | pass: 0 skipped; in the background-tab case one missed shot is replayed quickly and one is reported ("Missed 1 shot") |
+| Rounded clock | the clock heard a hair before `t0`; the clock wrapping round 600 s | shared unit (StationFeed) | (simulated: 24.6% of shots started at their last frame) | pass |
+| Shot names | a new game's shot 0 after the last game's shot 0; a re-rack keeps counting | shared unit | the new shot 0 skipped; the re-racked break was shot 0 again | pass |
+| Catch-up | in step, never ahead, never backwards; 2 s late, caught up in about 1.3 s; a missed shot plays in 30–50 frames | shared unit (replayStep) | (new) | pass |
+| Settled positions | each replay ends where the host settled the balls | client unit | (new) | pass: within 0.2 mm |
+| Your turn | you never step up while your window's still showing the last shot | client unit (10 fps, 300 ms) | (new) | pass |
+| Countdowns | the HUD's shot clock tracks the host (within a second) with no other change; a dropped player's clock stops and the window shows it; "reconnecting: 4Xs" counts down | client unit | host 37 s, window still 40 | pass |
+| Note size | 3 s of a running clock: the same note (it doesn't change every second) | shared unit | (new) | pass |
+| Stations | mid-draw at table 2 while table 1 finishes and frees; at the oche while a pool game ends; a menu open at table 2 while oche 2 ends | client unit | table 1 finishing pulled the player off the cue | pass |
+| Disconnects (Blake) | held 45 s, then a forfeit if the other's still here (pot paid once); a quick reconnect changes nothing; both gone = called off, both refunded once; waiting = called off; v an NPC = forfeit | shared unit | (rule change) | pass |
+| Pockets | each hole's edge on the simulation's mouth; a ball in play isn't over a hole; a ball rolled into each of the six pockets is over its hole when it drops | shared unit | (new) | pass |
+| Police in traffic | 4 patrol seeds × 4 min (new city): no car still more than 75 s, no cruiser more than 45 s, no mutual wait more than 3 s, no overlap, no cop car off the road, every car gets more than 150 m | shared unit | a car still 224 s (gridlock) | pass |
+| Chases | 3 seeds × 4 min, two wanted bandits: real dispatches and drop-offs, the same checks, a cop car never sits more than 14 s where it stopped | shared unit | a car still 178 s; 1,900–5,800 overlap samples | pass |
+| The reproduced jam | seed 1, 2 min (cop1 and c19 at junction 2) | shared unit | a car still 104 s | pass |
+| Parade | a parade closing a street, cops about, 2 min | shared unit | a car still 120 s | pass |
+| Merges | two cars from different ways committing to one exit lane at once | soak (car-to-car overlap) | 4 samples, 0.73 m | 0 |
+| Old police tests | dispatch counts (16 s window: the car drives the lanes now); a bandit in the cop car's lane is rammed = busted; a cruiser that sees you turns its siren on | shared unit (updated) | (the tests teleported cars outside the lanes) | pass |
+| Pavement overlaps | no two ground pieces overlap anywhere in the new city; no looks-only strips | shared unit | 222 overlapping pairs | pass |
+| Pavement gaps | every point within 1 m of a kerb (roads, diagonals, the ring) has pavement | shared unit | 1,349 points | pass |
+| Pavement walking | round the roundabout on the join, along a diagonal, across its cuts: feet at 0.15 m, no snag | shared unit | (passed before too: a guard) | pass |
+| Pavement look | from above and at eye height, before and after: the diagonal, the ring's join, an off-grid kerb | screenshots | ink lines on joins, overlaps flickering | one smooth surface, kerb lines only |
+| HUD | lobby (card shown), scavenge (card gone), pool aiming at 1280×720, 960×540, 800×600 (panel top-right, out of the shot; help then H), darts aiming | screenshots | the card stayed all game; the panel sat over the shot and the board | reviewed |
+| Everything | 298 shared + 12 client unit; typecheck; matchmaking + server smoke | full suite | | pass: 298/298 and 12/12; typecheck clean; smokes SMOKE_RESULT |
+| | full browser e2e, normal | e2e | | E2E_NORMAL |
+| | full browser e2e, 110 ms lag | e2e | | E2E_LAG |
+| Speed | the same five views, the R12.3 build against this one, alternating, twice each | fps (scratch script) | | the same or a touch better: street 1.1 → 1.2, ring 1.4 → 1.4, a junction 2.7 → 2.8, pool 1.3 → 1.4, darts 1.8 → 1.9 fps. (This container draws at 1-3 fps, slower than R12.3's: the numbers only compare the two builds.) |
+
+## Manual checklist for Blake (R12.3b)
+
+- [ ] Pool: does every shot play out now, on your PC and your mates'? Try a shot, then switch tabs and come back mid-shot.
+- [ ] The shot clock and "reconnecting" timers: do they count down smoothly?
+- [ ] Play pool at one table while a mate finishes a game at the other: you shouldn't be pulled off your cue.
+- [ ] Traffic with the police about (get 3 stars): does it keep moving? Do cop cars look right in the lanes, and pulling in to drop an officer off?
+- [ ] Pavements round the roundabout and along the two diagonal roads: any flicker, step or gap left?
+- [ ] The pool and darts panel: is it in the way anywhere? Is the H help useful?
+
 ## R12.3: pool and darts upstairs at THE SOGGY SHAMROCK, and one 8-minute scavenge (2026-11-06)
 
 | Area | Check | How | Result |
