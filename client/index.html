@@ -206,6 +206,9 @@
         <label class="check"><input type="checkbox" data-setting="reducedMotion" /> Reduced motion (no head bob / camera sway)</label>
         <label class="check"><input type="checkbox" data-setting="showFps" /> Show FPS &amp; ping</label>
         <label class="check"><input type="checkbox" data-setting="lowGraphics" /> Performance mode (no shadows, lower resolution; for older laptops)</label>
+        <label>Render scale <span class="val" data-val="renderScale"></span> <input type="range" min="0.5" max="1" step="0.05" data-setting="renderScale" title="How sharp the 3D view is drawn. Lower is faster on weaker graphics cards; the HUD and text stay sharp." /></label>
+        <label class="check"><input type="checkbox" data-setting="adaptiveRes" /> Adaptive resolution (softens the view a little when frames run slow; never below 60%)</label>
+        <label class="check"><input type="checkbox" data-setting="sharpHiDpi" /> Sharp on high-DPI screens (every device pixel; much slower)</label>
       </div>
       <button id="btn-settings-close" class="btn btn-go">DONE</button>
     </div>

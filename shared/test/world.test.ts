@@ -2391,3 +2391,24 @@ test("R12.2c the swarm: hit anyone in the pub and Seamus's six wee buddies come 
   assert.equal(w.npc.hit(boss.id, a.id, a.move.x, a.move.z), "hit");
   assert.ok(w.takeEvents().some((e) => e.t === "lepSwarm" && (e as any).on) && boss.state !== "ko", "GET HIM, LADS!");
 });
+
+// ---- R12.5: simulation levels for passers-by ----
+import { NPC_LOD } from "../src/index.js";
+test("R12.5 NPC levels: a passer-by far from every player updates one NPC step in three (and still walks); next to ANY player (here the second one) it updates every step", () => {
+  const { w, ps: [a, b] } = hotWorld(2);
+  const n = w.npc.spawn("tourist")!;
+  n.state = "walk";
+  const far = (p: typeof a, dx: number) => { w.debugTeleport(p.id, n.move.x + dx, n.move.z + 0.5, 0); };
+  far(a, NPC_LOD.far + 60); far(b, -(NPC_LOD.far + 60));
+  settle(w, 0.5);
+  const count = (secs: number) => { let moves = 0, steps = 0, x = n.move.x, z = n.move.z; const x0 = x, z0 = z; for (let i = 0; i < secs * 60; i++) { w.tick(); if (i % 2 === 1) { steps++; if (n.move.x !== x || n.move.z !== z) moves++; x = n.move.x; z = n.move.z; } } return { moves, steps, walked: Math.hypot(n.move.x - x0, n.move.z - z0) }; };
+  if (n.state !== "walk") n.state = "walk";
+  const f = count(6);
+  assert.ok(f.moves <= f.steps / NPC_LOD.every + 3, `far: moved on ${f.moves} of ${f.steps} steps`);
+  assert.ok(f.walked > 2, `far: still walking (${f.walked.toFixed(1)} m in 6 s)`);
+  // the second player walks up to it: from then on, every step (player one is still far away)
+  w.debugTeleport(b.id, n.move.x + 3, n.move.z + 3, 0);
+  n.state = "walk";
+  const near = count(3);
+  assert.ok(near.moves >= near.steps * 0.8, `near player two: moved on ${near.moves} of ${near.steps} steps`);
+});

@@ -29,6 +29,8 @@ export type NpcState = "walk" | "idle" | "stunned" | "flee" | "chase" | "windup"
 
 export interface NpcSimData {
   id: string;
+  /** R12.5: far passers-by: the time owed since their last update, and which step of NPC_LOD.every is theirs */
+  lodAcc?: number; lodSlot?: number;
   kind: NpcKind;
   move: MoveState;
   state: NpcState;
@@ -115,6 +117,13 @@ export const BIG_SHOT_FIRST = 35;
 export const BIG_SHOT_GAP: [number, number] = [45, 75];
 export const BIG_SHOT_STAY = 120;
 
+/** R12.5: far passers-by (see NpcSystem.step): beyond `far` m of every player they update every `every`th step */
+export const NPC_LOD = { far: 90, every: 3 };
+function farFromAll(x: number, z: number, players: { x: number; z: number }[], r: number): boolean {
+  for (const p of players) if ((p.x - x) * (p.x - x) + (p.z - z) * (p.z - z) < r * r) return false;
+  return true;
+}
+function hashSlot(id: string): number { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return Math.abs(h) % NPC_LOD.every; }
 export const NPC_STEP = SIM_DT * 2; // pedestrians think + move at 30 Hz (cheap, smooth enough)
 export const PUNCH_RANGE = 1.9;
 /** C4b: the old lady above the laundromat: how far beyond a noise's range she still hears it, how long she yells,
@@ -682,12 +691,26 @@ export class NpcSystem {
     }
   }
 
-  private step(dt: number) {
-    this.bigShots(dt);
+  /** R12.5 (scalable city): the step counter (which third of the far walkers updates this step) */
+  private stepN = 0;
+  private step(dt0: number) {
+    this.bigShots(dt0);
     const gone: NpcSimData[] = [];
     const players = this.host.playersForNpcs();
     const pById = new Map(players.map((p) => [p.id, p]));
+    const slot = this.stepN++ % NPC_LOD.every;
     for (const n of this.npcs.values()) {
+      // R12.5: simulation levels. A plain passer-by just walking or idling more than NPC_LOD.far m from EVERY player
+      // (in multiplayer the one next to your friend counts as near) updates on one step in NPC_LOD.every (staggered by
+      // its id, so they don't all land on one step), taking the whole elapsed time in one go: its timers and its walk
+      // keep their pace, only less often. Anyone else (near anyone, chasing, fleeing, shops, cops, characters) is
+      // updated every step as before.
+      let dt = dt0;
+      if (!SPECIAL_KINDS.has(n.kind) && (n.state === "walk" || n.state === "idle") && !n.leader && !n.detour && farFromAll(n.move.x, n.move.z, players, NPC_LOD.far)) {
+        n.lodAcc = (n.lodAcc ?? 0) + dt0;
+        if ((n.lodSlot ??= hashSlot(n.id)) !== slot) continue;
+        dt = n.lodAcc; n.lodAcc = 0;
+      } else if (n.lodAcc) { dt = dt0 + n.lodAcc; n.lodAcc = 0; } // (back near: the time it was owed, then every step)
       const def = NPC_DEFS[n.kind];
       if (n.leader && n.state === "walk") n.state = "follow"; // entourage: back to the boss after a fight / panic
       n.sayCd -= dt;

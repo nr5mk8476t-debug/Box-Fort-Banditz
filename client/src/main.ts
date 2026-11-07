@@ -629,6 +629,8 @@ function syncSettingsUI(s: Settings) {
   });
   const fv = document.querySelector<HTMLElement>('[data-val="fov"]');
   if (fv) fv.textContent = `(${s.fov}°)`;
+  const rv = document.querySelector<HTMLElement>('[data-val="renderScale"]');
+  if (rv) rv.textContent = `(${Math.round(s.renderScale * 100)}%)`;
 }
 
 document.querySelectorAll<HTMLInputElement>("[data-setting]").forEach((el) => {
@@ -1049,6 +1051,8 @@ const perf = { update: 0, world: 0, apply: 0, events: 0, render: 0, hud: 0, fram
 /** R12.5: this frame's parts (the benchmark), and the World applied between frames (hosting / joining) */
 const fp: FrameParts = { update: 0, world: 0, apply: 0, render: 0, hud: 0, total: 0 };
 let netApplyMs = 0;
+/** R12.5: the developer overlay's numbers (only kept while "Show FPS" is on) */
+const dev = { ft: new Float32Array(120), n: 0, draws: 0, prevDraws: 0 };
 let fpsSmooth = 60;
 /** R12.4 (tests: clips): "film" mode: the live loop stops and the tests step the game a fixed time per frame (the
  *  same code, a steady clock), so a clip shows motion at its real speed on a machine that can't draw it live */
@@ -1057,6 +1061,8 @@ let filming = false, filmNow = 0;
 engine.runRenderLoop(() => { if (!filming) frame(engine.getDeltaTime() / 1000, performance.now()); });
 function frame(dt: number, now: number) {
   if (dt > 0) fpsSmooth += (1 / Math.max(dt, 1e-3) - fpsSmooth) * 0.05;
+  if (arena && screen === "playing" && !benchRunning()) adaptRes(dt);
+  if (settings.showFps && dev.n < dev.ft.length) dev.ft[dev.n++] = dt * 1000;
   if (title) {
     title.update(dt);
     title.scene.render();
@@ -1093,13 +1099,22 @@ function frame(dt: number, now: number) {
     updateHud(arena);
     perf.hud = Math.max(perf.hud, performance.now() - th);
     perf.frame = Math.max(perf.frame, performance.now() - t0);
-    if (benchRunning()) { fp.render = th - tr; fp.hud = performance.now() - th; fp.total = performance.now() - t0; benchFrame(dt, fp, arena.scene); }
+    fp.render = th - tr; fp.hud = performance.now() - th; fp.total = performance.now() - t0;
+    if (benchRunning()) benchFrame(dt, fp, arena.scene);
     debugTimer += dt;
+    if (settings.showFps) { const d = (engine as unknown as { _drawCalls?: { current: number } })._drawCalls?.current ?? 0; dev.draws = d - dev.prevDraws; dev.prevDraws = d; }
     if (settings.showFps && debugTimer > 0.25) {
       debugTimer = 0;
       const p = arena.position;
+      // R12.5: the developer overlay (cheap: a few numbers a quarter-second; nothing measured when it's off)
+      const a = Array.from(dev.ft.subarray(0, dev.n)).sort((x, y) => x - y); dev.n = 0;
+      const med = a[a.length >> 1] ?? 0, worst = a[a.length - 1] ?? 0;
+      const heap = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
       $("debug").textContent =
-        `FPS ${fpsSmooth.toFixed(0)}  ping ${mode === "online" ? ping + "ms" : "n/a"}\n` +
+        `FPS ${fpsSmooth.toFixed(0)}  frame ${med.toFixed(1)} ms (worst ${worst.toFixed(0)})  ping ${mode === "online" ? ping + "ms" : "n/a"}\n` +
+        `cpu update ${fp.update.toFixed(1)} world ${fp.world.toFixed(1)} apply ${fp.apply.toFixed(1)} render ${fp.render.toFixed(1)} hud ${fp.hud.toFixed(1)}\n` +
+        `draws ${dev.draws}  meshes ${arena.scene.getActiveMeshes().length}  tris ${Math.round(arena.scene.getActiveIndices() / 3000)}k  lights ${arena.scene.lights.length}\n` +
+        `view ${engine.getRenderWidth()}×${engine.getRenderHeight()} (${Math.round(100 / engine.getHardwareScalingLevel())}%)${heap ? `  heap ${Math.round(heap.usedJSHeapSize / 1048576)} MB` : ""}\n` +
         `pos ${p.x.toFixed(1)}, ${p.y.toFixed(2)}, ${p.z.toFixed(1)}\n` +
         `unconfirmed inputs ${arena.stats.pending}  corrections ${arena.stats.corrections}\n` +
         `others ${arena.remoteCount()}`;
@@ -1109,8 +1124,29 @@ function frame(dt: number, now: number) {
   }
 }
 window.addEventListener("resize", () => engine.resize());
-// Performance mode renders at a lower resolution (big win on older laptops / integrated graphics)
-const applyScaling = () => engine.setHardwareScalingLevel(settings.lowGraphics ? 1.5 : 1);
+// Performance mode renders at a lower resolution (big win on older laptops / integrated graphics). R12.5: and the render
+// scale setting, the high-DPI option and adaptive resolution (dynScale) on top
+let dynScale = 1, lastLevel = 0;
+const applyScaling = () => {
+  const dpr = settings.sharpHiDpi ? Math.min(devicePixelRatio || 1, 2) : 1;
+  const scale = Math.max(0.5, Math.min(1, settings.renderScale)) * (settings.lowGraphics && settings.renderScale >= 1 ? 2 / 3 : 1) * (settings.adaptiveRes ? dynScale : 1);
+  const level = 1 / (scale * dpr);
+  if (Math.abs(level - lastLevel) > 1e-4) { lastLevel = level; engine.setHardwareScalingLevel(level); }
+};
+/** R12.5: adaptive resolution: once a second, look at the slow end of the last second's frames: a step down (10%) after
+ *  two slow seconds (90th percentile over 22 ms, under ~45 FPS), a step up (5%) after three easy ones (under 14 ms);
+ *  60% at least. Small steps, slow to change: no constant sharpening and softening */
+const adapt = { ft: new Float32Array(240), n: 0, t: 0, slow: 0, easy: 0 };
+function adaptRes(dt: number) {
+  if (!settings.adaptiveRes) { if (dynScale !== 1) { dynScale = 1; applyScaling(); } return; }
+  if (adapt.n < adapt.ft.length) adapt.ft[adapt.n++] = dt * 1000;
+  if ((adapt.t += dt) < 1) return;
+  const a = Array.from(adapt.ft.subarray(0, adapt.n)).sort((x, y) => x - y), p90 = a[Math.floor(a.length * 0.9)] ?? 0;
+  adapt.t = 0; adapt.n = 0;
+  if (p90 > 22) { adapt.easy = 0; if (++adapt.slow >= 2) { adapt.slow = 0; dynScale = Math.max(0.6, dynScale - 0.1); applyScaling(); } }
+  else if (p90 < 14) { adapt.slow = 0; if (++adapt.easy >= 3) { adapt.easy = 0; if (dynScale < 1) { dynScale = Math.min(1, dynScale + 0.05); applyScaling(); } } }
+  else { adapt.slow = 0; adapt.easy = 0; }
+}
 applyScaling();
 onSettingsChange(applyScaling);
 setInterval(() => { if (room && !dropped) room.ping((ms: number) => { ping = Math.round(ms); }); }, 2000);

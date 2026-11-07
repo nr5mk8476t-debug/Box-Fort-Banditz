@@ -14,6 +14,12 @@ export interface Settings {
   showFps: boolean;
   /** Performance mode for older laptops: no shadows, lower resolution, shorter view distance */
   lowGraphics: boolean;
+  /** R12.5: how much of the window's resolution the 3D view is drawn at (0.5..1; the HUD stays sharp) */
+  renderScale: number;
+  /** R12.5: draw every device pixel on a high-DPI screen (sharper, much slower; off: one pixel per CSS pixel) */
+  sharpHiDpi: boolean;
+  /** R12.5: drop the resolution a step when frames run slow, and bring it back when there's room (60% at least) */
+  adaptiveRes: boolean;
   playerName: string;
 }
 
@@ -33,6 +39,9 @@ function defaults(): Settings {
     screenShake: prefersReduced ? 0 : 1,
     showFps: false,
     lowGraphics: false,
+    renderScale: 1,
+    sharpHiDpi: false,
+    adaptiveRes: false,
     playerName: "",
   };
 }

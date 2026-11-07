@@ -9,6 +9,7 @@ import {
 import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
 import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
+import { areaZone, areaGroupId, floorVisible, checkAreaLights, LIGHT_BUDGET, type InteriorArea } from "./areas.ts";
 import { drawDartboard, drawChalkDoor, drawCloth, drawHouseRules, drawLeaguePhoto, notice, wornFloor } from "./pubGames.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
 
@@ -56,6 +57,20 @@ function drawMayorFace(c: CanvasRenderingContext2D, x: number, y: number, r: num
 
 /** Slice 2A: interiors are drawn only when the camera is this close to the building. */
 export const INTERIOR_DRAW_DIST = 42;
+/** R12.5 (scalable city): the city's static meshes are merged per map tile (TILE m square), not across the whole map,
+ *  so what's off-screen or past the fog isn't drawn. Small pieces (under DETAIL_MAX m: sills, trims, leaves, little
+ *  signs) go in their own tiles and stop drawing past DETAIL_OFF m (back on inside DETAIL_ON: the gap keeps them from
+ *  flickering on a boundary). Fog starts at 80 m, so by then they're mostly fog. Building shells and the skyline stay. */
+export const TILE = 64, DETAIL_MAX = 1.2, DETAIL_ON = 95, DETAIL_OFF = 110;
+/** R12.5: how many segments a little sphere needs (a Babylon sphere of n segments is about 4(n+2)^2 triangles: 6 is
+ *  256): a flower or a bead under 15 cm reads the same with 1 (36), under 40 cm with 2 (64), and bigger with up to 4 */
+export function sphereSegs(d: number, want: number): number { return Math.min(want, d < 0.15 ? 1 : d < 0.4 ? 2 : 4); }
+function tileKey(m: Mesh): string {
+  m.computeWorldMatrix(true);
+  const bb = m.getBoundingInfo().boundingBox, c = bb.centerWorld, e = bb.extendSizeWorld;
+  const detail = Math.max(e.x, e.y, e.z) * 2 < DETAIL_MAX;
+  return `${Math.floor(c.x / TILE)},${Math.floor(c.z / TILE)}${detail ? ",d" : ""}`;
+}
 /** Props are drawn by buildProps (static body here, changing parts in PropRenderer). */
 const PROP_BOX_KINDS = new Set<Box["kind"]>(["bin", "phone", "vending", "meter", "newsbox", "car", "statue", "steamer", "fishtank", "trinkets", "pizzacart", "gelato", "ricordi", "deli", "vaultdoor", "depositbox"]);
 
@@ -435,7 +450,7 @@ export class CityRenderer {
   private group = -1;
   private unitMeshes = new Map<number, Mesh[]>();
   /** R7: interiors that aren't units (the station's two floors, the pawn shops): drawn only near the camera too */
-  private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number; dist?: number; vis?: (x: number, y: number, z: number) => boolean; noBoxes?: boolean }[] = [];
+  private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number; dist?: number; vis?: (x: number, y: number, z: number, was: boolean) => boolean; noBoxes?: boolean }[] = [];
   /** R12.4: while the pub's being built: which visibility group each piece goes in (by where it is) */
   private pubZone: ((m: Mesh) => number) | null = null;
   private zoneOf(m: Mesh): number { return this.group >= 0 || !this.pubZone ? this.group : this.pubZone(m); }
@@ -617,7 +632,7 @@ export class CityRenderer {
 
   // ---- R11.5: textured skins (the club and its alley)
   private skinMats = new Map<string, StandardMaterial>();
-  private skinLists = new Map<string, { mat: StandardMaterial; meshes: Mesh[]; outline: number; grp: number }>();
+  private skinLists = new Map<string, { mat: StandardMaterial; meshes: Mesh[]; outline: number; grp: number; detail: boolean }>();
   private skinTex = new Map<string, Texture>();
   skinMat(skin: string, col: string): StandardMaterial {
     const key = skin + "|" + col;
@@ -635,8 +650,8 @@ export class CityRenderer {
   }
   private skinPush(m: Mesh, skin: string, col: string, outline: number) {
     worldUV(m, SKINS[skin].tile);
-    const mat = this.skinMat(skin, col), grp = this.zoneOf(m), key = mat.uniqueId + "|" + grp;
-    const l = this.skinLists.get(key) ?? this.skinLists.set(key, { mat, meshes: [], outline, grp }).get(key)!;
+    const mat = this.skinMat(skin, col), grp = this.zoneOf(m), tile = grp >= 0 ? "" : tileKey(m), key = mat.uniqueId + "|" + grp + "|" + tile;
+    const l = this.skinLists.get(key) ?? this.skinLists.set(key, { mat, meshes: [], outline, grp, detail: tile.endsWith(",d") }).get(key)!;
     l.meshes.push(m); m.isPickable = false;
   }
   private flushSkins() {
@@ -646,6 +661,7 @@ export class CityRenderer {
       mm.material = l.mat; mm.parent = this.root; mm.isPickable = false; mm.freezeWorldMatrix();
       if (l.outline > 0) ink(mm, l.outline);
       if (l.grp >= 0) this.intoGroup(mm, l.grp);
+      else if (l.detail) this.addDetail(mm);
     }
     this.skinLists.clear();
   }
@@ -683,7 +699,7 @@ export class CityRenderer {
     const grp = this.zoneOf(m);
     if (grp >= 0) castShadow = false; // interiors: no shadow casting (they're drawn on and off)
     if (this.brk) { m.metadata = { brk: this.brk }; castShadow = false; } // (C4a: breakables: the shadow map is drawn once)
-    const key = color + "|" + outline + "|" + (castShadow ? 1 : 0) + "|" + grp;
+    const key = color + "|" + outline + "|" + (castShadow ? 1 : 0) + "|" + grp + "|" + (grp >= 0 ? "" : tileKey(m));
     (this.byMaterial.get(key) ?? this.byMaterial.set(key, []).get(key)!).push(m);
     m.isPickable = false;
   }
@@ -746,7 +762,7 @@ export class CityRenderer {
   private flush() {
     const groups = new Map<string, Mesh[]>();
     for (const [key, meshes] of this.byMaterial) {
-      const [color, outline, cast, grp] = key.split("|");
+      const [color, outline, cast, grp, tile] = key.split("|");
       const c = Color3.FromHexString(color);
       for (const m of meshes) {
         const n = m.getTotalVertices();
@@ -754,11 +770,11 @@ export class CityRenderer {
         for (let i = 0; i < n; i++) { cols[i * 4] = c.r; cols[i * 4 + 1] = c.g; cols[i * 4 + 2] = c.b; cols[i * 4 + 3] = 1; }
         m.setVerticesData(VertexBuffer.ColorKind, cols);
       }
-      const gk = outline + "|" + cast + "|" + grp;
+      const gk = outline + "|" + cast + "|" + grp + "|" + tile;
       (groups.get(gk) ?? groups.set(gk, []).get(gk)!).push(...meshes);
     }
     for (const [gk, meshes] of groups) {
-      const [outline, cast, grp] = gk.split("|");
+      const [outline, cast, grp, tile] = gk.split("|");
       // MergeMeshes needs 32-bit indices for big batches; split very large groups to stay friendly to older GPUs
       for (let i = 0; i < meshes.length; i += 400) {
         const chunk = meshes.slice(i, i + 400);
@@ -777,18 +793,29 @@ export class CityRenderer {
         if (cast === "1" && this.shadows) this.shadows.addShadowCaster(merged);
         const g = Number(grp);
         if (g >= 0) { (this.unitMeshes.get(g) ?? this.unitMeshes.set(g, []).get(g)!).push(merged); merged.setEnabled(false); this.unitOn.set(g, false); }
+        else if (tile?.endsWith(",d")) this.addDetail(merged);
       }
     }
     this.byMaterial.clear();
   }
 
   /** Slice 2A: draw building interiors only near the camera. Call every frame. */
+  /** R12.5: the small-piece tiles (drawn within DETAIL_ON / DETAIL_OFF m of the camera) */
+  private detailTiles: { m: Mesh; x: number; z: number; on: boolean }[] = [];
+  private addDetail(m: Mesh) { const c = m.getBoundingInfo().boundingBox.centerWorld; this.detailTiles.push({ m, x: c.x, z: c.z, on: true }); }
+  /** (R12.5: the groups list, built once: it used to be a new array every frame) */
+  private groupList: { id: number; x: number; z: number; dist?: number; vis?: (x: number, y: number, z: number, was: boolean) => boolean }[] | null = null;
   update(camX: number, camZ: number, camY = 1.7) {
     if (this.neon.length || this.stationLights) this.updateNeon();
     this.updateHeli(Math.min(0.1, (performance.now() - this.lastUpd) / 1000)); this.lastUpd = performance.now();
-    for (const u of [...(this.arena.units ?? []), ...this.extraGroups]) {
-      const vis = (u as { vis?: (x: number, y: number, z: number) => boolean }).vis;
-      const on = vis ? vis(camX, camY, camZ) : Math.hypot(u.x - camX, u.z - camZ) < ((u as { dist?: number }).dist ?? INTERIOR_DRAW_DIST);
+    for (const t of this.detailTiles) {
+      const d = Math.hypot(t.x - camX, t.z - camZ), on = t.on ? d < DETAIL_OFF : d < DETAIL_ON; // (half a tile's reach included: TILE / 2 off the centre)
+      if (on !== t.on) { t.on = on; t.m.setEnabled(on); }
+    }
+    if (!this.groupList || this.groupList.length !== (this.arena.units?.length ?? 0) + this.extraGroups.length) this.groupList = [...(this.arena.units ?? []), ...this.extraGroups];
+    for (const u of this.groupList) {
+      const vis = (u as { vis?: (x: number, y: number, z: number, was: boolean) => boolean }).vis;
+      const on = vis ? vis(camX, camY, camZ, this.unitOn.get(u.id) ?? false) : Math.hypot(u.x - camX, u.z - camZ) < ((u as { dist?: number }).dist ?? INTERIOR_DRAW_DIST);
       if (on && (u.id === 9301 || u.id === 9302)) this.pubSeen = true;
       if (this.unitOn.get(u.id) === on) continue;
       this.unitOn.set(u.id, on);
@@ -3694,49 +3721,57 @@ export class CityRenderer {
     rows.slice(0, 5).forEach(([name, mm], i) => { c.fillStyle = i === 0 ? "#ffe14a" : "#f4f1ea"; c.fillText(`${i + 1}. ${(name ?? "?").slice(0, 14)}`, 40, 116 + i * 30); c.textAlign = "right"; c.fillText(`${mm} mm`, W - 40, 116 + i * 30); c.textAlign = "left"; });
     b.tex.update();
   }
-  private buildPub() {
-    // R12.4: the pub's insides in two groups by floor, drawn by where the camera is: outside, both within 60 m (the
-    // windows); inside on one floor, not the other (only near the stairs, where you see up and down). The shell, the
-    // signs and the front stay in the city as before.
-    {
-      const P0 = this.arena.pub!, R = P0.rect, y2 = P0.y2, cx = (R.minX + R.maxX) / 2, cz = (R.minZ + R.maxZ) / 2, st = P0.stairs;
-      const inside = (x: number, z: number) => x > R.minX + 0.2 && x < R.maxX - 0.2 && z > R.minZ + 0.2 && z < R.maxZ - 0.2;
-      const nearStairs = (x: number, z: number) => x > st.minX - 5 && x < st.maxX + 5 && z > st.minZ - 7 && z < st.maxZ + 3;
-      const far = (x: number, z: number) => Math.hypot(x - cx, z - cz) > 60;
-      this.extraGroups.push(
-        { id: 9301, x: cx, z: cz, rect: R, y0: -1, y1: y2, noBoxes: true, vis: (x, y, z) => !far(x, z) && !(inside(x, z) && y > y2 + 0.4 && !nearStairs(x, z)) },
-        { id: 9302, x: cx, z: cz, rect: R, y0: y2, y1: 20, noBoxes: true, vis: (x, y, z) => !far(x, z) && !(inside(x, z) && y < y2 - 0.3 && !nearStairs(x, z)) },
-      );
-      this.pubZone = (m) => {
-        m.computeWorldMatrix(true); const c = m.getBoundingInfo().boundingBox.centerWorld;
-        if (c.x < R.minX + 0.35 || c.x > R.maxX - 0.35 || c.z < R.minZ + 0.35 || c.z > R.maxZ - 0.35) return -1;
-        return c.y < y2 - 0.05 ? 9301 : 9302;
-      };
+  /** R12.5: THE SOGGY SHAMROCK as an interior area (the worked example: see areas.ts and docs/content-guide.md) */
+  private pubArea(): InteriorArea {
+    const P = this.arena.pub!, st = P.stairs, mid = (r: Rect) => [(r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2] as const;
+    const [gx, gz] = mid(P.gantry), [g2x, g2z] = mid(P.gantry2);
+    const px = P.pools.reduce((a, t) => a + t.x, 0) / P.pools.length, pz = P.pools.reduce((a, t) => a + t.z, 0) / P.pools.length;
+    const dx = P.darts.reduce((a, d) => a + (d.booth.minX + d.booth.maxX) / 2, 0) / P.darts.length, dz = P.darts.reduce((a, d) => a + (d.booth.minZ + d.booth.maxZ) / 2, 0) / P.darts.length;
+    return {
+      id: "the-soggy-shamrock", rect: P.rect,
+      floors: [{ y0: -1, y1: P.y2 }, { y0: P.y2, y1: 20 }],
+      outside: { on: 60, off: 66 },
+      between: [{ minX: st.minX - 5, maxX: st.maxX + 5, minZ: st.minZ - 7, maxZ: st.maxZ + 3 }],
+      lights: [
+        { name: "pubLampBar", x: gx, y: P.y1 + 2.7, z: gz, color: "#ffc883", range: 16, intensity: 1.0, floor: 0 },
+        { name: "pubLampFire", x: P.fire.x, y: P.y1 + 0.9, z: P.fire.z + (P.fire.z > gz ? -0.8 : 0.8), color: "#ff8a3c", range: 10, intensity: 1.1, floor: 0, flicker: true },
+        { name: "pubLampPool", x: px, y: P.y2 + 2.5, z: pz, color: "#fff0c4", range: 12, intensity: 1.0, floor: 1 },
+        { name: "pubLampDarts", x: dx, y: P.y2 + 2.5, z: dz, color: "#ffe0a8", range: 10, intensity: 0.9, floor: 1 },
+        { name: "pubLampBar2", x: g2x, y: P.y2 + 2.7, z: g2z, color: "#ffc883", range: 13, intensity: 0.9, floor: 1 },
+      ],
+    };
+  }
+  /** R12.5: make an interior area's floor groups (call before building its insides; pieces built while `areaZone` is set
+   *  go in their floor's group) */
+  private beginArea(a: InteriorArea, base: number) {
+    const cx = (a.rect.minX + a.rect.maxX) / 2, cz = (a.rect.minZ + a.rect.maxZ) / 2;
+    a.floors.forEach((f, i) => this.extraGroups.push({ id: areaGroupId(base, i), x: cx, z: cz, rect: a.rect, y0: f.y0, y1: f.y1, noBoxes: true, vis: (x, y, z, was) => floorVisible(a, i, x, y, z, was) }));
+    this.pubZone = (m) => { m.computeWorldMatrix(true); const c = m.getBoundingInfo().boundingBox.centerWorld; return areaZone(a, base, c.x, c.y, c.z); };
+    for (const w of checkAreaLights(a)) console.warn("[light budget]", w);
+  }
+  /** R12.5: an area's lamps: each lights only its own floor's pieces (Performance mode: none) */
+  private areaLights(a: InteriorArea, base: number) {
+    if (!this.detail) return;
+    for (const L of a.lights ?? []) {
+      const meshes = this.unitMeshes.get(areaGroupId(base, L.floor)) ?? [];
+      const l = new PointLight(L.name, new Vector3(L.x, L.y, L.z), this.scene);
+      l.diffuse = Color3.FromHexString(L.color); l.specular = Color3.Black(); l.range = L.range; l.intensity = 0;
+      l.includedOnlyMeshes = meshes; // (only this floor's pieces: the rest of the city's shaders don't change)
+      for (const m of meshes) { const mt = m.material as { maxSimultaneousLights?: number } | null; if (mt && (mt.maxSimultaneousLights ?? 4) < LIGHT_BUDGET.perMesh) mt.maxSimultaneousLights = LIGHT_BUDGET.perMesh; }
+      this.pubLights.push({ l, base: L.intensity, flick: L.flicker ? 1 : 0 });
     }
+  }
+  private buildPub() {
+    // R12.4: the pub's insides in two groups by floor, drawn by where the camera is (R12.5: an interior area: see areas.ts)
+    const area = this.pubArea();
+    this.beginArea(area, 9301);
     try { this.buildPubInner(); } finally { this.pubZone = null; this.flush(); }
+    this.areaLights(area, 9301);
     this.pubLighting();
   }
   /** R12.4: the pub's real lamps and the baked spill of light outside */
   private pubLighting() {
     const P = this.arena.pub!, sc = this.scene, mid = (r: Rect) => [(r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2] as const;
-    if (this.detail) {
-      const down = this.unitMeshes.get(9301) ?? [], up = this.unitMeshes.get(9302) ?? [];
-      const lamp = (name: string, x: number, y: number, z: number, col: string, range: number, base: number, flick: number, meshes: Mesh[]) => {
-        const l = new PointLight(name, new Vector3(x, y, z), sc);
-        l.diffuse = Color3.FromHexString(col); l.specular = Color3.Black(); l.range = range; l.intensity = 0;
-        l.includedOnlyMeshes = meshes; // (only this floor's pieces: the rest of the city's shaders don't change)
-        for (const m of meshes) { const mt = m.material as { maxSimultaneousLights?: number } | null; if (mt && (mt.maxSimultaneousLights ?? 4) < 6) mt.maxSimultaneousLights = 6; }
-        this.pubLights.push({ l, base, flick });
-      };
-      const [gx, gz] = mid(P.gantry), [g2x, g2z] = mid(P.gantry2);
-      const px = P.pools.reduce((a, t) => a + t.x, 0) / P.pools.length, pz = P.pools.reduce((a, t) => a + t.z, 0) / P.pools.length;
-      const dx = P.darts.reduce((a, d) => a + (d.booth.minX + d.booth.maxX) / 2, 0) / P.darts.length, dz = P.darts.reduce((a, d) => a + (d.booth.minZ + d.booth.maxZ) / 2, 0) / P.darts.length;
-      lamp("pubLampBar", gx, P.y1 + 2.7, gz, "#ffc883", 16, 1.0, 0, down);
-      lamp("pubLampFire", P.fire.x, P.y1 + 0.9, P.fire.z + (P.fire.z > gz ? -0.8 : 0.8), "#ff8a3c", 10, 1.1, 1, down);
-      lamp("pubLampPool", px, P.y2 + 2.5, pz, "#fff0c4", 12, 1.0, 0, up);
-      lamp("pubLampDarts", dx, P.y2 + 2.5, dz, "#ffe0a8", 10, 0.9, 0, up);
-      lamp("pubLampBar2", g2x, P.y2 + 2.7, g2z, "#ffc883", 13, 0.9, 0, up);
-    }
     // the spill: soft warm pools on the pavement out of the front door and under each bay window
     const t = new DynamicTexture("pubSpill", { width: 128, height: 128 }, sc, false), c = t.getContext() as CanvasRenderingContext2D;
     const g = c.createRadialGradient(64, 64, 2, 64, 64, 64); g.addColorStop(0, "rgba(255,200,120,0.85)"); g.addColorStop(0.45, "rgba(255,180,100,0.35)"); g.addColorStop(1, "rgba(255,170,90,0)");
@@ -3767,14 +3802,14 @@ export class CityRenderer {
     /** plain painted things (merged by colour) */
     const box = (w: number, h: number, d: number, x: number, y: number, z: number, col: string, o = 0.012, ry = 0, rx = 0, rz = 0) => { const m = MB.CreateBox("pbb", { width: w, height: h, depth: d }, sc); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); this.add(m, col, o, false); return m; };
     const cyl = (d: number, h: number, x: number, y: number, z: number, col: string, o = 0.01, t = 12, top?: number, rx = 0, rz = 0) => { const m = MB.CreateCylinder("pbc", { diameter: d, diameterTop: top ?? d, height: h, tessellation: t }, sc); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); this.add(m, col, o, false); return m; };
-    const ball = (d: number, x: number, y: number, z: number, col: string, o = 0.006, seg = 6) => { const m = MB.CreateSphere("pbs", { diameter: d, segments: seg }, sc); m.position.set(x, y, z); this.add(m, col, o, false); return m; };
+    const ball = (d: number, x: number, y: number, z: number, col: string, o = 0.006, seg = 6) => { const m = MB.CreateSphere("pbs", { diameter: d, segments: sphereSegs(d, seg) }, sc); m.position.set(x, y, z); this.add(m, col, o, false); return m; };
     const tube = (path: Vector3[], rad: number, col: string, o = 0.006, t = 8) => { const m = MB.CreateTube("pbt", { path, radius: rad, tessellation: t, cap: 3 }, sc); this.add(m, col, o, false); return m; };
     const glowCache = new Map<string, StandardMaterial>();
     const glow = (col: string, alpha = 1) => { const k = col + alpha; let m = glowCache.get(k); if (!m) { m = new StandardMaterial("pbGlow" + k, sc); m.disableLighting = true; m.emissiveColor = Color3.FromHexString(col); m.diffuseColor = Color3.Black(); if (alpha < 1) { m.alpha = alpha; m.backFaceCulling = false; } glowCache.set(k, m); } return m; };
     // glowing bits and textured sheets, merged per material at the end
     const lit = new Map<string, { mat: StandardMaterial; grp: number; list: Mesh[] }>();
     const keepM = <M extends Mesh>(m: M, mat: StandardMaterial): M => { m.material = mat; m.isPickable = false; const grp = this.zoneOf(m), k = mat.uniqueId + "|" + grp; (lit.get(k) ?? lit.set(k, { mat, grp, list: [] }).get(k)!).list.push(m); return m; };
-    const gsph = (d: number, x: number, y: number, z: number, col: string) => keepM(Object.assign(MB.CreateSphere("pbg", { diameter: d, segments: 5 }, sc), {}), glow(col)).position.set(x, y, z);
+    const gsph = (d: number, x: number, y: number, z: number, col: string) => keepM(Object.assign(MB.CreateSphere("pbg", { diameter: d, segments: sphereSegs(d, 5) }, sc), {}), glow(col)).position.set(x, y, z);
     const sheet = (w: number, h: number, x: number, y: number, z: number, nx: number, nz: number, mat: StandardMaterial) => { const p = MB.CreatePlane("pbq", { width: w, height: h }, sc); p.position.set(x, y, z); p.rotation.y = Math.atan2(-nx, -nz); return keepM(p, mat); };
     const texMat = (name: string, W: number, H: number, draw: (c: CanvasRenderingContext2D) => void, emissive = 0.35, alpha = false) => {
       const t = new DynamicTexture("pbTex-" + name, { width: W, height: H }, sc, true); t.wrapU = Texture.WRAP_ADDRESSMODE; t.wrapV = Texture.WRAP_ADDRESSMODE; const c = t.getContext() as unknown as CanvasRenderingContext2D; c.clearRect(0, 0, W, H); draw(c); t.hasAlpha = alpha; t.update();
@@ -3925,7 +3960,7 @@ export class CityRenderer {
         const board = MB.CreateBox("pbSignBoard", { width: 0.06, height: 1.25, depth: 1.0 }, sc); board.position.set(sx + 0.15, 5.45, sz); keepM(board, sg); }
       // fairy lights draped across the upper floors (warm, sagging strings), and along the cornice
       { const bulbs: Mesh[] = [];
-        const string = (ax: number, ay: number, az: number, bx2: number, by: number, bz: number, sag: number) => { const n = Math.max(4, Math.round(Math.hypot(bx2 - ax, bz - az) / 0.28)); for (let k = 0; k <= n; k++) { const t = k / n; const m = MB.CreateSphere("pbFairy", { diameter: 0.07, segments: 3 }, sc); m.position.set(ax + (bx2 - ax) * t, ay + (by - ay) * t - Math.sin(t * PI) * sag, az + (bz - az) * t); bulbs.push(m); } };
+        const string = (ax: number, ay: number, az: number, bx2: number, by: number, bz: number, sag: number) => { const n = Math.max(4, Math.round(Math.hypot(bx2 - ax, bz - az) / 0.28)); for (let k = 0; k <= n; k++) { const t = k / n; const m = MB.CreatePolyhedron("pbFairy", { type: 1, size: 0.035 }, sc); /* (R12.5: an 8-triangle bulb: a sphere was ~100 each, 68k in all) */ m.position.set(ax + (bx2 - ax) * t, ay + (by - ay) * t - Math.sin(t * PI) * sag, az + (bz - az) * t); bulbs.push(m); } };
         const drape = (alongX: boolean, a0: number, a1: number, f: number, s: number) => { for (const yy of [8.15, 6.0]) for (let u = a0; u < a1 - 0.5; u += 2.6) { const u1 = Math.min(a1, u + 2.6); if (alongX) string(u, yy, f + s * 0.12, u1, yy, f + s * 0.12, 0.45); else string(f + s * 0.12, yy, u, f + s * 0.12, yy, u1, 0.45); } };
         drape(true, r.minX, r.maxX - P.cham, r.minZ, -1); drape(false, r.minZ + P.cham, r.maxZ, r.maxX, 1); drape(false, r.minZ, r.maxZ, r.minX, -1);
         for (const yy of [8.15, 6.0]) string(P0[0] + out[0] * 0.12, yy, P0[1] + out[1] * 0.12, P1[0] + out[0] * 0.12, yy, P1[1] + out[1] * 0.12, 0.4);
@@ -3997,7 +4032,7 @@ export class CityRenderer {
       doorTile("SIDE BAR", (P.door2.minX + P.door2.maxX) / 2, IN.minZ + 0.9, 2.2, 1.2, PI);
       // milk-glass schoolhouse globes on brass rods (round the bar, over the tables), little wall lamps in the snugs
       const globes: Mesh[] = [];
-      const globe = (x: number, z: number, drop: number) => { cyl(0.02, drop, x, CEIL - drop / 2, z, BRASS, 0, 4); cyl(0.2, 0.08, x, CEIL - drop - 0.02, z, BRASS, 0.004, 10, 0.12); const g = MB.CreateSphere("pbGlobe", { diameter: 0.42, segments: 10 }, sc); g.position.set(x, CEIL - drop - 0.22, z); g.scaling.y = 1.1; globes.push(g); };
+      const globe = (x: number, z: number, drop: number) => { cyl(0.02, drop, x, CEIL - drop / 2, z, BRASS, 0, 4); cyl(0.2, 0.08, x, CEIL - drop - 0.02, z, BRASS, 0.004, 10, 0.12); const g = MB.CreateSphere("pbGlobe", { diameter: 0.42, segments: 7 }, sc); g.position.set(x, CEIL - drop - 0.22, z); g.scaling.y = 1.1; globes.push(g); };
       for (let x = B.minX + 0.4; x <= B.maxX - 0.3; x += 2.6) { globe(x, B.minZ + 0.35, 1.0); globe(x, B.maxZ - 0.35, 1.0); }
       for (let z = B.minZ + 2.0; z < B.maxZ - 1; z += 2.4) { globe(B.minX + 0.35, z, 1.0); globe(B.maxX - 0.35, z, 1.0); }
       for (const t of [...P.tables, ...P.rounds]) globe(t.x, t.z, 1.35);
