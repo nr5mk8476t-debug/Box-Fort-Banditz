@@ -298,3 +298,156 @@ test("pool (R12.3b): your turn waits for the window to finish showing the last s
   assert.ok(stepped >= 2, `stepped up for my shot ${stepped} times`);
   assert.equal(early, 0, "never while the last shot was still rolling in this window");
 });
+
+// =============================================================================================================
+// R12.4: three reproduced edge cases (each failed on R12.3b)
+// =============================================================================================================
+test("pool (R12.4): a delayed window gets a finished shot and a newer active one; the newer one settles on the host before the older replay ends: both still play, in order, no silent loss", async () => {
+  const rig = await pubRig(12);
+  const { w, view, pb, hostTick, lightT, notes, fb } = rig;
+  w.addPlayer("me", "ME"); w.addPlayer("gus", "GUS");
+  const T = pb.pools[1]; w.debugTeleport("me", T.x, T.z - T.d / 2 - 0.8, 0, pb.y2); w.debugTeleport("gus", T.x + 0.6, T.z - T.d / 2 - 0.8, 0, pb.y2);
+  w.pubGames.act("me", { op: "open", st: "pooltable2", vs: "mate", stake: 0 }); w.pubGames.act("gus", { op: "join", st: "pooltable2" });
+  const s = w.pubGames.st.get("pooltable2")!;
+  // the window's up to date before anything happens
+  const frame = (dt: number) => { const me = w.players.get("me")!; view.update(dt, { me: "me", x: me.move.x, y: me.move.y, z: me.move.z, clock: lightT(), pints: 0, tipsy: 0, others: [], hurt: false }); };
+  const deliver = () => { for (const [id, raw] of Object.entries(notes())) view.setNote(id, raw as string, lightT()); };
+  for (let k = 0; k < 30; k++) hostTick(); deliver(); frame(0.1);
+  const shoot = (pid: string, v: number) => { const P = s.pool!, cue = P.balls.find((b) => b.id === 0)!, t = P.balls.find((b) => b.id === 1)!; assert.equal(w.pubGames.act(pid, { op: "shot", st: "pooltable2", n: P.shots, dx: t.x - cue.x, dz: t.z - cue.z, v }), ""); };
+  // shot A: the break (long); the window hears nothing (a stall)
+  shoot(s.seats[s.pool!.turn].id, 6.5);
+  const A = `${s.gid}:${s.shot!.n}`, durA = s.shot!.dur;
+  while (s.shot) hostTick();
+  // shot B: a very soft one by whoever's up; the window hears about it now: A finished (last), B rolling
+  const up = s.seats[s.pool!.turn].id; const P = s.pool!, cue = P.balls.find((b) => b.id === 0)!;
+  w.pubGames.act(up, { op: "shot", st: "pooltable2", n: P.shots, dx: 0.3, dz: 1, v: 0.3, ...(P.inHand ? { cx: cue.x, cz: cue.z } : {}) });
+  const B = `${s.gid}:${s.shot!.n}`, durB = s.shot!.dur;
+  assert.ok(durB < durA / 2.5, `B (${durB.toFixed(2)} s) settles on the host before A's catch-up replay (${(durA / 2.5).toFixed(2)} s) ends`);
+  hostTick(); deliver();
+  const st = view.st.get("pooltable2")!;
+  assert.equal(st.key, A, "the older shot plays first");
+  const shown = new Map<string, number>();
+  // 10 fps, the host carrying on in real time, notes arriving each frame
+  for (let k = 0; k < 200; k++) {
+    for (let j = 0; j < 6; j++) hostTick();
+    deliver(); frame(0.1);
+    if (st.sim && !st.sim.done && st.simT > 0) shown.set(st.key, (shown.get(st.key) ?? 0) + 1);
+  }
+  assert.ok((shown.get(A) ?? 0) >= 2, "A played out");
+  assert.ok((shown.get(B) ?? 0) >= 2, `B played out after A (it settled on the host while it waited: it used to vanish) ${JSON.stringify([...shown])}`);
+  assert.equal(fb.filter((t: string) => /Missed/.test(t)).length, 0, "nothing reported missed: nothing was");
+  assert.ok(!st.rolling, "all shown");
+  const host = s.pool!.balls, drawn = st.balls;
+  for (const b of host) if (!b.down) assert.ok(Math.hypot(drawn[b.id].position.x - (T.x + b.x), drawn[b.id].position.z - (T.z + b.z)) < 1e-3, `ball ${b.id} where the host has it`);
+});
+
+test("darts (R12.4): your third dart's in the air when the turn passes to a mate who takes their time: you step back once it lands, with no further message", async () => {
+  const rig = await pubRig(13);
+  const { w, view, pb } = rig;
+  w.addPlayer("me", "ME"); w.addPlayer("gus", "GUS");
+  const O = pb.darts[0];
+  w.debugTeleport("me", O.oche + 0.3, O.board.z, -Math.PI / 2, pb.y2); w.debugTeleport("gus", O.oche + 1.2, O.board.z + 0.8, 0, pb.y2);
+  w.pubGames.act("me", { op: "open", st: "dartsoche1", vs: "mate", stake: 0 }); w.pubGames.act("gus", { op: "join", st: "dartsoche1" });
+  const sd = w.pubGames.st.get("dartsoche1")!; if (sd.seats[sd.darts!.turn].id !== "me") sd.darts!.turn = 1 - sd.darts!.turn;
+  await playOut(rig, { sec: 1, fps: 30, lat: 0.05, me: "me" });
+  view.use("dartsoche1"); await playOut(rig, { sec: 0.3, fps: 30, lat: 0.05, me: "me" });
+  assert.equal(view.mode, "darts");
+  // three darts, one after another, each the moment the last has landed (gus never throws)
+  for (let k = 0; k < 3; k++) {
+    (view as any).thrownAt = 0; view.testDart("dartsoche1", 0.01 * k, 0.1);
+    await playOut(rig, { sec: k < 2 ? 0.6 : 0.12, fps: 30, lat: 0.05, me: "me" });
+  }
+  assert.equal(sd.seats[sd.darts!.turn].id, "gus", "gus is up");
+  await playOut(rig, { sec: 2, fps: 30, lat: 0.05, me: "me" });
+  assert.equal(view.mode, "", "back to normal controls (it used to stay at the oche until the next message)");
+  assert.equal(view.cam, null, "the normal camera");
+});
+
+test("darts (R12.4): a dart in the air at the other board never holds up your throw or hides your aim", async () => {
+  const rig = await pubRig(14);
+  const { w, view, pb } = rig;
+  for (const id of ["me", "gus", "dan", "hana"]) w.addPlayer(id, id.toUpperCase());
+  const O1 = pb.darts[0], O2 = pb.darts[1];
+  w.debugTeleport("me", O1.oche + 0.3, O1.board.z, -Math.PI / 2, pb.y2); w.debugTeleport("gus", O1.oche + 1.2, O1.board.z + 0.8, 0, pb.y2);
+  w.debugTeleport("dan", O2.oche + 0.3, O2.board.z, -Math.PI / 2, pb.y2); w.debugTeleport("hana", O2.oche + 1.2, O2.board.z + 0.8, 0, pb.y2);
+  w.pubGames.act("me", { op: "open", st: "dartsoche1", vs: "mate", stake: 0 }); w.pubGames.act("gus", { op: "join", st: "dartsoche1" });
+  w.pubGames.act("dan", { op: "open", st: "dartsoche2", vs: "mate", stake: 0 }); w.pubGames.act("hana", { op: "join", st: "dartsoche2" });
+  const s1 = w.pubGames.st.get("dartsoche1")!; if (s1.seats[s1.darts!.turn].id !== "me") s1.darts!.turn = 1 - s1.darts!.turn;
+  await playOut(rig, { sec: 1, fps: 30, lat: 0.05, me: "me" });
+  view.use("dartsoche1"); await playOut(rig, { sec: 0.3, fps: 30, lat: 0.05, me: "me" });
+  // a dart thrown at board 2 (seen from here: it's right next door)
+  view.onEvent({ t: "pgDart", st: "dartsoche2", who: "dan", label: "T20", value: 60, bust: "", u: 0, v: 0.1 }, "me");
+  const thrown0 = s1.darts!.thrown;
+  view.input.button(0, true); // (my throw at board 1, right now)
+  await playOut(rig, { sec: 0.3, fps: 30, lat: 0.05, me: "me" });
+  assert.equal(s1.darts!.thrown, thrown0 + 1, "my dart went (it used to be refused while ANY dart was in the air)");
+  await playOut(rig, { sec: 0.4, fps: 30, lat: 0.05, me: "me" });
+  view.onEvent({ t: "pgDart", st: "dartsoche2", who: "dan", label: "5", value: 5, bust: "", u: 0.05, v: 0.1 }, "me");
+  view.update(1 / 30, { me: "me", x: O1.oche + 0.3, y: pb.y2, z: O1.board.z, clock: rig.lightT(), pints: 0, tipsy: 0, others: [], hurt: false });
+  assert.ok((view as any).marker?.isEnabled(), "my aiming ring still showing while board 2's dart flies");
+  assert.equal(view.mode, "darts");
+});
+
+// =============================================================================================================
+// R12.4: PeerRoom: leaving while a reconnect is half done must never let a late connection bring the room back
+// =============================================================================================================
+function fakeNet() {
+  const g = globalThis as any; g.window ??= g;
+  class FakeLink { onOpen = () => {}; onMessage = (_m: any) => {}; onClose = () => {}; closed = false; lastHeard = performance.now(); sent: any[] = [];
+    get open() { return !this.closed; } send(m: any) { this.sent.push(m); } close() { if (this.closed) return; this.closed = true; this.onClose(); } async signal() {} }
+  const links: FakeLink[] = [], sigs: any[] = [];
+  const joins: { resolve: (s: any) => void; sig: any }[] = [];
+  const client = { joinById: () => new Promise((resolve) => { const sig = { left: false, h: {} as Record<string, (m: any) => void>, onMessage(t: string, cb: (m: any) => void) { this.h[t] = cb; }, send() {}, leave() { this.left = true; return Promise.resolve(); } }; sigs.push(sig); joins.push({ resolve, sig }); }) };
+  return { FakeLink, links, sigs, joins, client, make: (_send: any) => { const l = new FakeLink(); links.push(l); return l as any; } };
+}
+const until = async (f: () => boolean, ms = 5000) => { const t0 = Date.now(); while (!f()) { if (Date.now() - t0 > ms) return false; await new Promise((r) => setTimeout(r, 10)); } return true; };
+async function joinedRoom(net: ReturnType<typeof fakeNet>, code = "ABCDE") {
+  const { PeerRoom } = await import("../src/p2p/peerRoom.ts");
+  PeerRoom.makeLink = net.make;
+  const p = PeerRoom.join(net.client as any, code, "ME", null);
+  await until(() => net.joins.length > 0); net.joins[net.joins.length - 1].resolve(net.joins[net.joins.length - 1].sig);
+  await until(() => net.links.length > 0); const l = net.links[net.links.length - 1];
+  l.onOpen(); l.onMessage({ t: "welcome", id: "g1", token: "tok1" }); l.onMessage({ t: "s", full: true, d: {} });
+  return { room: await p, PeerRoom };
+}
+test("PeerRoom (R12.4): leaving while a reconnect's handshake is in flight: the late welcome and snapshot are refused and their link closed; nothing revives the room", async () => {
+  const net = fakeNet(); const { room } = await joinedRoom(net);
+  let states = 0, recon = 0; room.onStateChange(() => states++); room.onReconnect(() => recon++);
+  net.links[0].close(); // (the Wi-Fi drops)
+  // the reconnect's attempt: its matchmaking join comes back, its new link opens
+  assert.ok(await until(() => net.joins.length === 2, 4000), "a reconnect attempt started");
+  net.joins[1].resolve(net.joins[1].sig);
+  assert.ok(await until(() => net.links.length === 2)); const l2 = net.links[1]; l2.onOpen();
+  // the player leaves now, mid-handshake
+  await room.leave(true);
+  assert.ok(room.isClosed); assert.ok(l2.closed, "the half-made link is closed when you leave");
+  // the host's late welcome + full snapshot arrive on it anyway
+  const s0 = states; l2.onMessage({ t: "welcome", id: "g1", token: "tok2" }); l2.onMessage({ t: "s", full: true, d: { phase: "x" } });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(states, s0, "no state reaches the game"); assert.equal(recon, 0, "no 'reconnected'");
+  assert.ok(net.sigs[1].left, "the matchmaking room's left");
+  // and no further attempts after leaving
+  await new Promise((r) => setTimeout(r, 1800)); assert.equal(net.joins.length, 2, "no more reconnect tries");
+});
+test("PeerRoom (R12.4): leaving while the matchmaking join is still pending (a slow handshake): when it finally answers, it's left at once and no link is made", async () => {
+  const net = fakeNet(); const { room } = await joinedRoom(net);
+  net.links[0].close();
+  assert.ok(await until(() => net.joins.length === 2, 4000));
+  await room.leave(true);
+  net.joins[1].resolve(net.joins[1].sig); await new Promise((r) => setTimeout(r, 50));
+  assert.ok(net.sigs[1].left, "left straight away"); assert.equal(net.links.length, 1, "no new link");
+});
+test("PeerRoom (R12.4): leave mid-reconnect and join another room straight away: the old attempt can't touch the new room", async () => {
+  const net = fakeNet(); const { room } = await joinedRoom(net, "AAAAA");
+  net.links[0].close();
+  assert.ok(await until(() => net.joins.length === 2, 4000)); net.joins[1].resolve(net.joins[1].sig);
+  assert.ok(await until(() => net.links.length === 2)); const old = net.links[1];
+  await room.leave(true);
+  const { room: room2 } = await joinedRoom(net, "BBBBB");
+  let states2 = 0; room2.onStateChange(() => states2++);
+  old.onOpen(); old.onMessage({ t: "welcome", id: "g9", token: "x" }); old.onMessage({ t: "s", full: true, d: {} });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(states2, 0, "the old attempt's snapshot never reaches the new room"); assert.equal(room2.sessionId, "g1", "the new room's own identity");
+  assert.ok(old.closed); assert.ok(!room2.isClosed);
+  await room2.leave(true);
+});

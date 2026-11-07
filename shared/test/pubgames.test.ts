@@ -474,7 +474,9 @@ test("R12.3b: a re-rack keeps counting shots (the new break never shares a numbe
   assert.ok(v.rerack); assert.equal(st.shots, 1, "the re-racked break is shot 1, not shot 0 again"); assert.ok(st.breakShot);
 });
 test("R12.3b: a window's view of a station: a new game's shot 0 after the last game's shot 0; status-only changes; shots it missed", () => {
-  const f = new StationFeed();
+  const f0 = new StationFeed();
+  // (R12.4: as a window does: whatever it was showing has finished by the time the next note comes in)
+  const f = { feed: (raw: string, clock: number) => { if (f0.playing) f0.finished(f0.playing); return f0.feed(raw, clock); }, get note() { return f0.note; } };
   const shot = (gid: number, n: number, t0: number, dur = 2) => ({ k: `${gid}:${n}`, n, b: [[0, 0, 0, 0]] as [number, number, number, number][], dx: 0, dz: 1, v: 1, t0, dur });
   const note = (o: any) => JSON.stringify({ ph: "play", gid: 1, dl: -1, left: 0, seats: [], pool: { n: 0 }, shot: null, last: null, ...o });
   let r = f.feed(note({ shot: shot(1, 0, 10) }), 10.5); assert.equal(r.replay?.why, "join", "(first look at this table: from where it's got to)"); assert.equal(r.replay?.at, 0.5);
@@ -544,4 +546,26 @@ test("R12.3b: the holes in the cloth are where the simulation's pockets are: a b
     n++;
   }
   assert.equal(n, 6);
+});
+
+test("R12.4: the line of shots a window has to show: in order, a shot that settles while it waits keeps its place, at most 2 wait (the rest reported)", () => {
+  const f = new StationFeed();
+  const shot = (n: number, t0: number, dur = 2) => ({ k: `7:${n}`, n, b: [[0, 0, 0, 0]] as [number, number, number, number][], dx: 0, dz: 1, v: 1, t0, dur });
+  const note = (o: any) => JSON.stringify({ ph: "play", gid: 7, dl: -1, left: 0, seats: [], pool: { n: 0 }, shot: null, last: null, ...o });
+  let r = f.feed(note({ shot: shot(0, 10, 4) }), 10.1); assert.equal(r.replay?.shot.n, 0);
+  // the window's slow: shot 0 is still being shown when shot 1 finishes on the host and shot 2 starts
+  r = f.feed(note({ last: shot(1, 14, 1), shot: shot(2, 15.5, 3) }), 15.6);
+  assert.equal(r.replay, null, "shot 0's still showing: nothing replaces it");
+  assert.deepEqual(f.queue.map((q) => q.shot.n), [1, 2], "1 then 2, waiting in line");
+  // shot 2 settles on the host while it waits: it stays in line
+  r = f.feed(note({ last: shot(2, 15.5, 3) }), 19);
+  assert.deepEqual(f.queue.map((q) => q.shot.n), [1, 2]); assert.equal(r.missed, 0);
+  assert.equal(f.finished("7:0")?.shot.n, 1); assert.equal(f.finished("7:1")?.shot.n, 2); assert.equal(f.finished("7:2"), null);
+  assert.ok(!f.busy); assert.equal(f.shownN, 2);
+  // a long interruption: more than 2 waiting: the oldest go, and say so
+  f.feed(note({ shot: shot(3, 30, 2) }), 30.1);
+  r = f.feed(note({ last: shot(4, 33, 2), shot: shot(5, 35.5, 2) }), 35.6); // (3 still showing; 4 and 5 waiting)
+  r = f.feed(note({ last: shot(6, 41, 2), shot: shot(7, 43.5, 2) }), 43.6); // (now 4, 5, 6, 7 would wait)
+  assert.deepEqual(f.queue.map((q) => q.shot.n), [6, 7], "only the newest 2 wait");
+  assert.equal(r.missed, 2, "4 and 5 reported missed, not silently gone");
 });

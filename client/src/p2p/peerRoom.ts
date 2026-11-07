@@ -28,6 +28,16 @@ export class PeerRoom {
   private closed = false;
   private dropped = false;
   private watch = 0;
+  /** R12.4: the connection attempt that counts (each attempt gets a number; leaving, or a newer attempt, makes the
+   *  older ones obsolete: whatever they bring back late is closed and ignored, never attached to the room) */
+  private attempt = 0;
+  /** call off the attempt in progress (leaving does this) */
+  private cancelAttempt: (() => void) | null = null;
+  /** the wait between reconnect tries (cleared on leaving) */
+  private retryTimer = 0;
+  private retryWake: (() => void) | null = null;
+  /** (tests) how a direct link is made */
+  static makeLink = (send: (d: SignalData) => void, initiator: boolean): PeerLink => new PeerLink(send, initiator);
 
   private constructor(private client: Client, readonly roomId: string, private name: string) {}
 
@@ -41,6 +51,9 @@ export class PeerRoom {
 
   /** One attempt: matchmaking room -> direct connection -> hello -> welcome + full city. */
   private connect(): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("left"));
+    this.cancelAttempt?.(); // (only ever one attempt at a time)
+    const gen = ++this.attempt;
     return new Promise<void>((resolve, reject) => {
       let sig: Room | null = null;
       let link: PeerLink | null = null;
@@ -49,27 +62,35 @@ export class PeerRoom {
         if (done) return;
         done = true;
         clearTimeout(timer);
+        if (this.cancelAttempt === cancel) this.cancelAttempt = null;
         if (sig) { const s = sig; sig = null; void s.leave(true).catch(() => {}); } // not needed once connected
-        if (err) { if (link) { link.onClose = () => {}; link.close(); } reject(err); } else resolve();
+        if (err) { if (link) { const l = link; link = null; l.onOpen = () => {}; l.onMessage = () => {}; l.onClose = () => {}; l.close(); } reject(err); } else resolve();
       };
+      const cancel = () => finish(new Error("left"));
+      this.cancelAttempt = cancel;
+      // (still the attempt that counts, and still in the room?)
+      const current = () => gen === this.attempt && !this.closed && !done;
       const timer = setTimeout(() => finish(new Error("p2p timeout: couldn't connect to the host's computer")), CONNECT_TIMEOUT_MS);
       this.client.joinById(this.roomId, {}).then((s) => {
-        if (done) { void s.leave(true).catch(() => {}); return; }
+        if (!current()) { void s.leave(true).catch(() => {}); return; }
         sig = s;
         s.onMessage("role", () => {});
-        s.onMessage("sig", (m: { data: SignalData }) => void link?.signal(m.data));
+        s.onMessage("sig", (m: { data: SignalData }) => { if (current()) void link?.signal(m.data); });
         s.onMessage("closed", () => finish(new Error("room not found: the host closed the game")));
         // only now: the offer goes out straight away, through this matchmaking room
-        link = new PeerLink((d) => { try { sig?.send("sig", { data: d }); } catch { /* ignore */ } }, true);
-        this.wire(link, finish);
+        link = PeerRoom.makeLink((d) => { try { if (current()) sig?.send("sig", { data: d }); } catch { /* ignore */ } }, true);
+        this.wire(link, finish, current);
       }, (e) => finish(e instanceof Error ? e : new Error(String(e))));
     });
   }
 
-  private wire(link: PeerLink, finish: (err?: Error) => void) {
-      link.onOpen = () => link.send({ t: "hello", name: this.name, token: this.reconnectionToken });
+  private wire(link: PeerLink, finish: (err?: Error) => void, current: () => boolean) {
+      link.onOpen = () => { if (current()) link.send({ t: "hello", name: this.name, token: this.reconnectionToken }); else finish(new Error("left")); };
       link.onClose = () => finish(new Error("p2p closed: couldn't connect to the host's computer"));
       link.onMessage = (m) => {
+        // (R12.4: a welcome or a first snapshot that turns up after you've left, or for an attempt that's been
+        //  superseded, closes its own link: it never brings a closed room back to life)
+        if (!current()) { finish(new Error("left")); return; }
         if (m?.t === "reject") return finish(new Error(m.reason === "full" ? "room is full" : "rejected"));
         if (m?.t === "welcome") {
           this.sessionId = m.id;
@@ -77,21 +98,24 @@ export class PeerRoom {
           return;
         }
         if (m?.t === "s" && m.full && this.sessionId) {
-          this.adopt(link);
+          if (!this.adopt(link)) { finish(new Error("left")); return; }
           this.onHostMessage(m);
           finish();
         }
       };
   }
 
-  private adopt(link: PeerLink) {
+  private adopt(link: PeerLink): boolean {
+    if (this.closed) return false;
+    this.link?.close();
     this.link = link;
     link.onMessage = (m) => this.onHostMessage(m);
     link.onClose = () => { if (this.link === link) this.onLinkLost(); };
+    return true;
   }
 
   private onHostMessage(m: any) {
-    if (!m || typeof m !== "object") return;
+    if (this.closed || !m || typeof m !== "object") return;
     if (m.t === "s") {
       applyDelta(this.state, m.d ?? {}, !!m.full);
       this.stateL.emit(this.state);
@@ -115,7 +139,8 @@ export class PeerRoom {
     this.dropL.emit();
     const until = performance.now() + RECONNECT_FOR_MS;
     while (!this.closed && performance.now() < until) {
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise<void>((r) => { this.retryWake = r; this.retryTimer = window.setTimeout(r, 1500); });
+      this.retryWake = null;
       if (this.closed) return;
       try {
         await this.connect();
@@ -131,13 +156,23 @@ export class PeerRoom {
 
   private end(code: number) {
     if (this.closed) return;
+    this.shutdown();
+    this.leaveL.emit(code);
+    this.clearListeners();
+  }
+  /** R12.4: stop everything: the attempt in progress, the reconnect wait, the watchdog, the link, pending pings */
+  private shutdown() {
     this.closed = true;
+    this.attempt++;
+    this.cancelAttempt?.(); this.cancelAttempt = null;
+    clearTimeout(this.retryTimer); this.retryWake?.(); this.retryWake = null;
     clearInterval(this.watch);
     const l = this.link;
     this.link = null;
-    l?.close();
-    this.leaveL.emit(code);
+    if (l) { l.onMessage = () => {}; l.onClose = () => {}; l.close(); }
+    this.pings.clear();
   }
+  private clearListeners() { this.stateL.clear(); for (const l of this.msgL.values()) l.clear(); this.dropL.clear(); this.reconL.clear(); this.leaveL.clear(); }
 
   // ------------------------------------------------------------------ the Room API main.ts uses
   send(type: string, msg?: unknown) {
@@ -164,11 +199,14 @@ export class PeerRoom {
 
   async leave(_consented = true) {
     if (this.closed) return;
-    this.link?.send({ t: "bye" });
-    await new Promise((r) => setTimeout(r, 100));
-    this.closed = true;
-    clearInterval(this.watch);
-    this.link?.close();
+    // (R12.4: closed straight away: nothing in flight, a reconnect half-done or a late welcome, can attach from here on)
+    const l = this.link;
     this.link = null;
+    this.shutdown();
+    if (l) { l.send({ t: "bye" }); await new Promise((r) => setTimeout(r, 100)); l.onMessage = () => {}; l.onClose = () => {}; l.close(); }
+    this.clearListeners();
   }
+  /** (tests) is a reconnect attempt in progress? */
+  get connecting() { return !!this.cancelAttempt; }
+  get isClosed() { return this.closed; }
 }

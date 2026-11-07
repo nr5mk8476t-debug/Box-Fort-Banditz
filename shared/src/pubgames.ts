@@ -890,12 +890,27 @@ export interface ReplayPlan { shot: WireShot; at: number; why: "live" | "join" |
  *  the window says so rather than letting them vanish */
 export interface FeedResult { changed: boolean; newGame: boolean; ended: boolean; replay: ReplayPlan | null; missed: number }
 
-/** a window's reading of one station's notes: which game it's on, which shots it's already shown */
+/** R12.4: at most this many shots wait in line behind the one being shown; older ones are dropped (and reported) */
+export const REPLAY_BACKLOG = 2;
+/** a window's reading of one station's notes: which game it's on, and for each shot whether it's been received,
+ *  is waiting in line, is being shown, or has been shown. R12.4: a shot that settles on the host while it's still
+ *  waiting here keeps its place (it used to be dropped without a word), the line plays in order, and nothing that's
+ *  being shown is ever replaced by a newer shot. */
 export class StationFeed {
-  raw = ""; gid = -1; played = ""; playedN = -1;
+  raw = ""; gid = -1;
+  /** the newest shot received this game (name, number) */
+  received = ""; receivedN = -1;
+  /** waiting to be shown, oldest first */
+  queue: ReplayPlan[] = [];
+  /** being shown right now ("" = nothing) */
+  playing = "";
+  /** shown to the end (shot number, this game) */
+  shownN = -1;
   note: any = null;
   /** (diagnostics: ?pgdebug in the address, or tests) what happened, newest last */
   log: string[] | null = null;
+  /** anything still to show (the next shot waits for this) */
+  get busy() { return !!this.playing || this.queue.length > 0; }
   feed(raw: string, clock: number): FeedResult {
     const none: FeedResult = { changed: false, newGame: false, ended: false, replay: null, missed: 0 };
     if (raw === this.raw) return none;
@@ -906,41 +921,46 @@ export class StationFeed {
     // (a status change, a clock starting, someone reconnecting, is still a change: only the identities below decide
     //  whether anything new happened)
     const fresh = n.gid !== this.gid, firstLook = !prev;
-    if (fresh) { this.gid = n.gid; this.played = ""; this.playedN = -1; }
+    if (fresh) { this.gid = n.gid; this.received = ""; this.receivedN = -1; this.queue = []; this.playing = ""; this.shownN = -1; }
     const ended = !!prev && prev.ph === "play" && (n.ph !== "play" || prev.gid !== n.gid);
-    let replay: ReplayPlan | null = null, missed = 0;
+    let missed = 0;
     const sh: WireShot | null = n.shot, last: WireShot | null = n.last;
     // (a window that's only just arrived takes the game as it finds it; one that's been watching counts what it missed)
-    const gap = (k: number) => (firstLook ? 0 : Math.max(0, k - this.playedN - 1));
-    if (sh && sh.k !== this.played) {
+    const gap = (k: number) => (firstLook ? 0 : Math.max(0, k - this.receivedN - 1));
+    const add = (shot: WireShot, at: number, why: ReplayPlan["why"]) => this.queue.push({ shot, at, why });
+    if (sh && sh.k !== this.received) {
       const el = wrapDelta(clock, sh.t0);
-      // (the shot before this one came and went unseen: it plays first, quickly, then this one catches up)
-      if (!firstLook && last && last.k !== this.played && last.n === sh.n - 1 && last.n > this.playedN) { missed = gap(last.n); replay = { shot: last, at: 0, why: "missed" }; this.queued = sh; }
-      else { missed = gap(sh.n); this.queued = null; }
-      this.played = sh.k; this.playedN = sh.n;
-      if (!replay) {
-        if (firstLook) replay = { shot: sh, at: Math.max(0, Math.min(sh.dur, el)), why: "join" };
-        // (a patch or two late is normal: in step with the host; later than that, from the start and catch up: a
-        //  shot's never just skipped)
-        else if (el <= 0.6) replay = { shot: sh, at: Math.max(0, el), why: "live" };
-        else replay = { shot: sh, at: 0, why: "behind" };
-      }
-    } else if (!sh && last && last.k !== this.played && !firstLook) {
-      missed = gap(last.n);
-      this.played = last.k; this.playedN = last.n;
-      // (old news, minutes ago in a background tab: just the table as it is)
-      if (wrapDelta(clock, last.t0) - last.dur < 6) replay = { shot: last, at: 0, why: "missed" }; else missed++;
+      // (the shot before this one came and went unseen: it goes in line first, then this one)
+      if (!firstLook && last && last.k !== this.received && last.n === sh.n - 1 && last.n > this.receivedN) { missed += gap(last.n); add(last, 0, "missed"); }
+      else missed += gap(sh.n);
+      this.received = sh.k; this.receivedN = sh.n;
+      if (firstLook) add(sh, Math.max(0, Math.min(sh.dur, el)), "join");
+      // (a patch or two late is normal: in step with the host; later than that, or behind others in line: from the
+      //  start, catching up. A shot's never just skipped)
+      else if (el <= 0.6 && !this.busy) add(sh, Math.max(0, el), "live");
+      else add(sh, 0, "behind");
+    } else if (!sh && last && last.k !== this.received && !firstLook) {
+      missed += gap(last.n);
+      this.received = last.k; this.receivedN = last.n;
+      // (old news, minutes ago in a background tab: just the table as it is, and say so)
+      if (wrapDelta(clock, last.t0) - last.dur < 6) add(last, 0, "missed"); else missed++;
     }
+    // (a long interruption: never an endless line of old shots: the oldest waiting go, and the window says how many)
+    while (this.queue.length > REPLAY_BACKLOG) { this.queue.shift(); missed++; }
+    const replay = this.playing ? null : this.take();
     if (this.log) {
-      const sk = replay ? replay.shot.k : sh?.k ?? "-";
-      this.log.push(`gid ${n.gid} ph ${n.ph} shot ${sk}${replay ? ` t0 ${replay.shot.t0} heard ${clock} el ${wrapDelta(clock, replay.shot.t0).toFixed(2)} -> ${replay.why} from ${replay.at.toFixed(2)}/${replay.shot.dur.toFixed(2)}` : ""}${ended ? " ENDED" : ""}${prev?.shot && !sh ? " settled" : ""}`);
+      this.log.push(`gid ${n.gid} ph ${n.ph} shot ${sh?.k ?? "-"} last ${last?.k ?? "-"} heard ${clock}${replay ? ` -> play ${replay.shot.k} (${replay.why}) from ${replay.at.toFixed(2)}/${replay.shot.dur.toFixed(2)}` : ""} line [${this.queue.map((q) => q.shot.k + ":" + q.why).join(" ")}] playing ${this.playing || "-"}${missed ? ` MISSED ${missed}` : ""}${ended ? " ENDED" : ""}${prev?.shot && !sh ? " settled" : ""}`);
       if (this.log.length > 60) this.log.shift();
     }
     return { changed: true, newGame: fresh, ended, replay, missed };
   }
-  /** the shot that came in while a missed one was being caught up (play it next, catching up with the host) */
-  queued: WireShot | null = null;
-  next(): ReplayPlan | null { const q = this.queued; this.queued = null; return q && this.note?.shot?.k === q.k ? { shot: q, at: 0, why: "behind" } : null; }
+  private take(): ReplayPlan | null { const p = this.queue.shift() ?? null; if (p) this.playing = p.shot.k; return p; }
+  /** the window's finished showing `key` (all the way): the next shot in line, if there is one */
+  finished(key: string): ReplayPlan | null {
+    if (this.playing === key) { this.playing = ""; const n = Number(key.split(":")[1]); if (n > this.shownN) this.shownN = n; }
+    if (this.log) this.log.push(`shown ${key}`);
+    return this.playing ? null : this.take();
+  }
 }
 
 /** a replay's next time: in step with the host's clock, never ahead of it, never backwards; if it's behind (heard late,

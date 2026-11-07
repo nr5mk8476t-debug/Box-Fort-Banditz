@@ -145,6 +145,8 @@ class Station {
   cue: TransformNode | null = null; cueT = -1; cueDir = { x: 0, z: 1 }; cueFrom = { x: 0, z: 0 };
   // darts
   darts: TransformNode[] = []; dartIn: number[] = []; flash = { label: "", t: 0 };
+  /** R12.4: the dart in the air at THIS board (each board its own: one board's dart never holds up the other's throw) */
+  fly: { k: number; t: number; u: number; v: number; from: Vector3; mine: boolean } | null = null;
   board: DynamicTexture | null = null; boardSig = "";
   /** darts: the cabinet doors' chalkboards (each player's score, chalked up as the game goes) */
   doors: DynamicTexture[] = []; doorSig = "";
@@ -152,7 +154,7 @@ class Station {
   seatOf(pid: string) { return this.note ? this.note.seats.findIndex((s) => s[0] === pid) : -1; }
   get turn() { return this.note?.pool?.turn ?? this.note?.darts?.turn ?? -1; }
   /** the host still has the shot rolling, or this window's replay of it is still going (the next shot waits for both) */
-  get rolling() { return !!this.note?.shot || !!this.sim; }
+  get rolling() { return !!this.note?.shot || !!this.sim || this.feed.busy; }
 }
 
 export class PubGamesView {
@@ -168,7 +170,9 @@ export class PubGamesView {
   private guide: LinesMesh | null = null;
   // darts aim
   private aim = { u: 0, v: 0.1 }; private steady = { on: false, t: 0, cool: 0, f: 1 }; private swayT = 0; private swayPh = [0, 0, 0, 0];
-  private marker: TransformNode | null = null; private thrownN = -1; private thrownAt = 0; private fly: { st: Station; k: number; t: number; u: number; v: number; from: Vector3 } | null = null;
+  private marker: TransformNode | null = null; private thrownN = -1; private thrownAt = 0;
+  /** R12.4: your turn at the oche ended while your last dart was in the air: step back once it's landed (and been seen) */
+  private handover: { st: Station; t: number } | null = null;
   private fov = 0;
   // the menu
   private menu = { st: "", stake: 0, vs: "npc" as "npc" | "mate", confirm: false };
@@ -261,7 +265,7 @@ export class PubGamesView {
     if (r.missed > 0 && (s.seatOf(this.ctx.me) >= 0 || this.near(s, 10))) this.hooks.feedback(`Missed ${r.missed} shot${r.missed > 1 ? "s" : ""} at ${s.idx + 1 ? "table " + (s.idx + 1) : "the table"} while this window was busy.`, "info");
     if (s.kind === "pool") {
       if (r.replay) this.startReplay(s, r.replay);
-      else if (!s.sim) { if (n.pool) this.showBalls(s, n.pool.b.map(([bid, x, z, d]) => ({ id: bid, x, z, down: !!d }))); else if (n.ph !== "play") this.placeRack(s); }
+      else if (!s.sim && !s.feed.busy) { if (n.pool) this.showBalls(s, n.pool.b.map(([bid, x, z, d]) => ({ id: bid, x, z, down: !!d }))); else if (n.ph !== "play") this.placeRack(s); }
     }
     if (PG_DEBUG && s.feed.log?.length) console.log("[pg]", id, s.feed.log[s.feed.log.length - 1]);
     // my turn just started: step up to the table / the oche (once this window's finished showing the last shot)
@@ -272,7 +276,9 @@ export class PubGamesView {
     // (only what's going on HERE moves you: another table or board finishing never touches your aim, your throw or a
     //  menu you've got open elsewhere)
     if (this.at !== id) return;
-    if (!mine && this.mode !== "menu" && (this.mode !== "darts" || !this.fly)) this.leave();
+    // (your own dart still in the air at this board: you see it land first, the checkout or the bust included)
+    if (r.ended && this.mode === "darts" && s.fly?.mine) { this.handover = { st: s, t: 0.9 }; return; }
+    if (!mine && this.mode !== "menu" && (this.mode !== "darts" || !s.fly)) this.leave();
     else if (r.ended) this.leave();
   }
   /** a new game at this station: nothing of the last one carries over (its replay, cue, potted balls, darts in flight,
@@ -281,7 +287,7 @@ export class PubGamesView {
     s.sim = null; s.key = ""; s.why = ""; s.simT = 0; s.cueT = -1; s.drop.clear();
     s.flash = { label: "", t: 0 }; (s as unknown as { hist?: number[][] }).hist = undefined;
     this.lastTurnMine.delete(s.id); if (this.pendingEnter === s.id) this.pendingEnter = "";
-    if (this.fly?.st === s) this.fly = null;
+    s.fly = null; if (this.handover?.st === s) this.handover = null;
     if (this.at === s.id) this.thrownN = -1;
   }
   /** a shot to play out, from the exact start the host used (see StationFeed for where it starts and why) */
@@ -295,6 +301,8 @@ export class PubGamesView {
     if (plan.at < 0.3) { const cue = start.find((b) => b.id === 0)!; s.cueT = 0; s.cueDir = { x: sh.dx, z: sh.dz }; s.cueFrom = { x: cue.x, z: cue.z }; if (this.near(s, 14)) sfx.cueStrike(sh.v / POOL.vMax); }
     this.showBalls(s, s.sim.balls.map((b) => ({ id: b.id, x: b.x, z: b.z, down: b.down })));
   }
+  /** is it my turn at this station (a game on, my seat, nothing rolling on the host)? */
+  private myTurn(s: Station) { const n = s.note; const seat = s.seatOf(this.ctx.me); return !!n && n.ph === "play" && seat >= 0 && s.turn === seat && !n.shot; }
   /** the shot / throw clock as this window should show it (whole seconds, never more than the host has left) */
   clockOf(s: Station): number { const n = s.note; if (!n || n.ph !== "play") return 0; return n.dl >= 0 ? Math.ceil(timeLeftAt(n.dl, this.ctx.clock) - 0.05) : n.left; }
   private near(s: Station, r: number) { return Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < r && Math.abs(this.ctx.y - this.U) < 2.5; }
@@ -331,7 +339,7 @@ export class PubGamesView {
       s.flash = { label: `${e.label}${Number(e.value) ? " · " + e.value : ""}`, t: 2.2 };
       if (this.near(s, 12)) { sfx.dartThunk(e.who === me ? 1 : 0.7); }
       if (e.who === me && e.bust) this.hooks.feedback(String(e.bust), "bad");
-      if (e.who !== me && this.near(s, 12)) { const k = (s.note?.darts?.d.length ?? 0); this.fly = this.fly ?? { st: s, k, t: 0, u: Number(e.u), v: Number(e.v), from: new Vector3((s.g.oche ?? 0) + 0.35, this.U + 1.7, s.g.z + 0.25) }; }
+      if (e.who !== me && this.near(s, 12)) { const k = (s.note?.darts?.d.length ?? 0); s.fly = s.fly ?? { k, t: 0, u: Number(e.u), v: Number(e.v), from: new Vector3((s.g.oche ?? 0) + 0.35, this.U + 1.7, s.g.z + 0.25), mine: false }; }
     } else if (e.t === "pgMsg") { if (e.to === me && e.msg) { this.lastMsg = String(e.msg); this.hooks.feedback(this.lastMsg, "info"); } }
     else if (e.t === "pgEnd") {
       const mineSeat = s.seatOf(me);
@@ -351,6 +359,8 @@ export class PubGamesView {
       this.drawBoard(s, dt);
     }
     if (this.at) { const s = this.st.get(this.at); if (s && (ctx.hurt || Math.hypot(ctx.x - s.g.x, ctx.z - s.g.z) > 9)) this.leave(); }
+    // (R12.4: your turn at the oche's over and your last dart's landed: step back now, unless it's come back round)
+    if (this.handover) { const h = this.handover; h.t -= dt; if (this.at !== h.st.id || this.mode !== "darts" || this.myTurn(h.st)) this.handover = null; else if (h.t <= 0) { this.handover = null; this.leave(); } }
     // your turn: step up once this window's finished showing the last shot (not into the middle of it)
     if (this.pendingEnter) { const s = this.st.get(this.pendingEnter); if (!s || this.quiet) this.pendingEnter = ""; else if (!s.rolling) { this.pendingEnter = ""; if (this.mode === "" || this.at === s.id) this.enter(s); } }
     this.updateCam(dt);
@@ -360,15 +370,16 @@ export class PubGamesView {
     if (s.sim) {
       // follow the host's clock (the game can run slower than real time on a slow machine): never ahead of it, never
       // backwards, and quicker until it's caught up if this window's behind (heard late, a stalled frame, a missed shot)
-      const sh = s.note?.shot, live = !!sh && sh.k === s.key;
+      // (with shots waiting in line behind it, it hurries: the line catches up, a few shots at most)
+      const sh = s.note?.shot, live = !!sh && sh.k === s.key && !s.feed.queue.length;
       s.simT = replayStep(s.simT, dt, live ? wrapDelta(this.ctx.clock, sh!.t0) : null, s.dur);
       s.sim.runTo(s.simT);
       this.showBalls(s, s.sim.balls.map((b) => ({ id: b.id, x: b.x, z: b.z, down: b.down })));
       // played out, and the host's settled it: the table as the host has it (the same to a tenth of a millimetre)
       if ((s.sim.done || s.simT >= s.dur) && !live) {
         s.sim = null;
-        // (a missed shot just caught up: now the one that came in meanwhile, catching up with the host)
-        const nx = s.feed.next();
+        // (shown to the end: the next shot in line, if one came in meanwhile: in order, catching up)
+        const nx = s.feed.finished(s.key);
         if (nx) this.startReplay(s, nx);
         else if (s.note?.pool) this.showBalls(s, s.note.pool.b.map(([id, x, z, d]) => ({ id, x, z, down: !!d })));
       }
@@ -400,7 +411,7 @@ export class PubGamesView {
     s.darts.forEach((d, k) => {
       const q = show[k];
       if (!q || Math.abs(q.u) > 0.35 || Math.abs(q.v) > 0.35) { d.setEnabled(false); s.dartIn[k] = 0; return; }
-      if (this.fly && this.fly.st === s && this.fly.k === k) { d.setEnabled(false); return; }
+      if (s.fly && s.fly.k === k) { d.setEnabled(false); return; }
       s.dartIn[k] = Math.min(1, s.dartIn[k] + dt / 0.12);
       const r = Math.hypot(q.u, q.v), x = r > 0.17 ? fx + 0.0 : fx; // (a miss sticks in the surround, just the same)
       d.position.set(x + (1 - s.dartIn[k]) * 0.4, by + q.v, s.g.z + q.u);
@@ -409,11 +420,17 @@ export class PubGamesView {
     });
     s.flash.t = Math.max(0, s.flash.t - dt);
     // a dart in flight (yours, or one you're watching)
-    if (this.fly && this.fly.st === s) {
-      const f = this.fly; f.t += dt; const k = Math.min(1, f.t / 0.2), to = new Vector3(fx, by + f.v, s.g.z + f.u);
+    if (s.fly) {
+      const f = s.fly; f.t += dt; const k = Math.min(1, f.t / 0.2), to = new Vector3(fx, by + f.v, s.g.z + f.u);
       const p = Vector3.Lerp(f.from, to, k); p.y += Math.sin(k * Math.PI) * 0.06;
       const d = s.darts[Math.min(5, f.k)]; d.position.copyFrom(p); d.setEnabled(true);
-      if (k >= 1) this.fly = null;
+      if (k >= 1) {
+        s.fly = null;
+        // (R12.4: your last dart's landed: if the turn's gone over meanwhile, step back from the oche once you've seen
+        //  where it went (0.7 s): not left waiting for the next message from the host, which may be a while if the
+        //  other player takes their time)
+        if (this.at === s.id && this.mode === "darts" && !this.myTurn(s)) this.handover = { st: s, t: 0.7 };
+      }
     }
   }
 
@@ -529,12 +546,12 @@ export class PubGamesView {
     this.leave();
   }
   private throwDart(s: Station) {
-    const D = s.note?.darts; if (!D || this.fly || (this.thrownN === D.n && performance.now() - this.thrownAt < 1500)) return;
+    const D = s.note?.darts; if (!D || s.fly || this.handover || (this.thrownN === D.n && performance.now() - this.thrownAt < 1500)) return;
     const p = this.swayed();
     this.thrownN = D.n; this.thrownAt = performance.now();
     this.hooks.act({ a: "pg", op: "dart", st: s.id, n: D.n, u: p.u, v: p.v });
     sfx.dartWhoosh();
-    const c = this.cam; this.fly = { st: s, k: D.d.length, t: 0, u: p.u, v: p.v, from: new Vector3((c?.x ?? s.g.x) - 0.25, (c?.y ?? this.U + 1.6) - 0.12, (c?.z ?? s.g.z) + 0.1) };
+    const c = this.cam; s.fly = { k: D.d.length, t: 0, u: p.u, v: p.v, from: new Vector3((c?.x ?? s.g.x) - 0.25, (c?.y ?? this.U + 1.6) - 0.12, (c?.z ?? s.g.z) + 0.1), mine: true };
   }
   /** where the dart goes if you let go now: your aim plus your hand's sway (the ring shows exactly this) */
   private swayed() {
@@ -576,7 +593,7 @@ export class PubGamesView {
       const tgt = 0.62; this.fov = this.fov ? this.fov + (tgt - this.fov) * Math.min(1, dt / 0.3 * 2.2) : base;
       this.cam = { x: ex, y: ey, z: s.g.z, yaw: -Math.PI / 2, pitch: Math.atan2(ey - by, ex - fx), fov: this.fov };
       if (!this.marker) this.marker = this.makeMarker();
-      const p = this.swayed(); this.marker.position.set(fx + 0.004, by + p.v, s.g.z + p.u); this.marker.setEnabled(!this.fly);
+      const p = this.swayed(); this.marker.position.set(fx + 0.004, by + p.v, s.g.z + p.u); this.marker.setEnabled(!s.fly && !this.handover);
     }
   }
   private blocked(x: number, y: number, z: number) {
