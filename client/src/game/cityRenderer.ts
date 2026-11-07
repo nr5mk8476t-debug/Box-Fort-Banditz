@@ -61,15 +61,27 @@ export const INTERIOR_DRAW_DIST = 42;
  *  so what's off-screen or past the fog isn't drawn. Small pieces (under DETAIL_MAX m: sills, trims, leaves, little
  *  signs) go in their own tiles and stop drawing past DETAIL_OFF m (back on inside DETAIL_ON: the gap keeps them from
  *  flickering on a boundary). Fog starts at 80 m, so by then they're mostly fog. Building shells and the skyline stay. */
-export const TILE = 64, DETAIL_MAX = 1.2, DETAIL_ON = 95, DETAIL_OFF = 110;
+const LANTERN_RED = [Color3.FromHexString("#5a1010"), Color3.FromHexString("#ff5a30")], LANTERN_GOLD = [Color3.FromHexString("#5a4010"), Color3.FromHexString("#ffc040")];
+export const TILE = 64, DETAIL_TILE = 64, DETAIL_MAX = 1.2, DETAIL_ON = 80, DETAIL_OFF = 95;
 /** R12.5: how many segments a little sphere needs (a Babylon sphere of n segments is about 4(n+2)^2 triangles: 6 is
  *  256): a flower or a bead under 15 cm reads the same with 1 (36), under 40 cm with 2 (64), and bigger with up to 4 */
 export function sphereSegs(d: number, want: number): number { return Math.min(want, d < 0.15 ? 1 : d < 0.4 ? 2 : 4); }
+/** R12.5: the outline widths the city's merged meshes use (every distinct width was its own mesh, and its own outline
+ *  pass, in every tile; 17 widths in one view). The nearest step (in proportion): at most a quarter thinner or thicker,
+ *  under a pixel on screen at any normal distance */
+export const OUTLINE_STEPS = [0, 0.004, 0.008, 0.012, 0.02, 0.03, 0.05, 0.08];
+export function snapOutline(w: number): number {
+  if (!(w > 0.001)) return 0;
+  let best = OUTLINE_STEPS[1], bd = Infinity;
+  for (const v of OUTLINE_STEPS) if (v > 0) { const d = Math.abs(Math.log(w / v)); if (d < bd) { bd = d; best = v; } }
+  return best;
+}
 function tileKey(m: Mesh): string {
   m.computeWorldMatrix(true);
   const bb = m.getBoundingInfo().boundingBox, c = bb.centerWorld, e = bb.extendSizeWorld;
   const detail = Math.max(e.x, e.y, e.z) * 2 < DETAIL_MAX;
-  return `${Math.floor(c.x / TILE)},${Math.floor(c.z / TILE)}${detail ? ",d" : ""}`;
+  // (small pieces: drawn by how far the batch's nearest edge is: within 80 m, off past 95)
+  return detail ? `${Math.floor(c.x / DETAIL_TILE)},${Math.floor(c.z / DETAIL_TILE)},d` : `${Math.floor(c.x / TILE)},${Math.floor(c.z / TILE)}`;
 }
 /** Props are drawn by buildProps (static body here, changing parts in PropRenderer). */
 const PROP_BOX_KINDS = new Set<Box["kind"]>(["bin", "phone", "vending", "meter", "newsbox", "car", "statue", "steamer", "fishtank", "trinkets", "pizzacart", "gelato", "ricordi", "deli", "vaultdoor", "depositbox"]);
@@ -696,6 +708,7 @@ export class CityRenderer {
 
   /** Queue a static mesh for merging (grouped by colour). */
   private add(m: Mesh, color: string, outline = 0.04, castShadow = true) {
+    outline = snapOutline(outline); // (R12.5: a few widths, not 17: each width is a separate mesh in every tile)
     const grp = this.zoneOf(m);
     if (grp >= 0) castShadow = false; // interiors: no shadow casting (they're drawn on and off)
     if (this.brk) { m.metadata = { brk: this.brk }; castShadow = false; } // (C4a: breakables: the shadow map is drawn once)
@@ -760,6 +773,8 @@ export class CityRenderer {
    * far fewer draw calls in the 200 m city.
    */
   private flush() {
+    if (this.lanternBodies.size) this.flushLanterns();
+    if (this.glowBatches.size) this.flushGlow();
     const groups = new Map<string, Mesh[]>();
     for (const [key, meshes] of this.byMaterial) {
       const [color, outline, cast, grp, tile] = key.split("|");
@@ -801,15 +816,16 @@ export class CityRenderer {
 
   /** Slice 2A: draw building interiors only near the camera. Call every frame. */
   /** R12.5: the small-piece tiles (drawn within DETAIL_ON / DETAIL_OFF m of the camera) */
-  private detailTiles: { m: Mesh; x: number; z: number; on: boolean }[] = [];
-  private addDetail(m: Mesh) { const c = m.getBoundingInfo().boundingBox.centerWorld; this.detailTiles.push({ m, x: c.x, z: c.z, on: true }); }
+  private detailTiles: { m: Mesh; minX: number; maxX: number; minZ: number; maxZ: number; on: boolean }[] = [];
+  private addDetail(m: Mesh) { m.computeWorldMatrix(true); const b = m.getBoundingInfo().boundingBox; this.detailTiles.push({ m, minX: b.minimumWorld.x, maxX: b.maximumWorld.x, minZ: b.minimumWorld.z, maxZ: b.maximumWorld.z, on: true }); }
   /** (R12.5: the groups list, built once: it used to be a new array every frame) */
   private groupList: { id: number; x: number; z: number; dist?: number; vis?: (x: number, y: number, z: number, was: boolean) => boolean }[] | null = null;
   update(camX: number, camZ: number, camY = 1.7) {
     if (this.neon.length || this.stationLights) this.updateNeon();
     this.updateHeli(Math.min(0.1, (performance.now() - this.lastUpd) / 1000)); this.lastUpd = performance.now();
     for (const t of this.detailTiles) {
-      const d = Math.hypot(t.x - camX, t.z - camZ), on = t.on ? d < DETAIL_OFF : d < DETAIL_ON; // (half a tile's reach included: TILE / 2 off the centre)
+      const dx = camX < t.minX ? t.minX - camX : camX > t.maxX ? camX - t.maxX : 0, dz = camZ < t.minZ ? t.minZ - camZ : camZ > t.maxZ ? camZ - t.maxZ : 0;
+      const d = Math.hypot(dx, dz), on = t.on ? d < DETAIL_OFF : d < DETAIL_ON; // (to the nearest piece's edge of the batch)
       if (on !== t.on) { t.on = on; t.m.setEnabled(on); }
     }
     if (!this.groupList || this.groupList.length !== (this.arena.units?.length ?? 0) + this.extraGroups.length) this.groupList = [...(this.arena.units ?? []), ...this.extraGroups];
@@ -1748,18 +1764,48 @@ export class CityRenderer {
   /** a red paper lantern: body, gold caps, a tassel (swings a little) */
   private lantern(x: number, y: number, z: number, size = 1, gold = false): Mesh {
     const sc = this.scene;
-    const body = MeshBuilder.CreateSphere("lantern", { diameter: 0.55 * size, segments: 10 }, sc);
-    body.scaling.y = 0.82; body.position.set(x, y, z); body.parent = this.root; body.isPickable = false;
-    body.material = gold ? (() => { const m = this.lanternMatFor().clone("lanternGold"); m.diffuseColor = Color3.FromHexString("#ffb000"); return m; })() : this.lanternMatFor();
-    ink(body, 0.02);
+    const body = MeshBuilder.CreateSphere("lantern", { diameter: 0.55 * size, segments: sphereSegs(0.55 * size, 6) }, sc);
+    body.scaling.y = 0.82; body.position.set(x, y, z); body.isPickable = false;
+    // R12.5: merged per map tile and colour when the city's flushed (they used to be 82 meshes, 82 outline passes, and 16
+    // cloned gold materials whose colours were made afresh every frame)
+    (this.lanternBodies.get((gold ? "g|" : "r|") + tileKey(body)) ?? this.lanternBodies.set((gold ? "g|" : "r|") + tileKey(body), []).get((gold ? "g|" : "r|") + tileKey(body))!).push(body);
     for (const dy of [0.24, -0.24]) {
       const cap = MeshBuilder.CreateCylinder("lcap", { diameter: 0.26 * size, height: 0.07 * size, tessellation: 10 }, sc);
       cap.position.set(x, y + dy * size, z); this.add(cap, "#e8b422", 0.01, false);
     }
     const tas = MeshBuilder.CreateCylinder("tassel", { diameter: 0.05 * size, height: 0.3 * size, tessellation: 5 }, sc);
     tas.position.set(x, y - 0.42 * size, z); this.add(tas, "#e8b422", 0, false);
-    this.lanternMeshes.push(body);
     return body;
+  }
+  private lanternBodies = new Map<string, Mesh[]>();
+  /** R12.5: little glowing things that share a material (festoon bulbs, lamps): merged per map tile when the city's
+   *  flushed (each was its own mesh: 148 festoon bulbs were 148 draws). For pieces that never move on their own. */
+  private glowBatches = new Map<string, { mat: StandardMaterial; list: Mesh[] }>();
+  glowBatch(m: Mesh, mat: StandardMaterial) {
+    m.isPickable = false;
+    const k = mat.uniqueId + "|" + tileKey(m);
+    (this.glowBatches.get(k) ?? this.glowBatches.set(k, { mat, list: [] }).get(k)!).list.push(m);
+  }
+  private flushGlow() {
+    for (const { mat, list } of this.glowBatches.values()) {
+      const m = list.length > 1 ? Mesh.MergeMeshes(list, true, true) : list[0];
+      if (!m) continue;
+      m.material = mat; m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix();
+    }
+    this.glowBatches.clear();
+  }
+  private lanternGold: StandardMaterial | null = null;
+  private flushLanterns() {
+    for (const [k, list] of this.lanternBodies) {
+      const gold = k.startsWith("g|");
+      const m = list.length > 1 ? Mesh.MergeMeshes(list, true, true) : list[0];
+      if (!m) continue;
+      if (gold && !this.lanternGold) { this.lanternGold = this.lanternMatFor().clone("lanternGold"); this.lanternGold.diffuseColor = Color3.FromHexString("#ffb000"); }
+      m.material = gold ? this.lanternGold : this.lanternMatFor();
+      m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix(); ink(m, 0.02);
+      this.lanternMeshes.push(m);
+    }
+    this.lanternBodies.clear();
   }
 
   /**
@@ -1881,8 +1927,8 @@ export class CityRenderer {
     for (const s2 of [-1, 1]) {
       const along = s2 * (frontLen / 2 - 0.35);
       at(MB.CreateBox("lampArm", { width: 0.05, height: 0.05, depth: 0.4 }, sc), along, 3.15, 0.3, "#2b2433", 0);
-      const lamp = MB.CreateSphere("itLamp", { diameter: 0.24, segments: 6 }, sc);
-      lamp.position.set(fx + ux * along + nx * 0.5, 3.05, fz + uz * along + nz * 0.5); lamp.material = this.glowMat("#ffd98a"); lamp.parent = this.root; lamp.isPickable = false;
+      const lamp = MB.CreateSphere("itLamp", { diameter: 0.24, segments: sphereSegs(0.24, 6) }, sc);
+      lamp.position.set(fx + ux * along + nx * 0.5, 3.05, fz + uz * along + nz * 0.5); this.glowBatch(lamp, this.glowMat("#ffd98a"));
     }
   }
 
@@ -1896,7 +1942,7 @@ export class CityRenderer {
     this.districtGates.italy = C.gates.length;
     const sc = this.scene, MB = MeshBuilder, bulb = this.glowMat("#ffd98a");
     this.group = -1; this.brk = "";
-    const light = (x: number, y: number, z: number, d = 0.16) => { const m = MB.CreateSphere("festoon", { diameter: d, segments: 5 }, sc); m.position.set(x, y, z); m.material = bulb; m.parent = this.root; m.isPickable = false; };
+    const light = (x: number, y: number, z: number, d = 0.16) => { const m = MB.CreateSphere("festoon", { diameter: d, segments: sphereSegs(d, 5) }, sc); m.position.set(x, y, z); this.glowBatch(m, bulb); };
     for (const g of C.gates) {
       const half = g.w / 2 - 0.2, H0 = 5.2;
       for (const sx of [-1, 1]) {
@@ -5056,9 +5102,9 @@ export class CityRenderer {
     if (this.heliBeam) this.heliBeam.setEnabled(n > 0.5); // (R6: the helicopter's searchlight sweeps at night)
     if (!this.lanternMat) return;
     this.lanternT += dt;
-    const glow = Color3.Lerp(Color3.FromHexString("#5a1010"), Color3.FromHexString("#ff5a30"), Math.min(1, n * 1.3));
-    this.lanternMat.emissiveColor = glow;
-    for (const m of this.lanternMeshes) if (m.material && m.material !== this.lanternMat) (m.material as StandardMaterial).emissiveColor = Color3.Lerp(Color3.FromHexString("#5a4010"), Color3.FromHexString("#ffc040"), Math.min(1, n * 1.3));
+    const k = Math.min(1, n * 1.3);
+    Color3.LerpToRef(LANTERN_RED[0], LANTERN_RED[1], k, this.lanternMat.emissiveColor); // (R12.5: in place, no new colours a frame)
+    if (this.lanternGold) Color3.LerpToRef(LANTERN_GOLD[0], LANTERN_GOLD[1], k, this.lanternGold.emissiveColor);
   }
 
   /** C5a: chain-link fences (the squat's roof) */
@@ -5974,7 +6020,7 @@ export class CityRenderer {
       const pad = MB.CreateCylinder("helipad", { diameter: 8.4, height: 0.12, tessellation: 32 }, sc); pad.position.set(hx, ry, hz); this.add(pad, "#3a3a44", 0.02, false);
       const ring = MB.CreateTorus("padring", { diameter: 7.4, thickness: 0.18, tessellation: 32 }, sc); ring.position.set(hx, ry + 0.07, hz); this.add(ring, "#ffd54a", 0, false);
       const hm = unlitTextured(sc, textTexture(sc, "H", { w: 256, h: 256, fg: "#f4f1ea" }), "padH"); const hp = MB.CreateGround("padH", { width: 3.2, height: 3.2 }, sc); hp.position.set(hx, ry + 0.08, hz); hp.material = hm; hp.parent = this.root; hp.isPickable = false;
-      for (let a = 0; a < 8; a++) { const l = MB.CreateSphere("padlamp", { diameter: 0.16, segments: 4 }, sc); l.position.set(hx + Math.cos(a * Math.PI / 4) * 4.1, ry + 0.12, hz + Math.sin(a * Math.PI / 4) * 4.1); l.material = this.glowMat("#7fd0ff"); l.parent = this.root; l.isPickable = false; }
+      for (let a = 0; a < 8; a++) { const l = MB.CreateSphere("padlamp", { diameter: 0.16, segments: sphereSegs(0.16, 4) }, sc); l.position.set(hx + Math.cos(a * Math.PI / 4) * 4.1, ry + 0.12, hz + Math.sin(a * Math.PI / 4) * 4.1); this.glowBatch(l, this.glowMat("#7fd0ff")); }
       // the helicopter (nose to the north-east)
       const yaw = 0.7, X = (u: number, w: number) => hx + Math.cos(yaw) * u + Math.sin(yaw) * w, Z = (u: number, w: number) => hz - Math.sin(yaw) * u + Math.cos(yaw) * w;
       const node = new TransformNode("heli", sc); node.position.set(hx, ry + 0.1, hz); node.rotation.y = yaw;
