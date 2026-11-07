@@ -295,7 +295,7 @@ test("stations: NPC bets: $20 at most, and a kitty of $40 a cycle so NPCs can't 
   assert.equal(s.stake, 0, "skint: plays for pride"); assert.equal(a.cash, 240);
   pg.newCycle(); assert.equal(pg.kitty.darts, PUBGAMES.npcKitty); assert.equal(a.cash, 240, "a pride game refunds nothing");
 });
-test("stations: interruptions: last orders; a dropped player's seat held 45 s then called off; walk away = forfeit; arrest = forfeit", () => {
+test("stations: interruptions: last orders; a dropped player's seat held 45 s, then a forfeit (R12.3b); walk away = forfeit; arrest = forfeit", () => {
   const { pg, add, tick, setClosed } = harness();
   const a = add("a", 50, 20, 0), b = add("b", 50, 20, 0);
   setClosed("LAST ORDERS: no new games."); assert.notEqual(pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 0 }), ""); setClosed("");
@@ -304,10 +304,12 @@ test("stations: interruptions: last orders; a dropped player's seat held 45 s th
   s.darts!.turn = s.seats.findIndex((q) => q.id === "b"); // (b's up when b drops: b's clock waits too)
   b.connected = false; tick(PUBGAMES.dropHold - 1); assert.equal(s.phase, "play", "seat held");
   b.connected = true; tick(1); b.connected = false; tick(PUBGAMES.dropHold + 0.5);
-  assert.equal(s.phase, "over"); assert.equal(s.end, "void"); assert.equal(a.cash, 50); assert.equal(b.cash, 50, "stakes back");
+  // (Blake, R12.3b: still gone after the hold, with the other player here: a forfeit, so pulling the plug can't dodge a
+  //  losing bet; the pot's paid once)
+  assert.equal(s.phase, "over"); assert.equal(s.end, "forfeit"); assert.equal(s.winner, "a"); assert.equal(a.cash, 60); assert.equal(b.cash, 40, "b's stake to a, once");
   tick(PUBGAMES.overT + 0.1); b.connected = true;
   pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 10 }); pg.act("b", { op: "join", st: "darts1" });
-  b.x = 60; tick(PUBGAMES.leaveT + 0.5); assert.equal(s.end, "forfeit"); assert.equal(s.winner, "a"); assert.equal(a.cash, 60); assert.equal(b.cash, 40);
+  b.x = 60; tick(PUBGAMES.leaveT + 0.5); assert.equal(s.end, "forfeit"); assert.equal(s.winner, "a"); assert.equal(a.cash, 70); assert.equal(b.cash, 30);
   tick(PUBGAMES.overT + 0.1); b.x = 20;
   pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 0 }); pg.act("b", { op: "join", st: "darts1" });
   a.jailed = true; tick(0.1); assert.equal(s.end, "forfeit"); assert.equal(s.winner, "b");
@@ -444,4 +446,73 @@ test("in the pub: a game going when the host starts the match is called off befo
   assert.equal(a.cash, 30);
   assert.ok(w.startMatch());
   assert.equal(w.pubGames.st.get("dartsoche1")!.end, "void"); assert.equal(a.cash, 0); assert.equal(b.cash, 0);
+});
+
+// ============================================================================== R12.3b: a window's view of a station
+import { StationFeed, replayStep, wrapDelta, timeLeftAt, poolResolve as resolve2, newPoolState as nps } from "../src/index.js";
+test("R12.3b: drops: a quick reconnect changes nothing; both players gone (or the host's gone) = called off and refunded; waiting = called off", () => {
+  const { pg, add, tick } = harness();
+  const a = add("a", 50, 20, 0), b = add("b", 50, 20, 0);
+  pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 10 }); pg.act("b", { op: "join", st: "darts1" });
+  const s = pg.st.get("darts1")!;
+  b.connected = false; tick(20); b.connected = true; tick(1);
+  assert.equal(s.phase, "play", "back within the hold: game on"); assert.equal(s.seats[1].drop, 0);
+  a.connected = false; b.connected = false; tick(PUBGAMES.dropHold + 0.5);
+  assert.equal(s.end, "void", "nobody left to win it: called off"); assert.equal(a.cash, 50); assert.equal(b.cash, 50, "both stakes back, once");
+  tick(PUBGAMES.overT + 0.1); a.connected = b.connected = true;
+  pg.act("a", { op: "open", st: "darts1", vs: "mate", stake: 10 }); a.connected = false; tick(PUBGAMES.dropHold + 0.5);
+  assert.equal(s.end, "void", "waiting for a mate: called off"); assert.equal(a.cash, 50);
+  // v an NPC: the NPC's always there: a forfeit (the stake goes to its kitty)
+  tick(PUBGAMES.overT + 0.1); a.connected = true;
+  pg.act("a", { op: "open", st: "darts1", vs: "npc", stake: 10 }); assert.equal(a.cash, 40);
+  a.connected = false; tick(PUBGAMES.dropHold + 0.5); assert.equal(s.end, "forfeit"); assert.equal(a.cash, 40);
+});
+test("R12.3b: a re-rack keeps counting shots (the new break never shares a number with the shot just played)", () => {
+  const st = nps(0); const before = st.balls.map((b) => ({ ...b }));
+  st.balls.find((b) => b.id === 8)!.down = true;
+  const v = resolve2(st, before, { first: 1, potted: [8], cushionBalls: 3, contact: true }, ["A", "B"]);
+  assert.ok(v.rerack); assert.equal(st.shots, 1, "the re-racked break is shot 1, not shot 0 again"); assert.ok(st.breakShot);
+});
+test("R12.3b: a window's view of a station: a new game's shot 0 after the last game's shot 0; status-only changes; shots it missed", () => {
+  const f = new StationFeed();
+  const shot = (gid: number, n: number, t0: number, dur = 2) => ({ k: `${gid}:${n}`, n, b: [[0, 0, 0, 0]] as [number, number, number, number][], dx: 0, dz: 1, v: 1, t0, dur });
+  const note = (o: any) => JSON.stringify({ ph: "play", gid: 1, dl: -1, left: 0, seats: [], pool: { n: 0 }, shot: null, last: null, ...o });
+  let r = f.feed(note({ shot: shot(1, 0, 10) }), 10.5); assert.equal(r.replay?.why, "join", "(first look at this table: from where it's got to)"); assert.equal(r.replay?.at, 0.5);
+  f.feed(note({ last: shot(1, 0, 10) }), 12.2);
+  r = f.feed(note({ ph: "over", last: shot(1, 0, 10) }), 13); assert.ok(r.ended); assert.equal(r.replay, null);
+  // the next game at the same table: its first shot is shot 0 too: still played (the old code skipped exactly this)
+  r = f.feed(note({ gid: 2 }), 20); assert.ok(r.newGame);
+  r = f.feed(note({ gid: 2, shot: shot(2, 0, 21) }), 21.05); assert.equal(r.replay?.why, "live"); assert.ok(Math.abs(r.replay!.at - 0.05) < 1e-9);
+  // the shared clock's rounded to 0.1 s: heard "before" it started is just "it's started" (the old code thought it was
+  // 599.95 s old and showed the end)
+  r = f.feed(note({ gid: 2, shot: shot(2, 1, 30.04) }), 30.0); assert.equal(r.replay?.why, "live"); assert.equal(r.replay?.at, 0);
+  // the clock wrapping round 600 s
+  r = f.feed(note({ gid: 2, shot: shot(2, 2, 599.97) }), 0.1); assert.equal(r.replay?.why, "live"); assert.ok(Math.abs(r.replay!.at - 0.13) < 1e-6);
+  // a status change only (a countdown, a reconnect) with the same rev: taken in (the old code ignored it), nothing replayed
+  const n1 = note({ gid: 2, rev: 7, dl: 40, last: shot(2, 2, 599.97) }), n2 = note({ gid: 2, rev: 7, dl: 45, last: shot(2, 2, 599.97) });
+  f.feed(n1, 3); r = f.feed(n2, 3.1); assert.ok(r.changed); assert.equal(f.note.dl, 45); assert.equal(r.replay, null);
+  // heard late: from the start, catching up
+  r = f.feed(note({ gid: 2, shot: shot(2, 3, 10) }), 11.5); assert.equal(r.replay?.why, "behind"); assert.equal(r.replay?.at, 0);
+  // a whole shot came and went unseen: replayed; two did: one replayed, one reported
+  r = f.feed(note({ gid: 2, last: shot(2, 4, 20) }), 23); assert.equal(r.replay?.why, "missed"); assert.equal(r.missed, 0);
+  r = f.feed(note({ gid: 2, last: shot(2, 6, 30) }), 33); assert.equal(r.replay?.why, "missed"); assert.equal(r.missed, 1, "shot 5 is reported, not silently gone");
+});
+test("R12.3b: replay timing: in step with the host, never ahead, never backwards; behind = quicker until caught up", () => {
+  assert.ok(Math.abs(wrapDelta(0.1, 599.9) - 0.2) < 1e-9); assert.ok(Math.abs(wrapDelta(599.9, 0.1) + 0.2) < 1e-9);
+  assert.equal(replayStep(0, 1 / 60, -0.04, 3), 1 / 60, "the shared clock a hair behind: it starts anyway, gently");
+  assert.equal(replayStep(1, 1 / 60, 0.5, 3), 1, "never backwards");
+  assert.ok(replayStep(0.5, 0.1, 0.6, 3) <= 0.7, "never more than a tick ahead of the host");
+  let t = 0; for (let k = 0; k < 45; k++) t = replayStep(t, 1 / 30, 2.0 + k / 30, 5); // (heard 2 s late)
+  assert.ok(t > 2.0 + 1.5 - 0.3 && t <= 2 + 1.5 + 0.1 + 1e-9, `caught up within 1.5 s (${t.toFixed(2)})`);
+  t = 0; let frames = 0; while (t < 3) { t = replayStep(t, 1 / 30, null, 3); frames++; } // (missed: the host's done)
+  assert.ok(frames >= 30 && frames <= 50, `a missed shot plays out quickly but visibly (${frames} frames)`);
+  assert.ok(Math.abs(timeLeftAt(5.2, 599.9) - 5.3) < 1e-9, "a deadline just past the wrap"); assert.equal(timeLeftAt(5.2, 9), 0, "never below 0");
+});
+test("R12.3b: the note only changes when something happens: a running clock goes out as when it runs out, not every second", () => {
+  const { pg, add, tick, h } = harness();
+  add("a", 50, 0, 0); add("b", 50, 0, 0);
+  pg.act("a", { op: "open", st: "pool1", vs: "mate", stake: 0 }); pg.act("b", { op: "join", st: "pool1" });
+  const n0 = pg.note("pool1"); tick(3.3); const n1 = pg.note("pool1");
+  assert.equal(n1, n0, "3 s of the shot clock running: the same note");
+  const d = JSON.parse(n1); assert.ok(Math.abs(timeLeftAt(d.dl, h.time % 600) - (POOL.clock - 3.3)) < 0.06, `${timeLeftAt(d.dl, h.time % 600)} s left`);
 });

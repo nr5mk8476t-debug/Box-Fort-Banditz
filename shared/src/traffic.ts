@@ -52,6 +52,14 @@ export interface CarSim {
   go: boolean;
   /** seconds standing still (anything but a queue or a stop line) */
   stillT: number;
+  /** R12.3b (diagnostics): why it's held up right now ("" = it isn't) and by what (a car, a cop car, a junction, a
+   *  person), and how long it's been stopped for any reason */
+  why?: string; by?: string; waitT?: number;
+  /** R12.3b: a police car driving with the traffic (its id is the cop car's); its siren (right of way at junctions);
+   *  where it's heading (it picks its way there; none = wherever); stopping where it is (dropping an officer off) */
+  cop?: boolean; siren?: boolean; goal?: { x: number; z: number } | null; hold?: boolean;
+  /** (its route: each lane's distance on to the goal, worked out when the goal moves) */
+  costs?: Float64Array; costFor?: { x: number; z: number };
 }
 
 export type TrafficEvent =
@@ -242,6 +250,14 @@ export function laneAt(l: Lane, s: number): { x: number; z: number; yaw: number 
 
 export class TrafficSystem {
   readonly cars: CarSim[] = [];
+  /** R12.3b: police cars driving WITH the traffic (patrolling, or heading off after a chase): the same lanes, lights
+   *  and give-way as everyone else, so a cruiser and a car can never sit nose to nose waiting for each other.
+   *  (Kept apart from `cars`, which the clients draw as ordinary cars.) */
+  readonly riders: CarSim[] = [];
+  /** everything in the lanes this tick */
+  private all: CarSim[] = [];
+  /** ...plus the cop cars outside them (for "is something in my way") */
+  private obst: CarSim[] = [];
   readonly lanes: Lane[];
   private net: RoadNet | undefined;
   private seed = 12345;
@@ -331,34 +347,46 @@ export class TrafficSystem {
   /** Is this car allowed to drive into its next connector right now? */
   /** A car in (or committed to) a junction's box, coming from another lane than `inLane`. */
   private boxBusy(car: CarSim, node: number, inLane: number): boolean {
-    for (const o of this.cars) {
+    for (const o of this.all) {
       if (o === car) continue;
       const ol = this.lanes[o.lane];
-      if (ol.conn && ol.node === node && ol.inLane !== inLane) return true;
-      if (o.go && o.next >= 0 && this.lanes[o.next].node === node && o.lane !== inLane) return true;
+      if (ol.conn && ol.node === node && ol.inLane !== inLane) { this.held = "box: " + o.id; return true; }
+      if (o.go && o.next >= 0 && this.lanes[o.next].node === node && o.lane !== inLane) { this.held = "box: " + o.id; return true; }
     }
     return false;
   }
+  /** (diagnostics) what the last "not yet" at a junction was waiting on */
+  private held = "";
 
   private mayEnter(car: CarSim, conn: Lane): boolean {
     const net = this.net!;
     const node = net.nodes[conn.node];
     const inL = this.lanes[conn.inLane], outL = this.lanes[conn.outLane];
+    // (R12.3b: a siren coming up to this junction from another way: let it through first)
+    if (!car.siren) for (const o of this.riders) {
+      if (!o.siren || o === car || o.lane === car.lane) continue;
+      const ol = this.lanes[o.lane];
+      if ((!ol.conn && ol.to === node.id && ol.len - o.s < 22 && o.v > 0.5) || (o.go && o.next >= 0 && this.lanes[o.next].node === node.id)) { this.held = "siren: " + o.id; return false; }
+    }
     // don't block the box: room on the road we're heading into (cars in the junction heading there count)
     // (a short road between two junctions holds one car: count everyone heading into it)
     const short = outL.len < 2 * GAP;
     let room = true;
-    for (const o of this.cars) {
+    for (const o of this.all) {
       if (o === car) continue;
-      if (o.lane === outL.id && (short || o.s < GAP + 1)) { room = false; break; }
+      if (o.lane === outL.id && (short || o.s < GAP + 1)) { room = false; this.held = "no room: " + o.id; break; }
       const ol = this.lanes[o.lane];
-      if (ol.conn && ol.outLane === outL.id && (short || ol.inLane !== inL.id)) { room = false; break; }
+      if (ol.conn && ol.outLane === outL.id && (short || ol.inLane !== inL.id)) { room = false; this.held = "no room: " + o.id; break; }
+      // (R12.3b: and a car from another way that's already committed to going in there: two cars merging at the same
+      //  moment used to drive into each other)
+      if (o.go && o.next >= 0 && !ol.conn && this.lanes[o.next].outLane === outL.id && o.lane !== inL.id) { room = false; this.held = "no room: " + o.id; break; }
     }
     if (!room) return false;
     if (node.ctl === "end") return true;
+    if (car.siren) return !this.boxBusy(car, node.id, inL.id); // (R12.3b: lights and give-way don't hold a siren up)
     if (node.ctl === "light") {
       const st = lightState(net, node.id, inL.edge, this.clock);
-      if (st !== "green") return false;
+      if (st !== "green") { this.held = "red light"; return false; }
       // (the box has to be clear of cars from the other approaches, e.g. ones that went on amber)
       return !this.boxBusy(car, node.id, inL.id);
     }
@@ -367,20 +395,20 @@ export class TrafficSystem {
       if (arcIn) return true; // already on the ring: priority
       // entering: the ring has to be clear coming toward us
       if (this.boxBusy(car, node.id, inL.id)) return false;
-      for (const o of this.cars) {
+      for (const o of this.all) {
         if (o === car) continue;
         const ol = this.lanes[o.lane];
-        if (!ol.conn && ol.to === node.id && net.edges[ol.edge].arc && ol.len - o.s < 12) return false;
+        if (!ol.conn && ol.to === node.id && net.edges[ol.edge].arc && ol.len - o.s < 12) { this.held = "ring: " + o.id; return false; }
       }
       return true;
     }
     // give way: one approach at a time, first come first served
     if (car.waitSince < 0 || this.boxBusy(car, node.id, inL.id)) return false;
-    for (const o of this.cars) {
+    for (const o of this.all) {
       if (o === car || o.lane === car.lane || o.waitSince < 0) continue;
       const ol = this.lanes[o.lane];
       if (ol.conn || ol.to !== node.id) continue;
-      if (o.waitSince < car.waitSince - 1e-6 || (Math.abs(o.waitSince - car.waitSince) <= 1e-6 && o.id < car.id)) return false;
+      if (o.waitSince < car.waitSince - 1e-6 || (Math.abs(o.waitSince - car.waitSince) <= 1e-6 && o.id < car.id)) { this.held = "give way: " + o.id; return false; }
     }
     return true;
   }
@@ -398,14 +426,20 @@ export class TrafficSystem {
     }
     if (!this.lanes.length) return;
     const truck = w.match.truck, bodies = w.match.paradeBodies();
-    for (const car of this.cars) {
+    this.all = this.riders.length ? [...this.cars, ...this.riders] : this.cars;
+    // (cop cars outside the lanes, sirens on, are something solid in the road: nobody drives into one)
+    const free = w.police.cars.filter((c) => !c.ride);
+    this.obst = free.length ? [...this.all, ...free.map((c) => ({ id: c.id, x: c.x, z: c.z, yaw: c.yaw, lane: -1, s: 0 } as CarSim))] : this.all;
+    for (const car of this.all) {
+      let why = "", by = "", qBy = "";
       let lane = this.lanes[car.lane];
       const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
       const rel = (x: number, z: number) => {
         const dx = x - car.x, dz = z - car.z;
         return { along: dx * fx + dz * fz, side: dx * fz - dz * fx };
       };
-      let target = lane.speed;
+      let target = car.siren ? lane.speed * 1.25 : lane.speed;
+      if (car.hold) { target = 0; why = "dropping off"; by = car.id; }
       // ---- the way ahead: this lane, then the next ones ----
       const nextConn = !lane.conn && car.next >= 0 ? this.lanes[car.next] : null;
       const toEnd = lane.len - car.s;
@@ -413,10 +447,12 @@ export class TrafficSystem {
       if (!lane.conn && nextConn && !car.go && (toEnd > 3 || car.v < 0.5) && this.intoClosed(car.next) && (lane.outs.some((o) => !this.intoClosed(o)) || (!this.withParade(car.next) && lane.outs.some((o) => this.withParade(o))))) car.next = this.pickNext(lane, car.next); // (R4: the parade's street is closed: go round)
       if (!lane.conn && nextConn) {
         if (toEnd < 12 && car.waitSince < 0) car.waitSince = this.clock;
+        this.held = "";
         const ok = toEnd > 12 || car.go || this.mayEnter(car, nextConn);
         if (ok && toEnd < 2 + car.v * 0.4) car.go = true; // committed: too close to stop now
         if (toEnd < 12 && !ok) {
           target = Math.min(target, Math.sqrt(Math.max(0, 2 * 5 * (toEnd - 0.3))));
+          if (toEnd < 3) { why = "junction " + lane.to; by = this.held || (car.waitSince < 0 ? "arriving" : "?"); }
         } else if (toEnd < 12 && ok) {
           target = Math.min(target, nextConn.speed + 1.5);
         }
@@ -427,6 +463,8 @@ export class TrafficSystem {
         // (at lights a green is short: if our way out is jammed for a few seconds of green, go another way)
         const limit = this.net!.nodes[lane.to].ctl === "light" ? 2.5 : CAR_REROUTE_AFTER;
         if (car.stuckT > limit && lane.outs.length > 1 && !car.go) { car.next = this.pickNext(lane, car.next); car.stuckT = 0; }
+        // (a police car heading somewhere: the way there, worked out again whenever where it's going moves)
+        if (car.goal && !car.go && car.costFor !== car.goal) car.next = this.toward(car, lane);
       }
       // cars ahead along our way (this lane + the next two)
       let gap = Infinity;
@@ -434,12 +472,12 @@ export class TrafficSystem {
         const path: Lane[] = [lane];
         if (nextConn) { path.push(nextConn); path.push(this.lanes[nextConn.outLane]); }
         else if (lane.conn) path.push(this.lanes[lane.outLane]);
-        for (const o of this.cars) {
+        for (const o of this.obst) {
           if (o === car) continue;
           const dx0 = o.x - car.x, dz0 = o.z - car.z;
           if (dx0 * dx0 + dz0 * dz0 > (LOOK + 4) * (LOOK + 4)) continue;
           // same lane: simple
-          if (o.lane === car.lane) { if (o.s > car.s) gap = Math.min(gap, o.s - car.s); continue; }
+          if (o.lane === car.lane) { if (o.s > car.s && o.s - car.s < gap) { gap = o.s - car.s; qBy = o.id; } continue; }
           // otherwise: does it sit on our way ahead?
           let acc = -car.s;
           search: for (const pl of path) {
@@ -447,13 +485,19 @@ export class TrafficSystem {
               const d = acc + s;
               if (d > LOOK) break search;
               const p = laneAt(pl, s);
-              if (Math.abs(p.x - o.x) < 1.7 && Math.abs(p.z - o.z) < 1.7 && Math.hypot(p.x - o.x, p.z - o.z) < 1.7) { gap = Math.min(gap, d); break search; }
+              // (a car in a lane sits on its lane's line: 1.7 m; a cop car out of the lanes can be anywhere: its own half
+              //  width and ours, so its body never meets ours)
+              let inWay: boolean;
+              if (o.lane === -1) { const ux = Math.sin(o.yaw), uz = Math.cos(o.yaw), qx = p.x - o.x, qz = p.z - o.z; inWay = Math.abs(qx * ux + qz * uz) < 2.2 + CAR_HALF_WIDTH + 0.2 && Math.abs(qx * uz - qz * ux) < 1.0 + CAR_HALF_WIDTH + 0.2; }
+              else inWay = Math.abs(p.x - o.x) < 1.7 && Math.abs(p.z - o.z) < 1.7 && Math.hypot(p.x - o.x, p.z - o.z) < 1.7;
+              // (the gap's measured to the cop car's near end, not its middle)
+              if (inWay) { const dd = o.lane === -1 ? d + CAR_HALF_LEN - 0.2 : d; if (dd < gap) { gap = dd; qBy = o.id; } break search; }
             }
             acc += pl.len;
           }
         }
       }
-      if (gap < Infinity) target = Math.min(target, gap < GAP ? 0 : Math.sqrt(2 * 5 * (gap - GAP)));
+      if (gap < Infinity) { target = Math.min(target, gap < GAP ? 0 : Math.sqrt(2 * 5 * (gap - GAP))); if (gap < GAP + 1 && !why) { why = "queue"; by = qBy; } }
       const brakeDist = CAR_HALF_LEN + 2.5 + car.v * 0.7;
       const blocked = (x: number, z: number, width: number) => { const r = rel(x, z); return r.along > 0 && r.along < brakeDist && Math.abs(r.side) < width; };
       // pedestrians IN the road (people waiting on the curb don't stop traffic)
@@ -474,9 +518,12 @@ export class TrafficSystem {
       } else { car.blockT = 0; car.blocker = ""; }
       // (held up by pedestrians for ages, whoever they are: creep on and nudge through)
       if (blocker && car.stillT > CAR_CREEP_AFTER + 3) target = Math.max(target, Math.min(1.2, gap < Infinity ? (gap > GAP ? 1.2 : 0) : 1.2, lane.speed));
-      if (truck.on && blocked(truck.x, truck.z, 2.6)) target = 0;
-      for (const c of w.police.cars) if (blocked(c.x, c.z, 2.6)) { target = 0; break; } // siren = right of way
-      for (const b of bodies) if (blocked(b.x, b.z, b.r + 1.8)) { target = 0; break; } // (R4: the dragon parade and the festa have the street)
+      if (blocker) { why = "pedestrian"; by = blocker; }
+      if (truck.on && blocked(truck.x, truck.z, 2.6)) { target = 0; why = "truck"; by = "truck"; }
+      // (R12.3b: a cop car with its siren on has the right of way: you stop if it's in your path, unless it's waiting
+      //  for YOU (it can't get past you), then you go first. One with its siren off is in the lanes like anyone else.)
+      if (!car.cop) for (const c of w.police.cars) if (!c.ride && c.waitFor !== car.id && blocked(c.x, c.z, 2.6)) { target = 0; why = "police"; by = c.id; break; }
+      for (const b of bodies) if (blocked(b.x, b.z, b.r + 1.8)) { target = 0; why = "parade"; by = "parade"; break; } // (R4: the dragon parade and the festa have the street)
       // honk at bandits in the lane (they won't stop for you!)
       car.honkCd = Math.max(0, car.honkCd - dt);
       for (const p of w.players.values()) {
@@ -489,6 +536,7 @@ export class TrafficSystem {
       }
       car.v = target > car.v ? Math.min(target, car.v + ACCEL * dt) : Math.max(target, car.v - BRAKE * dt);
       car.stillT = car.v < 0.3 && blocker ? car.stillT + dt : car.v < 0.3 ? car.stillT : 0;
+      car.why = car.v < 0.3 ? why || (lane.conn ? "" : "stop line") : ""; car.by = car.why ? by : ""; car.waitT = car.v < 0.3 ? (car.waitT ?? 0) + dt : 0;
       // ---- move along, into the next lane when we reach the end ----
       car.s += car.v * dt;
       while (car.s >= lane.len) {
@@ -502,13 +550,97 @@ export class TrafficSystem {
           lane = this.lanes[lane.outLane];
           car.lane = lane.id;
           this.laneUse[lane.id]++;
-          car.next = this.pickNext(lane, -1);
+          car.next = car.goal ? this.toward(car, lane) : this.pickNext(lane, -1);
         }
       }
       const p = laneAt(lane, car.s);
       car.x = p.x; car.z = p.z; car.yaw = p.yaw;
-      this.collide(car);
+      if (!car.cop) this.collide(car); // (a cruiser's own bumper is the police's: busts, not splats)
     }
+  }
+
+  // ------------------------------------------------------------------ R12.3b: police cars in the lanes
+  /** the road lane nearest (x, z) going roughly along `yaw` (within `maxD` m), and how far along it */
+  nearestLane(x: number, z: number, yaw: number, maxD = 4): { lane: Lane; s: number; d: number } | null {
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    let best: { lane: Lane; s: number; d: number } | null = null;
+    for (const l of this.lanes) {
+      if (l.conn || l.len < 6) continue;
+      const a = l.pts[0], b = l.pts[l.pts.length - 1];
+      // (cheap reject: nowhere near the lane's span)
+      if (x < Math.min(a.x, b.x) - maxD - 2 || x > Math.max(a.x, b.x) + maxD + 2 || z < Math.min(a.z, b.z) - maxD - 2 || z > Math.max(a.z, b.z) + maxD + 2) {
+        if (l.pts.length < 3) continue;
+      }
+      for (let i = 0; i < l.pts.length - 1; i++) {
+        const p = l.pts[i], q = l.pts[i + 1], ex = q.x - p.x, ez = q.z - p.z, L2 = ex * ex + ez * ez || 1;
+        const k = Math.max(0, Math.min(1, ((x - p.x) * ex + (z - p.z) * ez) / L2));
+        const d = Math.hypot(p.x + ex * k - x, p.z + ez * k - z);
+        if (d > maxD || (best && d >= best.d)) continue;
+        if ((ex * fx + ez * fz) / Math.sqrt(L2) < 0.5) continue; // (going our way)
+        best = { lane: l, s: l.cum[i] + k * Math.sqrt(L2), d };
+      }
+    }
+    return best;
+  }
+  /** how far (x, z) is from the nearest road lane (any direction) */
+  laneDist(x: number, z: number): number {
+    let best = Infinity;
+    for (const l of this.lanes) { if (l.conn) continue; for (let i = 0; i < l.pts.length; i += 2) { const d = Math.hypot(l.pts[i].x - x, l.pts[i].z - z); if (d < best) best = d; } }
+    return best;
+  }
+  /** a police car pulls into the traffic (null: no lane near enough / no room there right now) */
+  join(id: string, x: number, z: number, yaw: number, v: number): CarSim | null {
+    const nl = this.nearestLane(x, z, yaw, 3.5);
+    if (!nl || nl.s > nl.lane.len - 3) return null;
+    // (room: nobody within a car's length either side in that lane)
+    for (const o of [...this.cars, ...this.riders]) if (o.lane === nl.lane.id && Math.abs(o.s - nl.s) < GAP) return null;
+    const p = laneAt(nl.lane, nl.s);
+    const car: CarSim = { id, lane: nl.lane.id, s: nl.s, v: Math.min(v, nl.lane.speed), x: p.x, z: p.z, yaw: p.yaw, honkCd: 0, color: 0, next: -1, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0, cop: true };
+    car.next = this.pickNext(nl.lane, -1);
+    this.riders.push(car);
+    return car;
+  }
+  /** a police car pulls out of the traffic */
+  leave(car: CarSim) { const i = this.riders.indexOf(car); if (i >= 0) this.riders.splice(i, 1); }
+  /** the way on from the end of `lane` toward the car's goal: every lane's driving distance on to the goal (worked
+   *  out backwards from the lanes that pass near it), then the connector with the least */
+  private toward(car: CarSim, lane: Lane): number {
+    const g = car.goal!;
+    if (!car.costs || car.costFor !== g) {
+      const n = this.lanes.length, cost = new Float64Array(n).fill(Infinity);
+      const done = new Uint8Array(n);
+      // the lanes that pass the goal (both ways along a road: within 8 m of the nearest, or 14 m): the way along them to
+      // their nearest point (+ the gap to the goal itself)
+      const reach = Math.max(14, this.laneDist(g.x, g.z) + 8);
+      for (const l of this.lanes) {
+        if (l.conn) continue;
+        let best = Infinity, bd = Infinity;
+        for (let i = 0; i < l.pts.length; i += 2) { const d = Math.hypot(l.pts[i].x - g.x, l.pts[i].z - g.z); if (d < reach && d < bd) { bd = d; best = d + l.cum[i]; } }
+        if (best < Infinity) cost[l.id] = best;
+      }
+      // (Dijkstra, backwards; few hundred lanes)
+      for (;;) {
+        let k = -1, kc = Infinity;
+        for (let i = 0; i < n; i++) if (!done[i] && cost[i] < kc) { kc = cost[i]; k = i; }
+        if (k < 0) break;
+        done[k] = 1;
+        const L = this.lanes[k];
+        // who leads into lane k: a connector leads into its out lane; a road lane into its connectors
+        if (!L.conn) { for (const c of this.lanes) if (c.conn && c.outLane === k && !done[c.id]) { const v = kc + c.len; if (v < cost[c.id]) cost[c.id] = v; } }
+        else { const inL = L.inLane; if (!done[inL]) { const v = kc + this.lanes[inL].len; if (v < cost[inL]) cost[inL] = v; } }
+      }
+      car.costs = cost; car.costFor = g;
+    }
+    let best = -1, bc = Infinity;
+    for (const o of lane.outs) if (car.costs[o] < bc && !this.intoClosed(o)) { bc = car.costs[o]; best = o; }
+    return best >= 0 ? best : this.pickNext(lane, -1);
+  }
+  /** (diagnostics / tests) everything that's been stopped a while: who, where, why, held up by what */
+  waits(minS = 10): { id: string; lane: number; road: string; why: string; by: string; waitT: number; x: number; z: number }[] {
+    return [...this.cars, ...this.riders].filter((c) => (c.waitT ?? 0) >= minS).map((c) => {
+      const l = this.lanes[c.lane];
+      return { id: c.id, lane: c.lane, road: l.conn ? `junction ${l.node}` : this.net?.edges[l.edge]?.name ?? "?", why: c.why ?? "", by: c.by ?? "", waitT: c.waitT ?? 0, x: c.x, z: c.z };
+    });
   }
 
   /** Anything in the car's footprint: bandits get wiped out, loot gets flung, pedestrians step aside. */

@@ -116,13 +116,17 @@ import { unlitTextured } from "./look.ts";
 import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh.js";
 import { sfx } from "../audio.ts";
 import { settings } from "../settings.ts";
-import { PoolSim, cueSpotOk, checkout, ballColour, PUB_NPCS, inFoot, nearBoxes, type ArenaLayout, type Ball } from "@bfb/shared";
+import { PoolSim, cueSpotOk, checkout, ballColour, PUB_NPCS, inFoot, nearBoxes, StationFeed, replayStep, wrapDelta, timeLeftAt, type ArenaLayout, type Ball, type ReplayPlan, type WireShot } from "@bfb/shared";
 
+/** a seat: id, name, NPC?, when a dropped player's held seat runs out (-1 = here), when a player who walked off forfeits
+ *  (-1 = here); both on the shared clock */
 type Seat = [string, string, number, number, number];
 interface Note {
-  ph: "free" | "waiting" | "play" | "over"; rev: number; stake: number; msg: string; win: string; end: string; clock: number; seats: Seat[];
+  ph: "free" | "waiting" | "play" | "over"; gid: number; rev: number; stake: number; msg: string; win: string; end: string;
+  /** the shot / throw clock: when it runs out on the shared clock (-1 = not running), else what's left on it (stopped) */
+  dl: number; left: number; seats: Seat[];
   pool: { b: [number, number, number, number][]; turn: number; g: [string | null, string | null]; vis: number; brk: number; hand: number; n: number } | null;
-  shot: { n: number; b: [number, number, number, number][]; dx: number; dz: number; v: number; t0: number; dur: number } | null;
+  shot: WireShot | null; last: WireShot | null;
   darts: { sc: [number, number]; turn: number; d: [number, number, string, number][]; vs: number; n: number; last: { who: number; d: [number, number, string, number][]; tot: number; note: string } | null } | null;
 }
 export interface PgCtx { me: string; x: number; y: number; z: number; clock: number; pints: number; tipsy: number; others: { x: number; y: number; z: number }[]; hurt: boolean; }
@@ -132,11 +136,15 @@ type Mode = "" | "menu" | "place" | "aim" | "draw" | "darts";
 const BALL_COL: Record<string, string> = { cue: "#f4f1ea", red: "#c41e1e", yellow: "#e8c020", black: "#141414" };
 const SEAT_FLIGHT = ["#1f8a3a", "#8e1f2e"];
 
+const PG_DEBUG = typeof location !== "undefined" && /[?&]pgdebug\b/.test(location.search);
+
 class Station {
-  note: Note | null = null; rev = -1;
-  // pool
+  note: Note | null = null;
+  /** R12.3b: which game this window's on here, and which shots it's already shown (by name: game id + shot number) */
+  feed = new StationFeed();
+  // pool: the replay (the shot it's showing, how far in, why it started where it did)
   balls: Mesh[] = []; ballQ: Quaternion[] = []; ballPos: { x: number; z: number; down: boolean }[] = [];
-  sim: PoolSim | null = null; simT = 0; simN = -1; drop: Map<number, number> = new Map();
+  sim: PoolSim | null = null; simT = 0; key = ""; dur = 0; why = ""; drop: Map<number, number> = new Map();
   cue: TransformNode | null = null; cueT = -1; cueDir = { x: 0, z: 1 }; cueFrom = { x: 0, z: 0 };
   // darts
   darts: TransformNode[] = []; dartIn: number[] = []; flash = { label: "", t: 0 };
@@ -146,8 +154,8 @@ class Station {
   constructor(public id: string, public kind: "pool" | "darts", public idx: number, public g: { x: number; z: number; faceX?: number; oche?: number; by?: number }) {}
   seatOf(pid: string) { return this.note ? this.note.seats.findIndex((s) => s[0] === pid) : -1; }
   get turn() { return this.note?.pool?.turn ?? this.note?.darts?.turn ?? -1; }
-  /** the host still has the shot rolling (its word, not the replay's), or the replay's still going */
-  get rolling() { return !!this.note?.shot || (!!this.sim && !this.sim.done); }
+  /** the host still has the shot rolling, or this window's replay of it is still going (the next shot waits for both) */
+  get rolling() { return !!this.note?.shot || !!this.sim; }
 }
 
 export class PubGamesView {
@@ -170,6 +178,8 @@ export class PubGamesView {
   private hud: HTMLDivElement; private menuEl: HTMLDivElement;
   private ctx: PgCtx = { me: "", x: 0, y: 0, z: 0, clock: 0, pints: 0, tipsy: 0, others: [], hurt: false };
   private lastTurnMine = new Map<string, boolean>();
+  /** your turn came round while this window was still showing the last shot: step up when it's finished */
+  private pendingEnter = "";
   /** (tests: scenery screenshots) no HUD panel, no stepping up when your turn comes round */
   quiet = false;
   /** (tests) the last thing the host told me */
@@ -184,6 +194,7 @@ export class PubGamesView {
     this.U = pb.y2; this.wallZ = pb.rect.maxZ - 0.3; this.wx = pb.rect.minX + 0.3;
     pb.pools.forEach((q, i) => { const s = new Station(`pooltable${i + 1}`, "pool", i, { x: q.x, z: q.z }); this.st.set(s.id, s); this.buildPool(s); });
     pb.darts.forEach((d, i) => { const s = new Station(`dartsoche${i + 1}`, "darts", i, { x: d.oche + 0.3, z: d.board.z, faceX: d.faceX, oche: d.oche, by: d.board.y }); this.st.set(s.id, s); this.buildDarts(s); });
+    if (PG_DEBUG) for (const s of this.st.values()) s.feed.log = [];
   }
 
   // ---------------------------------------------------------------- building
@@ -243,33 +254,52 @@ export class PubGamesView {
   // ---------------------------------------------------------------- state from the host
   setNote(id: string, raw: string, clock: number) {
     const s = this.st.get(id); if (!s) return;
-    let n: Note | null = null; try { n = raw ? JSON.parse(raw) : null; } catch { n = null; }
-    if (!n || n.rev === s.rev) return;
-    const was = s.note; s.note = n; s.rev = n.rev;
+    // (R12.3b: every change counts, a countdown or someone reconnecting included; what's NEW (a game, a shot) is told
+    //  by its name, never by a revision number)
+    const r = s.feed.feed(raw, clock);
+    if (!r.changed) return;
+    const n = s.feed.note as Note; s.note = n;
+    if (r.newGame) this.resetStation(s);
+    // (shots that came and went while this window wasn't looking: said so, never silently gone)
+    if (r.missed > 0 && (s.seatOf(this.ctx.me) >= 0 || this.near(s, 10))) this.hooks.feedback(`Missed ${r.missed} shot${r.missed > 1 ? "s" : ""} at ${s.idx + 1 ? "table " + (s.idx + 1) : "the table"} while this window was busy.`, "info");
     if (s.kind === "pool") {
-      if (n.shot && n.shot.n !== s.simN) this.startReplay(s, n, clock);
-      if (!n.shot && !(s.sim && !s.sim.done)) { if (n.pool) this.showBalls(s, n.pool.b.map(([bid, x, z, d]) => ({ id: bid, x, z, down: !!d }))); else if (n.ph !== "play") this.placeRack(s); }
-      if (!n.shot && s.sim && s.sim.done) s.sim = null;
+      if (r.replay) this.startReplay(s, r.replay);
+      else if (!s.sim) { if (n.pool) this.showBalls(s, n.pool.b.map(([bid, x, z, d]) => ({ id: bid, x, z, down: !!d }))); else if (n.ph !== "play") this.placeRack(s); }
     }
-    // my turn just started: step up to the table / the oche
+    if (PG_DEBUG && s.feed.log?.length) console.log("[pg]", id, s.feed.log[s.feed.log.length - 1]);
+    // my turn just started: step up to the table / the oche (once this window's finished showing the last shot)
     const mine = n.ph === "play" && s.seatOf(this.ctx.me) >= 0 && s.turn === s.seatOf(this.ctx.me) && !n.shot;
     const before = this.lastTurnMine.get(id) ?? false; this.lastTurnMine.set(id, mine);
-    if (mine && !before && !this.quiet && Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < 7) this.enter(s);
-    if (!mine && this.at === id && this.mode !== "menu" && (this.mode !== "darts" || !this.fly)) this.leave();
-    if (was && was.ph === "play" && n.ph === "over") { this.leave(); }
+    if (mine && !before && !this.quiet && Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < 7) this.pendingEnter = id;
+    if (!mine && this.pendingEnter === id) this.pendingEnter = "";
+    // (only what's going on HERE moves you: another table or board finishing never touches your aim, your throw or a
+    //  menu you've got open elsewhere)
+    if (this.at !== id) return;
+    if (!mine && this.mode !== "menu" && (this.mode !== "darts" || !this.fly)) this.leave();
+    else if (r.ended) this.leave();
   }
-  /** a shot to replay: from the exact start the host used, fast-forwarded to now */
-  private startReplay(s: Station, n: Note, clock: number) {
-    const sh = n.shot!, start: Ball[] = sh.b.map(([id, x, z, d]) => ({ id, x, z, vx: 0, vz: 0, down: !!d }));
-    s.sim = new PoolSim(start, sh.dx, sh.dz, sh.v); s.simN = sh.n;
-    let el = (((clock - sh.t0) % 600) + 600) % 600; if (el > sh.dur + 2) el = sh.dur; if (el < 0.25) el = 0;
-    s.simT = el; s.sim.runTo(el);
+  /** a new game at this station: nothing of the last one carries over (its replay, cue, potted balls, darts in flight,
+   *  whose turn it was, the cabinet doors' running scores) */
+  private resetStation(s: Station) {
+    s.sim = null; s.key = ""; s.why = ""; s.simT = 0; s.cueT = -1; s.drop.clear();
+    s.flash = { label: "", t: 0 }; (s as unknown as { hist?: number[][] }).hist = undefined;
+    this.lastTurnMine.delete(s.id); if (this.pendingEnter === s.id) this.pendingEnter = "";
+    if (this.fly?.st === s) this.fly = null;
+    if (this.at === s.id) this.thrownN = -1;
+  }
+  /** a shot to play out, from the exact start the host used (see StationFeed for where it starts and why) */
+  private startReplay(s: Station, plan: ReplayPlan) {
+    const sh = plan.shot, start: Ball[] = sh.b.map(([id, x, z, d]) => ({ id, x, z, vx: 0, vz: 0, down: !!d }));
+    s.sim = new PoolSim(start, sh.dx, sh.dz, sh.v); s.key = sh.k; s.dur = sh.dur; s.why = plan.why;
+    s.simT = plan.at; s.sim.runTo(plan.at);
     s.sim.onHit = (k, sp) => { if (!this.near(s, 14)) return; if (k === "ball") sfx.ballClick(sp); else if (k === "cushion") sfx.cushion(sp); else sfx.pocketDrop(); };
-    for (const b of start) if (!b.down) s.ballPos[b.id] = { x: b.x, z: b.z, down: false };
+    for (const b of start) s.ballPos[b.id] = { x: b.x, z: b.z, down: b.down };
     s.drop.clear();
-    if (el < 0.3) { const cue = start.find((b) => b.id === 0)!; s.cueT = 0; s.cueDir = { x: sh.dx, z: sh.dz }; s.cueFrom = { x: cue.x, z: cue.z }; if (this.near(s, 14)) sfx.cueStrike(sh.v / POOL.vMax); }
+    if (plan.at < 0.3) { const cue = start.find((b) => b.id === 0)!; s.cueT = 0; s.cueDir = { x: sh.dx, z: sh.dz }; s.cueFrom = { x: cue.x, z: cue.z }; if (this.near(s, 14)) sfx.cueStrike(sh.v / POOL.vMax); }
     this.showBalls(s, s.sim.balls.map((b) => ({ id: b.id, x: b.x, z: b.z, down: b.down })));
   }
+  /** the shot / throw clock as this window should show it (whole seconds, never more than the host has left) */
+  clockOf(s: Station): number { const n = s.note; if (!n || n.ph !== "play") return 0; return n.dl >= 0 ? Math.ceil(timeLeftAt(n.dl, this.ctx.clock) - 0.05) : n.left; }
   private near(s: Station, r: number) { return Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < r && Math.abs(this.ctx.y - this.U) < 2.5; }
   private showBalls(s: Station, bs: { id: number; x: number; z: number; down: boolean }[]) {
     const pb = this.arena.pub!, q = pb.pools[s.idx]; let k = 0;
@@ -324,19 +354,27 @@ export class PubGamesView {
       this.drawBoard(s, dt);
     }
     if (this.at) { const s = this.st.get(this.at); if (s && (ctx.hurt || Math.hypot(ctx.x - s.g.x, ctx.z - s.g.z) > 9)) this.leave(); }
+    // your turn: step up once this window's finished showing the last shot (not into the middle of it)
+    if (this.pendingEnter) { const s = this.st.get(this.pendingEnter); if (!s || this.quiet) this.pendingEnter = ""; else if (!s.rolling) { this.pendingEnter = ""; if (this.mode === "" || this.at === s.id) this.enter(s); } }
     this.updateCam(dt);
     this.updateHud();
   }
   private tickPool(s: Station, dt: number) {
     if (s.sim) {
-      // follow the host's clock (the game can run slower than real time on a slow machine): never ahead of it,
-      // catching up if we fall behind
-      const sh = s.note?.shot;
-      if (sh && sh.n === s.simN) { const el = ((((this.ctx.clock - sh.t0) % 600) + 600) % 600); s.simT = el > sh.dur + 5 ? sh.dur : Math.max(Math.min(s.simT + dt, el + 0.1), el - 0.3); }
-      else s.simT += dt;
-      s.sim.runTo(Math.min(s.simT, sh?.dur ?? s.simT));
+      // follow the host's clock (the game can run slower than real time on a slow machine): never ahead of it, never
+      // backwards, and quicker until it's caught up if this window's behind (heard late, a stalled frame, a missed shot)
+      const sh = s.note?.shot, live = !!sh && sh.k === s.key;
+      s.simT = replayStep(s.simT, dt, live ? wrapDelta(this.ctx.clock, sh!.t0) : null, s.dur);
+      s.sim.runTo(s.simT);
       this.showBalls(s, s.sim.balls.map((b) => ({ id: b.id, x: b.x, z: b.z, down: b.down })));
-      if (s.sim.done && !s.note?.shot) { s.sim = null; if (s.note?.pool) this.showBalls(s, s.note.pool.b.map(([id, x, z, d]) => ({ id, x, z, down: !!d }))); }
+      // played out, and the host's settled it: the table as the host has it (the same to a tenth of a millimetre)
+      if ((s.sim.done || s.simT >= s.dur) && !live) {
+        s.sim = null;
+        // (a missed shot just caught up: now the one that came in meanwhile, catching up with the host)
+        const nx = s.feed.next();
+        if (nx) this.startReplay(s, nx);
+        else if (s.note?.pool) this.showBalls(s, s.note.pool.b.map(([id, x, z, d]) => ({ id, x, z, down: !!d })));
+      }
     }
     for (const [id, t] of s.drop) if (t < 0.4) s.drop.set(id, t + dt);
     // the cue: yours while you aim; anyone's stroke when a shot goes
@@ -385,10 +423,11 @@ export class PubGamesView {
   // ---------------------------------------------------------------- the scoreboards
   private drawBoard(s: Station, _dt: number) {
     const n = s.note, t = s.board; if (!t) return;
-    const sig = JSON.stringify([n?.rev, n?.clock, s.flash.t > 0 ? s.flash.label : "", n?.ph]);
+    const cd = this.clockOf(s);
+    const sig = JSON.stringify([s.feed.raw.length, n?.rev, n?.gid, cd, n?.seats.map((q) => [q[3] >= 0, q[4] >= 0]), s.flash.t > 0 ? s.flash.label : "", n?.ph]);
     if (sig === s.boardSig) return; s.boardSig = sig;
     const c = t.getContext() as unknown as C2D, W = t.getSize().width, H = t.getSize().height;
-    if (s.kind === "darts") drawDartsBoard(c, W, H, s, n); else drawPoolBoard(c, W, H, s, n);
+    if (s.kind === "darts") drawDartsBoard(c, W, H, s, n); else drawPoolBoard(c, W, H, s, n, cd);
     t.update();
     // (the left door is the first player's, the right door the second's: facing the board, -z is on your left)
     s.doors.forEach((d, k) => { drawDoorScore(d.getContext() as unknown as C2D, 256, 572, n, k, s); d.update(); });
@@ -399,7 +438,7 @@ export class PubGamesView {
   use(id: string) {
     const s = this.st.get(id); if (!s) return;
     const n = s.note, me = this.ctx.me, seat = s.seatOf(me);
-    if (n?.ph === "play" && seat >= 0) { if (s.turn === seat && !n.shot) { this.enter(s); return; } this.openMenu(s); return; }
+    if (n?.ph === "play" && seat >= 0) { if (s.turn === seat && !s.rolling) { this.enter(s); return; } if (s.turn === seat) return; this.openMenu(s); return; }
     if (n?.ph === "play") { this.hooks.feedback(`Game on: ${n.seats.map((q) => q[1]).join(" v ")}. Pull up a stool and watch.`, "info"); return; }
     if (n?.ph === "over") { this.hooks.feedback(n.msg || "Game over. The table's free in a moment.", "info"); return; }
     this.openMenu(s);
@@ -436,6 +475,7 @@ export class PubGamesView {
   private enter(s: Station) {
     if (this.at === s.id && (this.mode === "darts" || this.mode === "aim" || this.mode === "draw" || this.mode === "place")) return; // (already up)
     this.closeMenu(); this.at = s.id; this.fov = 0;
+    if (!this.helpCounted.has(s.id + ":" + (s.note?.gid ?? 0))) { this.helpCounted.add(s.id + ":" + (s.note?.gid ?? 0)); this.helpSeen[s.kind] = (this.helpSeen[s.kind] ?? 0) + 1; try { localStorage.setItem("bfb.pgHelp", JSON.stringify(this.helpSeen)); } catch { /* private window */ } }
     if (s.kind === "pool") {
       const P = s.note?.pool; if (!P) return;
       const c = this.cueBall(s);
@@ -472,6 +512,7 @@ export class PubGamesView {
       if (code === "ShiftLeft" || code === "ShiftRight") { this.fine = down; if (this.mode === "darts") this.steadyKey(down); return true; }
       if (!down) return true;
       if (code === "KeyE" || code === "Backspace") { this.leave(); return true; }
+      if (code === "KeyH") { this.helpOn = !this.helpOn; return true; }
       if (code === "Space" && (this.mode === "aim" || this.mode === "draw" || this.mode === "place")) { this.stand = !this.stand; return true; }
       return true;
     },
@@ -581,34 +622,59 @@ export class PubGamesView {
   }
 
   // ---------------------------------------------------------------- the HUD: what's going on here, your controls
+  // R12.3b (Blake): while you're aiming, a compact panel in the top-right corner, out of the way of the shot: who's
+  // playing and whose turn, the colours / the scores, the clock, your power or steadiness, the keys in one short line.
+  // The full instructions: your first two goes at each game, then H. Otherwise a small line above your pockets.
+  private helpOn = false; private helpSeen: Record<string, number> = (() => { try { return JSON.parse(localStorage.getItem("bfb.pgHelp") ?? "{}") ?? {}; } catch { return {}; } })();
+  /** (the games you've stepped up for, so the first-time help counts games, not visits) */
+  private helpCounted = new Set<string>();
+  private seatTag(q: Seat) {
+    const c = this.ctx.clock;
+    if (q[3] >= 0) return ` <span class="pg-warn">(reconnecting: ${Math.ceil(timeLeftAt(q[3], c))}s)</span>`;
+    if (q[4] >= 0) return ` <span class="pg-warn">(walked off: back in ${Math.ceil(timeLeftAt(q[4], c))}s!)</span>`;
+    return "";
+  }
   private updateHud() {
     const me = this.ctx.me;
     let s: Station | null = this.st.get(this.at) ?? null;
     if (!s) for (const q of this.st.values()) if (q.seatOf(me) >= 0 && q.note && (q.note.ph === "play" || q.note.ph === "waiting")) s = q;
     if (!s) for (const q of this.st.values()) if (this.near(q, 4.5)) { s = q; break; }
     if (!s || !s.note || s.note.ph === "free" || this.quiet) { this.hud.classList.add("hidden"); document.body.classList.remove("pg-on"); return; }
-    const n = s.note, seat = s.seatOf(me), mine = seat >= 0 && s.turn === seat;
-    const who = n.seats.map((q, i) => `${i === s!.turn && n.ph === "play" ? "▶ " : ""}${esc(q[1])}${q[3] ? " (reconnecting)" : q[4] ? ` (back in ${q[4]}s!)` : ""}`).join("  v  ");
-    let line = "", help = "", meter = "";
-    if (n.ph === "waiting") line = `${esc(n.seats[0]?.[1] ?? "")} is waiting for a mate${n.stake ? ` ($${n.stake})` : ""}. E at the ${s.kind === "pool" ? "table" : "oche"} to join.`;
-    else if (n.ph === "over") line = esc(n.msg);
-    else {
-      line = `${who}${n.stake ? ` · $${n.stake} each` : ""} · ${mine ? `YOUR ${s.kind === "pool" ? "SHOT" : "THROW"} (${n.clock}s)` : ""}`;
-      if (n.msg) line += `<br><span class="pg-msg">${esc(n.msg)}</span>`;
-      if (this.at === s.id && s.kind === "pool") {
-        help = this.mode === "place" ? "Ball in hand: move the mouse to place the white behind the line, CLICK to set it" : this.mode === "draw" ? "Pull the mouse back for power, LET GO to strike · right-click: cancel" : "Mouse: aim (SHIFT: fine) · HOLD CLICK and pull back, let go to strike · SPACE: stand up · E: step back";
-        if (this.mode === "draw") { const p = this.drawD / 0.3; meter = `<div class="pg-meter"><i style="width:${Math.round(p * 100)}%"></i></div>`; }
-      } else if (this.at === s.id) {
-        const D = n.darts; if (D) { const ck = checkout(D.sc[D.turn], 3 - D.d.length); line += `<br><b>${n.seats.map((q, i) => `${esc(q[1])} ${D.sc[i]}`).join("  ·  ")}</b>  ·  this visit: ${D.d.map((d) => d[2]).join(" ") || "-"}${ck ? `  ·  <span class="pg-ck">checkout ${ck.join(" ")}</span>` : ""}`; }
-        help = "Mouse: aim · the ring is where the dart lands · HOLD SHIFT to steady your hand · CLICK to throw · E: step back";
-        const st = this.steady; meter = `<div class="pg-meter steady"><i style="width:${Math.round((st.on ? Math.max(0, 1 - st.t / 2.5) : st.cool > 0 ? 1 - st.cool / 2 : 1) * 100)}%"></i></div>`;
-      } else if (mine) help = `E at the ${s.kind === "pool" ? "table" : "oche"}: your ${s.kind === "pool" ? "shot" : "throw"}`;
+    const n = s.note, seat = s.seatOf(me), mine = seat >= 0 && s.turn === seat, aiming = this.at === s.id && this.active && this.mode !== "menu";
+    const cd = this.clockOf(s), pool = s.kind === "pool";
+    const who = n.seats.map((q, i) => `${i === s!.turn && n.ph === "play" ? "▶ " : ""}${esc(q[1])}${this.seatTag(q)}`).join(" v ");
+    let html = "";
+    if (n.ph === "waiting") html = `<div class="pg-line">${esc(n.seats[0]?.[1] ?? "")} is waiting for a mate${n.stake ? ` ($${n.stake})` : ""}. E at the ${pool ? "table" : "oche"} to join.</div>`;
+    else if (n.ph === "over") html = `<div class="pg-line">${esc(n.msg)}</div>`;
+    else if (!aiming) {
+      const turn = mine ? `<b class="pg-you">YOUR ${pool ? "SHOT" : "THROW"}${cd ? ` · ${cd}s` : ""}</b>${s.rolling ? " (balls still rolling)" : ` · E at the ${pool ? "table" : "oche"}`}` : "";
+      html = `<div class="pg-line">${who}${n.stake ? ` · $${n.stake} each` : ""}${turn ? " · " + turn : ""}</div>${n.msg ? `<div class="pg-msg">${esc(n.msg)}</div>` : ""}`;
+    } else {
+      // the compact panel
+      let score = "", meter = "", keys = "", help = "";
+      if (pool) {
+        const P = n.pool;
+        score = n.seats.map((q, i) => { const g = P?.g[i]; const left = g && P ? P.b.filter(([id, , , d]) => !d && ballColour(id) === g).length : -1; return `${esc(q[1])}: ${g ? `<span class="pg-dot ${g}"></span>${left ? `${left} left` : "on the black"}` : P?.brk ? "break" : "open"}`; }).join(" · ") + (P && P.vis > 1 ? ` · <b>2 visits</b>` : "");
+        if (this.mode === "draw") meter = `<div class="pg-meter"><i style="width:${Math.round((this.drawD / 0.3) * 100)}%"></i></div>`;
+        keys = this.mode === "place" ? "Mouse: place the white · CLICK: set it" : this.mode === "draw" ? "Pull back for power · let go to strike · right-click: cancel" : "Aim · HOLD CLICK + pull back · SHIFT fine · SPACE stand · E back · H help";
+        help = "Ball in hand: put the white anywhere behind the baulk line (the line near your end), clear of the other balls, then CLICK.<br>Aim with the mouse (SHIFT for fine aim). The line shows the first ball you'd hit and where both go.<br>HOLD the left button and pull the mouse back for power; LET GO to strike. Right-click cancels.<br>SPACE stands you up for a look round the table. E steps back.<br>House rules: first pot after the break picks your colour; a foul gives the other player two visits; the black last.";
+      } else {
+        const D = n.darts;
+        if (D) { const ck = checkout(D.sc[D.turn], 3 - D.d.length); score = `${n.seats.map((q, i) => `${esc(q[1])} <b>${D.sc[i]}</b>`).join(" · ")} · this visit: ${D.d.map((d) => d[2]).join(" ") || "-"}${ck ? ` · <span class="pg-ck">${ck.join(" ")}</span>` : ""}`; }
+        const st = this.steady; meter = `<div class="pg-meter steady" title="steadiness"><i style="width:${Math.round((st.on ? Math.max(0, 1 - st.t / 2.5) : st.cool > 0 ? 1 - st.cool / 2 : 1) * 100)}%"></i></div>`;
+        keys = "Aim · HOLD SHIFT steady · CLICK throw · E back · H help";
+        help = "The ring is exactly where the dart will land; your hand sways (more after a few pints).<br>HOLD SHIFT to steady it for a couple of seconds; it needs a moment to recover after.<br>301, double out: finish exactly on zero with a double (the outer ring) or the bull. Go below zero, or leave 1, and it's a bust: your score goes back.";
+      }
+      const k = s.kind, first = (this.helpSeen[k] ?? 0) <= 2;
+      html = `<div class="pg-line">${who}${n.stake ? ` · $${n.stake}` : ""}</div><div class="pg-score">${score}</div>`
+        + `<div class="pg-clock${mine && cd > 0 && cd <= 10 ? " low" : ""}">${mine ? `YOUR ${pool ? "SHOT" : "THROW"}${cd ? ` · ${cd}s` : ""}` : "WAIT"}</div>${meter}`
+        + (n.msg ? `<div class="pg-msg">${esc(n.msg)}</div>` : "")
+        + `<div class="pg-keys">${keys}</div>` + (this.helpOn || first ? `<div class="pg-help">${help}</div>` : "");
     }
-    const html = `<div class="pg-line">${line}</div>${help ? `<div class="pg-help">${help}</div>` : ""}${meter}`;
     if (this.hud.innerHTML !== html) this.hud.innerHTML = html;
     this.hud.classList.remove("hidden");
-    this.hud.classList.toggle("top", this.active && this.mode !== "menu");
-    document.body.classList.toggle("pg-on", this.active && this.mode !== "menu");
+    this.hud.classList.toggle("top", aiming);
+    document.body.classList.toggle("pg-on", aiming);
   }
   /** the prompt when you look at a station */
   prompt(id: string): [string, string, string] {
@@ -624,7 +690,7 @@ export class PubGamesView {
   /** (tests) what's on each station, and your mode */
   info() {
     const out: Record<string, unknown> = { mode: this.mode, at: this.at, cam: this.cam ? { ...this.cam } : null, lastMsg: this.lastMsg };
-    for (const s of this.st.values()) out[s.id] = { ph: s.note?.ph ?? "free", seats: s.note?.seats.map((q) => q[1]) ?? [], turn: s.turn, rolling: s.rolling, msg: s.note?.msg ?? "", pool: s.note?.pool ?? null, darts: s.note?.darts ?? null, stake: s.note?.stake ?? 0, end: s.note?.end ?? "", win: s.note?.win ?? "", shown: s.kind === "pool" ? s.balls.filter((b) => b.isEnabled()).length : s.darts.filter((d) => d.isEnabled()).length, ballY: s.kind === "pool" ? s.balls[1].position.y : 0 };
+    for (const s of this.st.values()) out[s.id] = { ph: s.note?.ph ?? "free", seats: s.note?.seats.map((q) => q[1]) ?? [], turn: s.turn, rolling: s.rolling, msg: s.note?.msg ?? "", pool: s.note?.pool ?? null, darts: s.note?.darts ?? null, stake: s.note?.stake ?? 0, end: s.note?.end ?? "", win: s.note?.win ?? "", shown: s.kind === "pool" ? s.balls.filter((b) => b.isEnabled()).length : s.darts.filter((d) => d.isEnabled()).length, ballY: s.kind === "pool" ? s.balls[1].position.y : 0, clock: this.clockOf(s), replay: s.sim ? { k: s.key, t: s.simT, dur: s.dur, why: s.why } : null, log: s.feed.log?.slice(-8) ?? null };
     return out;
   }
   /** (tests) play through your own controls without a mouse: aim at an angle (radians, 0 = up the table) with a power 0..1 */
@@ -669,7 +735,7 @@ function drawDartsBoard(c: C2D, W: number, H: number, s: Station, n: Note | null
   if (n.ph === "over") { c.fillStyle = "rgba(10,30,18,0.85)"; c.fillRect(0, 60, W, 210); c.fillStyle = "#ffe9a8"; c.font = "bold 40px Georgia, serif"; c.textAlign = "center"; c.fillText(n.end === "void" ? "GAME CALLED OFF" : "GAME SHOT!", W / 2, 140); c.font = "26px Georgia, serif"; c.fillText(n.msg.slice(0, 48), W / 2, 200); }
 }
 /** the pool table's chalkboard: who's on what, the balls left, whose shot, visits */
-function drawPoolBoard(c: C2D, W: number, H: number, s: Station, n: Note | null) {
+function drawPoolBoard(c: C2D, W: number, H: number, s: Station, n: Note | null, cd: number) {
   c.fillStyle = "#1e2622"; c.fillRect(0, 0, W, H);
   c.strokeStyle = "rgba(240,236,224,0.12)"; c.lineWidth = 22; for (let q = 0; q < 5; q++) { c.beginPath(); c.moveTo(q * 120, H); c.lineTo(q * 120 + 90, 0); c.stroke(); }
   c.fillStyle = CHALK; c.textAlign = "center"; c.font = `bold 34px ${HAND}`; c.fillText(`TABLE ${s.idx + 1}`, W / 2, 42);
@@ -684,7 +750,7 @@ function drawPoolBoard(c: C2D, W: number, H: number, s: Station, n: Note | null)
     else { c.font = `22px ${HAND}`; c.fillStyle = "rgba(240,236,224,0.7)"; c.fillText(P?.brk ? "" : "open table", 290, y - 4); }
   });
   c.fillStyle = CHALK; c.font = `22px ${HAND}`;
-  const info = n.ph === "over" ? n.msg : `${P?.brk ? "Break" : P && P.vis > 1 ? "2 visits" : ""}${n.stake ? `   $${n.stake} each` : ""}   ${n.ph === "play" ? n.clock + "s" : ""}`;
+  const info = n.ph === "over" ? n.msg : `${P?.brk ? "Break" : P && P.vis > 1 ? "2 visits" : ""}${n.stake ? `   $${n.stake} each` : ""}   ${n.ph === "play" && cd > 0 ? cd + "s" : ""}`;
   c.fillText(info.slice(0, 44), 24, 270);
   if (n.msg && n.ph === "play") { c.fillStyle = "#ffe9a8"; c.fillText(n.msg.slice(0, 44), 24, 310); }
 }

@@ -437,3 +437,92 @@ test("2A: pedestrians wander into shops (and back out)", () => {
   }
   assert.ok(visited.size >= 4, `pedestrians went into ${[...visited].join(", ") || "no shops"}`);
 });
+
+// =============================================================================================================
+// R12.3b (Blake: "some sidewalk sections overlap or clip over one another"). The new city's pavement: the grid of
+// square cells, the curved pieces round the roundabout and the cuts along the diagonals and the straight roads.
+// Before: 400 overlapping pairs (427 m²): 222 at the same height (they flickered), 178 a smooth strip laid 2 cm above
+// the stepped collision along the diagonals; and thin strips of nothing beside kerbs that aren't on the 0.5 m grid.
+// =============================================================================================================
+function groundPieces(w: World): [number, number][][] {
+  const polyOf = (b: any): [number, number][] => b.poly ?? [[b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z + b.d / 2], [b.x - b.w / 2, b.z + b.d / 2]];
+  return w.arena.boxes.filter((b) => (b.kind === "sidewalk" || b.kind === "plaza" || b.kind === "curb") && b.y + b.h / 2 < 0.5).map(polyOf);
+}
+const areaOf = (p: [number, number][]) => { let a = 0; for (let k = 0; k < p.length; k++) a += p[k][0] * p[(k + 1) % p.length][1] - p[(k + 1) % p.length][0] * p[k][1]; return a / 2; };
+function overlapArea(A: [number, number][], B: [number, number][]) {
+  let out = A; const cw = areaOf(B) < 0;
+  for (let k = 0; k < B.length && out.length; k++) {
+    const P = B[k], Q = B[(k + 1) % B.length], inp2 = out; out = [];
+    const ins = (p: [number, number]) => { const v = (Q[0] - P[0]) * (p[1] - P[1]) - (Q[1] - P[1]) * (p[0] - P[0]); return cw ? v <= 1e-9 : v >= -1e-9; };
+    for (let j = 0; j < inp2.length; j++) {
+      const a = inp2[j], b = inp2[(j + 1) % inp2.length], ia = ins(a), ib = ins(b);
+      if (ia) out.push(a);
+      if (ia !== ib) { const dx = b[0] - a[0], dz = b[1] - a[1], ex = Q[0] - P[0], ez = Q[1] - P[1], t = (ex * (P[1] - a[1]) - ez * (P[0] - a[0])) / (ex * dz - ez * dx); out.push([a[0] + dx * t, a[1] + dz * t]); }
+    }
+  }
+  return out.length >= 3 ? Math.abs(areaOf(out)) : 0;
+}
+test("R12.3b pavement: no two pieces of ground overlap anywhere in the new city (nothing coplanar to flicker, no lip, no strip on top)", () => {
+  useCity("new"); const w = new World({ seed: 1, npcs: 0, spawnLoot: false }); useCity("classic");
+  const P = groundPieces(w), bb = P.map((p) => [Math.min(...p.map((q) => q[0])), Math.max(...p.map((q) => q[0])), Math.min(...p.map((q) => q[1])), Math.max(...p.map((q) => q[1]))]);
+  const bad: string[] = [];
+  for (let a = 0; a < P.length; a++) for (let b = a + 1; b < P.length; b++) {
+    const A = bb[a], B = bb[b];
+    if (A[1] <= B[0] || B[1] <= A[0] || A[3] <= B[2] || B[3] <= A[2]) continue;
+    const ar = overlapArea(P[a], P[b]); if (ar > 0.01) bad.push(`${ar.toFixed(2)} m² at ${((A[0] + A[1]) / 2).toFixed(1)},${((A[2] + A[3]) / 2).toFixed(1)}`);
+  }
+  assert.deepEqual(bad.slice(0, 5), [], `${bad.length} overlapping pairs`);
+  assert.equal((w.arena.scenery ?? []).filter((d) => d.kind === "walk").length, 0, "no looks-only strips laid over the pavement: what you see is what you walk on");
+});
+test("R12.3b pavement: no gaps between kerb and pavement round the roundabout, along the diagonals, or beside kerbs off the 0.5 m grid", () => {
+  useCity("new"); const w = new World({ seed: 1, npcs: 0, spawnLoot: false }); useCity("classic");
+  const P = groundPieces(w), a: any = w.arena, net = a.roadNet;
+  const G = new Map<string, [number, number][][]>();
+  for (const p of P) { const xs = p.map((q) => q[0]), zs = p.map((q) => q[1]); for (let gx = Math.floor(Math.min(...xs) / 4); gx <= Math.floor(Math.max(...xs) / 4); gx++) for (let gz = Math.floor(Math.min(...zs) / 4); gz <= Math.floor(Math.max(...zs) / 4); gz++) { const k = gx + "," + gz; (G.get(k) ?? G.set(k, []).get(k)!).push(p); } }
+  const inPoly = (p: [number, number][], x: number, z: number) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, zi] = p[i], [xj, zj] = p[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
+  const diag = net.edges.filter((e: any) => !e.arc && Math.abs(net.nodes[e.a].x - net.nodes[e.b].x) > 1 && Math.abs(net.nodes[e.a].z - net.nodes[e.b].z) > 1).map((e: any) => ({ ax: e.pa?.[0] ?? net.nodes[e.a].x, az: e.pa?.[1] ?? net.nodes[e.a].z, bx: e.pb?.[0] ?? net.nodes[e.b].x, bz: e.pb?.[1] ?? net.nodes[e.b].z, hw: e.hw }));
+  const segD = (x: number, z: number, g: any) => { const ex = g.bx - g.ax, ez = g.bz - g.az, L2 = ex * ex + ez * ez, k = Math.max(0, Math.min(1, ((x - g.ax) * ex + (z - g.az) * ez) / L2)); return Math.hypot(g.ax + ex * k - x, g.az + ez * k - z); };
+  let checked = 0; const gaps: string[] = [];
+  // (the city's streets: inside the outer ring road, off the map's edge)
+  for (let x = -109.87; x < 110; x += 0.25) for (let z = -92.87; z < 108; z += 0.25) {
+    if (a.roads.some((q: any) => x >= q.minX && x <= q.maxX && z >= q.minZ && z <= q.maxZ) || diag.some((g: any) => segD(x, z, g) <= g.hw) || Math.hypot(x, z) <= 29.7) continue;
+    const kerb = a.roads.some((q: any) => x > q.minX - 1 && x < q.maxX + 1 && z > q.minZ - 1 && z < q.maxZ + 1) || diag.some((g: any) => segD(x, z, g) < g.hw + 1) || Math.hypot(x, z) < 34;
+    if (!kerb) continue;
+    checked++;
+    if (!(G.get(Math.floor(x / 4) + "," + Math.floor(z / 4)) ?? []).some((p) => inPoly(p, x, z))) gaps.push(`${x.toFixed(2)},${z.toFixed(2)}`);
+  }
+  assert.ok(checked > 20000, `${checked} points along the kerbs`);
+  assert.deepEqual(gaps.slice(0, 8), [], `${gaps.length} points along a kerb with no pavement: ${gaps.slice(0, 8).join(" ")}`);
+});
+test("R12.3b pavement: walking along and across the joins (round the roundabout, along a diagonal, across its cuts): no snag, no step, no sinking", () => {
+  useCity("new"); const w = new World({ seed: 1, npcs: 0, spawnLoot: false }); useCity("classic");
+  const p = w.addPlayer("a", "A");
+  const walk = (x: number, z: number, path: (t: number) => { yaw: number }, sec: number) => {
+    w.debugTeleport("a", x, z, path(0).yaw, 0.2);
+    for (let i = 0; i < 20; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { yaw: path(0).yaw })]); w.tick(); w.takeEvents(); }
+    let minY = 9, maxY = -9, dist = 0, lx = p.move.x, lz = p.move.z;
+    for (let i = 0; i < sec * 60; i++) {
+      w.pushInputs("a", [inp(p.lastSeq + 1, { mz: 1, yaw: path(i / 60).yaw })]); w.tick(); w.takeEvents();
+      dist += Math.hypot(p.move.x - lx, p.move.z - lz); lx = p.move.x; lz = p.move.z;
+      if (i > 10) { minY = Math.min(minY, p.move.y); maxY = Math.max(maxY, p.move.y); }
+    }
+    return { minY, maxY, dist };
+  };
+  // 1. round the roundabout on the join between the curved pieces and the grid (r = 33.3), a quarter turn
+  // (between the diagonal leaving the ring at ~0.6 rad and the road at 1.57; held on the join, 33.2 m out)
+  const R = 33.2, a0 = 0.85;
+  const r1 = walk(Math.cos(a0) * R, Math.sin(a0) * R, () => { const ang = Math.atan2(p.move.z, p.move.x), k = 0.6 * (R - Math.hypot(p.move.x, p.move.z)); return { yaw: Math.atan2(-Math.sin(ang) + k * Math.cos(ang), Math.cos(ang) + k * Math.sin(ang)) }; }, 3);
+  // 2. along a diagonal, 1.2 m from its kerb (where the cut pieces meet the grid)
+  const net = w.arena.roadNet!, e = net.edges.find((q) => q.name === "Dodgy Cut-Through")!, A = net.nodes[e.a], B = net.nodes[e.b];
+  const L = Math.hypot(B.x - A.x, B.z - A.z), ux = (B.x - A.x) / L, uz = (B.z - A.z) / L, nx = -uz, nz = ux, off = e.hw + 1.2;
+  const r2 = walk(A.x + ux * L * 0.3 + nx * off, A.z + uz * L * 0.3 + nz * off, () => ({ yaw: Math.atan2(ux, uz) }), 6);
+  // 3. away from that diagonal's kerb, straight across the cut pieces into the grid
+  // (0.6 s: across the cut pieces into the grid, stopping short of the buildings 4 m back; against the same along the pavement)
+  const r3 = walk(A.x + ux * L * 0.5 + nx * (e.hw + 0.3), A.z + uz * L * 0.5 + nz * (e.hw + 0.3), () => ({ yaw: Math.atan2(nx, nz) }), 0.6);
+  const ref = walk(A.x + ux * L * 0.3 + nx * off, A.z + uz * L * 0.3 + nz * off, () => ({ yaw: Math.atan2(ux, uz) }), 0.6);
+  for (const [k, r] of [["round the roundabout", r1], ["along the diagonal", r2], ["across the diagonal's cuts", r3]] as const) {
+    assert.ok(r.minY > 0.13 && r.maxY < 0.17, `${k}: feet stay on the pavement's top (y ${r.minY.toFixed(3)}..${r.maxY.toFixed(3)})`);
+    if (k === "across the diagonal's cuts") assert.ok(r.dist > ref.dist * 0.95, `${k}: no snag (walked ${r.dist.toFixed(2)} m, ${ref.dist.toFixed(2)} m on plain pavement)`);
+    else assert.ok(r.dist > ({ "round the roundabout": 3, "along the diagonal": 6 } as Record<string, number>)[k] * 3.2, `${k}: no snag (walked ${r.dist.toFixed(1)} m)`);
+  }
+});

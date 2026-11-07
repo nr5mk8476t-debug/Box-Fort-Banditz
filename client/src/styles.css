@@ -363,10 +363,18 @@ body.night .match-hud .mh-time { color: #bfd0ff; }
 .pint-help b { color: #ffe14a; }
 
 /* R12.3: the pub's games: what's on at the table / the oche, your controls, the power and steadiness meters, the menu */
-.pg-hud { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); max-width: 720px; padding: 8px 16px; border-radius: 10px;
-  background: rgba(16, 32, 22, 0.86); border: 2px solid #c9a040; color: #f2ead8; font: 15px Georgia, serif; text-align: center; pointer-events: none; }
-.pg-hud .pg-msg { color: #ffe9a8; }
-.pg-hud .pg-help { margin-top: 4px; font: 13px system-ui, sans-serif; color: #d8ccb4; }
+.pg-hud { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); max-width: min(620px, calc(100vw - 32px)); padding: 5px 12px; border-radius: 9px;
+  background: rgba(16, 32, 22, 0.82); border: 2px solid #c9a040; color: #f2ead8; font: 14px Georgia, serif; text-align: center; pointer-events: none; }
+.pg-hud .pg-msg { color: #ffe9a8; font-size: 13px; }
+.pg-hud .pg-you { color: #ffe9a8; }
+.pg-hud .pg-warn { color: #ff9a7a; }
+.pg-hud .pg-help { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(201,160,64,0.4); font: 12px/1.45 system-ui, sans-serif; color: #d8ccb4; }
+.pg-hud .pg-keys { margin-top: 4px; font: 12px system-ui, sans-serif; color: #c8b890; }
+.pg-hud .pg-score { font-size: 13px; margin-top: 2px; }
+.pg-hud .pg-clock { margin-top: 3px; font: 400 15px "Bungee", sans-serif; color: #ffe9a8; letter-spacing: 0.5px; }
+.pg-hud .pg-clock.low { color: #ff7a6a; }
+.pg-hud .pg-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 3px; vertical-align: 0; border: 1px solid #1a1612; }
+.pg-hud .pg-dot.red { background: #d8343a; } .pg-hud .pg-dot.yellow { background: #f0d040; }
 .pg-meter { margin: 6px auto 0; width: 240px; height: 10px; border: 1px solid #c9a040; border-radius: 5px; overflow: hidden; background: rgba(0,0,0,0.4); }
 .pg-meter i { display: block; height: 100%; background: linear-gradient(90deg, #6fbf73, #e8c050 60%, #e0484a); }
 .pg-meter.steady i { background: #9ad0ff; }
@@ -376,7 +384,11 @@ body.night .match-hud .mh-time { color: #bfd0ff; }
 .pg-menu .pg-opt { margin: 6px 0; } .pg-menu .pg-opt b { display: inline-block; min-width: 22px; padding: 0 6px; margin-right: 8px; border: 1px solid #c9a040; border-radius: 4px; text-align: center; }
 .pg-menu .pg-stake span { padding: 0 5px; opacity: 0.6; } .pg-menu .pg-stake span.on { opacity: 1; color: #ffe9a8; border-bottom: 2px solid #e8c050; }
 .pg-menu small, .pg-menu .pg-foot { color: #c8b890; font-size: 13px; }
-.pg-hud.top { bottom: auto; top: 70px; }
+.pg-hud.top { left: auto; right: 14px; bottom: auto; top: 14px; transform: none; width: min(330px, 34vw); text-align: left; padding: 8px 12px; }
+.pg-hud.top .pg-meter { margin-left: 0; width: 100%; }
 .pg-hud .pg-ck { color: #9ae0a8; }
-body.pg-on #pockets, body.pg-on #controls-hint { display: none; }
+/* (R12.3b: while you aim: no inventory, controls line, home arrow, cash list or mode badge; your health, heat and the
+   match clock stay: the pub isn't a safe zone) */
+body.pg-on #pockets, body.pg-on #controls-hint, body.pg-on #home-arrow, body.pg-on #scores, body.pg-on #mode-badge { display: none; }
+@media (max-width: 700px) { .pg-hud.top { width: calc(100vw - 28px); right: 14px; top: auto; bottom: 120px; } }
 .pg-hud.hidden, .pg-menu.hidden { display: none; }

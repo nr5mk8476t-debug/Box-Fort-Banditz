@@ -1804,7 +1804,7 @@ test("R7 police presence: foot patrols walk the town and cruisers drive round al
   // a cruiser that sees you wanted turns its siren on
   const car = w.police.cars.find((c) => c.patrol)!;
   a.jailT = 0; a.lock = null; a.move.knockT = 0; // (in case that cop already got you)
-  car.x = 30; car.z = -87; car.yaw = Math.PI / 2; car.v = 0; car.route = []; // (on Gahookz Ghetto Lane, looking east)
+  w.police.placeCar(car, 30, -87, Math.PI / 2); // (on Gahookz Ghetto Lane, looking east; R12.3b: in its lane)
   w.debugTeleport(a.id, 37, -87, 0); a.notoriety = 65; settle(w, 1.2);
   assert.ok(car.mode !== "cruise" && car.target === a.id, `the cruiser's after you (${car.mode})`);
 });

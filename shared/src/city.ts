@@ -964,11 +964,82 @@ export function buildTrashington(): ArenaLayout {
       return i < 0 || j < 0 || i >= NX || j >= NZ ? -1 : dist[j * NX + i];
     };
     // ---- the pavement: runs of off-road cells along each row, stacked into strips while they line up ----
+    // R12.3b (Blake: "some sidewalk sections overlap or clip over one another"): the grid's square cells used to run
+    // 0.6 m into the curved pieces round the roundabout (the same height: they flickered), and along the two diagonals
+    // the pavement was 0.5 m steps with a smooth strip laid 2 cm above them for looks (what you saw wasn't what you
+    // walked on). Now a cell the road or the curved band only partly covers is laid, then cut exactly against them:
+    // every piece meets the next edge to edge, at one height, nothing on top of anything.
     let open = new Map<string, Rect>();
-    // (the band round the roundabout's outside is laid as smooth curved pieces instead, below: the grid's
-    //  cells would leave a stepped kerb)
-    const BAND = RING.r1 + 3;
-    const paved = (i: number, j: number) => dist[j * NX + i] > 0 && Math.hypot(X0 + (i + 0.5) * CELL, Z0 + (j + 0.5) * CELL) >= BAND;
+    const BAND = RING.r1 + 3, SEGS = 96, BAND_R = BAND + 0.6;
+    let subtractRef: ((pieces: [number, number][][], cut: [number, number][][]) => { pieces: [number, number][][]; cut: boolean }) | null = null, diagRef: [number, number][][] = [];
+    type P2 = [number, number];
+    // the curved band's outer edge (the pieces below go out to it): a 96-sided polygon, convex
+    const bandPoly: P2[] = []; for (let q = 0; q < SEGS; q++) { const a = (q / SEGS) * Math.PI * 2; bandPoly.push([Math.cos(a) * BAND_R, Math.sin(a) * BAND_R]); }
+    // each diagonal road's surface: a stadium (its rounded ends included, as the road test has them), convex
+    const diagPolys: P2[][] = roadSegs.map((g) => {
+      const L = Math.hypot(g.bx - g.ax, g.bz - g.az), ux = (g.bx - g.ax) / L, uz = (g.bz - g.az) / L, out: P2[] = [];
+      for (const [cx, cz, a0] of [[g.bx, g.bz, Math.atan2(uz, ux) - Math.PI / 2], [g.ax, g.az, Math.atan2(uz, ux) + Math.PI / 2]] as [number, number, number][])
+        for (let k = 0; k <= 8; k++) { const a = a0 + (k / 8) * Math.PI; out.push([cx + Math.cos(a) * g.hw, cz + Math.sin(a) * g.hw]); }
+      return out;
+    });
+    const inConvex = (P: P2[], x: number, z: number) => { for (let k = 0; k < P.length; k++) { const A = P[k], B = P[(k + 1) % P.length]; if ((B[0] - A[0]) * (z - A[1]) - (B[1] - A[1]) * (x - A[0]) < -1e-9) return false; } return true; };
+    // (all wound the same way round, so "outside an edge" means the same everywhere)
+    const signed = (P: P2[]) => { let A = 0; for (let k = 0; k < P.length; k++) A += P[k][0] * P[(k + 1) % P.length][1] - P[(k + 1) % P.length][0] * P[k][1]; return A; };
+    // (and the straight roads: not all their edges sit on the 0.5 m grid (e.g. x = -70.33), and the cell straddling such
+    //  an edge used to count as road: a strip of nothing between the kerb and the pavement)
+    const rectPolys: P2[][] = roads.map((r) => [[r.minX, r.minZ], [r.maxX, r.minZ], [r.maxX, r.maxZ], [r.minX, r.maxZ]]);
+    const cutters: P2[][] = [bandPoly, ...diagPolys, ...rectPolys].map((P) => (signed(P) < 0 ? [...P].reverse() : P));
+    const paved = (i: number, j: number) => {
+      const cx = X0 + (i + 0.5) * CELL, cz = Z0 + (j + 0.5) * CELL, d = dist[j * NX + i];
+      if (d < 0) return false; // (the park in the middle)
+      // (clear of every road and the band by more than half a cell: all pavement)
+      if (d > 0.36 && Math.hypot(cx, cz) >= BAND_R + 0.36) return true;
+      // (near a road's edge or the band: laid if any corner's off them, and cut exactly below)
+      // (a 5 x 5 sample of the cell, corners included: two different roads can each cover some corners and leave a wedge)
+      for (let u = 0; u <= 4; u++) for (let v = 0; v <= 4; v++) { const x = X0 + (i + u / 4) * CELL, z = Z0 + (j + v / 4) * CELL; if (!cutters.some((C) => inConvex(C, x, z))) return true; }
+      return false;
+    };
+    /** a rectangle minus the convex polygons over it: convex pieces (one cut per polygon edge) */
+    const clipHP = (P: P2[], ox: number, oz: number, nx: number, nz: number): P2[] => {
+      const out: P2[] = [];
+      for (let q = 0; q < P.length; q++) {
+        const A = P[q], B = P[(q + 1) % P.length], da = (A[0] - ox) * nx + (A[1] - oz) * nz, db = (B[0] - ox) * nx + (B[1] - oz) * nz;
+        if (da >= 0) out.push(A);
+        if ((da >= 0) !== (db >= 0)) { const t = da / (da - db); out.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]); }
+      }
+      return out;
+    };
+    const areaOf = (P: P2[]) => { let A = 0; for (let k = 0; k < P.length; k++) A += P[k][0] * P[(k + 1) % P.length][1] - P[(k + 1) % P.length][0] * P[k][1]; return Math.abs(A) / 2; };
+    /** convex pieces minus convex cutters (each wound the same way): what's left, still convex, and whether anything went */
+    const subtract = (pieces: P2[][], cut: P2[][]): { pieces: P2[][]; cut: boolean } => {
+      let any = false;
+      for (const C0 of cut) {
+        const C = signed(C0) < 0 ? [...C0].reverse() : C0, next: P2[][] = [];
+        const cx = C.map((p) => p[0]), cz = C.map((p) => p[1]), c0 = Math.min(...cx), c1 = Math.max(...cx), d0 = Math.min(...cz), d1 = Math.max(...cz);
+        for (const P of pieces) {
+          // (no overlap with this cutter's box: keep as is)
+          const bx = P.map((p) => p[0]), bz = P.map((p) => p[1]);
+          if (Math.max(...bx) <= c0 || Math.min(...bx) >= c1 || Math.max(...bz) <= d0 || Math.min(...bz) >= d1) { next.push(P); continue; }
+          let rem = P;
+          for (let k = 0; k < C.length && rem.length >= 3; k++) {
+            const A = C[k], B = C[(k + 1) % C.length], dx = B[0] - A[0], dz = B[1] - A[1];
+            const outside = clipHP(rem, A[0], A[1], dz, -dx);
+            if (outside.length >= 3 && areaOf(outside) > 1e-4) { next.push(outside); if (areaOf(outside) < areaOf(rem) - 1e-6) any = true; }
+            rem = clipHP(rem, A[0], A[1], -dz, dx);
+          }
+          if (rem.length >= 3 && areaOf(rem) > 1e-4) any = true; // (the part under the cutter: gone)
+        }
+        pieces = next;
+      }
+      return { pieces, cut: any };
+    };
+    subtractRef = subtract;
+    const lay = (r: Rect) => {
+      const res = subtract([[[r.minX, r.minZ], [r.maxX, r.minZ], [r.maxX, r.maxZ], [r.minX, r.maxZ]]], cutters);
+      if (!res.cut && res.pieces.length === 1) { ground(r); return; }
+      for (const P of res.pieces) if (P.length >= 3 && areaOf(P) > 5e-4) boxes.push(polyBox(P, 0.15, "sidewalk"));
+    };
+    diagRef = diagPolys;
     for (let j = 0; j <= NZ; j++) {
       const next = new Map<string, Rect>();
       if (j < NZ) {
@@ -980,64 +1051,27 @@ export function buildTrashington(): ArenaLayout {
           if (o) { o.maxZ = z1; open.delete(key); next.set(key, o); } else next.set(key, R(X0 + i0 * CELL, X0 + i * CELL, Z0 + j * CELL, z1));
         }
       }
-      for (const r of open.values()) ground(r);
+      for (const r of open.values()) lay(r);
       open = next;
     }
-    // (the pavement along a diagonal is 0.5 m steps underneath: a smooth kerb strip on top, looks only)
-    for (const e of diags) {
-      const [ax, az] = endP(e, "a"), [bx, bz] = endP(e, "b"), L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L;
-      for (const side of [-1, 1]) {
-        const nx = -uz * side, nz = ux * side, at = (t: number, o: number) => cellAt(ax + ux * t + nx * o, az + uz * t + nz * o);
-        let best: [number, number] = [0, 0], run = -1;
-        for (let t = 0; t <= L + 0.01; t += 0.25) {
-          const ok = at(t, e.hw + 0.6) > 0 && at(t, e.hw + 2.2) > 0;
-          if (ok && run < 0) run = t;
-          if ((!ok || t + 0.25 > L) && run >= 0) { const end = ok ? t : t - 0.25; if (end - run > best[1] - best[0]) best = [run, end]; run = -1; }
-        }
-        if (best[1] - best[0] < 2) continue;
-        const tm = (best[0] + best[1]) / 2, om = e.hw + (2.2 - 0.35) / 2;
-        scenery.push({ kind: "walk", x: ax + ux * tm + nx * om, z: az + uz * tm + nz * om, w: 2.55, d: best[1] - best[0], yaw: Math.atan2(ux, uz) });
-      }
-    }
+    void cellAt;
     // ---- R3: the pavement round the roundabout: 96 curved pieces from its kerb out past where the grid starts,
     //      each cut back square from the roads that leave the ring ----
     {
-      type P2 = [number, number];
-      const clipHP = (P: P2[], ox: number, oz: number, nx: number, nz: number): P2[] => {
-        const out: P2[] = [];
-        for (let q = 0; q < P.length; q++) {
-          const A = P[q], B = P[(q + 1) % P.length], da = (A[0] - ox) * nx + (A[1] - oz) * nz, db = (B[0] - ox) * nx + (B[1] - oz) * nz;
-          if (da >= 0) out.push(A);
-          if ((da >= 0) !== (db >= 0)) { const t = da / (da - db); out.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]); }
-        }
-        return out;
-      };
       const segs = 96, r0 = RING.r1, r1 = BAND + 0.6;
+      // (R12.3b: each piece cut exactly against the roads leaving the ring and the diagonals, the same way as the grid:
+      //  a piece whose middle was on a road used to go entirely, leaving a hole beside the road)
+      const roadPolys: P2[][] = roads.map((r) => [[r.minX, r.minZ], [r.maxX, r.minZ], [r.maxX, r.maxZ], [r.minX, r.maxZ]]);
       for (let q = 0; q < segs; q++) {
         const a0 = (q / segs) * Math.PI * 2, a1 = ((q + 1) / segs) * Math.PI * 2;
-        let P: P2[] = [[Math.cos(a0) * r0, Math.sin(a0) * r0], [Math.cos(a0) * r1, Math.sin(a0) * r1], [Math.cos(a1) * r1, Math.sin(a1) * r1], [Math.cos(a1) * r0, Math.sin(a1) * r0]];
-        const cx = Math.cos((a0 + a1) / 2) * (r0 + r1) / 2, cz = Math.sin((a0 + a1) / 2) * (r0 + r1) / 2;
-        for (const r of roads) {
-          if (!(r.maxX > Math.min(...P.map((p) => p[0])) && r.minX < Math.max(...P.map((p) => p[0])) && r.maxZ > Math.min(...P.map((p) => p[1])) && r.minZ < Math.max(...P.map((p) => p[1])))) continue;
-          const gaps = [r.minX - cx, cx - r.maxX, r.minZ - cz, cz - r.maxZ], m = Math.max(...gaps);
-          if (m < 0) { P = []; break; }
-          const side = gaps.indexOf(m);
-          P = side === 0 ? clipHP(P, r.minX, 0, -1, 0) : side === 1 ? clipHP(P, r.maxX, 0, 1, 0) : side === 2 ? clipHP(P, 0, r.minZ, 0, -1) : clipHP(P, 0, r.maxZ, 0, 1);
-          if (P.length < 3) break;
+        const P: P2[] = [[Math.cos(a0) * r0, Math.sin(a0) * r0], [Math.cos(a0) * r1, Math.sin(a0) * r1], [Math.cos(a1) * r1, Math.sin(a1) * r1], [Math.cos(a1) * r0, Math.sin(a1) * r0]];
+        const { pieces } = subtractRef!([P], [...roadPolys, ...diagRef]);
+        for (const Q of pieces) {
+          let A = 0;
+          for (let k = 0; k < Q.length; k++) A += Q[k][0] * Q[(k + 1) % Q.length][1] - Q[(k + 1) % Q.length][0] * Q[k][1];
+          if (Q.length < 3 || Math.abs(A) / 2 < 5e-4) continue;
+          boxes.push(polyBox(Q, 0.15, "sidewalk"));
         }
-        for (const g of roadSegs) {
-          if (P.length < 3) break;
-          const vx = g.bx - g.ax, vz = g.bz - g.az, l = Math.hypot(vx, vz), nx = -vz / l, nz = vx / l;
-          const sd = (cx - g.ax) * nx + (cz - g.az) * nz, sgn = sd >= 0 ? 1 : -1, t = ((cx - g.ax) * vx + (cz - g.az) * vz) / (l * l);
-          if (Math.abs(sd) > g.hw + 8 || t < -0.05 || t > 1.15) continue; // (only beside the diagonal itself, not its line carried on past the ring)
-          if (Math.abs(sd) < g.hw) { P = []; break; }
-          P = clipHP(P, g.ax + nx * g.hw * sgn, g.az + nz * g.hw * sgn, nx * sgn, nz * sgn);
-        }
-        if (P.length < 3) continue;
-        let A = 0;
-        for (let k = 0; k < P.length; k++) A += P[k][0] * P[(k + 1) % P.length][1] - P[(k + 1) % P.length][0] * P[k][1];
-        if (Math.abs(A) / 2 < 0.05) continue;
-        boxes.push(polyBox(P, 0.15, "sidewalk"));
       }
     }
     blocks.push({ name: "Road test: the city", rect: R(-HALF, HALF, Z0, HALF), tier: 1, open: ["N", "S", "E", "W"] });

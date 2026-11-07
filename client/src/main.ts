@@ -224,6 +224,9 @@ function updateMatchHud(a: ArenaScene) {
   const starter = canStart(a);
   show("btn-start", starter);
   $("btn-start").textContent = m.phase === "over" ? "PLAY AGAIN" : "START MATCH";
+  // (R12.3b: the lobby card (who's here, "Press ENTER to start") belongs to the lobby: once the match is on, the cash
+  //  list top-right has everyone, and the card was sitting over the screen for the whole game)
+  show("lobby-panel", m.phase === "lobby");
 
   // timer
   let round = "", time = "", sub = "", cls = "mh-time";

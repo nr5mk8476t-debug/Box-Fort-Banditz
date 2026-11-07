@@ -4,7 +4,7 @@ import {
   World, buildTrashington, inRect, onRoadAt, starsOf, JAIL_TIME, BREAKOUT_HEAT, COP_RUN, PLAYER, makeLock, newLockRun, lockPress, lockUpdate,
   pinPos, bindingPin, LOCK, ARREST, type MoveInput, type WorldEvent, type LockRun,
 } from "../src/index.js";
-import { setCityMap as useCity } from "../src/index.js";
+import { setCityMap as useCity, laneAt, type CopCarSim } from "../src/index.js";
 useCity("classic"); // (R3: these tests were written for the classic city and its landmarks)
 
 const inp = (seq: number, p: Partial<MoveInput> = {}): MoveInput =>
@@ -68,7 +68,9 @@ test("dispatch: 1 star = 1 cop, 2 = 2, 3 = 3 + a cop car; cops arrive from out o
     const { w, p } = quiet();
     p.notoriety = heat;
     const spawns: WorldEvent[] = [];
-    run(w, "a", 10, {}, spawns, () => { if (p.jailT <= 0) p.notoriety = heat; }); // (a new cop every 4 s; heat held)
+    // (a new cop every 4 s; heat held. R12.3b: 16 s, not 10: the cop car drives the lanes now, round the corners like
+    //  everyone else, instead of cutting straight across, so it takes a few seconds longer to get there)
+    run(w, "a", 16, {}, spawns, () => { if (p.jailT <= 0) p.notoriety = heat; });
     const sp = spawns.filter((e) => e.t === "copSpawn");
     // (at 3 stars the cop who hops out of the car counts toward the 3)
     assert.equal(sp.length, cops, `${heat} heat: cops on you`);
@@ -315,9 +317,16 @@ test("3 stars: the cop car stays on the roads, pulls up, drops off a cop; runnin
   w2.movePlayer(other, 30, -30, 0);
   other.notoriety = 95; p2.notoriety = 40;
   w2.movePlayer(p2, 0, -30, 0);
-  w2.police.cars.push({ id: "copX", x: -20, z: -30, yaw: Math.PI / 2, v: 15, target: "b", mode: "drive", route: [{ x: 30, z: -30 }], replanT: 9, calmT: 0, lifeT: 0, deployed: false });
+  // (R12.3b: the cop car drives in a lane now: a clear straight stretch of one, nobody else on it)
+  const ln = w2.traffic.lanes.find((l) => !l.conn && l.len > 26 && !w2.traffic.cars.some((c) => c.lane === l.id && c.s < 30))!;
+  const st = laneAt(ln, 6);
+  const cx: CopCarSim = { id: "copX", x: st.x, z: st.z, yaw: st.yaw, v: 0, target: "b", mode: "drive", route: [], replanT: 9, calmT: 0, lifeT: 0, deployed: false };
+  w2.police.cars.push(cx); w2.police.placeCar(cx, st.x, st.z, st.yaw);
+  assert.ok(cx.ride, "in the lane");
+  // (R12.3b: the cop car drives in its lane now: the bandit stands in that lane, in front of it)
+  w2.movePlayer(p2, cx.x + Math.sin(cx.yaw) * 14, cx.z + Math.cos(cx.yaw) * 14, 0);
   const ev2: WorldEvent[] = [];
-  run(w2, "a", 2, {}, ev2);
+  run(w2, "a", 4, {}, ev2);
   const b = ev2.find((e) => e.t === "busted") as Extract<WorldEvent, { t: "busted" }>;
   assert.ok(b && b.car, "rammed = busted");
 });
@@ -366,7 +375,7 @@ test("night: twice the cops per star (2/4/6) and a cop car from 2 stars", () => 
     nightfall(w);
     p.notoriety = heat;
     const ev: WorldEvent[] = [];
-    run(w, "a", 10, {}, ev, () => { if (p.jailT <= 0) p.notoriety = heat; });
+    run(w, "a", 16, {}, ev, () => { if (p.jailT <= 0) p.notoriety = heat; }); // (R12.3b: 16 s: see above)
     const n = ev.filter((e) => e.t === "copSpawn").length;
     assert.ok(n >= cops && n <= cops + cars, `${heat} heat at night: ${n} cops (+1 may hop out of the car)`);
     assert.equal(ev.filter((e) => e.t === "copCar" && e.stage === "dispatch").length, cars, `${heat} heat at night: cars`);

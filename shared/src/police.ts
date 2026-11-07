@@ -26,6 +26,7 @@ import { findPath } from "./navgraph.js";
 import { newLockRun, lockPress, type LockResult } from "./lockpick.js";
 import type { NpcSimData } from "./npcSim.js";
 import type { World, PlayerSim } from "./world.js";
+import { CAR_HALF_LEN, CAR_HALF_WIDTH, type CarSim } from "./traffic.js";
 
 export const STAR_HEAT = [30, 60, 90];
 export function starsOf(heat: number): number { return heat >= STAR_HEAT[2] ? 3 : heat >= STAR_HEAT[1] ? 2 : heat >= STAR_HEAT[0] ? 1 : 0; }
@@ -50,7 +51,7 @@ const COOL_DELAY = 3; // unseen this long -> heat cools fast
 const COOL_FAST = 4; // heat per second
 const COOL_SLOW = 0.6;
 const COOL_UNWANTED = 1;
-export const COPCAR = { speed: 15, halfLen: 2.2, halfWidth: 1.0, deployDist: 15 };
+export const COPCAR = { speed: 15, halfLen: 2.2, halfWidth: 1.0, deployDist: 15, /** R12.3b: how long it sits at the kerb after dropping its officer off */ parkFor: 8, /** R12.3b: how far right of a road's centre line it drives */ keepRight: 1.9 };
 /**
  * R7: the city's police presence (the new city): foot patrols walking beats round town, cruisers driving round all
  * day, and the station's own cops (one walking the ground floor, one guarding the evidence room). They ignore you
@@ -66,6 +67,22 @@ export interface CopCarSim {
   patrol?: boolean;
   route: { x: number; z: number }[];
   replanT: number; calmT: number; lifeT: number; deployed: boolean;
+  /** R12.3b: in the traffic's lanes (siren off: patrolling, or heading off after a chase), and the little offset it
+   *  eases out of as it pulls in */
+  ride?: CarSim | null; jx?: number; jz?: number; jyaw?: number; joinT?: number;
+  /** R12.3b (siren on): the car it's waiting for (it can't get past it: that car goes first), how long it's been stuck,
+   *  backing up to get clear; why it's stopped (diagnostics) */
+  waitFor?: string; stuckT?: number; revT?: number; why?: string;
+  /** R12.3b: dropping an officer off: where it pulls in to, how long it's sat there; done, it circles the area */
+  parkAt?: { x: number; z: number } | null; parkT?: number; orbit?: boolean;
+  /** the waypoint it last passed (to know which way the road it's on runs, for keeping right) */
+  lastWp?: { x: number; z: number };
+  /** the car it's backing up to make way for */
+  revFrom?: string;
+  /** circling the area after dropping its officer off: the road node it's heading for; tucked toward the kerb (m) */
+  orbitAt?: { x: number; z: number }; tuck?: number;
+  /** how near the road (any lane) gets to its target, checked once a second */
+  reachD?: number; reachT?: number;
 }
 
 export type PoliceEvent =
@@ -116,6 +133,7 @@ export class PoliceSystem {
   /** New round: no cops, no cars, nobody in jail. */
   reset() {
     for (const n of this.cops()) this.w.npc.npcs.delete(n.id);
+    for (const c of this.cars) if (c.ride) this.w.traffic?.leave(c.ride);
     this.cars.length = 0;
     this.nextCop.clear(); this.nextCarT.clear();
     for (const p of this.w.players.values()) { p.jailT = 0; p.lock = null; p.jailCell = -1; p.seenT = -99; }
@@ -479,10 +497,11 @@ export class PoliceSystem {
     });
     // the cruisers
     if (this.cars.filter((c) => c.patrol).length < PATROL.cars) {
-      const pts = this.roadPoints().filter((r) => unseen(r.x, r.z) && players.every((p) => Math.hypot(p.move.x - r.x, p.move.z - r.z) > 45));
+      const pts = this.roadPoints().filter((r) => unseen(r.x, r.z) && players.every((p) => Math.hypot(p.move.x - r.x, p.move.z - r.z) > 45) && this.roadClear(r.x, r.z));
       if (pts.length) {
         const r = pts[Math.floor(w.random() * pts.length)];
-        this.cars.push({ id: "cop" + this.nextCar++, x: r.x, z: r.z, yaw: w.random() * Math.PI * 2, v: 0, target: "", mode: "cruise", route: [], replanT: 0, calmT: 0, lifeT: 0, deployed: false, patrol: true });
+        const car: CopCarSim = { id: "cop" + this.nextCar, x: r.x, z: r.z, yaw: w.random() * Math.PI * 2, v: 0, target: "", mode: "cruise", route: [], replanT: 0, calmT: 0, lifeT: 0, deployed: false, patrol: true };
+        if (this.intoLane(car, r.edge, r.x + Math.sin(car.yaw), r.z + Math.cos(car.yaw))) { this.nextCar++; this.cars.push(car); }
       }
     }
   }
@@ -626,10 +645,19 @@ export class PoliceSystem {
     const w = this.w;
     const pts = this.roadPoints().filter((r) => { const d = Math.hypot(r.x - p.move.x, r.z - p.move.z); return d > 45 && d < 85; });
     if (!pts.length) return null;
-    const hidden = pts.filter((r) => !this.los(r.x, 1.4, r.z, p.move.x, p.move.y + 1.4, p.move.z));
-    const pool = hidden.length ? hidden : pts;
-    const r = pool[Math.floor(w.random() * pool.length)];
-    const car: CopCarSim = { id: "cop" + this.nextCar++, x: r.x, z: r.z, yaw: Math.atan2(p.move.x - r.x, p.move.z - r.z), v: 0, target: p.id, mode: "drive", route: [], replanT: 0, calmT: 0, lifeT: 0, deployed: false };
+    // (R12.3b: never right on top of a car)
+    const clear = pts.filter((r) => this.roadClear(r.x, r.z));
+    if (!clear.length) return null;
+    const hidden = clear.filter((r) => !this.los(r.x, 1.4, r.z, p.move.x, p.move.y + 1.4, p.move.z));
+    const pool = hidden.length ? hidden : clear;
+    // (it starts in a lane: a few tries at different spots; nowhere with room, it comes a moment later)
+    let car: CopCarSim | null = null;
+    for (let k = 0; k < 6 && !car; k++) {
+      const r = pool[Math.floor(w.random() * pool.length)];
+      const c: CopCarSim = { id: "cop" + this.nextCar, x: r.x, z: r.z, yaw: Math.atan2(p.move.x - r.x, p.move.z - r.z), v: 0, target: p.id, mode: "drive", route: [], replanT: 0, calmT: 0, lifeT: 0, deployed: false };
+      if (this.intoLane(c, r.edge, p.move.x, p.move.z)) { car = c; this.nextCar++; }
+    }
+    if (!car) return null;
     this.cars.push(car);
     w.emit({ t: "copCar", car: car.id, p: p.id, stage: "dispatch" });
     return car;
@@ -656,6 +684,7 @@ export class PoliceSystem {
     }
     car.route = best.map((i) => ({ x: g.nodes[i].x, z: g.nodes[i].z }));
     car.route.push({ x: to.x, z: to.z });
+    car.lastWp = undefined;
   }
 
   private carLeave(car: CopCarSim) {
@@ -674,7 +703,6 @@ export class PoliceSystem {
       car.calmT = valid && starsOf(p!.notoriety) >= 2 ? 0 : car.calmT + dt; // stays on you down to 2 stars
       if (car.calmT > 4) this.carLeave(car);
     }
-    let want = 0;
     if (car.mode === "cruise") {
       // R7: a cruiser on patrol: round town at a steady pace; anyone wanted in sight, siren on
       car.replanT -= dt;
@@ -683,85 +711,177 @@ export class PoliceSystem {
         for (const o of w.players.values()) {
           if (!this.wanted(o) || starsOf(o.notoriety) === 0 || Math.hypot(o.move.x - car.x, o.move.z - car.z) > PATROL.carSight) continue;
           if (!this.los(car.x, 1.4, car.z, o.move.x, o.move.y + 1.4, o.move.z)) continue;
-          car.mode = "drive"; car.target = o.id; car.calmT = 0; car.replanT = 0; car.deployed = false;
+          car.mode = "drive"; car.target = o.id; car.calmT = 0; car.replanT = 0; car.deployed = false; car.orbit = false; car.route = [];
           o.seenT = w.time; o.knownX = o.move.x; o.knownZ = o.move.z;
           w.emit({ t: "copCar", car: car.id, p: o.id, stage: "dispatch" });
           break;
         }
       }
-      if (car.mode === "cruise") {
-        if (car.route.length <= 1 && (!car.route[0] || Math.hypot(car.route[0].x - car.x, car.route[0].z - car.z) < 4)) {
-          const g = w.arena.roadGraph!;
-          const nd = g.nodes[Math.floor(w.random() * g.nodes.length)];
-          const r = this.nearestRoad(nd.x, nd.z);
-          if (r) this.planCar(car, r);
-        }
-        want = PATROL.cruise;
-        // don't drive into the back of the traffic
-        const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
-        for (const t of w.traffic?.cars ?? []) {
-          const dx = t.x - car.x, dz = t.z - car.z, along = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
-          if (along > 0 && along < 9 && side < 1.8) want = Math.min(want, Math.max(0, t.v - 0.5), along < 5 ? 0 : want);
-        }
-      }
     }
-    if (car.mode === "cruise") { /* (steering below) */ }
-    else if (car.mode === "leave") {
+    if (car.mode === "leave") {
       const players = [...w.players.values()].filter((o) => o.connected);
       if (car.lifeT > 25 || (car.lifeT > 3 && players.every((o) => Math.hypot(o.move.x - car.x, o.move.z - car.z) > 60))) {
+        if (car.ride) w.traffic.leave(car.ride);
         this.cars.splice(this.cars.indexOf(car), 1);
         return;
       }
-      if (!car.route.length) {
-        // drive to the road node furthest from everyone
-        const g = w.arena.roadGraph!;
-        let best = g.nodes[0], bestD = -1;
-        for (const nd of g.nodes) { const dp = Math.min(...players.map((o) => Math.hypot(o.move.x - nd.x, o.move.z - nd.z)), 999); if (dp > bestD) { bestD = dp; best = nd; } }
-        const r = this.nearestRoad(best.x, best.z);
-        if (r) this.planCar(car, r);
-      }
-      want = COPCAR.speed * 0.8;
-    } else if (car.mode === "drive" && valid) {
-      car.replanT -= dt;
-      if (car.replanT <= 0) { car.replanT = 1; const r = this.nearestRoad(p!.move.x, p!.move.z); if (r) this.planCar(car, r); }
-      want = COPCAR.speed;
-      // close enough (or at the end of the road nearest to them): pull over and send the cops in
-      const dp = Math.hypot(p!.move.x - car.x, p!.move.z - car.z);
-      const atEnd = car.route.length === 1 && Math.hypot(car.route[0].x - car.x, car.route[0].z - car.z) < 3;
-      if (dp < COPCAR.deployDist || (atEnd && dp < 30)) car.mode = "parked";
-    } else if (car.mode === "parked") {
-      want = 0;
-      if (car.v < 1 && !car.deployed && valid) {
-        car.deployed = true;
-        const rx = Math.cos(car.yaw), rz = -Math.sin(car.yaw);
-        for (const s of [1]) { // one cop hops out (light nerf: was two)
-          let x = car.x + rx * s * 2.2, z = car.z + rz * s * 2.2;
-          if (w.npc.lineClear(car.x, car.z, x, z, 0) === false) { x = car.x - Math.sin(car.yaw) * 3.2; z = car.z - Math.cos(car.yaw) * 3.2; }
-          this.spawnCop(p!, { x, z }, true);
-        }
-        w.emit({ t: "copCar", car: car.id, p: car.target, stage: "deploy" });
-      }
-      if (valid && Math.hypot(p!.move.x - car.x, p!.move.z - car.z) > 40) { car.mode = "drive"; car.replanT = 0; }
     }
-    // steer along the route
-    const wp = car.route[0];
-    if (car.mode !== "parked" && wp) {
+    // ---- R12.3b: every cop car drives in the traffic's lanes. Siren on, it has the right of way at junctions (lights
+    //      and give-way don't hold it up; cars coming to the junction let it through) and picks its way toward its
+    //      target; siren off, it's traffic like any other. In the lanes it can't leave the road, drive through a car, or
+    //      sit nose to nose with one. ----
+    if (!car.ride && (car.joinT = (car.joinT ?? 0) - dt) <= 0) {
+      car.joinT = 0.4;
+      const r = w.traffic?.join(car.id, car.x, car.z, car.yaw, car.v);
+      if (r) {
+        car.ride = r; car.jx = car.x - r.x; car.jz = car.z - r.z;
+        let e = car.yaw - r.yaw; while (e > Math.PI) e -= Math.PI * 2; while (e < -Math.PI) e += Math.PI * 2; car.jyaw = e;
+      }
+    }
+    if (car.ride) {
+      const r = car.ride, ln = w.traffic.lanes[r.lane];
+      r.siren = car.mode === "drive" || car.mode === "parked";
+      if (car.mode === "drive" && valid) {
+        let goal = { x: p!.move.x, z: p!.move.z };
+        if (car.orbit) {
+          // (its officer's out: it circles the area, siren on, somewhere 25-60 m from them, never stopping again)
+          car.replanT -= dt;
+          if (!car.orbitAt || car.replanT <= 0 || Math.hypot(car.orbitAt.x - car.x, car.orbitAt.z - car.z) < 12) {
+            car.replanT = 10;
+            const g = w.arena.roadGraph!, ring = g.nodes.filter((nd) => { const d = Math.hypot(nd.x - p!.move.x, nd.z - p!.move.z); return d > 25 && d < 60 && Math.hypot(nd.x - car.x, nd.z - car.z) > 15; });
+            const nd = ring.length ? ring[Math.floor(w.random() * ring.length)] : g.nodes[Math.floor(w.random() * g.nodes.length)];
+            car.orbitAt = { x: nd.x, z: nd.z };
+          }
+          goal = car.orbitAt;
+        }
+        if (!r.goal || Math.hypot(goal.x - r.goal.x, goal.z - r.goal.z) > 6) r.goal = { ...goal };
+        // close to them: it stops in its own lane (on a road, never in a junction) and sends an officer in
+        // (or, if they're off the road, as near as the road gets to them)
+        const dp = Math.hypot(p!.move.x - car.x, p!.move.z - car.z);
+        if ((car.reachT = (car.reachT ?? 0) - dt) <= 0) { car.reachT = 1; car.reachD = w.traffic.laneDist(p!.move.x, p!.move.z); }
+        const close = dp < COPCAR.deployDist || (dp < 30 && dp <= (car.reachD ?? 0) + 6);
+        if (!car.deployed && !car.orbit && close && !ln.conn && ln.len - r.s > 1.5) { car.mode = "parked"; car.parkT = 0; }
+      } else if (car.mode === "leave") { if (!r.goal) { const f = this.farNode(); r.goal = { x: f.x, z: f.z }; } }
+      else if (car.mode === "cruise") r.goal = null;
+      r.hold = car.mode === "parked";
+      if (car.mode === "parked") {
+        // (Blake, R12.3b: it drops an officer off, waits about 8 s and moves on, so a chase never seals a road for good)
+        if (r.v < 1 && !car.deployed && valid) {
+          car.deployed = true;
+          const rx = Math.cos(r.yaw), rz = -Math.sin(r.yaw);
+          let x = r.x + rx * 2.2, z = r.z + rz * 2.2; // (out of the kerb-side door, onto the pavement)
+          if (w.npc.lineClear(r.x, r.z, x, z, 0) === false) { x = r.x - Math.sin(r.yaw) * 3.2; z = r.z - Math.cos(r.yaw) * 3.2; }
+          this.spawnCop(p!, { x, z }, true);
+          w.emit({ t: "copCar", car: car.id, p: car.target, stage: "deploy" });
+        }
+        if (car.deployed) car.parkT = (car.parkT ?? 0) + dt;
+        if (valid && ((car.deployed && (car.parkT ?? 0) > COPCAR.parkFor) || Math.hypot(p!.move.x - car.x, p!.move.z - car.z) > 40)) { car.mode = "drive"; car.replanT = 0; car.orbit = car.deployed; car.orbitAt = undefined; }
+        else if (!valid && (car.parkT ?? 0) > COPCAR.parkFor) this.carLeave(car);
+      }
+      // (it eases over into the lane rather than jumping; stopped, it tucks in toward the kerb)
+      const k = Math.max(0, 1 - dt * 3), e = w.arena.roadNet?.edges[ln.edge], tuck = car.mode === "parked" && !ln.conn ? Math.max(0, (e?.hw ?? 4) / 2 - COPCAR.halfWidth - 0.25) : 0;
+      car.jx = (car.jx ?? 0) * k; car.jz = (car.jz ?? 0) * k; car.jyaw = (car.jyaw ?? 0) * k;
+      car.tuck = (car.tuck ?? 0) + (tuck - (car.tuck ?? 0)) * Math.min(1, dt * 1.5);
+      car.x = r.x + car.jx + Math.cos(r.yaw) * car.tuck; car.z = r.z + car.jz - Math.sin(r.yaw) * car.tuck; car.yaw = r.yaw + car.jyaw; car.v = r.v;
+      car.why = r.why ? `${r.why}${r.by ? " (" + r.by + ")" : ""}` : "";
+      this.carCollide(car);
+      return;
+    }
+    // ---- not in a lane yet (just arrived somewhere awkward): head along the nearest road until it can pull in ----
+    if (car.route.length <= 1 && (!car.route[0] || Math.hypot(car.route[0].x - car.x, car.route[0].z - car.z) < 4)) {
+      const r = this.nearestRoad(car.x + Math.sin(car.yaw) * 12, car.z + Math.cos(car.yaw) * 12);
+      if (r) this.planCar(car, r);
+    }
+    let want = 6;
+    car.why = ""; car.waitFor = "";
+    const hit = this.pathBlock(car);
+    if (hit) { want = Math.min(want, Math.sqrt(2 * 8 * Math.max(0, hit.d - 1.2))); if (hit.d < 4) { car.waitFor = hit.car.id; car.why = `waiting for ${hit.car.id}`; } }
+    // (stuck a few seconds with a car in the way: back up a little, slowly, straight back, and try again)
+    car.stuckT = car.v < 0.3 && car.waitFor ? (car.stuckT ?? 0) + dt : 0;
+    if ((car.stuckT ?? 0) > 3) { car.revT = 1.5; car.stuckT = 0; car.route = []; }
+    if ((car.revT ?? 0) > 0) { car.revT! -= dt; car.why = "backing up"; car.v = Math.max(-2, car.v - 8 * dt); car.x += Math.sin(car.yaw) * car.v * dt; car.z += Math.cos(car.yaw) * car.v * dt; this.carCollide(car); return; }
+    const wp = this.aimPoint(car);
+    if (wp) {
       const dx = wp.x - car.x, dz = wp.z - car.z, dist = Math.hypot(dx, dz);
       if (dist < 2.5 && car.route.length > 1) car.route.shift();
-      const want_yaw = Math.atan2(dx, dz);
-      let err = want_yaw - car.yaw;
+      let err = Math.atan2(dx, dz) - car.yaw;
       while (err > Math.PI) err -= Math.PI * 2;
       while (err < -Math.PI) err += Math.PI * 2;
-      const turn = 2.6 * dt * Math.min(1, 0.35 + car.v / 6);
+      const turn = dt * Math.min(2.6, 0.3 + Math.abs(car.v) / 5); // (a car's turning circle)
       car.yaw += Math.max(-turn, Math.min(turn, err));
-      if (Math.abs(err) > 0.5) want = Math.min(want, 6);
-      if (car.route.length === 1) want = Math.min(want, Math.max(0, dist * 1.2 - 1));
-    } else if (!wp) want = 0;
+      if (Math.abs(err) > 0.5) want = Math.min(want, 4);
+    } else want = 0;
     car.v = want > car.v ? Math.min(want, car.v + 8 * dt) : Math.max(want, car.v - 14 * dt);
     car.x += Math.sin(car.yaw) * car.v * dt;
     car.z += Math.cos(car.yaw) * car.v * dt;
     this.carCollide(car);
   }
+  /** (tests / debug) put a cop car somewhere: out of its lane, moved, and into the nearest lane going that way */
+  placeCar(car: CopCarSim, x: number, z: number, yaw: number) {
+    if (car.ride) this.w.traffic.leave(car.ride);
+    car.ride = null; car.x = x; car.z = z; car.yaw = yaw; car.v = 0; car.route = []; car.joinT = 0;
+    const r = this.w.traffic?.join(car.id, x, z, yaw, 0);
+    if (r) { car.ride = r; car.x = r.x; car.z = r.z; car.yaw = r.yaw; car.jx = car.jz = car.jyaw = 0; }
+  }
+  /** no car (or cop car) within 12 m: room for a new cop car to start */
+  private roadClear(x: number, z: number) { const tr = this.w.traffic; return !(tr?.cars.concat(tr.riders) ?? []).some((c) => Math.hypot(c.x - x, c.z - z) < 12) && !this.cars.some((c) => Math.hypot(c.x - x, c.z - z) < 12); }
+  /** R12.3b: a new cop car starts in a lane of the road it's on (the way that heads toward (tx, tz) if it can) */
+  private intoLane(car: CopCarSim, edge: number, tx: number, tz: number): boolean {
+    const g = this.w.arena.roadGraph!, [a, b] = g.edges[edge], A = g.nodes[a], B = g.nodes[b];
+    const along = Math.atan2(B.x - A.x, B.z - A.z), toward = (B.x - A.x) * (tx - car.x) + (B.z - A.z) * (tz - car.z) >= 0;
+    for (const yaw of toward ? [along, along + Math.PI] : [along + Math.PI, along]) {
+      const r = this.w.traffic?.join(car.id, car.x + Math.cos(yaw) * COPCAR.keepRight, car.z - Math.sin(yaw) * COPCAR.keepRight, yaw, 0);
+      if (r) { car.ride = r; car.x = r.x; car.z = r.z; car.yaw = r.yaw; car.jx = car.jz = car.jyaw = 0; return true; }
+    }
+    return false;
+  }
+  /** the first car in the way along where this cop car's about to drive (its route, sampled every metre from its
+   *  bumper), against each car's footprint widened by the cop car's own half width: how far ahead, and which */
+  private pathBlock(car: CopCarSim): { car: CarSim; d: number } | null {
+    const tr = this.w.traffic; if (!tr) return null;
+    const look = 4 + car.v * 0.7 + Math.max(0, car.v) * car.v / 16;
+    const pts: { x: number; z: number; d: number }[] = [];
+    let px = car.x, pz = car.z, d = 0;
+    const aim = this.aimPoint(car), way = car.mode === "parked" ? (car.parkAt ? [car.parkAt] : []) : aim ? [aim, ...car.route] : car.route;
+    // (from the front bumper on, along the heading for the first metres, then the route)
+    const hx = Math.sin(car.yaw), hz = Math.cos(car.yaw);
+    for (let k = 0; k <= 3 && d <= look; k++) { pts.push({ x: car.x + hx * (COPCAR.halfLen + k), z: car.z + hz * (COPCAR.halfLen + k), d: k }); }
+    px = car.x + hx * (COPCAR.halfLen + 3); pz = car.z + hz * (COPCAR.halfLen + 3); d = 3;
+    for (const q of way) {
+      const L = Math.hypot(q.x - px, q.z - pz); if (L < 0.01) continue;
+      for (let s = 1; s <= L && d + s <= look; s += 1) pts.push({ x: px + ((q.x - px) * s) / L, z: pz + ((q.z - pz) * s) / L, d: d + s });
+      d += L; px = q.x; pz = q.z; if (d > look) break;
+    }
+    let best: { car: CarSim; d: number } | null = null;
+    for (const t of tr.cars.concat(tr.riders)) {
+      if (Math.hypot(t.x - car.x, t.z - car.z) > look + 8) continue;
+      const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw);
+      for (const q of pts) {
+        if (best && q.d >= best.d) break;
+        const dx = q.x - t.x, dz = q.z - t.z, al = dx * fx + dz * fz, sd = dx * fz - dz * fx;
+        if (Math.abs(al) < CAR_HALF_LEN + COPCAR.halfWidth + 0.15 && Math.abs(sd) < CAR_HALF_WIDTH + COPCAR.halfWidth + 0.15) { best = { car: t, d: q.d }; break; }
+      }
+    }
+    return best;
+  }
+  /** where it's steering for: its spot at the kerb; else a point a few metres on along the road's centre line, a
+   *  lane's width to its right (R12.3b: keeping right like everyone else) */
+  private aimPoint(car: CopCarSim): { x: number; z: number } | null {
+    if (car.mode === "parked") return car.parkAt ?? null;
+    const wp0 = car.route[0]; if (!wp0) return null;
+    const c0 = this.nearestRoad(car.x, car.z) ?? { x: car.x, z: car.z }, sx = wp0.x - c0.x, sz = wp0.z - c0.z, sl = Math.hypot(sx, sz);
+    if (sl <= 3) return wp0;
+    const k = Math.min(sl, 5 + Math.abs(car.v) * 0.3);
+    return { x: c0.x + (sx / sl) * k + (sz / sl) * COPCAR.keepRight, z: c0.z + (sz / sl) * k - (sx / sl) * COPCAR.keepRight };
+  }
+  /** the road node furthest from everyone (where a car heading off goes) */
+  private farNode() {
+    const g = this.w.arena.roadGraph!, players = [...this.w.players.values()].filter((o) => o.connected);
+    let best = g.nodes[0], bestD = -1;
+    for (const nd of g.nodes) { const dp = Math.min(...players.map((o) => Math.hypot(o.move.x - nd.x, o.move.z - nd.z)), 999); if (dp > bestD) { bestD = dp; best = nd; } }
+    return best;
+  }
+
 
   /** Cop car footprint: wanted bandits get busted on the spot, others get knocked over. */
   private carCollide(car: CopCarSim) {

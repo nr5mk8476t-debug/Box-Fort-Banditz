@@ -216,7 +216,9 @@ export function poolResolve(s: PoolState, before: Ball[], log: ShotLog, names: [
   if (blackDown) {
     if (s.breakShot) { // black on the break: re-rack, the same player breaks again
       v.rerack = true; v.line = "The black went down on the break: re-rack, break again.";
-      Object.assign(s, newPoolState(me)); return v;
+      // (the shot count carries on through the re-rack: every shot in a game has its own number, so a client never
+      //  mistakes the new break for the one it just watched)
+      Object.assign(s, newPoolState(me), { shots: s.shots }); return v;
     }
     if (cueDown) { v.lose = me; v.win = you; v.line = `${names[me]} potted the black AND the white: ${names[you]} wins!`; return v; }
     if (v.foul) { v.lose = me; v.win = you; v.line = `Black potted on a foul (${v.foul.toLowerCase()}): ${names[you]} wins!`; return v; }
@@ -408,7 +410,12 @@ export interface StationState {
   pool: PoolState | null;
   darts: DartsState | null;
   /** pool: the shot rolling now (its start, the shot, the server clock it started on) */
-  shot: { n: number; balls: Ball[]; dx: number; dz: number; v: number; t0: number; dur: number } | null;
+  shot: PoolShot | null;
+  /** pool: the shot before (kept so a client that missed it entirely, a stalled frame or a background tab, can still
+   *  play it out instead of the balls just jumping) */
+  last: PoolShot | null;
+  /** this game's id (new for every game at every station, never reused): with the shot number it names each shot */
+  gid: number;
   clock: number;
   /** what just happened (shown on the station's board and the HUD); the winner ("" = none / called off) */
   msg: string; winner: string;
@@ -418,7 +425,8 @@ export interface StationState {
   /** increments on every change (clients use it to spot new shots and darts) */
   rev: number;
 }
-const freshStation = (): StationState => ({ phase: "free", seats: [], stake: 0, pool: null, darts: null, shot: null, clock: 0, msg: "", winner: "", end: "", overT: 0, gameT: 0, npcT: 0, rev: 0 });
+export interface PoolShot { n: number; balls: Ball[]; dx: number; dz: number; v: number; t0: number; dur: number }
+const freshStation = (): StationState => ({ phase: "free", seats: [], stake: 0, pool: null, darts: null, shot: null, last: null, gid: 0, clock: 0, msg: "", winner: "", end: "", overT: 0, gameT: 0, npcT: 0, rev: 0 });
 
 /** NPC opponents (existing upstairs regulars who come over to play) */
 export const PUB_NPCS = {
@@ -478,6 +486,8 @@ export class PubGames {
   readonly kitty: Record<StationKind, number> = { pool: PUBGAMES.npcKitty, darts: PUBGAMES.npcKitty };
   /** which NPC is busy at which station */
   private npcAt: Record<StationKind, string> = { pool: "", darts: "" };
+  /** the last game id handed out (game ids are never reused, at any station) */
+  private gidN = 0;
   constructor(private h: PubHost, stations: StationGeom[]) {
     for (const g of stations) { this.geom.set(g.id, g); this.st.set(g.id, freshStation()); }
   }
@@ -507,7 +517,7 @@ export class PubGames {
         }
         if (p.cash < stake) { this.msg(a.st, `You need $${stake} for that stake.`, pid); return "broke"; }
         s.seats = [{ id: pid, name: p.name, npc: false, stake, paid: false, away: 0, drop: 0 }];
-        s.stake = stake; s.msg = ""; s.winner = ""; s.end = "";
+        s.stake = stake; s.msg = ""; s.winner = ""; s.end = ""; s.gid = ++this.gidN; s.shot = null; s.last = null;
         if (a.vs === "npc") {
           this.h.addCash(pid, -stake); s.seats[0].paid = true;
           s.seats.push({ id: "npc:" + g.kind, name: PUB_NPCS[g.kind].name, npc: true, stake, paid: true, away: 0, drop: 0 });
@@ -554,7 +564,7 @@ export class PubGames {
     const first = Math.floor(this.h.rng() * 2);
     if (g.kind === "pool") { s.pool = newPoolState(first); s.darts = null; s.clock = POOL.clock; }
     else { s.darts = newDartsState(first); s.pool = null; s.clock = DARTS.clock; }
-    s.shot = null;
+    s.shot = null; s.last = null;
     s.msg = g.kind === "pool" ? `${s.seats[first].name} breaks.` : `${s.seats[first].name} throws first. 301, double out.`;
     this.placeTurn(id);
     this.bump(s);
@@ -615,7 +625,7 @@ export class PubGames {
     const shooter = P.turn, seat = s.seats[shooter];
     const names: [string, string] = [s.seats[0].name, s.seats[1].name];
     const v = poolResolve(P, before, log, names, timeout);
-    s.shot = null; delete (s as any)._sim; s.clock = POOL.clock;
+    s.last = s.shot; s.shot = null; delete (s as any)._sim; s.clock = POOL.clock;
     if (v.win >= 0) {
       const w = s.seats[v.win];
       if (s.seats[v.lose].npc) this.h.npcSay("pool", pick(PUB_NPCS.pool.lines.lose, this.h.rng)); else if (w.npc) this.h.npcSay("pool", pick(PUB_NPCS.pool.lines.win, this.h.rng));
@@ -686,14 +696,26 @@ export class PubGames {
   tick(dt: number) {
     for (const [id, s] of this.st) {
       const g = this.geom.get(id)!;
-      if (s.phase === "over") { s.overT -= dt; if (s.overT <= 0) { Object.assign(s, freshStation(), { rev: s.rev + 1 }); } continue; }
+      if (s.phase === "over") { s.overT -= dt; if (s.overT <= 0) { Object.assign(s, freshStation(), { rev: s.rev + 1, gid: s.gid }); } continue; }
       if (s.phase === "free") continue;
       // seats: dropped connections (held 45 s, then void), walking off (10 s, then forfeit), arrests (forfeit)
       let ended = false;
       for (let k = 0; k < s.seats.length && !ended; k++) {
         const q = s.seats[k]; if (q.npc) continue;
         const p = this.h.player(q.id);
-        if (!p || !p.connected) { q.drop += dt; if (q.drop >= PUBGAMES.dropHold) { this.finish(id, "", "void", `${q.name} dropped out: game called off, stakes back.`); ended = true; } continue; }
+        if (!p || !p.connected) {
+          q.drop += dt;
+          if (q.drop >= PUBGAMES.dropHold) {
+            // (Blake, R12.3b: held 45 s for a genuine dropout; still gone after that with the other player here, it's a
+            //  forfeit, so pulling the plug can't dodge a losing bet. Nobody left to win it (both gone, the host's
+            //  gone): called off, stakes back. Waiting for a mate: called off.)
+            const o = s.seats[1 - k], oHere = !!o && (o.npc || (this.h.player(o.id)?.connected ?? false));
+            if (s.phase === "play" && oHere) this.finish(id, o.id, "forfeit", `${q.name} never came back: ${o.name} wins.`);
+            else this.finish(id, "", "void", `${q.name} dropped out: game called off, stakes back.`);
+            ended = true;
+          }
+          continue;
+        }
         q.drop = 0;
         const other2 = s.seats[1 - k];
         if (p.jailed) { if (s.phase === "waiting" || !other2) this.finish(id, "", "void", `${q.name} got lifted.`); else this.finish(id, other2.id, "forfeit", `${q.name} got lifted by the guards: ${other2.name} wins.`); ended = true; continue; }
@@ -739,6 +761,12 @@ export class PubGames {
     }
   }
 
+  /** is the station's clock counting down right now (a person's turn, nothing rolling, their seat not on hold)? */
+  clockRunning(s: StationState): boolean {
+    if (s.phase !== "play") return false;
+    const turn = s.pool?.turn ?? s.darts?.turn ?? -1, seat = s.seats[turn];
+    return !!seat && !seat.npc && seat.drop <= 0 && !(s.pool && s.shot);
+  }
   private msg(id: string, msg: string, to?: string) { this.h.emit({ t: "pgMsg", st: id, msg, to }); }
   private bump(s: StationState) { s.rev++; }
 
@@ -746,12 +774,23 @@ export class PubGames {
   note(id: string): string {
     const s = this.st.get(id); if (!s) return "";
     const r3 = (x: number) => Math.round(x * 1e4) / 1e4;
+    // (R12.3b: countdowns go out as the moment they run out, on the shared clock, so the note only changes when a clock
+    //  starts, stops or resets, not every second, and a window that hasn't heard from the host for a moment still
+    //  counts down truthfully. A clock that's stopped (a dropped player's held seat) sends what's left instead.)
+    const at = (t: number) => Math.round(((((this.h.time + t) % 600) + 600) % 600) * 10) / 10;
+    const run = this.clockRunning(s);
+    const wire = (q: PoolShot) => ({ k: `${s.gid}:${q.n}`, n: q.n, b: q.balls.map((b) => [b.id, b.x, b.z, b.down ? 1 : 0]), dx: q.dx, dz: q.dz, v: q.v, t0: Math.round((((q.t0 % 600) + 600) % 600) * 1000) / 1000, dur: q.dur });
     return JSON.stringify({
-      ph: s.phase, rev: s.rev, stake: s.stake, msg: s.msg, win: s.winner, end: s.end, clock: Math.ceil(s.clock),
-      seats: s.seats.map((q) => [q.id, q.name, q.npc ? 1 : 0, q.drop > 0 ? 1 : 0, q.away > 0 ? Math.ceil(PUBGAMES.leaveT - q.away) : 0]),
+      ph: s.phase, gid: s.gid, rev: s.rev, stake: s.stake, msg: s.msg, win: s.winner, end: s.end,
+      dl: run ? at(s.clock) : -1, left: run || s.phase !== "play" ? 0 : Math.ceil(s.clock),
+      // (each seat: id, name, NPC?, when a dropped player's held seat runs out (-1 = here), when a player who walked off
+      //  forfeits (-1 = here))
+      seats: s.seats.map((q) => [q.id, q.name, q.npc ? 1 : 0, q.drop > 0 ? at(PUBGAMES.dropHold - q.drop) : -1, q.away > 0 ? at(PUBGAMES.leaveT - q.away) : -1]),
       pool: s.pool ? { b: s.pool.balls.map((b) => [b.id, r3(b.x), r3(b.z), b.down ? 1 : 0]), turn: s.pool.turn, g: s.pool.groups, vis: s.pool.visits, brk: s.pool.breakShot ? 1 : 0, hand: s.pool.inHand ? 1 : 0, n: s.pool.shots } : null,
-      // (the rolling shot: the exact start (full precision, so the replay matches the host's), the shot, when it started)
-      shot: s.shot ? { n: s.shot.n, b: s.shot.balls.map((b) => [b.id, b.x, b.z, b.down ? 1 : 0]), dx: s.shot.dx, dz: s.shot.dz, v: s.shot.v, t0: Math.round((s.shot.t0 % 600) * 1000) / 1000, dur: s.shot.dur } : null,
+      // (the rolling shot: the exact start (full precision, so the replay matches the host's), the shot, when it started;
+      //  its name k = game id : shot number, never reused)
+      shot: s.shot ? wire(s.shot) : null,
+      last: s.last ? wire(s.last) : null,
       darts: s.darts ? { sc: s.darts.scores, turn: s.darts.turn, d: s.darts.darts.map((x) => [r3(x.u), r3(x.v), x.label, x.value]), vs: s.darts.visitStart, n: s.darts.thrown, last: s.darts.last ? { who: s.darts.last.who, d: s.darts.last.darts.map((x) => [r3(x.u), r3(x.v), x.label, x.value]), tot: s.darts.last.total, note: s.darts.last.note } : null } : null,
     });
   }
@@ -816,4 +855,91 @@ export function npcPoolShot(P: PoolState, rng: () => number): { dx: number; dz: 
   // the error: a small turn of the aim (about 0.3 degrees), +-10% power
   const e = gauss(rng) * PUBGAMES.npcAim, n = Math.hypot(best.dx, best.dz), ux = best.dx / n, uz = best.dz / n, ce = Math.cos(e), se = Math.sin(e);
   return { dx: ux * ce - uz * se, dz: ux * se + uz * ce, v: Math.max(POOL.vMin, Math.min(POOL.vMax, best.v * (1 + (rng() * 2 - 1) * PUBGAMES.npcPow))), cx: best.c.x, cz: best.c.z };
+}
+
+// ================================================================================================ a window's view of a station
+// R12.3b: what each window (the host's own included) makes of the notes a station sends. Kept here, with no drawing, so
+// the tests can drive it exactly as the client does.
+
+/** a - b on the shared clock, which goes out wrapped at 600 s: the signed difference, in (-300, 300] */
+export function wrapDelta(a: number, b: number): number {
+  let d = (a - b) % 600;
+  if (d > 300) d -= 600; else if (d <= -300) d += 600;
+  return d;
+}
+
+/** seconds left until a deadline on the shared clock (never below 0) */
+export function timeLeftAt(deadline: number, clock: number): number { return deadline < 0 ? 0 : Math.max(0, wrapDelta(deadline, clock)); }
+
+export interface WireShot { k: string; n: number; b: [number, number, number, number][]; dx: number; dz: number; v: number; t0: number; dur: number }
+/** a shot to play out: from `at` seconds in; why ("live" = in step with the host; "join" = you've just walked in on
+ *  this game: from where it's got to; "behind" = this window heard late: from the start, catching up; "missed" = the
+ *  whole shot came and went between two looks (a stalled frame, a background tab): played through quickly) */
+export interface ReplayPlan { shot: WireShot; at: number; why: "live" | "join" | "behind" | "missed" }
+/** missed: shots that came and went entirely while this window wasn't looking (more than the one it can still replay):
+ *  the window says so rather than letting them vanish */
+export interface FeedResult { changed: boolean; newGame: boolean; ended: boolean; replay: ReplayPlan | null; missed: number }
+
+/** a window's reading of one station's notes: which game it's on, which shots it's already shown */
+export class StationFeed {
+  raw = ""; gid = -1; played = ""; playedN = -1;
+  note: any = null;
+  /** (diagnostics: ?pgdebug in the address, or tests) what happened, newest last */
+  log: string[] | null = null;
+  feed(raw: string, clock: number): FeedResult {
+    const none: FeedResult = { changed: false, newGame: false, ended: false, replay: null, missed: 0 };
+    if (raw === this.raw) return none;
+    this.raw = raw;
+    let n: any = null; try { n = raw ? JSON.parse(raw) : null; } catch { n = null; }
+    if (!n) return none;
+    const prev = this.note; this.note = n;
+    // (a status change, a clock starting, someone reconnecting, is still a change: only the identities below decide
+    //  whether anything new happened)
+    const fresh = n.gid !== this.gid, firstLook = !prev;
+    if (fresh) { this.gid = n.gid; this.played = ""; this.playedN = -1; }
+    const ended = !!prev && prev.ph === "play" && (n.ph !== "play" || prev.gid !== n.gid);
+    let replay: ReplayPlan | null = null, missed = 0;
+    const sh: WireShot | null = n.shot, last: WireShot | null = n.last;
+    // (a window that's only just arrived takes the game as it finds it; one that's been watching counts what it missed)
+    const gap = (k: number) => (firstLook ? 0 : Math.max(0, k - this.playedN - 1));
+    if (sh && sh.k !== this.played) {
+      const el = wrapDelta(clock, sh.t0);
+      // (the shot before this one came and went unseen: it plays first, quickly, then this one catches up)
+      if (!firstLook && last && last.k !== this.played && last.n === sh.n - 1 && last.n > this.playedN) { missed = gap(last.n); replay = { shot: last, at: 0, why: "missed" }; this.queued = sh; }
+      else { missed = gap(sh.n); this.queued = null; }
+      this.played = sh.k; this.playedN = sh.n;
+      if (!replay) {
+        if (firstLook) replay = { shot: sh, at: Math.max(0, Math.min(sh.dur, el)), why: "join" };
+        // (a patch or two late is normal: in step with the host; later than that, from the start and catch up: a
+        //  shot's never just skipped)
+        else if (el <= 0.6) replay = { shot: sh, at: Math.max(0, el), why: "live" };
+        else replay = { shot: sh, at: 0, why: "behind" };
+      }
+    } else if (!sh && last && last.k !== this.played && !firstLook) {
+      missed = gap(last.n);
+      this.played = last.k; this.playedN = last.n;
+      // (old news, minutes ago in a background tab: just the table as it is)
+      if (wrapDelta(clock, last.t0) - last.dur < 6) replay = { shot: last, at: 0, why: "missed" }; else missed++;
+    }
+    if (this.log) {
+      const sk = replay ? replay.shot.k : sh?.k ?? "-";
+      this.log.push(`gid ${n.gid} ph ${n.ph} shot ${sk}${replay ? ` t0 ${replay.shot.t0} heard ${clock} el ${wrapDelta(clock, replay.shot.t0).toFixed(2)} -> ${replay.why} from ${replay.at.toFixed(2)}/${replay.shot.dur.toFixed(2)}` : ""}${ended ? " ENDED" : ""}${prev?.shot && !sh ? " settled" : ""}`);
+      if (this.log.length > 60) this.log.shift();
+    }
+    return { changed: true, newGame: fresh, ended, replay, missed };
+  }
+  /** the shot that came in while a missed one was being caught up (play it next, catching up with the host) */
+  queued: WireShot | null = null;
+  next(): ReplayPlan | null { const q = this.queued; this.queued = null; return q && this.note?.shot?.k === q.k ? { shot: q, at: 0, why: "behind" } : null; }
+}
+
+/** a replay's next time: in step with the host's clock, never ahead of it, never backwards; if it's behind (heard late,
+ *  a stalled frame, the host already finished), it plays faster until it's caught up. hostEl = how far the host is
+ *  into this shot, or null once the host's done with it. */
+export const REPLAY_CATCHUP = 2.5;
+export function replayStep(t: number, dt: number, hostEl: number | null, dur: number): number {
+  const target = hostEl === null ? dur : Math.min(dur, hostEl);
+  let nt = t + dt * (target - t > 0.3 ? REPLAY_CATCHUP : 1);
+  if (hostEl !== null) nt = Math.min(nt, hostEl + 0.1);
+  return Math.min(dur, Math.max(t, nt));
 }
