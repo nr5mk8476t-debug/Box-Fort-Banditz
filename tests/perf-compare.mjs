@@ -20,7 +20,8 @@ for (const l of b.legs) {
   if (d.p99 > CHANGE_BUDGET.p99Ms) flags.push(`slow frames +${Math.round(d.p99 * 100)}%`);
   if (d.dc > CHANGE_BUDGET.drawCalls) flags.push(`draw calls +${Math.round(d.dc * 100)}%`);
   if (d.tri > CHANGE_BUDGET.triangles) flags.push(`triangles +${Math.round(d.tri * 100)}%`);
-  if (l.over50 > o.over50 + CHANGE_BUDGET.over50) flags.push(`${l.over50 - o.over50} more frames over 50 ms`);
+  // (only where frames are normally well under 50 ms: on a machine where every frame is over it, the count means nothing)
+  if (o.medianMs < 33 && l.over50 > o.over50 + CHANGE_BUDGET.over50) flags.push(`${l.over50 - o.over50} more frames over 50 ms`);
   const f = (x) => (x > 0 ? "+" : "") + Math.round(x * 100) + "%";
   rows.push(`${key(l).slice(0, 44).padEnd(44)} median ${String(o.medianMs).padStart(6)} → ${String(l.medianMs).padStart(6)} (${f(d.med).padStart(5)})  p99 ${f(d.p99).padStart(5)}  draws ${o.drawCalls} → ${l.drawCalls} (${f(d.dc)})  tris ${Math.round(o.triangles / 1000)}k → ${Math.round(l.triangles / 1000)}k (${f(d.tri)})${flags.length ? "   OVER BUDGET: " + flags.join(", ") : ""}`);
   if (flags.length) warn.push(key(l));

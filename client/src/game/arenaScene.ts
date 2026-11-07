@@ -340,6 +340,10 @@ export class ArenaScene {
 
   constructor(engine: Engine, private input: FpInput, arena: ArenaLayout, spawnIndex = 0, private networked = true) {
     const scene = (this.scene = new Scene(engine));
+    // R12.5: while the city's built, setting a material's property doesn't make Babylon walk every mesh in the scene
+    // looking for that material's users (it did, once per setting: with ~3,700 meshes that was ~5 s of the loading, and
+    // it grew with the square of the city). Switched back on at the end of the constructor (everything's marked once).
+    scene.blockMaterialDirtyMechanism = true;
     scene.clearColor = new Color4(0.62, 0.8, 0.95, 1);
     scene.fogMode = Scene.FOGMODE_LINEAR;
     scene.fogColor = new Color3(0.62, 0.8, 0.95);
@@ -414,6 +418,7 @@ export class ArenaScene {
     this.voicePitch = [1.0, 1.25, 0.85, 1.45][spawnIndex % 4];
     input.onAction = (a, src) => this.lootAction(a, src);
     void toon;
+    scene.blockMaterialDirtyMechanism = false;
   }
 
   /** Compile every shader before the player drops in (avoids a freeze on the first frames). */
@@ -427,7 +432,10 @@ export class ArenaScene {
     cam.maxZ = 1000;
     cam.fov = 1.6;
     // (R12.4: the pub's insides too, built now, and looked at from inside, downstairs and up: no freeze on the walk there)
-    const built = this.city.prebuildPub(); this.city.warmGroups(true);
+    this.scene.blockMaterialDirtyMechanism = true; // (R12.5: see the constructor)
+    const built = this.city.prebuildPub();
+    this.scene.blockMaterialDirtyMechanism = false;
+    this.city.warmGroups(true);
     const pub = this.arena.pub, inPub = built && pub ? [[(pub.rect.minX + pub.rect.maxX) / 2, pub.y1 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, 0], [(pub.rect.minX + pub.rect.maxX) / 2, pub.y1 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, Math.PI], [(pub.rect.minX + pub.rect.maxX) / 2, pub.y2 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, 0], [(pub.rect.minX + pub.rect.maxX) / 2, pub.y2 + 1.7, (pub.rect.minZ + pub.rect.maxZ) / 2, 0.1, Math.PI]] : [];
     for (const [x, y, z, rx, ry] of [[0, 150, -130, 0.85, 0], [0, 150, 130, 0.85, Math.PI], [0, 6, 0, 0.2, 0], [-13, 2, -40, 0.1, 0], ...inPub]) {
       cam.position.set(x, y, z);
