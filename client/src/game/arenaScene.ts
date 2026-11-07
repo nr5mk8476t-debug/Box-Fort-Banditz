@@ -885,8 +885,8 @@ export class ArenaScene {
         case "pintNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"That's $${PUB.price}, pal." You're short.` : e.reason === "cutoff" ? `"You've had plenty, pal." Fergal won't serve you till you've sobered up.` : "Finish the one you've got first.", "info"); break;
         case "pintDone": {
           const pub = this.arena.pub, near = !!pub && Math.hypot(this.cur.x - (pub.rect.minX + pub.rect.maxX) / 2, this.cur.z - (pub.rect.minZ + pub.rect.maxZ) / 2) < 22;
-          if (e.p === me) { this.pint.result(e.mm, e.grade, e.won); if (e.grade !== "miss") sfx.cash(); this.onFeedback?.(e.grade === "perfect" ? `SPLIT THE G! ${e.mm.toFixed(1)} mm. +$${e.won}${e.best ? " (best tonight!)" : ""}` : e.grade === "close" ? `Close: ${e.mm.toFixed(1)} mm off. Your $${e.won} back.` : `Missed the G by ${e.mm.toFixed(1)} mm.`, e.grade === "miss" ? "info" : "good"); if (e.pints === PUB.cutoff) this.onFeedback?.("That's six. Fergal's cutting you off.", "info"); }
-          if (e.grade === "perfect" && near) { sfx.cheer(e.p === me ? 1 : 0.6); pubFlourish(); }
+          if (e.p === me) { this.pint.result(e.mm, e.grade, e.won); this.onFeedback?.(e.grade === "perfect" ? `SPLIT THE G! ${e.mm.toFixed(1)} mm. +$${e.won}${e.best ? " (best tonight!)" : ""}` : e.grade === "close" ? `Close: ${e.mm.toFixed(1)} mm off. Your $${e.won} back.` : `Missed the G by ${e.mm.toFixed(1)} mm.`, e.grade === "miss" ? "info" : "good"); if (e.pints === PUB.cutoff) this.onFeedback?.("That's six. Fergal's cutting you off.", "info"); }
+          if (e.grade === "perfect" && near) { if (e.p !== me) sfx.cheer(0.6); pubFlourish(); } // (R12.4: your own cheer comes when the head's settled and the result shows)
           break;
         }
         // R12.2b: the jukebox; R12.2c: SEAMUS O'SHORTLY and the lads

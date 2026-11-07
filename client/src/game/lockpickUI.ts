@@ -292,6 +292,9 @@ export class PintUI {
   private help: HTMLDivElement;
   rate = 0;
   holding = false;
+  private swallowT = 0;
+  private stung = false;
+  private swallows = 0;
   /** seconds since you let go (the head settling) */
   private since = 0;
   hold = 0;
@@ -324,30 +327,35 @@ export class PintUI {
   /** the head's settled (the result can show) */
   get settled() { return this.sent && this.since > 0.6; }
   start(rate: number) {
-    this.rate = rate; this.hold = 0; this.since = 0; this.holding = false; this.sent = false; this.verdict = null; this.verdictT = 0; this.tip = 0;
+    this.rate = rate; this.hold = 0; this.since = 0; this.stung = false; this.holding = false; this.sent = false; this.verdict = null; this.verdictT = 0; this.tip = 0;
     this.help.innerHTML = "<b>HOLD CLICK</b> (or <b>SPACE</b>) to drink. Let go just above the <b>G</b>'s bar: the head settles a touch after.";
     this.root.classList.remove("hidden");
   }
   /** mouse / SPACE down or up */
   press(down: boolean) {
     if (!this.open || this.sent) return;
-    if (down && !this.holding) { this.holding = true; sfx.gulp(true); return; }
+    if (down && !this.holding) { this.holding = true; this.swallowT = 0.42; this.swallows = 0; return; }
     if (!down && this.holding) this.release();
   }
   private release() {
-    this.holding = false; this.sent = true; sfx.gulp(false);
+    this.holding = false; this.sent = true; sfx.glassDown();
     this.onGulp?.(this.hold);
   }
   /** the World's verdict */
   result(mm: number, grade: string, won: number) { this.verdict = { mm, grade, won }; this.verdictT = 3.9; this.sent = true; this.holding = false; }
   private showVerdict() {
     const { mm, grade, won } = this.verdict!;
+    if (!this.stung) { this.stung = true; sfx.pintResult(grade); if (grade !== "miss") sfx.cash(); if (grade === "perfect") sfx.cheer(1); }
     this.help.innerHTML = grade === "perfect" ? `<b>SPLIT IT!</b> ${mm.toFixed(1)} mm off. +$${won}` : grade === "close" ? `So close: ${mm.toFixed(1)} mm. Your $${won} back.` : `Missed by ${mm.toFixed(1)} mm.`; }
   close() { this.rate = 0; this.holding = false; this.root.classList.add("hidden"); }
   update(dt: number) {
     if (!this.open) return;
     this.t += dt;
-    if (this.holding) { this.hold += dt; if (this.level <= 0.02) this.release(); }
+    if (this.holding) {
+      this.hold += dt;
+      if ((this.swallowT += dt) >= 0.42) { this.swallowT -= 0.42; sfx.swallow(this.swallows++); }
+      if (this.level <= 0.02) this.release();
+    }
     else if (this.sent) { const was = this.settled; this.since += dt; if (!was && this.settled && this.verdict) this.showVerdict(); }
     // the glass up to your mouth while you drink; down again after; it turns round once the verdict's in
     const up = this.holding ? 1 : 0;

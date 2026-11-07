@@ -153,7 +153,9 @@ class Station {
   // darts
   darts: TransformNode[] = []; dartIn: number[] = []; flash = { label: "", t: 0 };
   /** R12.4: the dart in the air at THIS board (each board its own: one board's dart never holds up the other's throw) */
-  fly: { k: number; t: number; u: number; v: number; from: Vector3; mine: boolean } | null = null;
+  fly: { k: number; t: number; u: number; v: number; from: Vector3; mine: boolean; label?: string } | null = null;
+  /** R12.4: when a dart last landed with no word yet of what it scored (its sting plays when the word comes) */
+  landAt = 0;
   board: DynamicTexture | null = null; boardSig = "";
   /** darts: the cabinet doors' chalkboards (each player's score, chalked up as the game goes) */
   doors: DynamicTexture[] = []; doorSig = "";
@@ -351,7 +353,13 @@ export class PubGamesView {
     const s = this.st.get(String(e.st ?? "")); if (!s) return;
     if (e.t === "pgDart") {
       s.flash = { label: `${e.label}${Number(e.value) ? " · " + e.value : ""}`, t: 2.2 };
-      if (this.near(s, 12)) { sfx.dartThunk(e.who === me ? 1 : 0.7); }
+      // R12.4: the sound when the dart lands (it may still be in the air: then it plays as it hits the board)
+      const g = e.who === me ? 1 : 0.7, label = String(e.label ?? "");
+      if (this.near(s, 12)) {
+        if (s.fly && s.fly.mine === (e.who === me)) s.fly.label = label;
+        else if (performance.now() - s.landAt < 1500) { s.landAt = 0; sfx.dartSting(label, g); }
+        else sfx.dartLand(label, g);
+      }
       if (e.who === me && e.bust) this.hooks.feedback(String(e.bust), "bad");
       if (e.who !== me && this.near(s, 12)) { const k = (s.note?.darts?.d.length ?? 0); s.fly = s.fly ?? { k, t: 0, u: Number(e.u), v: Number(e.v), from: new Vector3((s.g.oche ?? 0) + 0.35, this.U + 1.7, s.g.z + 0.25), mine: false }; }
     } else if (e.t === "pgMsg") { if (e.to === me && e.msg) { this.lastMsg = String(e.msg); this.hooks.feedback(this.lastMsg, "info"); } }
@@ -439,6 +447,7 @@ export class PubGamesView {
       const p = Vector3.Lerp(f.from, to, k); p.y += Math.sin(k * Math.PI) * 0.06;
       const d = s.darts[Math.min(5, f.k)]; d.position.copyFrom(p); d.setEnabled(true);
       if (k >= 1) {
+        if (this.near(s, 12)) { if (f.label !== undefined) sfx.dartLand(f.label, f.mine ? 1 : 0.7); else { sfx.dartThunk(f.mine ? 1 : 0.7); s.landAt = performance.now(); } }
         s.fly = null;
         // (R12.4: your last dart's landed: if the turn's gone over meanwhile, step back from the oche once you've seen
         //  where it went (0.7 s): not left waiting for the next message from the host, which may be a while if the

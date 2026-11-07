@@ -10,6 +10,9 @@ let musicBus: GainNode;
 let sfxBus: GainNode;
 let unlocked = false;
 const unlockListeners: (() => void)[] = [];
+/** R12.4 (clips with sound): when sounds are rendered offline, each is placed at its game time */
+let tOff = 0;
+const now = () => ctx!.currentTime + tOff;
 
 function applyVolumes() {
   if (!ctx) return;
@@ -72,7 +75,7 @@ function env(g: GainNode, t: number, a: number, peak: number, d: number) {
 
 function blip(freq: number, dur: number, type: OscillatorType, vol: number, slideTo?: number, when = 0) {
   if (!ctx) return;
-  const t = ctx.currentTime + when;
+  const t = now() + when;
   const o = ctx.createOscillator();
   const g = ctx.createGain();
   o.type = type;
@@ -93,7 +96,7 @@ function noise(dur: number, vol: number, filterFreq: number, when = 0, q = 1): A
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
-  const t = ctx.currentTime + when;
+  const t = now() + when;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
   const f = ctx.createBiquadFilter();
@@ -187,15 +190,33 @@ export const sfx = {
   /** R12.1: the pint: pouring at the tap, a gulp (glug glug), the pub cheering a split G */
   pour() { noise(0.9, 0.05, 900, 0, 0.8); blip(180, 0.5, "sine", 0.04, 120, 0.1); },
   gulp(on: boolean) { if (on) for (let i = 0; i < 4; i++) blip(150 + i * 12, 0.09, "sine", 0.12, 90, i * 0.32); else blip(320, 0.08, "sine", 0.06, 500); },
+  // R12.4: Split the G: a swallow every ~0.42 s while you drink (deeper as the glass empties), the glass set down on
+  // the bar, the head settling (a soft fizz), and the result's sting (perfect: a bright run; close: "ooh"; miss: a groan)
+  swallow(k = 0) { const f = 175 - Math.min(40, k * 4); blip(f, 0.13, "sine", 0.14, f * 0.55); noise(0.07, 0.05, 520, 0.02, 1.2); blip(900, 0.04, "sine", 0.025, 1500, 0.09); },
+  glassDown() { blip(140, 0.06, "sine", 0.12, 90); noise(0.03, 0.08, 1300, 0, 1.5); blip(2100, 0.07, "triangle", 0.035, undefined, 0.01); blip(3150, 0.1, "sine", 0.02, undefined, 0.012); noise(0.6, 0.03, 6500, 0.06, 0.6); },
+  pintResult(grade: string) {
+    if (grade === "perfect") [784, 988, 1175, 1568].forEach((f, i) => blip(f, 0.14, "triangle", 0.09, undefined, i * 0.07));
+    else if (grade === "close") { blip(520, 0.35, "triangle", 0.06, 430); blip(392, 0.4, "triangle", 0.05, 330, 0.12); noise(0.5, 0.04, 900, 0, 0.6); }
+    else { blip(260, 0.5, "sawtooth", 0.035, 150); noise(0.6, 0.05, 500, 0.05, 0.6); }
+  },
   cheer(g = 1) { noise(1.4, 0.16 * g, 1200, 0, 0.5); noise(1.0, 0.1 * g, 2400, 0.15, 0.7); for (let i = 0; i < 5; i++) blip(380 + i * 70, 0.2, "triangle", 0.05 * g, 520 + i * 90, 0.05 + i * 0.12); },
   /** R12.2b: the jukebox: a clunk and a needle drop */
   // R12.3: the pub's games (quiet: it's a pub, not an arcade)
-  cueStrike(power = 1) { blip(1500, 0.03, "square", 0.05 + 0.05 * power, 900); noise(0.025, 0.06 + 0.06 * power, 2600); },
-  ballClick(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.04) return; blip(2400 + Math.random() * 300, 0.025, "sine", 0.09 * g, 1800); noise(0.015, 0.05 * g, 5200); },
-  cushion(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.05) return; blip(140, 0.07, "sine", 0.1 * g, 90); noise(0.04, 0.05 * g, 700); },
-  pocketDrop() { blip(260, 0.06, "sine", 0.08, 180); noise(0.12, 0.07, 500, 0.05, 0.8); blip(160, 0.1, "sine", 0.06, 110, 0.12); },
-  dartThunk(gain = 1) { noise(0.03, 0.12 * gain, 1800); blip(340, 0.06, "sine", 0.08 * gain, 220); },
-  dartWhoosh() { sweepNoise(0.12, 0.04, 2400, 900); },
+  // R12.4: pool and darts with more body: the cue tip's woody "tock", the hard phenolic click of the balls (bright, two
+  // partials), a dull rubber thump off the cushions, the drop into the pocket and the rattle down the return; the dart's
+  // whoosh, its thwack into the sisal, a little ding for a treble, a double or the bull, a clatter off the wall for a miss
+  cueStrike(power = 1) { blip(1150, 0.035, "triangle", 0.07 + 0.08 * power, 700); blip(430, 0.06, "sine", 0.06 + 0.07 * power, 300); noise(0.02, 0.05 + 0.07 * power, 3200, 0, 2); },
+  ballClick(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.04) return; blip(2900 + Math.random() * 400, 0.035, "sine", 0.12 * g, 2600); blip(5300 + Math.random() * 500, 0.02, "sine", 0.04 * g); noise(0.012, 0.06 * g, 6000, 0, 2); },
+  cushion(speed = 1) { const g = Math.min(1, speed / 3); if (g < 0.05) return; blip(120, 0.08, "sine", 0.13 * g, 80); noise(0.05, 0.06 * g, 600, 0, 0.8); },
+  pocketDrop() { blip(220, 0.07, "sine", 0.1, 150); noise(0.06, 0.08, 800, 0, 1.5); for (let i = 0; i < 3; i++) blip(330 - i * 40, 0.04, "triangle", 0.05 - i * 0.012, undefined, 0.1 + i * 0.09); noise(0.3, 0.04, 420, 0.12, 0.7); },
+  dartThunk(gain = 1) { noise(0.025, 0.16 * gain, 2400, 0, 1.2); blip(260, 0.07, "sine", 0.12 * gain, 180); noise(0.08, 0.05 * gain, 700, 0.01, 0.8); },
+  dartSting(label: string, gain = 1) {
+    if (label === "MISS") { noise(0.05, 0.1 * gain, 900, 0, 0.8); for (let i = 0; i < 3; i++) blip(1700 - i * 300, 0.05, "triangle", 0.03 * gain, undefined, 0.04 + i * 0.07); }
+    else if (label === "BULL") [1318, 1760, 2093].forEach((f, i) => blip(f, 0.16, "sine", 0.07 * gain, undefined, 0.03 + i * 0.07));
+    else if (/^[TD]/.test(label) || label === "25") { blip(label[0] === "T" ? 1568 : 1318, 0.18, "sine", 0.06 * gain, undefined, 0.03); }
+  },
+  dartLand(label: string, gain = 1) { if (label !== "MISS") sfx.dartThunk(gain); sfx.dartSting(label, gain); },
+  dartWhoosh() { sweepNoise(0.16, 0.05, 2600, 700); },
   checkout() { [659, 784, 988, 1318].forEach((f, i) => blip(f, 0.12, "triangle", 0.07, undefined, i * 0.08)); },
   juke() { blip(120, 0.12, "square", 0.08, 80); noise(0.08, 0.08, 2400, 0.1); blip(880, 0.08, "triangle", 0.05, 1320, 0.2); },
   cash() { blip(1568, 0.06, "square", 0.08); blip(2093, 0.18, "square", 0.08, undefined, 0.06); noise(0.08, 0.06, 5000, 0.02); },
@@ -316,7 +337,7 @@ export function chargeTone(): () => void {
 function sweepNoise(dur: number, vol: number, f0: number, f1: number) {
   if (!ctx) return;
   noise(0.001, 0.0001, 1000); // make sure the noise buffer exists
-  const t = ctx.currentTime;
+  const t = now();
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf!;
   const f = ctx.createBiquadFilter();
@@ -337,7 +358,7 @@ function sweepNoise(dur: number, vol: number, f0: number, f1: number) {
  */
 function voice(syllables: number[], pitch: number, vol: number, delay = 0) {
   if (!ctx) return;
-  let t = ctx.currentTime + delay;
+  let t = now() + delay;
   for (const syl of syllables) {
     const dur = 0.09 + Math.random() * 0.05;
     const o = ctx.createOscillator();
@@ -758,3 +779,17 @@ export function jukeboxMusic(clock: number, tune: number, gain: number, cutoff: 
   }, 40);
 }
 export function jukeboxMusicOn(): boolean { return jbTimer !== null && !!jbBus && jbBus.gain.value > 0.01; }
+
+/** R12.4 (test clips): play back a log of sound calls (game seconds) into an offline context, with the very same synth
+ *  code, and hand back the mix (two channels) so a film clip can carry its real sound */
+export async function renderSfxOffline(log: { t: number; name: string; args: unknown[] }[], dur: number): Promise<Float32Array[]> {
+  const keep = { ctx, sfxBus, noiseBuf };
+  const off = new OfflineAudioContext(2, Math.ceil(44100 * dur), 44100);
+  const comp = off.createDynamicsCompressor(); comp.threshold.value = -10; comp.ratio.value = 6;
+  const bus = off.createGain(); bus.gain.value = 0.8; bus.connect(comp).connect(off.destination);
+  ctx = off as unknown as AudioContext; sfxBus = bus; noiseBuf = null;
+  try { for (const e of log) { tOff = e.t; (sfx as unknown as Record<string, (...a: unknown[]) => void>)[e.name]?.(...e.args); } }
+  finally { tOff = 0; ctx = keep.ctx; sfxBus = keep.sfxBus; noiseBuf = keep.noiseBuf; }
+  const buf = await off.startRendering();
+  return [buf.getChannelData(0), buf.getChannelData(1)];
+}

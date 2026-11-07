@@ -9,7 +9,7 @@ import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
 import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
-import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, startTitleMusic, stopMusic } from "./audio.ts";
+import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, renderSfxOffline, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
 } from "./net.ts";
@@ -996,6 +996,7 @@ const perf = { update: 0, world: 0, apply: 0, events: 0, render: 0, hud: 0, fram
 let fpsSmooth = 60;
 /** R12.4 (tests: clips): "film" mode: the live loop stops and the tests step the game a fixed time per frame (the
  *  same code, a steady clock), so a clip shows motion at its real speed on a machine that can't draw it live */
+let sfxDepth = 0;
 let filming = false, filmNow = 0;
 engine.runRenderLoop(() => { if (!filming) frame(engine.getDeltaTime() / 1000, performance.now()); });
 function frame(dt: number, now: number) {
@@ -1109,6 +1110,26 @@ enterTitle();
     /** R12.4 (clips): stop the live loop / step it a fixed dt (s) per call */
     film: (on: boolean) => { filming = on; filmNow = performance.now(); },
     filmStep: (dt: number, n = 1) => { for (let k = 0; k < n; k++) { filmNow += dt * 1000; frame(dt, filmNow); } },
+    // R12.4: clips with their sound: log every sound effect at its film time, then render the log offline to a WAV
+    sfxRec: (on: boolean) => {
+      const S = sfx as unknown as Record<string, (...a: unknown[]) => void>, W = window as unknown as { __sfxOrig?: Record<string, (...a: unknown[]) => void>; __sfxLog?: { t: number; name: string; args: unknown[] }[]; __sfxT0?: number };
+      if (on && !W.__sfxOrig) {
+        W.__sfxOrig = { ...S }; W.__sfxLog = []; W.__sfxT0 = filmNow;
+        for (const k of Object.keys(S)) if (typeof S[k] === "function") { const f = W.__sfxOrig[k]; S[k] = (...a: unknown[]) => { if (!sfxDepth) W.__sfxLog!.push({ t: (filmNow - W.__sfxT0!) / 1000, name: k, args: a }); sfxDepth++; try { return f(...a); } finally { sfxDepth--; } }; } // (a sound made of other sounds is logged once)
+        return [];
+      }
+      if (!on && W.__sfxOrig) { Object.assign(S, W.__sfxOrig); W.__sfxOrig = undefined; }
+      return W.__sfxLog ?? [];
+    },
+    sfxWav: async (log: { t: number; name: string; args: unknown[] }[], dur: number) => {
+      const [l, r] = await renderSfxOffline(log, dur), n = l.length, b = new DataView(new ArrayBuffer(44 + n * 4));
+      const w = (o: number, t: string) => { for (let i = 0; i < t.length; i++) b.setUint8(o + i, t.charCodeAt(i)); };
+      w(0, "RIFF"); b.setUint32(4, 36 + n * 4, true); w(8, "WAVE"); w(12, "fmt "); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 2, true);
+      b.setUint32(24, 44100, true); b.setUint32(28, 44100 * 4, true); b.setUint16(32, 4, true); b.setUint16(34, 16, true); w(36, "data"); b.setUint32(40, n * 4, true);
+      for (let i = 0; i < n; i++) { b.setInt16(44 + i * 4, Math.max(-1, Math.min(1, l[i])) * 32767, true); b.setInt16(46 + i * 4, Math.max(-1, Math.min(1, r[i])) * 32767, true); }
+      let bin = ""; const u = new Uint8Array(b.buffer); for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode(...u.subarray(i, i + 0x8000));
+      return btoa(bin);
+    },
     toggleMap: (on?: boolean) => toggleMap(on),
     lobbyNpc: () => { const out: any[] = []; netView()?.npcs?.forEach((n: any, id: string) => { if (n.kind === "uncle_dumpster") out.push({ id, x: n.x, y: n.y, z: n.z, state: n.state }); }); return out[0] ?? null; },
     // C4b: tags on walls, my aura, and a noise (solo) to wake the old lady
