@@ -1284,6 +1284,21 @@ enterTitle();
     respawnT: () => arena?.respawnT ?? 0,
     wipeout: () => { if (local) { const p = local.world.players.get(SOLO_ID)!; local.world.traffic.wipeout(p, local.world.traffic.cars[0]); } else room?.send("dbg", { op: "wipeout" }); },
     npcStats: () => arena?.npcStats() ?? null,
+    // R12.5 (test box only): switch one cost off at a time to see what it costs (experiments, not settings)
+    perfExp: (o: { outlines?: boolean; shadows?: boolean; scale?: number; bigCity?: boolean }) => {
+      const sc = arena?.scene; if (!sc) return null;
+      const cnt = { outlined: 0, big: 0, casters: 0 };
+      for (const m of sc.meshes) {
+        if ((m as any).__ol === undefined) (m as any).__ol = m.renderOutline;
+        if (o.outlines !== undefined) m.renderOutline = o.outlines ? (m as any).__ol : false;
+        if ((m as any).__ol) cnt.outlined++;
+        const bb = m.getBoundingInfo().boundingBox, w = Math.max(bb.extendSizeWorld.x, bb.extendSizeWorld.z) * 2;
+        if (w > 150 && m.name !== "ground" && !/road|pave|ground|water|sky/i.test(m.name)) { cnt.big++; if (o.bigCity !== undefined) { if ((m as any).__en === undefined) (m as any).__en = m.isEnabled(false); m.setEnabled(o.bigCity ? (m as any).__en : false); } }
+      }
+      for (const l of sc.lights) { const g = l.getShadowGenerator() as any; const map = g?.getShadowMap?.(); if (map) { cnt.casters += map.renderList?.length ?? 0; if (o.shadows !== undefined) { l.shadowEnabled = o.shadows; } } }
+      if (o.scale !== undefined) engine.setHardwareScalingLevel(1 / o.scale);
+      return cnt;
+    },
     bench: () => void startBench(), benchResult: () => (window as any).__benchResult ?? null, // (R12.5)
     npcDrawn: (id: string) => arena?.npcDrawnPos(id) ?? null,
     punchTarget: () => arena?.punchTarget ?? null,

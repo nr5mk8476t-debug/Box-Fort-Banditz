@@ -91,7 +91,7 @@ export function benchRoute(A: ArenaLayout): Leg[] {
 
 const MAXF = 20000;
 class Bench {
-  ft = new Float32Array(MAXF); parts = new Float32Array(MAXF * 5); dc = new Float32Array(MAXF); am = new Float32Array(MAXF); tri = new Float32Array(MAXF); heap = new Float32Array(MAXF); gpu = new Float32Array(MAXF);
+  ft = new Float32Array(MAXF); parts = new Float32Array(MAXF * 5); dc = new Float32Array(MAXF); am = new Float32Array(MAXF); tri = new Float32Array(MAXF); heap = new Float32Array(MAXF); gpu = new Float32Array(MAXF); cx = new Float32Array(MAXF); cz = new Float32Array(MAXF);
   n = 0; leg = 0; t = 0; settle = 0; legStart = 0; prevDraw = 0; prevHeap = 0;
   results: Record<string, unknown>[] = [];
   side0 = { ...side };
@@ -162,7 +162,7 @@ export function benchFrame(dt: number, p: FrameParts, scene: Scene) {
   b.ctx.setCam(c); if (L.walk) b.ctx.teleport?.(c.x, c.y - 1.7, c.z, c.yaw);
   if (b.n < MAXF) {
     const i = b.n++;
-    b.ft[i] = dt * 1000;
+    b.ft[i] = dt * 1000; b.cx[i] = c.x; b.cz[i] = c.z;
     b.parts[i * 5] = p.update; b.parts[i * 5 + 1] = p.world; b.parts[i * 5 + 2] = p.apply; b.parts[i * 5 + 3] = p.render; b.parts[i * 5 + 4] = p.hud;
     const d = drawCount(scene); b.dc[i] = d - b.prevDraw; b.prevDraw = d;
     b.am[i] = scene.getActiveMeshes().length; b.tri[i] = scene.getActiveIndices() / 3;
@@ -190,10 +190,15 @@ function summarise(b: Bench, L: Leg, scene: Scene) {
   for (let i = 0; i < act.length; i++) { const m = act.data[i] as AbstractMesh; const n = m.lightSources?.length ?? 0; lmax = Math.max(lmax, n); lsum += n; }
   let casters = 0; for (const l of scene.lights) { const g = l.getShadowGenerator(); const rl = g?.getShadowMap()?.renderList; if (rl) casters += rl.length; }
   const gpuOk = b.gpu[i0] >= 0;
+  // where the slowest frame of a walk was (and how far from the pub's door)
+  let wi = i0; for (let i = i0; i < i1; i++) if (b.ft[i] > b.ft[wi]) wi = i;
+  const P = b.ctx.arena.pub, dx = P ? (P.door.minX + P.door.maxX) / 2 : 0, dz = P ? (P.door.minZ + P.door.maxZ) / 2 : 0;
+  const wp = Math.max(i0, wi - 1); // (a frame's time is measured at the next frame: the slow one was drawn from the position before)
+  const worstAt = L.walk && i1 > i0 ? `(${r1(b.cx[wp])}, ${r1(b.cz[wp])}), ${Math.round(Math.hypot(b.cx[wp] - dx, b.cz[wp] - dz))} m from the pub door` : undefined;
   return {
     leg: L.name, night: L.night, frames: ft.length, secs: r1(L.secs),
     medianMs: r1(pct(ft, 0.5)), p95Ms: r1(pct(ft, 0.95)), p99Ms: r1(pct(ft, 0.99)), maxMs: r1(slow[0] ?? 0), low1Fps: r1(low1), fps: r1(ft.length / Math.max(1e-6, ft.reduce((a, v) => a + v, 0) / 1000)),
-    over50: ft.filter((v) => v > 50).length, over100: ft.filter((v) => v > 100).length,
+    worstAt, over50: ft.filter((v) => v > 50).length, over100: ft.filter((v) => v > 100).length,
     cpu: { update: r1(mean(b.parts, 5, 0)), world: r1(mean(b.parts, 5, 1)), apply: r1(mean(b.parts, 5, 2)), renderCall: r1(mean(b.parts, 5, 3)), hud: r1(mean(b.parts, 5, 4)) },
     gpuMs: gpuOk ? r1(mean(b.gpu)) : "unavailable",
     drawCalls: Math.round(mean(b.dc)), activeMeshes: Math.round(mean(b.am)), triangles: Math.round(mean(b.tri)),
