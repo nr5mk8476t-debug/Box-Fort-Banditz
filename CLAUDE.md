@@ -34,8 +34,8 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R12.4)
-- R12.4 shipped: the pub built at load with per-floor visibility (no freeze on the way there), a fair Split the G (visible G, smooth drink, a set settle, 1.5 mm perfect), pool/darts/pint sounds, pub lamps and pavement light at night, the controls behind H on small windows, and fixes to pool's shot queue, darts handover and peer leave.
-- Clips with sound: the film scripts log sounds at game time and render them offline (`__bfb.sfxRec`, `__bfb.sfxWav`).
-- Wait for Blake's feel notes: the manual checklist for R12.4 in `docs/test-plan.md`.
-- Then: the pub brawl, the quiz and the G-split champ. Then R13: the alleys and fire escapes.
+## Next up (as of R12.5)
+- R12.5 shipped the performance foundation: the city merged by 64 m tiles (small pieces drawn within 80-95 m), glow batches, outline widths in 8 steps, size-scaled spheres, no material scans while building, NPC simulation levels (far from every player: 10 Hz), interior areas (`client/src/game/areas.ts`, the pub as the worked example), render scale / adaptive resolution / the developer overlay, the BENCHMARK (pause menu), `tests/perf-route.mjs` and `tests/perf-compare.mjs`.
+- Before adding content: read `docs/content-guide.md`; check `docs/perf-budget.md` with the BENCHMARK before and after.
+- Waiting on Blake: his and his mate's BENCHMARK results (to set the real budgets), and his picks from `docs/expansion-plan.md`.
+- Paused (Blake): the black market dealer, extra decoration, the bigger Split the G. Then: the pub brawl, the quiz and the G-split champ; R13: the alleys and fire escapes.

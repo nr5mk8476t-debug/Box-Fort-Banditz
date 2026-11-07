@@ -546,6 +546,40 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.5: performance and a foundation for a bigger city (2026-11-07)
+
+Before/after on the same test box, same build settings, same route (the BENCHMARK, `tests/perf-route.mjs`), and the same
+fixed views (`views.mjs` in the session scratchpad). The test box renders in software (about 1–2 FPS): every number is
+relative CPU/draw cost, NOT a real graphics card's frame rate. GPU time: unavailable here. Blake's PC result is pending.
+
+| Area | Check | How | Before | Result |
+|---|---|---|---|---|
+| Whole route (solo) | median / 99th / 1% low / worst frame | BENCHMARK (`base-solo` → `after2-solo`) | 822 / 1,616 ms, 0.4 FPS, 2,835 ms | 610 / 1,229 ms, 0.8 FPS, 1,286 ms |
+| Every stretch | median, triangles | perf-compare | | median −17 to −37%, triangles −41 to −66% on all 23 stretches |
+| Draw calls | per fixed view (across the road, bar, window, darts, balcony, street) | views.mjs, baseline build d61660e vs now | 505 / 473 / 1,237 / 215 / 1,339 / 1,100 | 529 / 488 / 1,377 / 235 / 1,473 / 1,143 (+3 to +11%: within the +15% budget) |
+| Triangles | same views | views.mjs | 975k / 1,267k / 1,474k / 1,050k / 1,611k / 902k | 417k / 549k / 839k / 408k / 964k / 524k |
+| First walk to the pub | worst frame | BENCHMARK | 2,835 ms (median 925) | 1,286 ms (median 580) |
+| Loading | the scene's own build work | CPU profile of the loading | ~7.1 s (5 s of it material scans) | ~3.2 s; wall-clock loading on this box is noisy (21–33 s both builds) |
+| Hosting | the host's World, network handling | BENCHMARK, MP=host | 1.3 ms a tick, 0.1 ms a message | HOST_RESULT |
+| Looks | 9 views by day and night: the façade, the balcony floor and from below, the entrance and flowers, Little Italy's gate and festoons, Chinatown's lanterns, the bar, the darts, street outlines | matched screenshots, both builds | | the same (only passing cars differ) |
+| Small sphere detail | flowers, beads, fairy lights, festoons | the screenshots above | | no visible change |
+| NPC levels | a far passer-by updates one step in three and still walks; next to the SECOND player it updates every step | shared unit (new) | | pass |
+| NPC levels | pedestrians ease into walking (now measured over each one's own update time); traffic soaks with police (4 seeds), chases, parade | shared unit (existing) | failed with the levels on: seed 2 overlap 1.9 m | pass: the cause was a parade tow dropping a car on a police car (fixed); kerbside walkers stay at full rate |
+| Interior areas | floors, the outside gap (no switching when pacing the edge), stairs, the light budget, the pub within it | client unit (new) | | pass (4 tests) |
+| Leaving mid-pint | no glass, panels, buffs or body classes left | e2e (new check) | the glass and `pint-on` stayed; panels piled up | E2E_PINT |
+| Stress (SYNTHETIC) | stacked buildings (city2), double passers-by (npcs2) | BENCHMARK with STRESS | | STRESS_RESULT |
+| Everything | shared + client unit; typecheck; smokes | full suite | | UNIT_RESULT |
+| | full browser e2e, normal / 110 ms | e2e | | E2E_RESULT |
+
+## Manual checklist for Blake (R12.5)
+
+- [ ] Run the BENCHMARK on your PC (pause menu → BENCHMARK, about 3 minutes) and paste me the result; same for your mate.
+- [ ] Does the city look the same to you? Look at the pub's flowers and fairy lights, Chinatown's lanterns, Little
+      Italy's festoons, the balcony, and the black outlines on buildings.
+- [ ] Walk from your fort to the pub: any hitch left?
+- [ ] Settings: try Render scale at 70% and Adaptive resolution: does it help on your mate's PC?
+- [ ] Read `docs/expansion-plan.md` and pick what to build first.
+
 ## R12.4: pub games, the approach freeze, sound, Split the G, night lighting, small windows (2026-11-07)
 
 The regression tests below were run against the R12.3b code first (a worktree of cc18e62) and failed for the reason given.

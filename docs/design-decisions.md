@@ -1922,3 +1922,68 @@ the city properly lit at night. Show the real game at milestones (before/after w
 - The pub brawl, the quiz and the G-split champ; then R13 (the alleys and fire escapes).
 - Street lighting beyond the lamp pools (lit windows spilling onto the street elsewhere, shop fronts).
 - The band and the background noise aren't in the test clips' sound yet (effects only).
+
+## R12.5: performance and a foundation for a bigger city (Blake, 2026-11-07)
+
+Blake's brief, in two parts: (1) FPS is getting worse around THE SOGGY SHAMROCK, for him and a friend: find the real
+bottlenecks, fix the biggest, prove it with repeatable tests; (2) the city is going to grow a lot (buildings, NPCs,
+shops, interiors, activities): build a foundation so new content doesn't make performance steadily worse, with budgets,
+a way of adding content, regression checks, and a staged plan. New features paused (the black market dealer, extra
+decoration, the bigger Split the G).
+
+### Blake's decisions (asked as numbered questions)
+1. **Reference PC:** Blake's own; he and his friend run the BENCHMARK and send the result.
+2. **Benchmark:** a button in the pause menu.
+3. **Resolution:** a render scale setting (default 100% of the window's pixels; the old engine already drew one pixel
+   per CSS pixel on high-DPI screens, so "capped" is the default), plus a high-DPI option.
+4. **Adaptive resolution:** an option, off by default.
+5. **File cap lifted** ("if you need to add more files more than 100, do so").
+
+### What was measured (test box: SwiftShader, CPU only: relative numbers, not real FPS)
+- **Triangles: 0.9–1.7 million in every view**, 1.05 M even at the darts booth. Half came from ~58 city-wide merged
+  meshes (150–930 m wide): frustum culling could never drop them, so the whole city was drawn from inside the pub.
+- **The pub's façade: ~480k triangles**: ~1,900 flower and bead spheres at 256 triangles each, 68k of fairy-light bulbs,
+  80k of glow balls and globes.
+- **Outline passes**: each outlined mesh is drawn twice: 35–50% of draw calls.
+- **Resolution**: 50% render scale cut 25–33% of the frame (pixels matter). **Shadows**: 7–9% (drawn once).
+- **Loading**: ~5 s of it was Babylon walking every mesh each time a material property was set (it grows with the
+  square of the city).
+- **Hitches**: the first walk to the pub still had a 2.8 s frame; NPC models (~400 ms), text textures and the sparkle
+  textures were made mid-game.
+- **CPU**: the World ~1.3–1.8 ms a tick on this CPU (collision for 78 NPCs and players); the pub band's scheduler;
+  218 MB of garbage on the first walk alone.
+- **Hosting**: the host's World 1.3 ms a tick; network handling ~0.1 ms a message.
+
+### What changed
+- **The city merged by 64 m map tiles** (not across the map): off-screen tiles aren't drawn. Small pieces (under 1.2 m)
+  in their own tile meshes, drawn within 80 m of the batch's edge, off past 95 (the gap stops flicker; fog starts at
+  80 m). Building shells and the skyline unchanged.
+- **Draw calls kept within budget**: tiling alone raised them 16–37%. Recovered by merging the 82 Chinatown lanterns,
+  the 148 Little Italy festoon bulbs and the street lamps per tile ("glow batches"), and by snapping the city's outline
+  widths to 8 steps (17 widths were 17 meshes per tile; a width moves at most about a quarter, under a pixel).
+- **Little spheres sized to their size** (`sphereSegs`): a 12 cm flower 36 triangles, not 256; fairy lights as 8-triangle
+  octahedrons. Matched screenshots show no visible difference.
+- **No material scans while building** (`scene.blockMaterialDirtyMechanism` during the build): the scene's own build
+  work fell from ~7 s to ~3 s of CPU on the test box.
+- **Hitches**: NPC models at most 2 a frame once the game's running (everyone present at loading is built then); the loot
+  sparkles made at loading; no new colours every frame in the pub, the lanterns or the fairy lights.
+- **NPC simulation levels**: a plain passer-by only walking or idling, more than 90 m from every player and not at a
+  kerb, updates every third NPC step (10 Hz), staggered, with its timers caught up exactly. Everyone else, and anyone
+  near any player (multiplayer: near your friend counts), every step.
+- **Interior areas** (`client/src/game/areas.ts`): floors, outside visibility with a gap, stairs, lamps with a budget;
+  the pub rebuilt on it as the worked example. `docs/content-guide.md` explains adding a building, interior,
+  characters or activity.
+- **Render scale, adaptive resolution (off), the high-DPI option, the developer overlay** (Show FPS: frame time, worst,
+  CPU parts, draws, meshes, triangles, render size, heap).
+- **Cleanup**: leaving mid-pint left the glass, the hidden slots and the drinking keys; the pool/darts panels, the
+  buffs and the dirty-water overlay piled up one more per game; the toon material cache kept every game's materials.
+- **Fixed on the way**: a parade or festa tow could drop a car right on top of a passing police car (found when the NPC
+  levels changed the random sequence of a traffic soak).
+
+### The BENCHMARK and the budget
+- Pause menu → BENCHMARK: the same route by day and night; per stretch: median, 95th/99th, worst, 1% low, CPU parts,
+  draw calls, meshes, triangles, lights, heap; GPU time where the browser allows it (most don't); the machine, the
+  resolution and the settings. A result to copy. Test box: `tests/perf-route.mjs` (solo or MP=host/join, STRESS=...).
+- `tests/perf-compare.mjs` flags any stretch over the per-change budget (median +10%, 99th +20%, draws +15%, triangles
+  +15%); `docs/perf-budget.md` has the frame and scene budgets (proposals until Blake's result is in).
+- `docs/expansion-plan.md`: the staged plan and the design proposals for Blake to choose from.

@@ -2,6 +2,40 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.5: faster round THE SOGGY SHAMROCK, a BENCHMARK button, and a foundation for a bigger city (2026-11-07)
+
+**Faster**
+- **The whole city isn't drawn from everywhere any more.** The city used to be merged into huge meshes that each
+  covered the whole map, so even from inside the pub the game drew the city behind the walls. It's now in 64 m tiles:
+  what you can't see isn't drawn, and little things (sills, signs, plants) stop drawing once they're far enough to be
+  lost in the fog. On the test route: **40–66% fewer triangles, every stretch 17–37% faster**, the worst frame on the
+  first walk to the pub halved.
+- **The pub's façade is much lighter**: its ~1,900 tiny flowers and beads and its fairy lights were drawn with far more
+  detail than anyone could see (about 480,000 triangles); now a fraction of that, looking the same.
+- **Fewer draw calls where it mattered**: Chinatown's lanterns and Little Italy's festoon lights are drawn in batches
+  instead of one by one.
+- **Loading does less**: building the city no longer slows down the more there is of it.
+- **No mid-game builds**: new passers-by are built at most two a frame; the loot sparkles are made while loading.
+- **Passers-by far from every player** think a bit less often (10 times a second instead of 30); anyone near any
+  player, or doing anything that matters, is exactly as before.
+
+**New**
+- **BENCHMARK** (pause menu): about 3 minutes round the same route (the fort, the first road, the pub inside and out,
+  pool and darts, the balcony, a city street), by day and night, then a result to copy and send to Blake.
+- **Settings**: **Render scale** (50–100%: lower is faster on weaker graphics cards; the HUD stays sharp), **Adaptive
+  resolution** (off by default: softens the view a little when frames run slow, never below 60%), and **Sharp on
+  high-DPI screens**.
+- **Show FPS** now shows the frame time, the worst frame, draw calls, triangles and the render size.
+
+**Fixed**
+- Leaving a game in the middle of a pint left the glass on screen and hid your slots in the next game; the pool and
+  darts panels piled up one more each game.
+- A street closed for a parade could tow a car right on top of a passing police car.
+
+**For building the city** (docs): `docs/perf-budget.md` (the budgets), `docs/content-guide.md` (how to add buildings,
+interiors, characters and activities, with the pub as the worked example), `docs/expansion-plan.md` (a staged plan and
+ideas to choose from).
+
 ## R12.4: no freeze on the way to the pub, a fair Split the G, pub sounds, lit nights, small windows (2026-11-07)
 
 **Fixed**
