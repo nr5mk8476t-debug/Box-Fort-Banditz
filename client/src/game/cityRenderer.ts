@@ -789,6 +789,7 @@ export class CityRenderer {
     for (const u of [...(this.arena.units ?? []), ...this.extraGroups]) {
       const vis = (u as { vis?: (x: number, y: number, z: number) => boolean }).vis;
       const on = vis ? vis(camX, camY, camZ) : Math.hypot(u.x - camX, u.z - camZ) < ((u as { dist?: number }).dist ?? INTERIOR_DRAW_DIST);
+      if (on && (u.id === 9301 || u.id === 9302)) this.pubSeen = true;
       if (this.unitOn.get(u.id) === on) continue;
       this.unitOn.set(u.id, on);
       for (const m of this.unitMeshes.get(u.id) ?? []) m.setEnabled(on);
@@ -798,6 +799,8 @@ export class CityRenderer {
 
   /** R12.4: for the loading screen's warm-up renders: every interior group (and the pub's moving bits) on, so their first
    *  draw happens there, not on the walk; off again after (the next frame puts back what should be showing) */
+  /** R12.5 (the benchmark): has the pub's inside been drawn (outside the loading warm-up) this session? */
+  pubSeen = false;
   warmGroups(on: boolean) {
     for (const ms of this.unitMeshes.values()) for (const m of ms) m.setEnabled(on);
     for (const ms of this.unitPlanes.values()) for (const m of ms) m.setEnabled(on);

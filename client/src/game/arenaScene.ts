@@ -2110,6 +2110,13 @@ export class ArenaScene {
   }
 
   dispose() {
+    // R12.5: everything this game put on the page goes with it: leaving mid-pint used to leave the glass up, the slots
+    // hidden ("pint-on") and SPACE / the mouse still drinking; the pool and darts panels, the buffs and the dirty-water
+    // overlay piled up, one more per game
+    this.pint.close(); this.pint.root.remove(); this.input.gulp = null;
+    this.pg.dispose();
+    this.buffEl?.remove(); this.buffEl = null; this.dirtyEl?.remove(); this.dirtyEl = null;
+    document.body.classList.remove("pint-on", "benching");
     this.raidAlert.dispose();
     this.stopChargeTone?.();
     this.input.onAction = null;

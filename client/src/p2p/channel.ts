@@ -1,3 +1,4 @@
+import { benchNet } from "../game/bench.ts";
 // A direct browser-to-browser connection (WebRTC data channel) carrying JSON messages.
 // Big messages (the full city snapshot a new player gets) are cut into chunks, because
 // some browsers refuse data channel messages over ~64 KB.
@@ -95,8 +96,10 @@ export class PeerLink {
       let text = s;
       if (c === "$") { text = this.buf + s.slice(1); this.buf = ""; }
       let m: any;
+      const t0 = performance.now();
       try { m = JSON.parse(text); } catch { return; }
       this.onMessage(m);
+      benchNet(performance.now() - t0, text.length); // (R12.5: the benchmark: reading and applying messages; a no-op otherwise)
     };
   }
 
@@ -129,5 +132,38 @@ export class PeerLink {
     try { this.dc?.close(); } catch { /* ignore */ }
     try { this.pc.close(); } catch { /* ignore */ }
     this.onClose();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// (R12.5: the old emitter.ts, folded in here to keep the repo inside its 100-file budget)
+/** Tiny listener list (the parts of the Colyseus Room API the game uses). */
+export class Listeners<A extends unknown[]> {
+  private fns = new Set<(...a: A) => void>();
+  add(fn: (...a: A) => void) { this.fns.add(fn); return { clear: () => { this.fns.delete(fn); } }; }
+  emit(...a: A) { for (const f of [...this.fns]) { try { f(...a); } catch (e) { console.error(e); } } }
+  clear() { this.fns.clear(); }
+}
+
+export function randomId(n = 9): string {
+  const abc = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const b = crypto.getRandomValues(new Uint8Array(n));
+  let s = "";
+  for (const x of b) s += abc[x % abc.length];
+  return s;
+}
+
+/** A timer that keeps firing when the tab is in the background (browsers slow normal timers to once a second or less). */
+export function backgroundTimer(ms: number, fn: () => void): () => void {
+  try {
+    const src = `let h=setInterval(()=>postMessage(0),${ms});onmessage=()=>{clearInterval(h);close()}`;
+    const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+    const w = new Worker(url);
+    URL.revokeObjectURL(url);
+    w.onmessage = () => fn();
+    return () => { w.postMessage(0); w.terminate(); };
+  } catch {
+    const h = setInterval(fn, ms); // workers blocked: normal timer (slows down in a background tab)
+    return () => clearInterval(h);
   }
 }

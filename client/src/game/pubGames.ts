@@ -523,6 +523,12 @@ export class PubGamesView {
       if (P.hand) { this.place = { x: c.x, z: c.z }; this.mode = "place"; } else this.mode = "aim";
     } else { this.mode = "darts"; this.aim = { u: 0, v: 0.103 }; this.swayPh = [Math.random() * 6, Math.random() * 6, Math.random() * 6, Math.random() * 6]; this.steady = { on: false, t: 0, cool: 0, f: 1 }; }
   }
+  /** R12.5: leaving the game: take the panel and the menu off the page (they used to pile up, one more per game) */
+  dispose() {
+    try { this.leave(); } catch { /* already gone */ }
+    this.hud.remove(); this.menuEl.remove();
+    document.body.classList.remove("pg-on");
+  }
   leave() { this.follow = null; if (this.mode === "menu") this.closeMenu(); this.mode = ""; this.at = ""; this.cam = null; this.drawD = 0; if (this.guide) this.guide.setEnabled(false); if (this.marker) this.marker.setEnabled(false); }
   get active() { return this.mode !== ""; }
 

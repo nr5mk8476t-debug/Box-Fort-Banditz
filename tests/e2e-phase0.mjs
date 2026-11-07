@@ -966,9 +966,25 @@ try {
   await shot(A, "02-solo-arena.png");
   await A.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
   await shot(A, "07-pause-menu.png");
+  // R12.5: leave in the middle of a pint (the glass up, the mouse held down): nothing of the game stays on the page
+  const pubA = await A.evaluate(() => window.__bfb.pub());
+  let pintUp = false;
+  if (pubA) {
+    const tp = pubA.taps[0];
+    await A.evaluate((t) => { window.__bfb.teleportY(t.x + t.face[0] * 0.85, 0.25, t.z + t.face[1] * 0.85, Math.atan2(-t.face[0], -t.face[1])); window.__bfb.setCash(40); }, tp);
+    await A.waitForFunction(() => /GUZZLE/.test(window.__bfb.promptText()), null, { timeout: 60000 }).catch(() => {});
+    await A.keyboard.press("e");
+    pintUp = await A.waitForFunction(() => window.__bfb.pubInfo()?.open, null, { timeout: 60000 }).then(() => true, () => false);
+    await A.evaluate(() => window.__bfb.pintPress(true));
+    await A.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
+  }
   await A.click("#btn-leave");
   await A.waitForFunction(() => window.__bfb.info().screen === "title");
   ok(true, "leave from solo returns to title");
+  if (pubA) {
+    const left = await A.evaluate(() => ({ pint: document.querySelectorAll("#pint").length, pg: document.querySelectorAll("#pg-hud, #pg-menu").length, cls: document.body.className, buffs: document.querySelectorAll("#hud-buffs").length }));
+    ok(pintUp && left.pint === 0 && left.pg === 0 && left.buffs === 0 && !/pint-on|pg-on/.test(left.cls), `R12.5: left mid-pint: no glass, panels or body classes left behind (${JSON.stringify(left)})`);
+  }
 
   console.log("\n# Create room");
   // (D1: the host window switches to Performance mode for the online part. On this CPU-only box a full-detail host

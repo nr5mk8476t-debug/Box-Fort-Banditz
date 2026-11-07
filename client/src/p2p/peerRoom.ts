@@ -4,7 +4,7 @@ import type { Client, Room } from "@colyseus/sdk";
 import { MSG } from "@bfb/shared";
 import { PeerLink, type SignalData } from "./channel";
 import { applyDelta, emptyState, type NetState } from "./sync";
-import { Listeners } from "./emitter";
+import { Listeners } from "./channel";
 
 const CONNECT_TIMEOUT_MS = 20000;
 const SILENT_DROP_MS = 8000;

@@ -9,6 +9,8 @@ import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
 import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
+declare const __BFB_BUILD__: string; // (R12.5: the commit, from vite.config.ts)
+import { runBench, benchFrame, cancelBench, benchRunning, type FrameParts } from "./game/bench.ts";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, renderSfxOffline, startTitleMusic, stopMusic } from "./audio.ts";
 import {
   createRoom, joinRoom, friendlyError, type GameRoom, inviteLink, roomCodeFromUrl, setUrlRoom, rememberRoom, forgetRoom,
@@ -484,7 +486,9 @@ function onRoomState(state: any) {
   if (!arena || !room) return;
   // the SDK gets a new reconnection token after an automatic reconnect: keep the saved one fresh
   if (room.reconnectionToken && room.reconnectionToken !== savedToken) { savedToken = room.reconnectionToken; rememberRoom(room); }
-  arena.applyWorld(state as WorldView, room.sessionId, performance.now());
+  const ta = performance.now();
+  arena.applyWorld(state as WorldView, room.sessionId, ta);
+  netApplyMs += performance.now() - ta; // (R12.5: counted in the next frame's "apply")
 
   if (state.phase !== lastPhase) {
     lastPhase = state.phase;
@@ -693,6 +697,36 @@ onClick("btn-resume", () => void resume());
 onClick("btn-pause-settings", () => openSettings("pause"));
 onClick("btn-settings-close", closeSettings);
 onClick("btn-leave", () => void leaveGame());
+// R12.5: the BENCHMARK (the same route every time; a result to copy and send)
+onClick("btn-bench", () => void startBench());
+onClick("btn-bench-close", () => { show("bench-result", false); showPause(true); });
+onClick("btn-bench-copy", () => { const t = $<HTMLTextAreaElement>("bench-text"); t.select(); void navigator.clipboard?.writeText(t.value).catch(() => document.execCommand("copy")); $("btn-bench-copy").textContent = "COPIED"; });
+window.addEventListener("keydown", (e) => { if (e.code === "Escape" && benchRunning()) cancelBench(); });
+async function startBench() {
+  if (!arena || benchRunning()) return;
+  const a = arena;
+  show("pause", false); show("bench-status", true); document.body.classList.add("benching");
+  const res = await runBench({
+    scene: a.scene, engine, arena: CITY, canvas,
+    mode: local ? "solo" : room?.isHost ? "hosting" : "joining",
+    players: () => { let n = 0; netView()?.players?.forEach(() => n++); return n; },
+    npcs: () => a.npcStats().total, cars: () => a.carCount(),
+    setCam: (c) => { a.camOverride = c; }, setNight: (on) => { a.forceNight = on; },
+    teleport: local ? (x, y, z, yaw) => { local!.teleport(x, z, yaw, y); a.debugTeleport(x, z, yaw, y); } : undefined,
+    startGames: local ? () => { a.onAction?.({ a: "pg", op: "open", st: "pooltable2", vs: "npc", stake: 0 } as any); a.onAction?.({ a: "pg", op: "open", st: "dartsoche1", vs: "npc", stake: 0 } as any); } : undefined,
+    gamesActive: () => { const i = a.pg.info() as any; return ["pooltable2", "dartsoche1"].map((k) => `${k}: ${i?.[k]?.ph ?? "-"}${i?.[k]?.rolling ? " (rolling)" : ""}`).join(", "); },
+    settings: { lowGraphics: settings.lowGraphics, fov: settings.fov, showFps: settings.showFps },
+    build: __BFB_BUILD__, pubSeen: () => a.city.pubSeen,
+    status: (s) => { $("bench-status").textContent = s; },
+  });
+  show("bench-status", false); document.body.classList.remove("benching");
+  if (local) { const sp = CITY.spawns[0]; local.teleport(sp.x, sp.z, 0, 0); a.debugTeleport(sp.x, sp.z, 0, 0); }
+  if (!res) { showPause(true); return; }
+  $<HTMLTextAreaElement>("bench-text").value = res.text + "\n\n---- data ----\n" + res.json;
+  $("btn-bench-copy").textContent = "COPY RESULT";
+  show("bench-result", true);
+  (window as any).__benchResult = res;
+}
 onClick("btn-start", () => startMatch());
 const copyInvite = async () => {
   if (!room) return;
@@ -1012,6 +1046,9 @@ let debugTimer = 0;
 let netOut: MoveInput[] = [];
 let lastNetSend = 0;
 const perf = { update: 0, world: 0, apply: 0, events: 0, render: 0, hud: 0, frame: 0 };
+/** R12.5: this frame's parts (the benchmark), and the World applied between frames (hosting / joining) */
+const fp: FrameParts = { update: 0, world: 0, apply: 0, render: 0, hud: 0, total: 0 };
+let netApplyMs = 0;
 let fpsSmooth = 60;
 /** R12.4 (tests: clips): "film" mode: the live loop stops and the tests step the game a fixed time per frame (the
  *  same code, a steady clock), so a clip shows motion at its real speed on a machine that can't draw it live */
@@ -1027,6 +1064,7 @@ function frame(dt: number, now: number) {
     const t0 = performance.now();
     arena.update(dt, now);
     const t1 = performance.now();
+    fp.update = t1 - t0; fp.world = 0; fp.apply = netApplyMs; netApplyMs = 0;
     const out = arena.takeOutbox();
     if (local) {
       // Solo: our own World runs right here, with zero lag
@@ -1037,6 +1075,7 @@ function frame(dt: number, now: number) {
       const t3 = performance.now();
       if (ev.length) arena.handleEvents(ev);
       perf.update = Math.max(perf.update, t1 - t0); perf.world = Math.max(perf.world, t2 - t1); perf.apply = Math.max(perf.apply, t3 - t2); perf.events = Math.max(perf.events, performance.now() - t3);
+      fp.world = t2 - t1; fp.apply += performance.now() - t2;
     } else if (room && !dropped) {
       // batch inputs: at most ~30 packets a second (every input is still sent, just grouped),
       // which halves the server's per-message work on the small hosting plan
@@ -1054,6 +1093,7 @@ function frame(dt: number, now: number) {
     updateHud(arena);
     perf.hud = Math.max(perf.hud, performance.now() - th);
     perf.frame = Math.max(perf.frame, performance.now() - t0);
+    if (benchRunning()) { fp.render = th - tr; fp.hud = performance.now() - th; fp.total = performance.now() - t0; benchFrame(dt, fp, arena.scene); }
     debugTimer += dt;
     if (settings.showFps && debugTimer > 0.25) {
       debugTimer = 0;
@@ -1244,6 +1284,7 @@ enterTitle();
     respawnT: () => arena?.respawnT ?? 0,
     wipeout: () => { if (local) { const p = local.world.players.get(SOLO_ID)!; local.world.traffic.wipeout(p, local.world.traffic.cars[0]); } else room?.send("dbg", { op: "wipeout" }); },
     npcStats: () => arena?.npcStats() ?? null,
+    bench: () => void startBench(), benchResult: () => (window as any).__benchResult ?? null, // (R12.5)
     npcDrawn: (id: string) => arena?.npcDrawnPos(id) ?? null,
     punchTarget: () => arena?.punchTarget ?? null,
     heat: () => arena?.heat ?? null,

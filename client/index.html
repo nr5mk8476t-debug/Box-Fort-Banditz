@@ -173,9 +173,22 @@
       <button id="btn-pause-copy" class="btn">COPY INVITE LINK</button>
       <button id="btn-start" class="btn btn-go">START MATCH</button>
       <button id="btn-pause-settings" class="btn btn-quiet">SETTINGS</button>
+      <button id="btn-bench" class="btn btn-quiet" title="About 3 minutes: the same route round THE SOGGY SHAMROCK, day and night">BENCHMARK</button>
       <button id="btn-leave" class="btn btn-danger">LEAVE</button>
     </div>
   </section>
+
+  <!-- R12.5: the BENCHMARK's result -->
+  <section id="bench-result" class="screen dim hidden" role="dialog" aria-modal="true">
+    <div class="card settings-card bench-card">
+      <h2>BENCHMARK</h2>
+      <p class="small">Copy this and send it to Blake (it says what your PC is and how each part of the route ran).</p>
+      <textarea id="bench-text" readonly spellcheck="false"></textarea>
+      <button id="btn-bench-copy" class="btn btn-go">COPY RESULT</button>
+      <button id="btn-bench-close" class="btn btn-quiet">DONE</button>
+    </div>
+  </section>
+  <div id="bench-status" class="bench-status hidden"></div>
 
   <!-- SETTINGS -->
   <section id="settings" class="screen dim hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">

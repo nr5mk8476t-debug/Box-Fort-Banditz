@@ -1,3 +1,4 @@
+import { benchHostTick } from "../game/bench.ts";
 // "Host from your browser": the player who creates a room runs the whole game (the same World
 // the server used to run) right here in their browser, and friends connect straight to them.
 // This class looks like a Colyseus Room to the rest of the game, so main.ts barely changes.
@@ -6,7 +7,7 @@ import { MSG, MAX_PLAYERS, SIM_DT, SIGNAL_ROOM, applyDebug, type WorldEvent } fr
 import { LocalSession } from "../localSession";
 import { PeerLink, type SignalData } from "./channel";
 import { Snapshotter } from "./sync";
-import { Listeners, randomId, backgroundTimer } from "./emitter";
+import { Listeners, randomId, backgroundTimer } from "./channel";
 
 /** How long a player who lost connection keeps their seat (seconds). */
 export const SEAT_HOLD_S = 120;
@@ -193,6 +194,7 @@ export class HostRoom {
       this.world.tick();
       steps++;
     }
+    if (steps) benchHostTick(performance.now() - now, steps); // (R12.5: the benchmark: the World's cost on the host)
     if (steps) {
       const ev = this.world.takeEvents();
       this.session.refresh();
