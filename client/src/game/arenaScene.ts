@@ -894,7 +894,7 @@ export class ArenaScene {
         case "mocktail": if (e.p === me) { sfx.cash(); this.onFeedback?.(`One ${e.drink}, glowing. $${e.paid}. Dance energy for ${FEVER.boost} s!`, "good"); } break;
         case "mocktailNo": if (e.p === me) this.onFeedback?.(`"That's $${FEVER.mocktail}, champ." You're short.`, "info"); break;
         // R12.1: THE SOGGY SHAMROCK
-        case "pint": if (e.p === me) { sfx.pour(); this.pint.start(e.rate); this.onFeedback?.(`A pint of GUZZLE'S, $${e.paid}. Now split the G!`, "good"); } break;
+        case "pint": if (e.p === me) { sfx.pour(); this.pint.start(e.rate); this.input.gulp = (down) => this.pint.press(down); /* (R12.5b: the moment it's poured, not the next frame: a release or a lost window in between went nowhere) */ this.onFeedback?.(`A pint of GUZZLE'S, $${e.paid}. Now split the G!`, "good"); } break;
         case "pintNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"That's $${PUB.price}, pal." You're short.` : e.reason === "cutoff" ? `"You've had plenty, pal." Fergal won't serve you till you've sobered up.` : "Finish the one you've got first.", "info"); break;
         case "pintDone": {
           const pub = this.arena.pub, near = !!pub && Math.hypot(this.cur.x - (pub.rect.minX + pub.rect.maxX) / 2, this.cur.z - (pub.rect.minZ + pub.rect.maxZ) / 2) < 22;
