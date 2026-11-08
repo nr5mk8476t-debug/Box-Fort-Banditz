@@ -4648,7 +4648,7 @@ export class CityRenderer {
       // floor's end grain) and a boarded, painted soffit underneath, 2 cm below the floor (never touching it: no flicker).
       // Looks only: it's all above head height (the brace's foot is 1.35 m under the floor, ~3.4 m up), so no collision.
       {
-        const BF = P.balcony[0], BS = P.balcony[1] ?? P.balcony[0], TIMBER = "#2a1810", FASCIA = "#1e4a32", SOFFIT = "#e2d3b2";
+        const BF = P.balcony[0], BS = P.balcony[1] ?? P.balcony[0], TIMBER = "#2a1810", FASCIA = "#1e4a32", SOFFIT = "#c9b791";
         const bracket = (wx: number, wz: number, ox: number, oz: number, depth: number) => {
           const ex = wx + ox * (depth - 0.12), ez = wz + oz * (depth - 0.12), yB = U - 0.15 - 0.09;
           // the joist, from just inside the wall to the fascia
