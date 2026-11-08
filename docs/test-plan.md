@@ -566,10 +566,10 @@ relative CPU/draw cost, NOT a real graphics card's frame rate. GPU time: unavail
 | NPC levels | a far passer-by updates one step in three and still walks; next to the SECOND player it updates every step | shared unit (new) | | pass |
 | NPC levels | pedestrians ease into walking (now measured over each one's own update time); traffic soaks with police (4 seeds), chases, parade | shared unit (existing) | failed with the levels on: seed 2 overlap 1.9 m | pass: the cause was a parade tow dropping a car on a police car (fixed); kerbside walkers stay at full rate |
 | Interior areas | floors, the outside gap (no switching when pacing the edge), stairs, the light budget, the pub within it | client unit (new) | | pass (4 tests) |
-| Leaving mid-pint | no glass, panels, buffs or body classes left | e2e (new check) | the glass and `pint-on` stayed; panels piled up | E2E_PINT |
+| Leaving mid-pint | no glass, panels, buffs or body classes left | e2e (new check) | the glass and `pint-on` stayed; panels piled up | pass (110 ms run: the pint was up, nothing left behind) |
 | Stress (SYNTHETIC) | every building stacked on itself (about twice the façades) + twice the passers-by (77 → 98 NPCs), same build | BENCHMARK with STRESS=city2,npcs2 | normal: median 612 ms | draw calls 0 to +7% outdoors (tiles absorb it), triangles +20–39%, outdoor medians +18–60%, indoors ~0; the World's CPU +22%; loading +9 s. The next limit for a denser city: detailed façade geometry in view, not draw calls |
 | Everything | shared + client unit; typecheck; smokes | full suite | | pass: 300/300 shared, 22/22 client; typecheck clean; both smokes pass |
-| | full browser e2e, normal / 110 ms | e2e | | E2E_RESULT |
+| | full browser e2e, normal / 110 ms | e2e | | normal: pass, 437/437 (before the leave-mid-pint check moved to the new city; it skipped itself in the classic city). 110 ms: 420 checks passed, none failed, when pushed to main at Blake's request; the rest (two players online at pool and darts) still running |
 
 ## Manual checklist for Blake (R12.5)
 
