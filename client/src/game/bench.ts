@@ -222,6 +222,7 @@ function report(b: Bench, pubSeen: boolean) {
     hostWorldMsPerTick: side.hostTicks ? r1(side.hostMs / side.hostTicks) : undefined, hostTicks: side.hostTicks || undefined,
     netMsgs: side.netMsgs || undefined, netMsPerMsg: side.netMsgs ? r1(side.netMs / side.netMsgs) : undefined, netKBps: side.netMsgs ? r1(side.netBytes / 1024 / Math.max(1, b.ft.subarray(0, b.n).reduce((a, v) => a + v, 0) / 1000)) : undefined,
     meshes: s.meshes.length, materials: s.materials.length, textures: s.textures.length,
+    paused: b.paused, pausedSecs: r1(b.pausedSecs), softwareRendering: !!c.softwareRendering,
   };
   const all = Array.from(b.ft.subarray(0, b.n)), slow = [...all].sort((x, y) => y - x), n1 = Math.max(1, Math.round(all.length * 0.01));
   const total = { frames: all.length, medianMs: r1(pct(all, 0.5)), p99Ms: r1(pct(all, 0.99)), low1Fps: r1(1000 / (slow.slice(0, n1).reduce((a, v) => a + v, 0) / n1)), maxMs: r1(slow[0] ?? 0) };
