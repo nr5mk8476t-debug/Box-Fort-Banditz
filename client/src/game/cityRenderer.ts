@@ -3838,8 +3838,18 @@ export class CityRenderer {
     this.group = -1; this.brk = "";
     const dyn = new TransformNode("pubDyn", sc); dyn.parent = this.root; this.pubDyn = dyn;
     const IN = { minX: r.minX + T, maxX: r.maxX - T, minZ: r.minZ + T, maxZ: r.maxZ - T };
+    /** inside the cut corner's inner wall: x - z <= cutK */
+    const cutK = r.maxX - r.minZ - P.cham - T * S2;
+    const tinCeil = (x0: number, x1: number, z0: number, z1: number, y: number) => {
+      let pts: [number, number][] = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+      const f = (p: [number, number]) => cutK - (p[0] - p[1]), outp: [number, number][] = [];
+      for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], fa = f(a), fb = f(b);
+        if (fa >= 0) outp.push(a); if ((fa >= 0) !== (fb >= 0)) { const t = fa / (fa - fb); outp.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); } }
+      pts = outp; if (pts.length < 3) return;
+      this.skinPush(footPrism(sc, pts, y - 0.025, y - 0.005), "tin", "#c8b890", 0);
+    };
     // R12.1b (Blake: "darker, with that nice glossy mahogany feel"): near-black red mahogany, glossy (see skinMat)
-    const MAH = "#26090a", MAH2 = "#160606", RED = "#7a1119", BLACK = "#141010", BRASS = "#d9a632", GOLD = "#e8c050", LEATHER = "#2e1410", CREAM = "#e8dcc4";
+    const MAH = "#26090a", MAH2 = "#160606", RED = "#52090f", BLACK = "#141010", BRASS = "#d9a632", GOLD = "#e8c050", LEATHER = "#2e1410", CREAM = "#e8dcc4";
     let seed = 1;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     /** a skinned box (merged per material; always drawn) */
@@ -3914,7 +3924,8 @@ export class CityRenderer {
         // the stall riser: raised red panels on a black skirting
         B(len, 0, 0.12, 0.16, mid, BLACK);
         for (let u = a0 + 0.1; u < a1 - 0.5; u += 1.0) { const w = Math.min(0.85, a1 - 0.1 - u); if (inGap(u + w / 2, 0.45)) continue; B(w, 0.18, 0.68, 0.12, u + w / 2, WOOD, "mahogany"); B(w - 0.14, 0.25, 0.61, 0.04, u + w / 2, WOOD2, "mahogany", 0.11); B(w - 0.2, 0.58, 0.6, 0.02, u + w / 2, GOLD, "", 0.15); }
-        B(len, 0.68, 0.78, 0.22, mid, WOOD, "mahogany"); // (the sill)
+        // (the sill; R12.6: stops either side of the side door: it ran across the doorway at knee height)
+        for (const [s0, s1] of doorGap ? [[a0, doorGap[0] - 0.05], [doorGap[1] + 0.05, a1]] : [[a0, a1]]) if (s1 - s0 > 0.05) B(s1 - s0, 0.68, 0.78, 0.22, (s0 + s1) / 2, WOOD, "mahogany");
         // pilasters (with a base and a capital) at every pier; glazing bars across the big windows
         for (const b of this.arena.boxes) {
           if (b.deco !== "pubshell" || b.poly) continue;
@@ -4106,10 +4117,10 @@ export class CityRenderer {
         for (const [y, col] of [[1.37, MAH2], [1.42, BRASS], [3.3, MAH2]] as [number, string][]) box(ax ? 0.06 : x1 - x0, 0.05, ax ? z1 - z0 : 0.06, (x0 + x1) / 2 + nx * 0.06, y, (z0 + z1) / 2 + nz * 0.06, col, 0);
       }
       // the ceiling: pressed tin between dark beams
-      sbx(IN.minX, IN.maxX, CEIL - 0.025, CEIL - 0.005, IN.minZ, P.stairs.minZ, "tin", "#c8b890");
-      sbx(IN.minX, P.stairs.minX, CEIL - 0.025, CEIL - 0.005, P.stairs.minZ, IN.maxZ, "tin", "#c8b890");
-      sbx(P.stairs.maxX, IN.maxX, CEIL - 0.025, CEIL - 0.005, P.stairs.minZ, IN.maxZ, "tin", "#c8b890");
-      for (let z = IN.minZ + 1.8; z < IN.maxZ - 0.5; z += 3.0) sbx(IN.minX, IN.maxX, CEIL - 0.28, CEIL - 0.025, z - 0.13, z + 0.13, "mahogany", MAH2);
+      // (R12.6: cut along the corner's inner wall: square, they poked out through the cut corner, a tin triangle and a beam
+      //  showing over the door and up on the roof)
+      tinCeil(IN.minX, IN.maxX, IN.minZ, P.stairs.minZ, CEIL); tinCeil(IN.minX, P.stairs.minX, P.stairs.minZ, IN.maxZ, CEIL); tinCeil(P.stairs.maxX, IN.maxX, P.stairs.minZ, IN.maxZ, CEIL);
+      for (let z = IN.minZ + 1.8; z < IN.maxZ - 0.5; z += 3.0) sbx(IN.minX, Math.min(IN.maxX, cutK + z - 0.13), CEIL - 0.28, CEIL - 0.025, z - 0.13, z + 0.13, "mahogany", MAH2);
       // the floor: worn dark boards (the slab), a mosaic strip round the bar's foot, the tiled names at both doors
       const mosaic = texMat("mosaic", 256, 256, (c) => { const cols = ["#e8dcc4", "#7a1f1a", "#1f4a2e", "#e8dcc4", "#c8a060"]; for (let y = 0; y < 256; y += 16) for (let x = 0; x < 256; x += 16) { c.fillStyle = cols[((x * 3 + y * 7) / 16 + (x === y ? 2 : 0)) % cols.length | 0]; c.fillRect(x + 1, y + 1, 14, 14); } c.fillStyle = "rgba(40,30,20,0.6)"; for (let k = 0; k <= 256; k += 16) { c.fillRect(k, 0, 1, 256); c.fillRect(0, k, 256, 1); } c.strokeStyle = "#141010"; c.lineWidth = 10; c.strokeRect(0, 0, 256, 256); }, 0.3);
       const B = P.bar, mw = 0.7;
@@ -4119,7 +4130,7 @@ export class CityRenderer {
       const doorTile = (text: string, x: number, z: number, w: number, d: number, ry: number) => { const m = texMat("doortile-" + text, 512, 256, (c) => { c.fillStyle = "#e8dcc4"; c.fillRect(0, 0, 512, 256); for (let k = 0; k < 900; k++) { c.fillStyle = `rgba(${Math.random() < 0.5 ? "0,0,0" : "255,255,255"},0.06)`; c.fillRect(Math.random() * 512, Math.random() * 256, 8, 8); } c.strokeStyle = "#7a1f1a"; c.lineWidth = 18; c.strokeRect(14, 14, 484, 228); c.strokeStyle = "#1f4a2e"; c.lineWidth = 8; c.strokeRect(36, 36, 440, 184); lettering(c, text, 512, 256, "#1f4a2e", "Georgia, serif", 0.3); }, 0.3);
         const g = MB.CreateGround("pbDoorTile", { width: w, height: d }, sc); g.position.set(x, Y1 + 0.005, z); g.rotation.y = ry; keepM(g, m); };
       doorTile("THE SOGGY SHAMROCK", MX + inn[0] * 1.3, MZ + inn[1] * 1.3, 2.6, 1.6, yawOut + PI);
-      doorTile("SIDE BAR", (P.door2.minX + P.door2.maxX) / 2, IN.minZ + 0.9, 2.2, 1.2, PI);
+      doorTile("SIDE BAR", (P.door2.minX + P.door2.maxX) / 2, IN.minZ + 0.9, 2.2, 1.2, 0); // (R12.6: reads from the street, like the main door's: it was upside down coming in)
       // milk-glass schoolhouse globes on brass rods (round the bar, over the tables), little wall lamps in the snugs
       const globes: Mesh[] = [];
       const globe = (x: number, z: number, drop: number) => { cyl(0.02, drop, x, CEIL - drop / 2, z, BRASS, 0, 4); cyl(0.2, 0.08, x, CEIL - drop - 0.02, z, BRASS, 0.004, 10, 0.12); const g = MB.CreateSphere("pbGlobe", { diameter: 0.42, segments: 7 }, sc); g.position.set(x, CEIL - drop - 0.22, z); g.scaling.y = 1.1; globes.push(g); };
@@ -4415,8 +4426,8 @@ export class CityRenderer {
       const sign2 = (text: string, x: number, z: number, nx: number, nz: number) => sheet(1.4, 0.32, x, U + 2.8, z, nx, nz, texMat("sign2-" + text, 512, 116, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 512, 116); c.strokeStyle = GOLD; c.lineWidth = 6; c.strokeRect(6, 6, 500, 104); lettering(c, text, 512, 116); }, 0.5));
       sign2("SEAMUS'S SNUG", -93.07, 25.95, -1, 0);
       // the ceiling: pressed tin and beams; milk-glass globes
-      sbx(IN.minX, IN.maxX, UC - 0.025, UC - 0.005, IN.minZ, IN.maxZ, "tin", "#c8b890");
-      for (let z = IN.minZ + 1.8; z < IN.maxZ - 0.5; z += 3.0) sbx(IN.minX, IN.maxX, UC - 0.28, UC - 0.025, z - 0.13, z + 0.13, "mahogany", MAH2);
+      tinCeil(IN.minX, IN.maxX, IN.minZ, IN.maxZ, UC);
+      for (let z = IN.minZ + 1.8; z < IN.maxZ - 0.5; z += 3.0) sbx(IN.minX, Math.min(IN.maxX, cutK + z - 0.13), UC - 0.28, UC - 0.025, z - 0.13, z + 0.13, "mahogany", MAH2);
       const BW = P.hall.minZ, bulb = "#ffe2a0";
       const globes2: Mesh[] = [];
       const globe2 = (x: number, z: number, drop: number) => { cyl(0.02, drop, x, UC - drop / 2, z, BRASS, 0, 4); cyl(0.2, 0.08, x, UC - drop - 0.02, z, BRASS, 0.004, 10, 0.12); const g = MB.CreateSphere("pbGlobe2", { diameter: 0.42, segments: 10 }, sc); g.position.set(x, UC - drop - 0.22, z); g.scaling.y = 1.1; globes2.push(g); };
