@@ -17,7 +17,7 @@ Every update to Box Fort Banditz, newest first. Each round has its screenshots i
   the background counted as a huge freeze. Now it records any length, leaves paused moments out (and says so), and
   marks anything it couldn't measure. It also records the render scale, adaptive resolution and high-DPI settings, and
   every run starts at full resolution.
-- **Split the G**: alt-tabbing (or clicking away) mid-drink kept the pint gulping. Now losing the window lets go.
+- **Split the G**: alt-tabbing (or clicking away) mid-drink kept the pint gulping. Now losing the window lets go, and the pint takes the mouse and SPACE the moment it's poured (a let-go in its first frame used to be missed).
 - **Watching a mate throw darts**: you could see the dart twice (stuck in the board and flying in) and hear the
   impact twice. Now one dart, one thud.
 - **Crowds**: people stepping apart now only check those next to them (it checked every pair: fine now, but it would
