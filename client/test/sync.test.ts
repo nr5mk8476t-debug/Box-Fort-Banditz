@@ -388,6 +388,35 @@ test("darts (R12.4): a dart in the air at the other board never holds up your th
   assert.equal(view.mode, "darts");
 });
 
+test("darts (R12.5): watching a mate throw: one dart (never the stuck one AND the flying one), one impact sound, even when the host's state arrives before the throw's event", async () => {
+  const { sfx } = await import("../src/audio.ts");
+  const calls: string[] = [];
+  const keep = { dartLand: sfx.dartLand, dartThunk: sfx.dartThunk, dartSting: sfx.dartSting };
+  sfx.dartLand = (l: string) => { calls.push("land " + l); }; sfx.dartThunk = () => { calls.push("thunk"); }; sfx.dartSting = (l: string) => { calls.push("sting " + l); };
+  try {
+    const rig = await pubRig(15);
+    const { w, view, pb } = rig;
+    for (const id of ["me", "dan", "hana"]) w.addPlayer(id, id.toUpperCase());
+    const O2 = pb.darts[1];
+    w.debugTeleport("me", O2.oche + 2.5, O2.board.z + 2, 0, pb.y2); // (watching from beside the oche)
+    w.debugTeleport("dan", O2.oche + 0.3, O2.board.z, -Math.PI / 2, pb.y2); w.debugTeleport("hana", O2.oche + 1.2, O2.board.z + 0.8, 0, pb.y2);
+    w.pubGames.act("dan", { op: "open", st: "dartsoche2", vs: "mate", stake: 0 }); w.pubGames.act("hana", { op: "join", st: "dartsoche2" });
+    const s2 = w.pubGames.st.get("dartsoche2")!; if (s2.seats[s2.darts!.turn].id !== "dan") s2.darts!.turn = 1 - s2.darts!.turn;
+    await playOut(rig, { sec: 1, fps: 30, lat: 0.05, me: "me" });
+    // Dan throws: the host's state (with the dart on the board) reaches us BEFORE the throw's event
+    w.pubGames.act("dan", { op: "dart", st: "dartsoche2", n: s2.darts!.n, u: 0.01, v: 0.1 });
+    w.takeEvents();
+    await playOut(rig, { sec: 0.1, fps: 30, lat: 0, me: "me" });
+    view.onEvent({ t: "pgDart", st: "dartsoche2", who: "dan", label: "T20", value: 60, bust: "", u: 0.01, v: 0.1 }, "me");
+    const st = (view as any).st.get("dartsoche2");
+    let most = 0;
+    for (let k = 0; k < 15; k++) { await playOut(rig, { sec: 1 / 30, fps: 30, lat: 0, me: "me" }); most = Math.max(most, st.darts.filter((d: any) => d.isEnabled()).length); }
+    assert.equal(most, 1, `one dart showing at a time (most at once: ${most})`);
+    const impacts = calls.filter((c) => c.startsWith("land") || c === "thunk").length;
+    assert.equal(impacts, 1, `one impact: ${calls.join(", ")}`);
+  } finally { Object.assign(sfx, keep); }
+});
+
 // =============================================================================================================
 // R12.4: PeerRoom: leaving while a reconnect is half done must never let a late connection bring the room back
 // =============================================================================================================

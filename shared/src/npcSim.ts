@@ -1126,9 +1126,19 @@ export class NpcSystem {
         this.nudge(n.move, (dx / d) * push, (dz / d) * push);
       }
     }
+    // R12.5: people only push people within 0.8 m: so only pairs in neighbouring 1 m cells are looked at (it was every
+    // pair: 2,900 checks a step for 77 people, nine times that for three times as many). The same pairs as before (to
+    // within a nudge: the cells are filled before anyone's pushed), in the same order.
+    const cells = new Map<number, number[]>(), cellOf = (x: number, z: number) => (Math.floor(x) + 4096) * 8192 + (Math.floor(z) + 4096);
+    for (let i = 0; i < list.length; i++) { const m = list[i].move, k = cellOf(m.x, m.z); (cells.get(k) ?? cells.set(k, []).get(k)!).push(i); }
+    const near: number[] = [];
     for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        const a = list[i].move, b = list[j].move;
+      const a = list[i].move, cx = Math.floor(a.x), cz = Math.floor(a.z);
+      near.length = 0;
+      for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++) { const c = cells.get(cellOf(cx + ox, cz + oz)); if (c) for (const j of c) if (j > i) near.push(j); }
+      near.sort((p, q) => p - q);
+      for (const j of near) {
+        const b = list[j].move;
         const dx = b.x - a.x, dz = b.z - a.z;
         const d2 = dx * dx + dz * dz;
         if (d2 > 0.64 || d2 < 1e-8) continue;

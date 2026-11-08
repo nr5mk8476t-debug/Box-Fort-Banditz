@@ -158,7 +158,8 @@ export class FpInput {
     if (e.code === "KeyR" && this.enabled) this.onAction?.("robEnd"); // letting go of R stops a hold-up
     if (e.code === "KeyF" && this.charging === "key") { this.charging = null; if (this.enabled) this.onAction?.("chargeEnd", "key"); }
   };
-  clear = () => { this.keys.clear(); };
+  // (R12.5: and a held drink is let go: losing the window (alt-tab, a click elsewhere) used to leave the pint gulping on)
+  clear = () => { this.keys.clear(); if (this.gulp) this.gulp(false); };
 
   private lastX: number | null = null;
   private lastY = 0;

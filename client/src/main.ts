@@ -9,6 +9,8 @@ import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
 import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
+import { softwareRendering, gpuHelpHtml } from "./gpuCheck.ts";
+import { adaptStep } from "./game/adaptive.ts";
 declare const __BFB_BUILD__: string; // (R12.5: the commit, from vite.config.ts)
 import { runBench, benchFrame, cancelBench, benchRunning, type FrameParts } from "./game/bench.ts";
 import { installAudioUnlock, isAudioUnlocked, whenAudioUnlocked, sfx, renderSfxOffline, startTitleMusic, stopMusic } from "./audio.ts";
@@ -34,6 +36,15 @@ const CITY = buildTrashington();
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const show = (id: string, on = true) => $(id).classList.toggle("hidden", !on);
 const TEST_MODE = new URLSearchParams(location.search).has("test");
+// R12.5: is the browser drawing without the graphics card? (Blake's 180 FPS became 15 when Brave turned its hardware
+// acceleration off.) A warning with the steps on the title screen. The test box always renders in software: there it's
+// only checked with ?gpucheck=1.
+const SOFTWARE_GPU = (!TEST_MODE || new URLSearchParams(location.search).has("gpucheck")) && softwareRendering();
+if (SOFTWARE_GPU) {
+  document.getElementById("gpu-warn-text")!.innerHTML = gpuHelpHtml();
+  document.getElementById("gpu-warn")!.classList.remove("hidden");
+  document.getElementById("btn-gpu-ok")!.addEventListener("click", () => document.getElementById("gpu-warn")!.classList.add("hidden"));
+}
 // R12.5: SYNTHETIC STRESS TESTS (test mode only; never real content): ?stress=city2 stacks a copy of every building on
 // top of itself (about twice the façade detail in view); ?stress=npcs2 / npcs3 doubles / triples the passers-by (solo)
 const STRESS = TEST_MODE ? (new URLSearchParams(location.search).get("stress") ?? "") : "";
@@ -717,6 +728,8 @@ async function startBench() {
   if (!arena || benchRunning()) return;
   const a = arena;
   show("pause", false); show("bench-status", true); document.body.classList.add("benching");
+  // (R12.5: every run starts from the same place: adaptive resolution back to full and held there while it runs)
+  dynScale = 1; adapt.slow = adapt.easy = 0; applyScaling();
   const res = await runBench({
     scene: a.scene, engine, arena: CITY, canvas,
     mode: local ? "solo" : room?.isHost ? "hosting" : "joining",
@@ -726,8 +739,8 @@ async function startBench() {
     teleport: local ? (x, y, z, yaw) => { local!.teleport(x, z, yaw, y); a.debugTeleport(x, z, yaw, y); } : undefined,
     startGames: local ? () => { a.onAction?.({ a: "pg", op: "open", st: "pooltable2", vs: "npc", stake: 0 } as any); a.onAction?.({ a: "pg", op: "open", st: "dartsoche1", vs: "npc", stake: 0 } as any); } : undefined,
     gamesActive: () => { const i = a.pg.info() as any; return ["pooltable2", "dartsoche1"].map((k) => `${k}: ${i?.[k]?.ph ?? "-"}${i?.[k]?.rolling ? " (rolling)" : ""}`).join(", "); },
-    settings: { lowGraphics: settings.lowGraphics, fov: settings.fov, showFps: settings.showFps },
-    build: __BFB_BUILD__ + (STRESS ? ` SYNTHETIC STRESS: ${STRESS}` : ""), pubSeen: () => a.city.pubSeen,
+    settings: { lowGraphics: settings.lowGraphics, fov: settings.fov, showFps: settings.showFps, renderScale: settings.renderScale, adaptiveRes: settings.adaptiveRes, sharpHiDpi: settings.sharpHiDpi, startScale: Math.round(100 / engine.getHardwareScalingLevel()) + "%" },
+    build: __BFB_BUILD__ + (STRESS ? ` SYNTHETIC STRESS: ${STRESS}` : ""), pubSeen: () => a.city.pubSeen, softwareRendering: SOFTWARE_GPU,
     status: (s) => { $("bench-status").textContent = s; },
   });
   show("bench-status", false); document.body.classList.remove("benching");
@@ -1142,19 +1155,21 @@ const applyScaling = () => {
   const level = 1 / (scale * dpr);
   if (Math.abs(level - lastLevel) > 1e-4) { lastLevel = level; engine.setHardwareScalingLevel(level); }
 };
-/** R12.5: adaptive resolution: once a second, look at the slow end of the last second's frames: a step down (10%) after
- *  two slow seconds (90th percentile over 22 ms, under ~45 FPS), a step up (5%) after three easy ones (under 14 ms);
- *  60% at least. Small steps, slow to change: no constant sharpening and softening */
-const adapt = { ft: new Float32Array(240), n: 0, t: 0, slow: 0, easy: 0 };
+/** R12.5: adaptive resolution: once a second, look at the slow end of the last second's frames (90th percentile):
+ *  a step down (10%) after two slow seconds (over 22 ms: under ~45 FPS); a step back up (5%) after four seconds that
+ *  meet the 60 FPS target (under 18.5 ms: a 60 Hz screen's 16.7 ms frames count; it used to want under 14 ms, which a
+ *  60 Hz cap never gives, so it stayed blurry for good). If it has to step down again within 8 s of stepping up, it
+ *  waits before trying again (20 s, then 40, up to 300): no constant sharpening and softening. 60% at least. */
+const adapt = { ft: new Float32Array(1200), n: 0, t: 0, slow: 0, easy: 0, lastUp: -1e9, wait: 0, waitUntil: 0, clock: 0 };
 function adaptRes(dt: number) {
   if (!settings.adaptiveRes) { if (dynScale !== 1) { dynScale = 1; applyScaling(); } return; }
+  adapt.clock += dt;
   if (adapt.n < adapt.ft.length) adapt.ft[adapt.n++] = dt * 1000;
   if ((adapt.t += dt) < 1) return;
   const a = Array.from(adapt.ft.subarray(0, adapt.n)).sort((x, y) => x - y), p90 = a[Math.floor(a.length * 0.9)] ?? 0;
   adapt.t = 0; adapt.n = 0;
-  if (p90 > 22) { adapt.easy = 0; if (++adapt.slow >= 2) { adapt.slow = 0; dynScale = Math.max(0.6, dynScale - 0.1); applyScaling(); } }
-  else if (p90 < 14) { adapt.slow = 0; if (++adapt.easy >= 3) { adapt.easy = 0; if (dynScale < 1) { dynScale = Math.min(1, dynScale + 0.05); applyScaling(); } } }
-  else { adapt.slow = 0; adapt.easy = 0; }
+  const step = adaptStep(p90, adapt, dynScale);
+  if (step) { dynScale = Math.max(0.6, Math.min(1, dynScale + step)); applyScaling(); }
 }
 applyScaling();
 onSettingsChange(applyScaling);

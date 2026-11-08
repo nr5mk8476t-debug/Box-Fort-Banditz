@@ -36,6 +36,8 @@ export interface BenchCtx {
   /** solo only: start a pool game and a darts game against the pub's regulars (so the games are live upstairs) */
   startGames?: () => void; gamesActive?: () => string;
   settings: Record<string, unknown>; build: string; pubSeen: () => boolean;
+  /** the browser's drawing without the graphics card (see gpuCheck.ts) */
+  softwareRendering?: boolean;
   status: (s: string) => void;
 }
 
@@ -89,10 +91,11 @@ export function benchRoute(A: ArenaLayout): Leg[] {
   return [...day, ...night];
 }
 
-const MAXF = 20000;
+/** room for ~10 minutes at 300 FPS (it filled up at 20,000 on a fast PC and the night views came out empty) */
+const MAXF = 200000;
 class Bench {
   ft = new Float32Array(MAXF); parts = new Float32Array(MAXF * 5); dc = new Float32Array(MAXF); am = new Float32Array(MAXF); tri = new Float32Array(MAXF); heap = new Float32Array(MAXF); gpu = new Float32Array(MAXF); cx = new Float32Array(MAXF); cz = new Float32Array(MAXF);
-  n = 0; leg = 0; t = 0; settle = 0; legStart = 0; prevDraw = 0; prevHeap = 0;
+  n = 0; leg = 0; t = 0; settle = 0; legStart = 0; prevDraw = 0; prevHeap = 0; paused = 0; pausedSecs = 0;
   results: Record<string, unknown>[] = [];
   side0 = { ...side };
   constructor(public ctx: BenchCtx, public legs: Leg[], public gpuTimer: { get: () => number } | null) {}
@@ -157,6 +160,9 @@ export function benchFrame(dt: number, p: FrameParts, scene: Scene) {
   const b = running; if (!b) return;
   const L = b.legs[b.leg];
   if (b.settle > 0) { b.settle -= dt; b.prevDraw = drawCount(scene); return; } // (the first moment of a still view isn't counted: the camera's just jumped)
+  // a paused tab (switched away / minimised: the browser stops drawing it): not a freeze; left out, counted, and the
+  // route waits (the stretch still gets its full time)
+  if (dt > 1.5 || (typeof document !== "undefined" && document.hidden)) { b.paused++; b.pausedSecs += dt; b.prevDraw = drawCount(scene); return; }
   b.t += dt;
   const k = Math.min(1, b.t / L.secs), c = L.at(k);
   b.ctx.setCam(c); if (L.walk) b.ctx.teleport?.(c.x, c.y - 1.7, c.z, c.yaw);
@@ -183,7 +189,7 @@ function summarise(b: Bench, L: Leg, scene: Scene) {
   const i0 = b.legStart, i1 = b.n, ft = Array.from(b.ft.subarray(i0, i1));
   const mean = (a: Float32Array, k = 1, o = 0) => { let s = 0, n = 0; for (let i = i0; i < i1; i++) { s += a[i * k + o]; n++; } return n ? s / n : 0; };
   const slow = [...ft].sort((x, y) => y - x), n1 = Math.max(1, Math.round(ft.length * 0.01));
-  const low1 = 1000 / (slow.slice(0, n1).reduce((a, v) => a + v, 0) / n1);
+  const low1 = ft.length ? 1000 / (slow.slice(0, n1).reduce((a, v) => a + v, 0) / n1) : 0;
   // heap drops between frames over 1 MB: most likely garbage collections (Chrome only)
   let drops = 0, dropMB = 0; for (let i = i0 + 1; i < i1; i++) { const d = b.heap[i - 1] - b.heap[i]; if (b.heap[i] >= 0 && d > 1) { drops++; dropMB += d; } }
   const act = scene.getActiveMeshes(); let lmax = 0, lsum = 0;
@@ -227,9 +233,11 @@ function report(b: Bench, pubSeen: boolean) {
     `Window ${info.window}, rendering ${info.render} (pixel ratio ${info.devicePixelRatio}, scaling ${info.hardwareScaling}), WebGL ${info.webgl}`,
     `Settings: ${JSON.stringify(info.settings)}`,
     `GPU time: ${b.gpuTimer ? "measured (timer queries)" : "unavailable in this browser (CPU numbers only)"}`,
+    `Graphics card in use: ${c.softwareRendering ? "NO: the browser is drawing in software (hardware acceleration is off): these numbers aren't the PC's real speed" : "yes (hardware accelerated)"}`,
+    ...(b.paused ? [`Paused: ${b.paused} time(s), ${r1(b.pausedSecs)} s (the tab was in the background): left out of the numbers`] : []),
     "",
     "stretch                                        med   p95   p99   max  1%low  >50ms  cpu(upd/wld/apl/rnd/hud)  draws  meshes   tris",
-    ...b.results.map((r: any) => `${(r.leg + (r.night ? " (night)" : "")).slice(0, 44).padEnd(44)} ${pad(r.medianMs, 5)} ${pad(r.p95Ms, 5)} ${pad(r.p99Ms, 5)} ${pad(r.maxMs, 5)} ${pad(r.low1Fps, 6)} ${pad(r.over50, 5)}  ${`${r.cpu.update}/${r.cpu.world}/${r.cpu.apply}/${r.cpu.renderCall}/${r.cpu.hud}`.padEnd(24)} ${pad(r.drawCalls, 6)} ${pad(r.activeMeshes, 6)} ${pad(r.triangles, 7)}`),
+    ...b.results.map((r: any) => !r.frames ? `${(r.leg + (r.night ? " (night)" : "")).slice(0, 44).padEnd(44)}  no samples (not measured: ignore this line)` : `${(r.leg + (r.night ? " (night)" : "")).slice(0, 44).padEnd(44)} ${pad(r.medianMs, 5)} ${pad(r.p95Ms, 5)} ${pad(r.p99Ms, 5)} ${pad(r.maxMs, 5)} ${pad(r.low1Fps, 6)} ${pad(r.over50, 5)}  ${`${r.cpu.update}/${r.cpu.world}/${r.cpu.apply}/${r.cpu.renderCall}/${r.cpu.hud}`.padEnd(24)} ${pad(r.drawCalls, 6)} ${pad(r.activeMeshes, 6)} ${pad(r.triangles, 7)}`),
     "",
     `Overall: ${total.frames} frames, median ${total.medianMs} ms, 99th ${total.p99Ms} ms, 1% low ${total.low1Fps} FPS, worst ${total.maxMs} ms`,
   ];

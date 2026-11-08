@@ -2412,3 +2412,14 @@ test("R12.5 NPC levels: a passer-by far from every player updates one NPC step i
   const near = count(3);
   assert.ok(near.moves >= near.steps * 0.8, `near player two: moved on ${near.moves} of ${near.steps} steps`);
 });
+test("R12.5 crowds: people pressed together still step apart (separation looks only at neighbouring cells now)", () => {
+  const { w, ps: [a, b] } = hotWorld(2);
+  w.debugTeleport(a.id, 0, -60, 0); w.debugTeleport(b.id, 0, -60, 0);
+  const crowd = Array.from({ length: 30 }, () => w.npc.spawn("tourist")!);
+  const x0 = crowd[0].move.x, z0 = crowd[0].move.z;
+  crowd.forEach((n, i) => { n.move.x = x0 + (i % 6) * 0.2; n.move.z = z0 + Math.floor(i / 6) * 0.2; n.state = "idle"; n.stateT = 99; });
+  const minGap = () => { let m = Infinity; for (let i = 0; i < crowd.length; i++) for (let j = i + 1; j < crowd.length; j++) m = Math.min(m, Math.hypot(crowd[i].move.x - crowd[j].move.x, crowd[i].move.z - crowd[j].move.z)); return m; };
+  const before = minGap();
+  settle(w, 3);
+  assert.ok(minGap() > before + 0.2 && minGap() > 0.45, `spread out: closest pair ${before.toFixed(2)} m -> ${minGap().toFixed(2)} m`);
+});

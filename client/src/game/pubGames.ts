@@ -353,15 +353,23 @@ export class PubGamesView {
     const s = this.st.get(String(e.st ?? "")); if (!s) return;
     if (e.t === "pgDart") {
       s.flash = { label: `${e.label}${Number(e.value) ? " · " + e.value : ""}`, t: 2.2 };
-      // R12.4: the sound when the dart lands (it may still be in the air: then it plays as it hits the board)
       const g = e.who === me ? 1 : 0.7, label = String(e.label ?? "");
+      // someone else's throw you're watching: fly it in first. R12.5: the slot it flies into is the dart it IS: if the
+      // host's state already has it on the board (the state can come before the event), the one at the same spot, not
+      // the next empty slot (that showed the dart twice: stuck in the board and flying in)
+      if (e.who !== me && this.near(s, 12) && !s.fly) {
+        const D = s.note?.darts, u = Number(e.u), v = Number(e.v);
+        let k = D ? D.d.findIndex(([du, dv]) => Math.abs(du - u) < 0.002 && Math.abs(dv - v) < 0.002) : -1;
+        if (k < 0) k = D?.d.length ?? 0;
+        s.fly = { k, t: 0, u, v, from: new Vector3((s.g.oche ?? 0) + 0.35, this.U + 1.7, s.g.z + 0.25), mine: false };
+      }
+      // R12.4: the sound when the dart lands (it may still be in the air: then it plays as it hits the board, once)
       if (this.near(s, 12)) {
         if (s.fly && s.fly.mine === (e.who === me)) s.fly.label = label;
         else if (performance.now() - s.landAt < 1500) { s.landAt = 0; sfx.dartSting(label, g); }
         else sfx.dartLand(label, g);
       }
       if (e.who === me && e.bust) this.hooks.feedback(String(e.bust), "bad");
-      if (e.who !== me && this.near(s, 12)) { const k = (s.note?.darts?.d.length ?? 0); s.fly = s.fly ?? { k, t: 0, u: Number(e.u), v: Number(e.v), from: new Vector3((s.g.oche ?? 0) + 0.35, this.U + 1.7, s.g.z + 0.25), mine: false }; }
     } else if (e.t === "pgMsg") { if (e.to === me && e.msg) { this.lastMsg = String(e.msg); this.hooks.feedback(this.lastMsg, "info"); } }
     else if (e.t === "pgEnd") {
       const mineSeat = s.seatOf(me);

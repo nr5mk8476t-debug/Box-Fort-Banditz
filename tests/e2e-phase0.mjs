@@ -1902,6 +1902,9 @@ try {
     let pintUp = false;
     for (let k = 0; k < 3 && !pintUp; k++) { await R3.keyboard.press("e"); pintUp = await R3.waitForFunction(() => window.__bfb.pubInfo()?.open, null, { timeout: 30000 }).then(() => true, () => false); } // (one pint at a time: the last may still be pouring)
     await R3.evaluate(() => window.__bfb.pintPress(true));
+    // (R12.5: losing the window while drinking lets go of the drink: it used to keep gulping)
+    await R3.evaluate(() => window.dispatchEvent(new Event("blur")));
+    ok(pintUp && !(await R3.evaluate(() => window.__bfb.pubInfo()?.holding)), "R12.5: losing focus mid-drink lets go of the drink");
     await R3.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
     await R3.click("#btn-leave");
     await R3.waitForFunction(() => window.__bfb.info().screen === "title", null, { timeout: 60000 });
