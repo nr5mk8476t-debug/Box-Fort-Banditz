@@ -557,7 +557,7 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 | Darts | watching: one dart showing at a time, one impact, when the host's state arrives before the throw's event | client unit (new; fails on the old code) | two darts, two impacts | pass |
 | Crowds | 30 people pressed together step apart | shared unit (new) | (all pairs: same result) | pass |
 | Everything | 301 shared + 31 client unit (incl. the benchmark at simulated 30/60/144/240 FPS and a 30 s paused tab); typecheck; smokes | full suite | | pass |
-| | browser e2e, normal / 110 ms | e2e | | normal: 437/438 (the blur check: fixed), then 439/439 on the fixed build; 110 ms: E2E_LAG |
+| | browser e2e, normal / 110 ms | e2e | | normal: 437/438 (the blur check: fixed), then 439/439 on the fixed build; 110 ms: 438/438 |
 
 ## R12.5: performance and a foundation for a bigger city (2026-11-07)
 
