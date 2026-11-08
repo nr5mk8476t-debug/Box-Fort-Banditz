@@ -1,0 +1,30 @@
+before: d61660e (solo, ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver))
+after:  3b884ce+changes (solo, ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver))
+walk: fort → first road → the pub (first app median  924.9 →  594.8 ( -36%)  p99  -32%  draws 783 → 783 (0%)  tris 1318k → 553k (-58%)
+pub from across the road                     median 1063.1 →  862.3 ( -19%)  p99  -19%  draws 1069 → 1198 (+12%)  tris 1672k → 951k (-43%)
+the entrance                                 median 1300.1 → 1099.4 ( -15%)  p99  -14%  draws 1034 → 1057 (+2%)  tris 1644k → 794k (-52%)
+downstairs: the bar                          median  786.5 →  636.3 ( -19%)  p99  -25%  draws 466 → 480 (+3%)  tris 1266k → 548k (-57%)
+downstairs: out of the window                median 1071.2 →    928 ( -13%)  p99  -11%  draws 1302 → 1445 (+11%)  tris 1497k → 864k (-42%)
+downstairs: the fireside                     median  576.9 →  423.5 ( -27%)  p99  +30%  draws 311 → 316 (+2%)  tris 1101k → 372k (-66%)   OVER BUDGET: slow frames +30%
+walk: in, up the stairs                      median  751.9 →  521.1 ( -31%)  p99  -16%  draws 905 → 894 (-1%)  tris 1407k → 658k (-53%)
+upstairs: pool                               median  722.1 →  538.9 ( -25%)  p99  -18%  draws 419 → 447 (+7%)  tris 1168k → 450k (-61%)
+upstairs: darts                              median  531.9 →  386.9 ( -27%)  p99   -6%  draws 214 → 226 (+6%)  tris 1051k → 405k (-61%)
+balcony: out at the city                     median  795.4 →  656.6 ( -17%)  p99  -18%  draws 976 → 1006 (+3%)  tris 1254k → 639k (-49%)
+balcony: along the front                     median   1184 → 1021.7 ( -14%)  p99  -14%  draws 1443 → 1553 (+8%)  tris 1648k → 999k (-39%)
+walk: back down and out                      median 1129.8 →  699.3 ( -38%)  p99  -11%  draws 1152 → 1042 (-10%)  tris 1390k → 645k (-54%)
+city street                                  median    813 →    592 ( -27%)  p99  -24%  draws 1114 → 1159 (+4%)  tris 907k → 530k (-42%)
+pub from across the road (night)             median 1062.2 →  763.3 ( -28%)  p99  -28%  draws 1124 → 1153 (+3%)  tris 1693k → 930k (-45%)
+the entrance (night)                         median 1254.2 →   1093 ( -13%)  p99  -14%  draws 1011 → 1039 (+3%)  tris 1636k → 785k (-52%)
+downstairs: the bar (night)                  median  797.7 →  637.5 ( -20%)  p99  -44%  draws 466 → 478 (+3%)  tris 1265k → 547k (-57%)
+downstairs: out of the window (night)        median 1095.7 →    938 ( -14%)  p99  -14%  draws 1312 → 1446 (+10%)  tris 1500k → 865k (-42%)
+downstairs: the fireside (night)             median  590.4 →  445.3 ( -25%)  p99  +24%  draws 307 → 317 (+3%)  tris 1100k → 372k (-66%)   OVER BUDGET: slow frames +24%
+upstairs: pool (night)                       median  719.2 →    574 ( -20%)  p99  -20%  draws 460 → 449 (-2%)  tris 1187k → 451k (-62%)
+upstairs: darts (night)                      median  550.6 →  399.7 ( -27%)  p99  -42%  draws 216 → 228 (+6%)  tris 1051k → 406k (-61%)
+balcony: out at the city (night)             median  863.7 →  718.6 ( -17%)  p99  -17%  draws 1004 → 1008 (+0%)  tris 1263k → 639k (-49%)
+balcony: along the front (night)             median 1182.3 →  888.5 ( -25%)  p99  -18%  draws 1425 → 1572 (+10%)  tris 1639k → 1008k (-38%)
+city street (night)                          median  822.2 →  591.7 ( -28%)  p99  -31%  draws 1109 → 1145 (+3%)  tris 905k → 525k (-42%)
+
+overall: median 822.5 → 612.2 ms, 99th 1616.3 → 1304.9 ms, 1% low 0.4 → 0.7 FPS, worst 2835.3 → 1372.5 ms
+loading: 20.9 → 22.9 s
+
+2 stretch(es) over the per-change budget: find out what they cost before accepting the change.

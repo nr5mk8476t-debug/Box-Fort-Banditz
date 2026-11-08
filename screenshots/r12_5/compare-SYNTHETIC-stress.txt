@@ -1,0 +1,30 @@
+before: 3b884ce+changes (solo, ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver))
+after:  3b884ce+changes SYNTHETIC STRESS: city2,npcs2 (solo, ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver))
+walk: fort → first road → the pub (first app median  594.8 →  798.1 ( +34%)  p99  +34%  draws 783 → 906 (+16%)  tris 553k → 770k (+39%)   OVER BUDGET: median +34%, slow frames +34%, draw calls +16%, triangles +39%
+pub from across the road                     median  862.3 → 1014.4 ( +18%)  p99  +19%  draws 1198 → 1233 (+3%)  tris 951k → 1152k (+21%)   OVER BUDGET: median +18%, triangles +21%
+the entrance                                 median 1099.4 → 1024.4 (  -7%)  p99   -7%  draws 1057 → 1105 (+5%)  tris 794k → 851k (+7%)
+downstairs: the bar                          median  636.3 →    538 ( -15%)  p99  -12%  draws 480 → 515 (+7%)  tris 548k → 629k (+15%)
+downstairs: out of the window                median    928 → 1084.9 ( +17%)  p99  +12%  draws 1445 → 1443 (0%)  tris 864k → 1039k (+20%)   OVER BUDGET: median +17%, triangles +20%
+downstairs: the fireside                     median  423.5 →    441 (  +4%)  p99  -39%  draws 316 → 349 (+10%)  tris 372k → 409k (+10%)
+walk: in, up the stairs                      median  521.1 →  477.1 (  -8%)  p99  +22%  draws 894 → 881 (-1%)  tris 658k → 725k (+10%)   OVER BUDGET: slow frames +22%
+upstairs: pool                               median  538.9 →  652.8 ( +21%)  p99  +30%  draws 447 → 576 (+29%)  tris 450k → 523k (+16%)   OVER BUDGET: median +21%, slow frames +30%, draw calls +29%, triangles +16%
+upstairs: darts                              median  386.9 →  423.7 ( +10%)  p99  -15%  draws 226 → 234 (+4%)  tris 405k → 464k (+15%)
+balcony: out at the city                     median  656.6 → 1024.6 ( +56%)  p99  +56%  draws 1006 → 1057 (+5%)  tris 639k → 826k (+29%)   OVER BUDGET: median +56%, slow frames +56%, triangles +29%
+balcony: along the front                     median 1021.7 → 1209.7 ( +18%)  p99  +29%  draws 1553 → 1598 (+3%)  tris 999k → 1237k (+24%)   OVER BUDGET: median +18%, slow frames +29%, triangles +24%
+walk: back down and out                      median  699.3 →  965.8 ( +38%)  p99  +30%  draws 1042 → 1110 (+7%)  tris 645k → 799k (+24%)   OVER BUDGET: median +38%, slow frames +30%, triangles +24%
+city street                                  median    592 →  925.3 ( +56%)  p99  +52%  draws 1159 → 1138 (-2%)  tris 530k → 712k (+34%)   OVER BUDGET: median +56%, slow frames +52%, triangles +34%
+pub from across the road (night)             median  763.3 →  984.8 ( +29%)  p99  +32%  draws 1153 → 1226 (+6%)  tris 930k → 1151k (+24%)   OVER BUDGET: median +29%, slow frames +32%, triangles +24%
+the entrance (night)                         median   1093 → 1172.6 (  +7%)  p99   +8%  draws 1039 → 1082 (+4%)  tris 785k → 842k (+7%)
+downstairs: the bar (night)                  median  637.5 →  657.7 (  +3%)  p99   +1%  draws 478 → 500 (+5%)  tris 547k → 624k (+14%)
+downstairs: out of the window (night)        median    938 → 1277.3 ( +36%)  p99  +33%  draws 1446 → 1541 (+7%)  tris 865k → 1074k (+24%)   OVER BUDGET: median +36%, slow frames +33%, triangles +24%
+downstairs: the fireside (night)             median  445.3 →  472.2 (  +6%)  p99  -36%  draws 317 → 349 (+10%)  tris 372k → 409k (+10%)
+upstairs: pool (night)                       median    574 →  603.2 (  +5%)  p99   +6%  draws 449 → 537 (+20%)  tris 451k → 505k (+12%)   OVER BUDGET: draw calls +20%
+upstairs: darts (night)                      median  399.7 →  399.4 (   0%)  p99   +4%  draws 228 → 242 (+6%)  tris 406k → 467k (+15%)
+balcony: out at the city (night)             median  718.6 → 1108.3 ( +54%)  p99  +52%  draws 1008 → 1072 (+6%)  tris 639k → 835k (+31%)   OVER BUDGET: median +54%, slow frames +52%, triangles +31%
+balcony: along the front (night)             median  888.5 → 1362.7 ( +53%)  p99  +39%  draws 1572 → 1606 (+2%)  tris 1008k → 1239k (+23%)   OVER BUDGET: median +53%, slow frames +39%, triangles +23%
+city street (night)                          median  591.7 →  948.2 ( +60%)  p99  +60%  draws 1145 → 1160 (+1%)  tris 525k → 718k (+37%)   OVER BUDGET: median +60%, slow frames +60%, triangles +37%
+
+overall: median 612.2 → 722.7 ms, 99th 1304.9 → 1655.4 ms, 1% low 0.7 → 0.6 FPS, worst 1372.5 → 1789.8 ms
+loading: 22.9 → 31.9 s
+
+15 stretch(es) over the per-change budget: find out what they cost before accepting the change.

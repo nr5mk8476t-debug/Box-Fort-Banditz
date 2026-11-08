@@ -1,0 +1,36 @@
+loaded in 595.4 s (click -> playing)
+BOX FORT BANDITZ BENCHMARK  build d61660e+changes  2026-11-07T13:48:37.144Z
+hosting, 2 player(s), 77 NPCs, 22 cars; pub first visit
+GPU: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+CPU threads: 4, memory: 16 GB, OS: Linux
+Browser: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36
+Window 1280×720, rendering 1280×720 (pixel ratio 1, scaling 1), WebGL 2
+Settings: {"lowGraphics":false,"fov":90,"showFps":false}
+GPU time: unavailable in this browser (CPU numbers only)
+
+stretch                                        med   p95   p99   max  1%low  >50ms  cpu(upd/wld/apl/rnd/hud)  draws  meshes   tris
+walk: fort → first road → the pub (first app 2223.5 5365.2 5365.2 7231.5    0.1    11  1.3/0/34.8/666.7/0.2        818    486 1362643
+pub from across the road                     2382.8 2382.8 2382.8 2599.5    0.4     2  1.4/0/23.8/16.6/0.1        1024    502 1657920
+the entrance                                 3200.7 3200.7 3200.7  3493    0.3     2  3.5/0/62.3/16/0.1           969    477 1625214
+downstairs: the bar                          2641.2 2641.2 2641.2 2718.3    0.4     2  1.5/0/37.8/10.9/0.2         495    230 1280102
+downstairs: out of the window                2247.4 2247.4 2247.4 2358.3    0.4     2  2.4/0/26.9/24.9/0.2        1331    709 1504496
+downstairs: the fireside                     2552.4 2552.4 2552.4 2603.6    0.4     2  1.5/0/35.1/10.7/0.2         267    143 1092196
+walk: in, up the stairs                      2175.9 2378.7 2378.7  2516    0.4     6  1.6/0/36.1/14.4/0.1        1010    553 1438473
+upstairs: pool                               4082.5 4082.5 4082.5 4428.1    0.2     2  1.8/0/71.1/18.3/0.2         418    214 1175526
+upstairs: darts                              2079.3 2079.3 2079.3 2209.7    0.5     3  1.3/0/30.6/8.5/0.1          219    116 1053224
+balcony: out at the city                     1847.4 1847.4 1847.4 2410.6    0.4     3  1.4/0/25.9/14.7/0.1        1038    699 1288040
+balcony: along the front                     2157.4 2157.4 2157.4 2206.8    0.5     2  1.8/0/37.9/21.1/0.1        1421    787 1641063
+walk: back down and out                      2449.5 2989.3 2989.3 3063.8    0.3     8  1.6/0/35.9/18.8/0.2        1302    753 1456944
+city street                                  2306.1 2306.1 2306.1 2718.6    0.4     2  1.4/0/48.9/18.2/0.2        1118    612  906533
+pub from across the road (night)             2153.3 2153.3 2153.3 2180.8    0.5     2  1.1/0/26.9/20.5/0.2        1023    502 1656058
+the entrance (night)                         2327.8 2327.8 2327.8 2485.9    0.4     2  1.5/0/27.2/15/0.1           974    480 1626372
+downstairs: the bar (night)                   2622  2622  2622 2735.9    0.4     2  1.1/0/40.3/9.1/0.1          463    220 1265510
+downstairs: out of the window (night)        2302.8 2302.8 2302.8 2349.1    0.4     2  1.5/0/38.4/26.8/0.2        1332    712 1506030
+downstairs: the fireside (night)             2533.1 2533.1 2533.1 2661.2    0.4     2  1.4/0/35.7/17.8/0.2         271    146 1093102
+upstairs: pool (night)                       2009.5 2009.5 2009.5 2057.4    0.5     3  1/0/44.1/9.5/0.1            379    202 1157396
+upstairs: darts (night)                      2049.3 2049.3 2049.3 2088.7    0.5     2  2.4/0/35.3/9/0.2            228    120 1057395
+balcony: out at the city (night)             2012.5 2012.5 2012.5 2278.4    0.4     3  1/0/23.4/15.9/0.1           998    687 1269270
+balcony: along the front (night)             2333.4 2333.4 2333.4 2523.5    0.4     2  1.4/0/32.7/31.2/0.1        1408    783 1639447
+city street (night)                          2668.5 2668.5 2668.5 3786.5    0.3     2  1/0/48.2/18.2/0.1          1076    599  892190
+
+Overall: 70 frames, median 2349.1 ms, 99th 5365.2 ms, 1% low 0.1 FPS, worst 7231.5 ms
