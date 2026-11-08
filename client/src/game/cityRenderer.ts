@@ -4642,42 +4642,7 @@ export class CityRenderer {
       { const mm = Mesh.MergeMeshes(fairy2, true, true); if (mm && this.pubFairy) { const both = Mesh.MergeMeshes([this.pubFairy, mm], true, true); if (both) { both.material = this.pubFairy.material ?? glow("#ffe0a0"); both.parent = this.root; both.isPickable = false; this.pubFairy = both; } } }
       for (const [x, z] of [[-81.6, 5.0], [-76.8, 5.0], [-72.4, 7.5], [-72.4, 14.4]]) { sbx(x - 0.3, x + 0.3, U, U + 0.4, z - 0.22, z + 0.22, "crate", "#2a1a10", 0.008); for (let k = 0; k < 10; k++) { ball(0.16, x + (rnd() - 0.5) * 0.5, U + 0.5 + rnd() * 0.15, z + (rnd() - 0.5) * 0.35, k % 3 ? "#2f7a34" : ["#d62c2c", "#ff5aa0", "#ffd54a"][k % 3], 0, 4); } }
       for (const t of P.balTables) { cyl(0.6, 0.05, t.x, U + 1.05, t.z, MAH, 0.006, 14); cyl(0.06, 1.0, t.x, U + 0.52, t.z, iron, 0.003, 8); cyl(0.4, 0.04, t.x, U + 0.02, t.z, iron, 0, 10); cyl(0.085, 0.15, t.x + 0.1, U + 1.15, t.z, "#1b0a06", 0.003, 10, 0.09); cyl(0.095, 0.025, t.x + 0.1, U + 1.23, t.z, "#f2e2bc", 0, 10); }
-      // R12.6 (Blake: "a nice designed cantilever"): the balcony hangs off the wall on proper brackets, nothing on the
-      // pavement: every ~2.6 m a dark timber joist out to the edge, a curved wrought-iron knee brace from the wall up to
-      // the joist's end with a scroll at its heel, an iron wall plate; a painted green fascia round the edge (hiding the
-      // floor's end grain) and a boarded, painted soffit underneath, 2 cm below the floor (never touching it: no flicker).
-      // Looks only: it's all above head height (the brace's foot is 1.35 m under the floor, ~3.4 m up), so no collision.
-      {
-        const BF = P.balcony[0], BS = P.balcony[1] ?? P.balcony[0], TIMBER = "#2a1810", FASCIA = "#1e4a32", SOFFIT = "#e2d3b2";
-        const bracket = (wx: number, wz: number, ox: number, oz: number, depth: number) => {
-          const ex = wx + ox * (depth - 0.12), ez = wz + oz * (depth - 0.12), yB = U - 0.15 - 0.09;
-          // the joist, from just inside the wall to the fascia
-          if (ox) box(depth + 0.05, 0.18, 0.12, wx + ox * (depth / 2 - 0.02), yB, wz, TIMBER, 0.006); else box(0.12, 0.18, depth + 0.05, wx, yB, wz + oz * (depth / 2 - 0.02), TIMBER, 0.006);
-          // the knee brace: a quarter curve from the wall (1.35 m down) up and out to the joist's end
-          const y0 = U - 1.35, y1 = U - 0.33, pts: Vector3[] = [];
-          for (let k = 0; k <= 10; k++) { const th = (k / 10) * Math.PI / 2, h = (depth - 0.18) * (1 - Math.cos(th)); pts.push(new Vector3(wx + ox * (0.04 + h), y0 + (y1 - y0) * Math.sin(th), wz + oz * (0.04 + h))); }
-          tube(pts, 0.035, iron, 0.004, 6);
-          // a straight strut from the curve's heel to the joist's middle (the triangle reads as structure)
-          tube([new Vector3(wx + ox * 0.06, y0 + 0.08, wz + oz * 0.06), new Vector3(wx + ox * (depth * 0.55), yB - 0.08, wz + oz * (depth * 0.55))], 0.022, iron, 0.003, 5);
-          // the scroll at the heel: a curl winding in
-          { const c: Vector3[] = []; for (let k = 0; k <= 14; k++) { const a = Math.PI * 0.5 + (k / 14) * Math.PI * 1.6, r = 0.13 - k * 0.006; c.push(new Vector3(wx + ox * (0.2 + Math.cos(a) * r), y0 + 0.42 + Math.sin(a) * r, wz + oz * (0.2 + Math.cos(a) * r))); } tube(c, 0.018, iron, 0.003, 5); }
-          // the wall plate (bolted to the brick) and the brace's foot
-          if (ox) box(0.04, 0.55, 0.16, wx + ox * 0.02, y0 + 0.22, wz, iron, 0.003); else box(0.16, 0.55, 0.04, wx, y0 + 0.22, wz + oz * 0.02, iron, 0.003);
-          void ex; void ez;
-        };
-        const front = BF.maxZ, side = BS.minX; // (the walls the balcony hangs off)
-        for (const x of [-81.6, -79.0, -76.4]) bracket(x, front, 0, -1, front - BF.minZ);
-        for (const z of [8.8, 11.6, 14.0]) bracket(side, z, 1, 0, BS.maxX - side);
-        // the fascia round the outer edge (front, side) and the soffit under every piece of the floor
-        box(BF.maxX - BF.minX + 0.04, 0.3, 0.05, (BF.minX + BF.maxX) / 2, U - 0.17, BF.minZ - 0.025, FASCIA, 0.006);
-        box(0.05, 0.3, BS.maxZ - BF.minZ + 0.04, BS.maxX + 0.025, U - 0.17, (BF.minZ + BS.maxZ) / 2, FASCIA, 0.006);
-        box(0.05, 0.3, BF.maxZ - BF.minZ, BF.minX - 0.025, U - 0.17, (BF.minZ + BF.maxZ) / 2, FASCIA, 0.006); // (its west end)
-        box(BS.maxX - BS.minX, 0.3, 0.05, (BS.minX + BS.maxX) / 2, U - 0.17, BS.maxZ + 0.025, FASCIA, 0.006); // (its north end)
-        for (const b of this.arena.boxes) if (b.deco === "balcony") {
-          if (b.poly) { const m = footPrism(sc, b.poly, b.y - b.h / 2 - 0.04, b.y - b.h / 2 - 0.02); this.skinPush(m, "boards", SOFFIT, 0); continue; }
-          sbx(b.x - b.w / 2, b.x + b.w / 2, b.y - b.h / 2 - 0.04, b.y - b.h / 2 - 0.02, b.z - b.d / 2, b.z + b.d / 2, "boards", SOFFIT, 0);
-        }
-      }
+      for (const [x, z, ry] of [[-81.8, 6.1, 0], [-77.0, 6.1, 0], [-73.75, 9.5, PI / 2], [-73.75, 14.0, PI / 2]] as [number, number, number][]) { tube([new Vector3(x, U - 0.15, z), new Vector3(x + Math.sin(ry) * 0.0 + (ry ? 0.9 : 0), U - 0.15, z - (ry ? 0 : 0.9)), new Vector3(x, U - 0.9, z)], 0.03, iron, 0); }
       // ---------------------------------------------------------------- MAMMY MOLONEY's whiskey snug: a fire, a wall of
       // whiskey, her high-backed chair, two old fellas in leather chairs behind their newspapers, a rug, a lamp
       const SF = P.snugFire;
