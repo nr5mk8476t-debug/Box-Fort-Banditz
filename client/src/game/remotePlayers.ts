@@ -51,6 +51,8 @@ function lerpAngle(a: number, b: number, t: number) {
 
 export class RemotePlayers {
   private map = new Map<string, Remote>();
+  /** R12.6: the other players (for lighting them with the room they're in) */
+  *roots(): Iterable<TransformNode> { for (const r of this.map.values()) yield r.root; }
   constructor(private scene: Scene) {}
 
   private build(id: string, info: RemoteInfo): Remote {

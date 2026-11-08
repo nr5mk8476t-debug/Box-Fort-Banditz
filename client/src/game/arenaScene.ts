@@ -147,6 +147,7 @@ export class ArenaScene {
   private wasWinded = false;
   private mantleTotal = 0;
   private viewmodel: Viewmodel;
+  private pubLitT = 0;
   // camera feel
   private eye: number = PLAYER.eyeHeight;
   private fovKick = 0;
@@ -1655,6 +1656,9 @@ export class ArenaScene {
       if (!this.pint.open || !p.taps.some((t) => Math.hypot(t.x - x, t.z - z) < 3.2 && Math.abs(t.y - this.cur.y) < 2.5)) { this.pint.close(); this.input.gulp = null; }
     } else if (this.input.gulp) this.input.gulp = null;
     this.city.updatePub(dt, this.night.level, this.camera.position.x, this.camera.position.z);
+    // R12.6: the people, the games' balls/cues/darts and your own hands in the pub are lit by its lamps too (they were lit
+    // by the sky only: grey-blue figures in a warm room at night)
+    if ((this.pubLitT -= dt) <= 0) { this.pubLitT = 0.25; this.city.pubLightDynamic([...this.npcs.roots(), ...this.remotes.roots(), this.pg.root, this.viewmodel.node]); }
     // R12.3: the games: replay shots, darts in the boards, the scoreboards; your controls when you're up
     const others: { x: number; y: number; z: number }[] = []; for (const o of this.others.values()) others.push({ x: o.x, y: o.y, z: o.z });
     this.pg.update(dt, { me: this.myId, x, y: this.cur.y, z, clock: this.match.lightT ?? 0, pints: this.cur.pints ?? 0, tipsy: tipsyAmount(this.cur), others, hurt: this.cur.knockT > 0 || this.jailT > 0 || (this.cur.stunT ?? 0) > 0 });

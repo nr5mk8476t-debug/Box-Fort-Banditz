@@ -1953,18 +1953,39 @@ export class CityRenderer {
         const pot = MB.CreateCylinder("cypPot", { diameterTop: 0.7, diameterBottom: 0.5, height: 0.55, tessellation: 10 }, sc); pot.position.set(g.x + sx * (half + 0.9), 0.28, g.z); this.add(pot, "#b5653b", 0.02);
         const tree = MB.CreateCylinder("cypress", { diameterTop: 0.05, diameterBottom: 0.75, height: 2.6, tessellation: 8 }, sc); tree.position.set(g.x + sx * (half + 0.9), 1.85, g.z); this.add(tree, "#2f5a3a", 0.03);
       }
-      // the arch: three bands (green outside, white, red inside) of small blocks round a half circle, bulbs along it
-      const bands: [number, string][] = [[half + 0.05, "#2f8f4e"], [half - 0.3, "#f4f1ea"], [half - 0.65, "#c8322c"]];
-      for (const [r, col] of bands) {
-        const n = 18;
+      // the arch: three bands (green outside, white, red inside) round a squashed half circle, bulbs along it
+      // (R12.6, the Little Italy flicker: the bands were rows of overlapping blocks whose front faces sat in the same plane,
+      //  so where green, white and red overlapped (most of the top of the arch) they z-fought; and every block's hidden
+      //  side faces, pulled forward by the ink outline's depth bias when seen edge-on, drew lines across the name board.
+      //  Now: ONE solid curved arch (green, inked) with the white and red bands inlaid on its faces (no ink): nothing
+      //  overlaps in a plane and there are no hidden faces inside it)
+      const edges = [half + 0.23, half - 0.12, half - 0.47, half - 0.83];
+      const at = (r: number, a: number): [number, number] => [g.x + Math.cos(a) * r, H0 + Math.sin(a) * (half * 0.55 + (r - half))];
+      const strip = (rOut: number, rIn: number, z0: number, z1: number, n = 40): Mesh => {
+        const pos: number[] = [], ind: number[] = [], nrm: number[] = [];
+        const quad = (a: number[], b: number[], c: number[], d: number[], out: number[]) => {
+          const o = pos.length / 3; pos.push(...a, ...b, ...c, ...d);
+          const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+          const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+          const flip = cr[0] * out[0] + cr[1] * out[1] + cr[2] * out[2] > 0; // (Babylon's front faces wind clockwise)
+          if (flip) ind.push(o, o + 2, o + 1, o, o + 3, o + 2); else ind.push(o, o + 1, o + 2, o, o + 2, o + 3);
+          const l = Math.hypot(out[0], out[1], out[2]) || 1; for (let k = 0; k < 4; k++) nrm.push(out[0] / l, out[1] / l, out[2] / l);
+        };
+        const P3 = (r: number, a: number, z: number) => { const [x, y] = at(r, a); return [x, y, z]; };
         for (let i = 0; i < n; i++) {
-          const a0 = (i / n) * Math.PI, a1 = ((i + 1) / n) * Math.PI, am = (a0 + a1) / 2, seg = r * (a1 - a0) + 0.04;
-          const m = MB.CreateBox("arch", { width: seg, height: 0.36, depth: 0.5 }, sc);
-          m.position.set(g.x + Math.cos(am) * r, H0 + Math.sin(am) * r * 0.55, g.z);
-          m.rotation.z = Math.atan2(Math.cos(am) * 0.55, -Math.sin(am)); // (along the arch's curve)
-          this.add(m, col, 0.02);
+          const a0 = (i / n) * Math.PI, a1 = ((i + 1) / n) * Math.PI, am = (a0 + a1) / 2;
+          const [ox, oy] = [Math.cos(am) * (half * 0.55 + rOut - half), Math.sin(am) * rOut]; // (the ellipse's outward normal)
+          quad(P3(rOut, a0, z0), P3(rOut, a1, z0), P3(rIn, a1, z0), P3(rIn, a0, z0), [0, 0, -1]);
+          quad(P3(rOut, a0, z1), P3(rOut, a1, z1), P3(rIn, a1, z1), P3(rIn, a0, z1), [0, 0, 1]);
+          quad(P3(rOut, a0, z0), P3(rOut, a1, z0), P3(rOut, a1, z1), P3(rOut, a0, z1), [ox, oy, 0]);
+          quad(P3(rIn, a0, z0), P3(rIn, a1, z0), P3(rIn, a1, z1), P3(rIn, a0, z1), [-ox, -oy, 0]);
         }
-      }
+        for (const a of [0, Math.PI]) quad(P3(rOut, a, z0), P3(rIn, a, z0), P3(rIn, a, z1), P3(rOut, a, z1), [0, a ? 1 : -1, 0]);
+        const m = new Mesh("arch", sc), vd = new VertexData(); vd.positions = pos; vd.indices = ind; vd.normals = nrm; vd.uvs = new Array((pos.length / 3) * 2).fill(0); vd.applyToMesh(m); return m;
+      };
+      this.add(strip(edges[0], edges[3], g.z - 0.25, g.z + 0.25), "#2f8f4e", 0.02);
+      this.add(strip(edges[1], edges[2], g.z - 0.29, g.z + 0.29), "#f4f1ea", 0);
+      this.add(strip(edges[2], edges[3] - 0.01, g.z - 0.29, g.z + 0.29), "#c8322c", 0);
       for (let i = 1; i < 12; i++) { const a = (i / 12) * Math.PI, r = half + 0.35; light(g.x + Math.cos(a) * r, H0 + Math.sin(a) * r * 0.55, g.z - 0.28, 0.14); light(g.x + Math.cos(a) * r, H0 + Math.sin(a) * r * 0.55, g.z + 0.28, 0.14); }
       // the name board, both faces, hanging under the top of the arch
       const bm = unlitTextured(sc, textTexture(sc, "LITTLE ITALY", { w: 512, h: 128, bg: "#f4f1ea", fg: "#2f8f4e" }), "itBoard");
@@ -3730,7 +3751,46 @@ export class CityRenderer {
   private pubLamps: StandardMaterial[] = [];
   /** R12.4 night lighting (Blake: "baked + a few real lights"): five real lamps in the pub (no shadows), each lighting
    *  only its own floor's pieces; Performance mode has none. `flick`: a fire's flicker */
-  private pubLights: { l: PointLight; base: number; flick: number }[] = [];
+  private pubLights: { l: PointLight; base: number; flick: number; floor: number; nStatic: number }[] = [];
+  /** R12.6: the moving things the pub's lamps light now (per floor) */
+  private pubLitDyn: Set<import("@babylonjs/core/Meshes/abstractMesh.js").AbstractMesh>[] = [new Set(), new Set()];
+  private pubLitMats = new WeakSet<object>();
+  /**
+   * R12.6: light the people, the games' pieces and your hands with the pub's lamps when they're inside (each floor's
+   * lamps light that floor's things). The lamps used to light the building only: at night the figures and the pool
+   * balls were lit by the sky alone, cold grey-blue in a warm room. Called a few times a second; only changes are
+   * applied (Babylon re-checks the lights of just the meshes added or removed).
+   */
+  pubLightDynamic(nodes: Iterable<TransformNode>) {
+    const P = this.arena.pub;
+    if (!P || !this.pubLights.length) return;
+    const r = P.rect, M = 0.3, inside = (x: number, z: number, m = M) => x > r.minX - m && x < r.maxX + m && z > r.minZ - m && z < r.maxZ + m;
+    const next: Set<import("@babylonjs/core/Meshes/abstractMesh.js").AbstractMesh>[] = [new Set(), new Set()];
+    if (this.pubNear) for (const n of nodes) {
+      const rp = n.getAbsolutePosition();
+      if (!inside(rp.x, rp.z, 40)) continue; // (most of the city's people: one check)
+      for (const m of n.getChildMeshes(false)) {
+        if (!m.isEnabled() || !m.isVisible) continue;
+        const mt = m.material as (StandardMaterial & { maxSimultaneousLights?: number }) | null;
+        if (!mt || (mt as StandardMaterial).disableLighting) continue;
+        const c = m.getAbsolutePosition();
+        if (!inside(c.x, c.z) || c.y > P.roofY) continue;
+        next[c.y < P.y2 - 0.25 ? 0 : 1].add(m);
+      }
+    }
+    for (let f = 0; f < 2; f++) {
+      const cur = this.pubLitDyn[f], nw = next[f];
+      if (cur.size === nw.size && [...nw].every((m) => cur.has(m))) continue;
+      for (const L of this.pubLights) {
+        if (L.floor !== f) continue;
+        const arr = L.l.includedOnlyMeshes;
+        for (let i = arr.length - 1; i >= L.nStatic; i--) if (!nw.has(arr[i])) arr.splice(i, 1);
+        for (const m of nw) if (!cur.has(m)) arr.push(m);
+      }
+      for (const m of nw) if (!cur.has(m)) { const mt = m.material as { maxSimultaneousLights?: number } | null; if (mt && !this.pubLitMats.has(mt) && (mt.maxSimultaneousLights ?? 4) < LIGHT_BUDGET.perMesh) { mt.maxSimultaneousLights = LIGHT_BUDGET.perMesh; this.pubLitMats.add(mt); } }
+      this.pubLitDyn[f] = nw;
+    }
+  }
   /** R12.4: the warm light on the pavement (out of the door, under the bay windows): baked, drawn at night */
   private pubSpill: StandardMaterial | null = null;
   private pubBoard: { tex: DynamicTexture; note: string } | null = null;
@@ -3802,9 +3862,9 @@ export class CityRenderer {
       const meshes = this.unitMeshes.get(areaGroupId(base, L.floor)) ?? [];
       const l = new PointLight(L.name, new Vector3(L.x, L.y, L.z), this.scene);
       l.diffuse = Color3.FromHexString(L.color); l.specular = Color3.Black(); l.range = L.range; l.intensity = 0;
-      l.includedOnlyMeshes = meshes; // (only this floor's pieces: the rest of the city's shaders don't change)
+      l.includedOnlyMeshes = meshes.slice(); // (only this floor's pieces: the rest of the city's shaders don't change. R12.6: its own copy: the people inside get added to it)
       for (const m of meshes) { const mt = m.material as { maxSimultaneousLights?: number } | null; if (mt && (mt.maxSimultaneousLights ?? 4) < LIGHT_BUDGET.perMesh) mt.maxSimultaneousLights = LIGHT_BUDGET.perMesh; }
-      this.pubLights.push({ l, base: L.intensity, flick: L.flicker ? 1 : 0 });
+      this.pubLights.push({ l, base: L.intensity, flick: L.flicker ? 1 : 0, floor: L.floor, nStatic: meshes.length });
     }
   }
   private buildPub() {
@@ -3947,8 +4007,10 @@ export class CityRenderer {
         B(len + 0.1, 3.3, 3.4, 0.24, mid, RED, "panel");
         B(len, 3.4, 4.35, 0.2, mid, BLACK);
         const fl = len - 1.6;
-        if (alongX) sheet(fl, 0.8, mid, 3.88, o + s * 0.15, 0, s, len > 14 ? fascia : fasciaShort); else sheet(fl, 0.8, o + s * 0.15, 3.88, mid, s, 0, len > 14 ? fascia : fasciaShort);
-        for (const e of [a0 + 0.45, a1 - 0.45]) { if (alongX) sheet(0.6, 0.6, e, 3.88, o + s * 0.155, 0, s, roundel); else sheet(0.6, 0.6, o + s * 0.155, 3.88, e, s, 0, roundel);
+        // (R12.6 flicker: the name boards sat 2 mm in front of the black board's ink outline (an outline also writes depth, 8 mm proud
+        //  of its box here): now 2.5 cm clear)
+        if (alongX) sheet(fl, 0.8, mid, 3.88, o + s * 0.165, 0, s, len > 14 ? fascia : fasciaShort); else sheet(fl, 0.8, o + s * 0.165, 3.88, mid, s, 0, len > 14 ? fascia : fasciaShort);
+        for (const e of [a0 + 0.45, a1 - 0.45]) { if (alongX) sheet(0.6, 0.6, e, 3.88, o + s * 0.17, 0, s, roundel); else sheet(0.6, 0.6, o + s * 0.17, 3.88, e, s, 0, roundel);
           B(0.4, 3.3, 4.35, 0.3, e, RED, "panel"); B(0.48, 4.0, 4.35, 0.4, e, RED, "panel"); }
         B(len + 0.4, 4.35, 4.48, 0.36, mid, RED, "panel");
         for (let u = a0 + 0.1; u < a1 - 0.05; u += 0.22) B(0.1, 4.48, 4.6, 0.4, u, BLACK, "", 0.02);
@@ -4010,14 +4072,14 @@ export class CityRenderer {
         cyl(0.07, 0.07, dx - out[0] * 0.07, Y1 + 1.1, dz - out[1] * 0.07, BRASS, 0.004, 8);
       }
       sb(L - 0.4, 1.0, 0.2, ox, 3.88, oz, "panel", BLACK, 0.01, yawOut);
-      sheet(L - 0.8, 0.7, ox + out[0] * 0.11, 3.88, oz + out[1] * 0.11, out[0], out[1], fascia);
+      sheet(L - 0.8, 0.7, ox + out[0] * 0.125, 3.88, oz + out[1] * 0.125, out[0], out[1], fascia); // (R12.6: clear of its board's outline)
       // the clock, out on an iron bracket off the east front (R12.2c: moved off the corner; it crowded the door's name)
       { const cx = r.maxX + 0.75, cz = 20.0, cy = 4.1;
         tube([new Vector3(r.maxX + 0.02, cy + 0.55, cz), new Vector3(cx, cy + 0.55, cz), new Vector3(cx, cy + 0.42, cz)], 0.035, BLACK, 0);
         tube([new Vector3(r.maxX + 0.02, cy - 0.1, cz), new Vector3(cx - 0.3, cy + 0.5, cz)], 0.025, BLACK, 0);
         const face = texMat("clock", 256, 256, (c) => { c.fillStyle = "#f8f2e0"; c.beginPath(); c.arc(128, 128, 124, 0, 6.3); c.fill(); c.strokeStyle = "#141010"; c.lineWidth = 10; c.stroke(); c.fillStyle = "#141010"; c.font = "bold 30px Georgia, serif"; c.textAlign = "center"; c.textBaseline = "middle"; ["XII", "III", "VI", "IX"].forEach((t, i) => { const a = (i / 4) * 2 * PI - PI / 2; c.fillText(t, 128 + Math.cos(a) * 92, 128 + Math.sin(a) * 92); }); c.lineCap = "round"; c.lineWidth = 9; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 + 50, 128 - 30); c.stroke(); c.lineWidth = 6; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 - 10, 128 - 85); c.stroke(); }, 0.6, true);
         const cl = MB.CreateCylinder("pbClock", { diameter: 0.8, height: 0.14, tessellation: 24 }, sc); cl.position.set(cx, cy, cz); cl.rotation.set(PI / 2, 0, 0); this.add(cl, BLACK, 0.01, false);
-        for (const sd of [-1, 1]) sheet(0.7, 0.7, cx, cy, cz + sd * 0.075, 0, sd, face);
+        for (const sd of [-1, 1]) sheet(0.7, 0.7, cx, cy, cz + sd * 0.09, 0, sd, face); // (R12.6: the faces were inside the case's outline (12 mm): they flickered)
         const rim = MB.CreateTorus("pbClockRim", { diameter: 0.82, thickness: 0.05, tessellation: 24 }, sc); rim.position.set(cx, cy, cz); rim.rotation.set(PI / 2, 0, 0); this.add(rim, GOLD, 0, false); }
       // the side door: one red door swung in, a fanlight, two lanterns, the step
       { const D2 = P.door2, dx = (D2.minX + D2.maxX) / 2, w = D2.maxX - D2.minX;
@@ -4145,8 +4207,8 @@ export class CityRenderer {
       const framed = (x: number, y: number, z: number, nx: number, nz: number, w: number, h: number, col: string) => {
         const fw = nx ? 0.05 : w + 0.1, fd = nx ? w + 0.1 : 0.05;
         box(fw, h + 0.1, fd, x, y, z, rnd() < 0.6 ? BRASS : BLACK, 0.004);
-        box(nx ? 0.06 : w, h, nx ? w : 0.06, x + nx * 0.006, y, z + nz * 0.006, col, 0);
-        if (rnd() < 0.5) box(nx ? 0.065 : w * 0.5, h * 0.4, nx ? w * 0.5 : 0.065, x + nx * 0.006, y + (rnd() - 0.5) * h * 0.3, z + nz * 0.006 + (nx ? (rnd() - 0.5) * w * 0.3 : 0), ["#e8dcc4", "#2a2a30", "#8a6a3a", "#4a6a8a"][Math.floor(rnd() * 4)], 0);
+        box(nx ? 0.06 : w, h, nx ? w : 0.06, x + nx * 0.02, y, z + nz * 0.02, col, 0); // (R12.6: 2.5 cm proud of the frame: seen from the side, the frame's ink outline (drawn with a depth bias) covered a canvas 1 cm in front of it: gold boards)
+        if (rnd() < 0.5) box(nx ? 0.065 : w * 0.5, h * 0.4, nx ? w * 0.5 : 0.065, x + nx * 0.03, /* (R12.6: 1.2 cm proud of the canvas, was 2 mm) */ y + (rnd() - 0.5) * h * 0.3, z + nz * 0.03 + (nx ? (rnd() - 0.5) * w * 0.3 : 0), ["#e8dcc4", "#2a2a30", "#8a6a3a", "#4a6a8a"][Math.floor(rnd() * 4)], 0);
       };
       const picCols = ["#3a5a6a", "#8a6a3a", "#2a4a3a", "#a8946a", "#6a3a3a", "#d8c8a0", "#4a4a6a", "#7a5a4a", "#c8b8a0", "#2a2a2a"];
       const wallRun = (nx: number, nz: number, fixed: number, a0: number, a1: number, skip: (u: number) => boolean) => {
@@ -4166,16 +4228,16 @@ export class CityRenderer {
       // tin signs (parody adverts) in among them
       const tin = (text: string, sub: string, bg: string, fg: string) => texMat("tin-" + text, 256, 160, (c) => { c.fillStyle = bg; c.fillRect(0, 0, 256, 160); c.strokeStyle = fg; c.lineWidth = 8; c.strokeRect(8, 8, 240, 144); c.fillStyle = fg; c.textAlign = "center"; c.font = "bold 34px Georgia, serif"; c.fillText(text, 128, 70); c.font = "18px Georgia, serif"; c.fillText(sub, 128, 112); for (let k = 0; k < 40; k++) { c.fillStyle = "rgba(90,50,20,0.25)"; c.fillRect(Math.random() * 256, Math.random() * 160, 3 + Math.random() * 6, 2 + Math.random() * 4); } }, 0.45);
       const tins = [tin("GUZZLE'S", "probably fine for you", "#141010", GOLD), tin("KILLKENNEL", "the red ale with bite", "#8e1f1a", "#f4e8c8"), tin("HARPY", "lager, allegedly", "#1f3a8a", "#ffe14a"), tin("O'BINLID'S", "whiskey, aged in a bin", "#2a4a2a", "#f4e8c8"), tin("SMITHEREENS", "irish ale since tuesday", "#c8a040", "#3a1a0a")];
-      [[IN.minX + 0.04, 3.5, 11.0, 1, 0], [IN.maxX - 0.04, 3.55, 27.5, -1, 0], [-97.5, 3.5, IN.maxZ - 0.04, 0, -1], [-81.0, 3.5, IN.maxZ - 0.04, 0, -1], [-84.0, 3.55, IN.minZ + 0.04, 0, 1], [IN.minX + 0.04, 3.5, 21.0, 1, 0]].forEach(([x, y, z, nx, nz], i) => sheet(0.8, 0.5, x, y, z, nx, nz, tins[i % tins.length]));
+      [[IN.minX + 0.055, 3.5, 11.0, 1, 0], [IN.maxX - 0.055, 3.55, 27.5, -1, 0], [-97.5, 3.5, IN.maxZ - 0.055, 0, -1], [-81.0, 3.5, IN.maxZ - 0.055, 0, -1], [-84.0, 3.55, IN.minZ + 0.055, 0, 1], [IN.minX + 0.055, 3.5, 21.0, 1, 0]] /* (R12.6: 1.5 cm off the wall lining: they were in its plane) */.forEach(([x, y, z, nx, nz], i) => sheet(0.8, 0.5, x, y, z, nx, nz, tins[i % tins.length]));
       // a big station clock, a dartboard, a fiddle, crossed hurleys, a bodhrán, gilt mirrors
       const face = texMat("inclock", 256, 256, (c) => { c.fillStyle = "#f8f2e0"; c.beginPath(); c.arc(128, 128, 124, 0, 6.3); c.fill(); c.fillStyle = "#141010"; for (let k = 0; k < 12; k++) { const a = (k / 12) * 2 * PI; c.fillRect(128 + Math.cos(a) * 100 - 4, 128 + Math.sin(a) * 100 - 4, 8, 8); } c.lineWidth = 8; c.lineCap = "round"; c.strokeStyle = "#141010"; c.beginPath(); c.moveTo(128, 128); c.lineTo(170, 90); c.moveTo(128, 128); c.lineTo(120, 40); c.stroke(); c.fillStyle = "#7a1f1a"; c.font = "bold 20px Georgia, serif"; c.textAlign = "center"; c.fillText("FERGAL TIME", 128, 190); }, 0.5, true);
-      { const x = P.fire.x + 3.4, y = 3.0, z = IN.maxZ - 0.05; const c1 = MB.CreateCylinder("pbBigClock", { diameter: 0.9, height: 0.08, tessellation: 24 }, sc); c1.rotation.x = PI / 2; c1.position.set(x, y, z - 0.04); this.add(c1, MAH2, 0.006, false); sheet(0.8, 0.8, x, y, z - 0.09, 0, -1, face); }
+      { const x = P.fire.x + 3.4, y = 3.0, z = IN.maxZ - 0.05; const c1 = MB.CreateCylinder("pbBigClock", { diameter: 0.9, height: 0.08, tessellation: 24 }, sc); c1.rotation.x = PI / 2; c1.position.set(x, y, z - 0.04); this.add(c1, MAH2, 0.006, false); sheet(0.8, 0.8, x, y, z - 0.1, 0, -1, face); } // (R12.6: clear of the case's outline)
       const dart = texMat("dartboard", 256, 256, (c) => { c.fillStyle = "#141010"; c.beginPath(); c.arc(128, 128, 126, 0, 6.3); c.fill(); for (let k = 0; k < 20; k++) { const a0 = (k / 20) * 2 * PI, a1 = ((k + 1) / 20) * 2 * PI; for (const [r0, r1, ca, cb] of [[18, 95, "#141010", "#f4e8c8"], [95, 105, "#c41e1e", "#1f8a3a"], [60, 68, "#c41e1e", "#1f8a3a"]] as [number, number, string, string][]) { c.fillStyle = k % 2 ? ca : cb; c.beginPath(); c.arc(128, 128, r1, a0, a1); c.arc(128, 128, r0, a1, a0, true); c.fill(); } } c.fillStyle = "#1f8a3a"; c.beginPath(); c.arc(128, 128, 18, 0, 6.3); c.fill(); c.fillStyle = "#c41e1e"; c.beginPath(); c.arc(128, 128, 8, 0, 6.3); c.fill(); }, 0.4, true);
       { const x = IN.maxX - 0.06, z = 29.0; sbx(x - 0.04, x, 1.25, 2.35, z - 0.55, z + 0.55, "mahogany", MAH); sheet(0.62, 0.62, x - 0.06, 1.75, z, -1, 0, dart); }
       { const x = IN.minX + 0.08, z = 23.2, y = 2.8; box(0.06, 0.55, 0.24, x, y, z, "#8a4a1a", 0.004, 0, 0.35); box(0.04, 0.03, 0.4, x, y + 0.2, z + 0.32, MAH2, 0, 0, 0.35); }
       for (const sd of [-1, 1]) box(0.05, 0.9, 0.06, IN.maxX - 0.07, 3.0, 24.6 + sd * 0.1, "#d8b080", 0.004, 0, sd * 0.6);
       { const m = MB.CreateCylinder("pbWallBodhran", { diameter: 0.55, height: 0.08, tessellation: 18 }, sc); m.rotation.z = PI / 2; m.position.set(IN.maxX - 0.08, 2.4, 25.6); this.add(m, "#e8dcbc", 0.006, false); }
-      for (const [x, z, nx, nz] of [[IN.minX + 0.05, 17.1, 1, 0], [-92.0, IN.maxZ - 0.05, 0, -1]] as [number, number, number, number][]) { box(nx ? 0.06 : 1.3, 1.7, nx ? 1.3 : 0.06, x, 2.55, z, BRASS, 0.006); const m = MB.CreatePlane("pbMirror", { width: 1.15, height: 1.55 }, sc); m.position.set(x + nx * 0.04, 2.55, z + nz * 0.04); m.rotation.y = Math.atan2(-nx, -nz); const mm = new StandardMaterial("pbMirrorM", sc); mm.diffuseColor = Color3.FromHexString("#3a3430"); mm.emissiveColor = Color3.FromHexString("#1a1612"); mm.specularColor = Color3.White(); mm.specularPower = 64; keepM(m, mm); }
+      for (const [x, z, nx, nz] of [[IN.minX + 0.05, 17.1, 1, 0], [-92.0, IN.maxZ - 0.05, 0, -1]] as [number, number, number, number][]) { box(nx ? 0.06 : 1.3, 1.7, nx ? 1.3 : 0.06, x, 2.55, z, BRASS, 0.006); const m = MB.CreatePlane("pbMirror", { width: 1.15, height: 1.55 }, sc); m.position.set(x + nx * 0.05, 2.55, z + nz * 0.05); /* (R12.6: 2 cm clear of the frame's outline: they flickered gold) */ m.rotation.y = Math.atan2(-nx, -nz); const mm = new StandardMaterial("pbMirrorM", sc); mm.diffuseColor = Color3.FromHexString("#3a3430"); mm.emissiveColor = Color3.FromHexString("#1a1612"); mm.specularColor = Color3.White(); mm.specularPower = 64; keepM(m, mm); }
       // the high shelf of curios (west and north walls): jugs, books, jars, trophies, a ship in a bottle
       const shelf = (x0: number, x1: number, z0: number, z1: number, nx: number, nz: number) => {
         const ax = nx !== 0, len = ax ? z1 - z0 : x1 - x0, sy = 3.62;
@@ -4348,7 +4410,7 @@ export class CityRenderer {
       const fender = MB.CreateBox("pbFender", { width: 1.5, height: 0.12, depth: 0.04 }, sc); fender.position.set(F.x, Y1 + 0.16, IN.maxZ - 1.05); this.add(fender, BRASS, 0.004, false);
       for (const sx of [-1.1, 1.1]) { cyl(0.08, 0.26, F.x + sx, Y1 + 1.45, IN.maxZ - 0.72, BRASS, 0.004, 8); gsph(0.06, F.x + sx, Y1 + 1.62, IN.maxZ - 0.72, "#ffd08a"); }
       box(0.3, 0.36, 0.12, F.x, Y1 + 1.5, IN.maxZ - 0.72, MAH2, 0.006);
-      { box(1.5, 1.0, 0.05, F.x, Y1 + 2.5, IN.maxZ - 0.62, BRASS, 0.004); const m = MB.CreatePlane("pbOverMantel", { width: 1.36, height: 0.86 }, sc); m.position.set(F.x, Y1 + 2.5, IN.maxZ - 0.65); const mm = new StandardMaterial("pbOMirror", sc); mm.diffuseColor = Color3.FromHexString("#3a3430"); mm.emissiveColor = Color3.FromHexString("#1a1612"); mm.specularColor = Color3.White(); keepM(m, mm); }
+      { box(1.5, 1.0, 0.05, F.x, Y1 + 2.5, IN.maxZ - 0.62, BRASS, 0.004); const m = MB.CreatePlane("pbOverMantel", { width: 1.36, height: 0.86 }, sc); m.position.set(F.x, Y1 + 2.5, IN.maxZ - 0.665); /* (R12.6: it was 1 mm in front of the frame's outline: gold from below, flickering) */ const mm = new StandardMaterial("pbOMirror", sc); mm.diffuseColor = Color3.FromHexString("#3a3430"); mm.emissiveColor = Color3.FromHexString("#1a1612"); mm.specularColor = Color3.White(); keepM(m, mm); }
       cyl(0.3, 0.3, F.x + 1.6, Y1 + 0.15, IN.maxZ - 1.0, "#2a2a30", 0.004, 10, 0.22); for (let k = 0; k < 3; k++) box(0.025, 0.7, 0.025, F.x - 1.6 + k * 0.06, Y1 + 0.38, IN.maxZ - 0.9, BLACK, 0, 0, 0, (k - 1) * 0.1);
       for (const [dx, ry] of [[-0.2, 0.3], [0.15, -0.4]]) { const lg = MB.CreateCylinder("pbLog", { diameter: 0.14, height: 0.7, tessellation: 8 }, sc); lg.rotation.set(0, ry, PI / 2); lg.position.set(F.x + dx, Y1 + 0.1, cz - 0.42); this.add(lg, "#4a2a14", 0.004, false); }
       const fm = new StandardMaterial("pbFlame", sc); fm.disableLighting = true; fm.emissiveColor = Color3.FromHexString("#ff8a2a"); fm.alpha = 0.85; fm.backFaceCulling = false; this.pubFireMat = fm;
@@ -4487,7 +4549,7 @@ export class CityRenderer {
         box(0.012, ch - 0.1, cw - 0.1, wx + 0.036, by, zc, "#121010", 0);
         { const disc = MB.CreateCylinder("pbBoard", { diameter: 0.451, height: 0.04, tessellation: 40 }, sc); disc.rotation.z = PI / 2; disc.position.set(F - 0.021, by, zc); this.add(disc, "#1a1410", 0, false); } // (no ink outline: it stood proud of the face and hid it)
         sheet(0.451, 0.451, F + 0.001, by, zc, 1, 0, boardTex);
-        for (const e of [-1, 1]) { const z0 = zc + e * cw / 2, z1 = z0 + e * 0.4; sbx(wx + 0.02, wx + 0.05, cy0, cy0 + ch, Math.min(z0, z1), Math.max(z0, z1), "mahogany", MAH2, 0.006); sheet(0.34, 0.76, wx + 0.052, by, (z0 + z1) / 2, 1, 0, doorTex(e > 0 ? 1 : 0)); box(0.03, 0.06, 0.02, wx + 0.06, by, z1 - e * 0.03, BRASS, 0); }
+        for (const e of [-1, 1]) { const z0 = zc + e * cw / 2, z1 = z0 + e * 0.4; sbx(wx + 0.02, wx + 0.05, cy0, cy0 + ch, Math.min(z0, z1), Math.max(z0, z1), "mahogany", MAH2, 0.006); sheet(0.34, 0.76, wx + 0.064, by, (z0 + z1) / 2, 1, 0, doorTex(e > 0 ? 1 : 0)); /* (R12.6: outside the door's outline) */ box(0.03, 0.06, 0.02, wx + 0.06, by, z1 - e * 0.03, BRASS, 0); }
         // two brass picture lights over the cabinet, angled down at the board (warm, even; no bulbs round it)
         for (const e of [-0.22, 0.22]) {
           cyl(0.03, 0.06, wx + 0.05, cy0 + ch + 0.08, zc + e, BRASS, 0.002, 8, undefined, 0, PI / 2);
@@ -4597,10 +4659,10 @@ export class CityRenderer {
         for (let z = L.minZ + 0.3; z < L.maxZ; z += 1.2) box(0.2, 0.18, 0.03, L.minX + 0.1, U + 0.96, z, MAH2, 0);
         for (const [z, pint] of [[25.3, 1], [26.6, 0], [29.4, 1], [30.8, 0]] as [number, number][]) { cyl(0.1, 0.004, (L.minX + x1) / 2, U + 1.102, z, "#e8dcc4", 0, 12); if (pint) { cyl(0.08, 0.15, (L.minX + x1) / 2, U + 1.18, z, "#1b0a06", 0.003, 10, 0.09); cyl(0.09, 0.025, (L.minX + x1) / 2, U + 1.26, z, "#f2e2bc", 0, 10); } }
         const wxw = L.minX + 0.01;
-        sheet(0.8, 1.0, wxw + 0.02, U + 1.85, 28.0, 1, 0, texMat("houserules", 320, 400, (c) => drawHouseRules(c, 320, 400), 0.38));
+        sheet(0.8, 1.0, wxw + 0.04, U + 1.85, 28.0, 1, 0, /* (R12.6: it was inside its own frame) */ texMat("houserules", 320, 400, (c) => drawHouseRules(c, 320, 400), 0.38));
         box(0.03, 1.06, 0.86, wxw + 0.01, U + 1.85, 28.0, MAH2, 0.004);
-        for (const [z, k] of [[25.9, 0], [26.9, 1], [29.1, 2], [30.1, 3]] as [number, number][]) { box(0.03, 0.42, 0.56, wxw + 0.01, U + 1.75, z, BRASS, 0.003); sheet(0.48, 0.34, wxw + 0.03, U + 1.75, z, 1, 0, texMat("league" + k, 256, 180, (c) => drawLeaguePhoto(c, 256, 180, k), 0.3)); }
-        sheet(0.34, 0.24, wxw + 0.03, U + 1.3, 31.2, 1, 0, texMat("betnote", 256, 180, (c) => notice(c, ["LOST A BET?", "Seamus accepts gold.", "Hughie accepts", "excuses."]), 0.35));
+        for (const [z, k] of [[25.9, 0], [26.9, 1], [29.1, 2], [30.1, 3]] as [number, number][]) { box(0.03, 0.42, 0.56, wxw + 0.01, U + 1.75, z, BRASS, 0.003); sheet(0.48, 0.34, wxw + 0.04, U + 1.75, z, 1, 0, texMat("league" + k, 256, 180, (c) => drawLeaguePhoto(c, 256, 180, k), 0.3)); }
+        sheet(0.34, 0.24, wxw + 0.04, U + 1.3, 31.2, 1, 0, texMat("betnote", 256, 180, (c) => notice(c, ["LOST A BET?", "Seamus accepts gold.", "Hughie accepts", "excuses."]), 0.35));
       }
       // the trophy shelf in the corner: a few modest cups, a pennant
       { const zw = IN.maxZ, x = IN.maxX - 0.75;
@@ -4652,7 +4714,7 @@ export class CityRenderer {
         sbx(F2.x - 0.55, F2.x + 0.55, U, U + 0.8, fz - 0.02, fz - 0.01, "plaster", "#141010");
         sbx(F2.x - 1.25, F2.x + 1.25, U + 1.15, U + 1.27, fz - 0.23, fz, "mahogany", MAH, 0.008);
         sbx(F2.x - 1.2, F2.x + 1.2, U, U + 0.06, fz - 0.55, fz, "stone", "#6a5a4a");
-        box(1.3, 0.95, 0.05, F2.x, U + 1.85, fz - 0.03, GOLD, 0.004); { const m = new StandardMaterial("pbMirror3", sc); m.diffuseColor = Color3.FromHexString("#3a3430"); m.emissiveColor = Color3.FromHexString("#2a2018"); m.specularColor = Color3.White(); m.specularPower = 64; sheet(1.16, 0.8, F2.x, U + 1.85, fz - 0.06, 0, -1, m); }
+        box(1.3, 0.95, 0.05, F2.x, U + 1.85, fz - 0.03, GOLD, 0.004); { const m = new StandardMaterial("pbMirror3", sc); m.diffuseColor = Color3.FromHexString("#3a3430"); m.emissiveColor = Color3.FromHexString("#2a2018"); m.specularColor = Color3.White(); m.specularPower = 64; sheet(1.16, 0.8, F2.x, U + 1.85, fz - 0.075, 0, -1, m); } // (R12.6: clear of the frame's outline)
         for (const dx of [-1.0, 1.0]) { cyl(0.12, 0.25, F2.x + dx, U + 1.4, fz - 0.12, "#2a3a6a", 0.003, 8, 0.06); }
         const fm3 = this.pubFireMat;
         if (fm3) for (let q = 0; q < 4; q++) { const f = MB.CreatePlane("pbFlame3", { width: 0.26, height: 0.46 }, sc); f.position.set(F2.x - 0.27 + q * 0.18, U + 0.3, fz - 0.15); f.rotation.y = q % 2 ? 0.6 : -0.6; f.material = fm3; f.parent = dyn; f.isPickable = false; this.pubFire.push({ m: f, ph: q * 1.3 + 0.2, s: 0.85 + (q % 2) * 0.2, y0: U }); }
@@ -4767,7 +4829,7 @@ export class CityRenderer {
       }
       { const rg = texMat("rug2", 256, 160, (c) => { c.fillStyle = "#2a3a5a"; c.fillRect(0, 0, 256, 160); c.strokeStyle = GOLD; c.lineWidth = 8; c.strokeRect(12, 12, 232, 136); c.strokeStyle = "#7a1f1a"; c.lineWidth = 10; c.strokeRect(30, 30, 196, 100); }, 0.25); const m = MB.CreateGround("pbRug2", { width: 3.2, height: 2.2 }, sc); m.position.set(-88.6, U + 0.006, 28.0); keepM(m, rg); }
       cyl(0.04, 1.4, -85.4, U + 0.7, 30.9, BRASS, 0.003, 6); { const sh = MB.CreateCylinder("pbStdLamp", { diameterTop: 0.25, diameterBottom: 0.45, height: 0.35, tessellation: 12 }, sc); sh.position.set(-85.4, U + 1.55, 30.9); this.add(sh, "#d8c8a0", 0.004, false); gsph(0.14, -85.4, U + 1.42, 30.9, "#ffcf7a"); }
-      { const y = U + 2.3; for (const [x, z, nx, nz] of [[-88.6, IN.maxZ - 0.58, 0, -1], [-84.7, 26.5, -1, 0], [-84.7, 29.3, -1, 0]] as [number, number, number, number][]) { box(nx ? 0.05 : 1.0, 0.75, nx ? 1.0 : 0.05, x, y, z, BRASS, 0.004); box(nx ? 0.06 : 0.86, 0.62, nx ? 0.86 : 0.06, x + nx * 0.006, y, z + nz * 0.006, ["#4a3a2a", "#3a4a3a", "#5a4a3a"][Math.abs(Math.round(z)) % 3], 0); } }
+      { const y = U + 2.3; for (const [x, z, nx, nz] of [[-88.6, IN.maxZ - 0.58, 0, -1], [-84.7, 26.5, -1, 0], [-84.7, 29.3, -1, 0]] as [number, number, number, number][]) { box(nx ? 0.05 : 1.0, 0.75, nx ? 1.0 : 0.05, x, y, z, BRASS, 0.004); box(nx ? 0.06 : 0.86, 0.62, nx ? 0.86 : 0.06, x + nx * 0.02, y, z + nz * 0.02, /* (R12.6: proud of the frame) */ ["#4a3a2a", "#3a4a3a", "#5a4a3a"][Math.abs(Math.round(z)) % 3], 0); } }
     }
     // ---------------------------------------------------------------- merge everything glowing / textured, per material
     for (const { mat, grp, list } of lit.values()) for (let i = 0; i < list.length; i += 500) { const m = Mesh.MergeMeshes(list.slice(i, i + 500), true, true); if (m) { m.material = mat; m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix(); if (grp >= 0) this.intoGroup(m, grp); } }

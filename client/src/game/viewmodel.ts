@@ -79,6 +79,8 @@ export class Viewmodel {
   private left: HandRig;
   private right: HandRig;
   private rootNode: TransformNode;
+  /** R12.6: your hands and what's in them (lit by the room you're in) */
+  get node(): TransformNode { return this.rootNode; }
   private t = 0;
   private phase = 0;
   private dip = new Spring(160, 18); // landing dip

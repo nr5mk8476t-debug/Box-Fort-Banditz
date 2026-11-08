@@ -175,7 +175,8 @@ export class PubGamesView {
   blend: { from: { x: number; y: number; z: number; yaw: number; pitch: number; fov: number }; t: number; dur: number; init?: boolean } | null = null;
   private follow: { st: Station; t: number; from: { x: number; y: number; z: number; yaw: number; pitch: number; fov: number } } | null = null;
   private U = 0; private wallZ = 0; private wx = 0;
-  private root: TransformNode;
+  /** (R12.6: public so the pub's lamps can light the balls, cues and darts) */
+  readonly root: TransformNode;
   private mats = new Map<string, StandardMaterial>();
   // pool aim
   private aimA = 0; private drawD = 0; private place = { x: 0, z: 0 }; private stand = false; private fine = false;

@@ -145,6 +145,8 @@ interface Vis {
 
 export class NpcRenderer {
   private map = new Map<string, Vis>();
+  /** R12.6: the people being drawn (for lighting them with the room they're in) */
+  *roots(): Iterable<TransformNode> { for (const v of this.map.values()) if (v.enabled) yield v.root; }
   private bubbleTex = new Map<string, ReturnType<typeof unlitTextured>>();
   private time = 0;
   /** night: cops carry flashlights */
