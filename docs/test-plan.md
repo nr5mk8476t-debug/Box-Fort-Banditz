@@ -569,7 +569,7 @@ relative CPU/draw cost, NOT a real graphics card's frame rate. GPU time: unavail
 | Leaving mid-pint | no glass, panels, buffs or body classes left | e2e (new check) | the glass and `pint-on` stayed; panels piled up | pass (110 ms run: the pint was up, nothing left behind) |
 | Stress (SYNTHETIC) | every building stacked on itself (about twice the façades) + twice the passers-by (77 → 98 NPCs), same build | BENCHMARK with STRESS=city2,npcs2 | normal: median 612 ms | draw calls 0 to +7% outdoors (tiles absorb it), triangles +20–39%, outdoor medians +18–60%, indoors ~0; the World's CPU +22%; loading +9 s. The next limit for a denser city: detailed façade geometry in view, not draw calls |
 | Everything | shared + client unit; typecheck; smokes | full suite | | pass: 300/300 shared, 22/22 client; typecheck clean; both smokes pass |
-| | full browser e2e, normal / 110 ms | e2e | | normal: pass, 437/437 (before the leave-mid-pint check moved to the new city; it skipped itself in the classic city). 110 ms: 420 checks passed, none failed, when pushed to main at Blake's request; the rest (two players online at pool and darts) still running |
+| | full browser e2e, normal / 110 ms | e2e | | normal: pass, 437/437 (before the leave-mid-pint check moved to the new city; it skipped itself in the classic city). 110 ms: pass, 438/438 (finished after the push to main, at Blake's request), the leave-mid-pint check included |
 
 ## Manual checklist for Blake (R12.5)
 
