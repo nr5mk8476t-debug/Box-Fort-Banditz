@@ -13,6 +13,8 @@ export interface PlayerView extends Record<string, any> {
   heat: number;
   /** Phase 3: cash from finished rounds + value locked in the fort right now */
   cash: number;
+  /** R12.6: WEE MICKEY's gear (bit 1 lockpick kit, bit 2 smoke bomb) */
+  gear?: number;
   bank: number;
   /** Phase 3.5: seconds until respawn after a car wipeout (0 = fine); hold-up progress (-1 = none) */
   respawnT: number;
@@ -117,6 +119,7 @@ export function playerView(w: World, id: string, out: Record<string, any> = {}):
   out.hand = p.hand; out.p0 = p.pockets[0]; out.p1 = p.pockets[1]; out.p2 = p.pockets[2]; out.sel = p.sel;
   out.heat = Math.round(p.notoriety);
   out.cash = p.cash;
+  out.gear = p.gear.pick + p.gear.smoke * 2; // (R12.6: WEE MICKEY's gear: bit 1 the lockpick kit, bit 2 the smoke bomb)
   out.bank = w.match.bankedValue(p);
   out.respawnT = Math.max(0, Math.ceil(p.respawnT * 10) / 10);
   out.robT = p.rob ? Math.round(p.rob.t * 20) / 20 : -1;

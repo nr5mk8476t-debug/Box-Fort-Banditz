@@ -28,6 +28,8 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   | "don" | "velvet_guard"
   // R11.4: SKETCHY STEVE, the back alley's raccoon in a trench coat
   | "sketchy_steve"
+  // R12.6: WEE MICKEY, the night fence at the pub's cellar door
+  | "wee_mickey"
   // R12.1: THE SOGGY SHAMROCK: Fergal behind the bar, the two old regulars on their stools (Old Mossy, Noreen), and
   // the session band in the corner (THE RUSTY BIN LIDS: fiddle, tin whistle, bodhrán, banjo)
   | "barman" | "regular" | "trad_band"
@@ -64,7 +66,9 @@ export interface NpcDef {
   dropOnKo?: boolean;
   lines: { idle: string[]; hit: string[]; fight?: string[]; win?: string[]; lose?: string[]; dodge?: string[]; film?: string[]; yell?: string[]; holdup?: string[]; spot?: string[]; lost?: string[]; bust?: string[]; warn?: string[]; sold?: string[];
     /** R12.1: the pub: pouring, cutting you off, judging your split */
-    pour?: string[]; cutoff?: string[]; perfect?: string[]; close?: string[]; miss?: string[] };
+    pour?: string[]; cutoff?: string[]; perfect?: string[]; close?: string[]; miss?: string[];
+    /** R12.6: WEE MICKEY */
+    day?: string[]; gear?: string[]; no?: string[]; broke?: string[] };
 }
 
 export const NPC_DEFS: Record<NpcKind, NpcDef> = {
@@ -166,6 +170,20 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       hit: ["OW! Bad for business!", "Not the coat! It's vintage!", "That's assault AND battery!"],
       yell: ["COPS! I was never here!", "Scatter! SCATTER!", "Uh oh. Gotta bounce."],
       sold: ["Pleasure doin' business.", "Don't tell your mum.", "Enjoy the ride, kid.", "No refunds. Ever."],
+    },
+  },
+  wee_mickey: {
+    kind: "wee_mickey", name: "Wee Mickey", walk: 1.0, flee: 1.0, fighter: false, hp: 1, dodge: 0, notoriety: 6, spawnWeight: 0,
+    loot: [["coin_pile", 1]],
+    lines: {
+      idle: ["*taps nose*", "Deliveries round the back. Always round the back.", "I'm just minding the kegs. Honest.", "Anything... warm? You know. Hot. Recently acquired.", "Fergal doesn't know I'm here. Fergal doesn't need to know.", "*whistles at nothing in particular*"],
+      day: ["Not in the daylight, ya eejit. Come back when it's dark.", "Shop's shut. It's broad daylight!", "*pretends to count kegs* Come back tonight."],
+      hit: ["Ah, here! I'm a businessman!", "Right. Shop's SHUT.", "That's no way to treat your supplier."],
+      yell: ["Not with the shades about!", "Cops! I'm a keg. I'm just a keg."],
+      sold: ["Lovely. Never saw it. Never saw YOU.", "Pleasure. Now scarper.", "That'll do nicely. Mind the cops.", "Grand. It fell off a lorry, right?"],
+      gear: ["Use it wisely. Or don't. No refunds.", "Didn't get it from me.", "Lovely bit of kit, that."],
+      no: ["What would I want with THAT?", "Rubbish. Next.", "That's just money, pal. Spend it."],
+      broke: ["Come back with cash, sunshine.", "Credit? Do I look like a bank?"],
     },
   },
   barman: {
@@ -459,7 +477,7 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
 /** Pedestrian types that wander the streets (raccoons and cashiers have their own jobs). */
 export const NPC_KINDS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => NPC_DEFS[k].spawnWeight > 0);
 /** Kinds that are never part of the everyday crowd (own jobs, own counts). */
-export const SPECIAL_KINDS = new Set<NpcKind>(["raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "lou", "meat_locker", "champ", "fran", "cold_cuts", "receptionist", "don", "velvet_guard", "sketchy_steve", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
+export const SPECIAL_KINDS = new Set<NpcKind>(["wee_mickey", "raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "lou", "meat_locker", "champ", "fran", "cold_cuts", "receptionist", "don", "velvet_guard", "sketchy_steve", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
 /** The four big shots. */
 export const BIG_SHOTS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => !!NPC_DEFS[k].bigShot);
 

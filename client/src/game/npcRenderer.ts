@@ -54,6 +54,7 @@ const LOOKS: Record<string, Look> = {
   cold_cuts: { body: "#3a4a3a", legs: "#2b2433", skin: "#c98a5c", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 2.0 },
   don: { body: "#f4f1ea", legs: "#ece6dc", skin: "#e0a878", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.5 }, // (R11.1: DON BINNIE: the white suit)
   velvet_guard: { body: "#141018", legs: "#141018", skin: "#b07a52", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.75 },
+  wee_mickey: { body: "#5a6a3a", legs: "#3a3028", skin: "#e8b08a", hat: "#7a6a4a", hatShape: "none", prop: "none", bulk: 0.9 }, // (R12.6: the night fence: a moss cardigan, a tweed flat cap)
   sketchy_steve: { body: "#a8865a", legs: "#4a4652", skin: "#8a8a96", hat: "#3a3028", hatShape: "none", prop: "none", bulk: 1.15 }, // (R11.4: a raccoon in a trench coat)
   receptionist: { body: "#8fb4e0", legs: "#1f3a78", skin: "#e8b48a", hat: "#5a3a24", hatShape: "none", prop: "none", bulk: 1.0 },
   champ: { body: "#ff7a1a", legs: "#ff7a1a", skin: "#d9a07a", hat: "#f4f1ea", hatShape: "band", prop: "none", bulk: 2.0 },
@@ -297,6 +298,20 @@ export class NpcRenderer {
       const tip = part(MeshBuilder.CreateSphere("donCigarTip", { diameter: 0.045, segments: 4 }, sc), "#ff7a1a", head, 0); tip.position.set(0.1, -0.1, 0.34);
       const tash = part(MeshBuilder.CreateBox("donTash", { width: 0.2, height: 0.04, depth: 0.03 }, sc), "#14100c", head, 0); tash.position.set(0, -0.06, 0.19);
       for (const sx of [-1, 1]) { const ring = part(MeshBuilder.CreateTorus("donRing", { diameter: 0.07, thickness: 0.02, tessellation: 8 }, sc), "#ffd54a", pivot, 0); ring.position.set(sx * 0.42 * bulk, 0.8, 0.05); }
+    }
+    if (v.kind === "wee_mickey") {
+      // R12.6: WEE MICKEY: a tweed flat cap pulled low, bushy grey eyebrows and sideburns, a red nose, a toothpick, a
+      // scarf (nothing on the chest)
+      const cap = part(MeshBuilder.CreateCylinder("mickCap", { diameter: 0.4, diameterTop: 0.36, height: 0.1, tessellation: 14 }, sc), "#7a6a4a", head, 0.01); cap.position.set(0, 0.2, -0.01); cap.scaling.z = 1.08;
+      const peak = part(MeshBuilder.CreateBox("mickPeak", { width: 0.3, height: 0.03, depth: 0.14 }, sc), "#6a5a3a", head, 0.008); peak.position.set(0, 0.16, 0.2); peak.rotation.x = 0.25;
+      const button = part(MeshBuilder.CreateSphere("mickButton", { diameter: 0.04, segments: 4 }, sc), "#5a4a2a", head, 0); button.position.set(0, 0.26, 0.02);
+      for (const sx of [-1, 1]) {
+        const brow = part(MeshBuilder.CreateBox("mickBrow", { width: 0.1, height: 0.035, depth: 0.04 }, sc), "#c8c4bc", head, 0); brow.position.set(sx * 0.08, 0.08, 0.18); brow.rotation.z = sx * -0.25;
+        const burn = part(MeshBuilder.CreateBox("mickBurn", { width: 0.04, height: 0.12, depth: 0.08 }, sc), "#c8c4bc", head, 0); burn.position.set(sx * 0.17, 0.0, 0.05);
+      }
+      const nose = part(MeshBuilder.CreateSphere("mickNose", { diameter: 0.07, segments: 6 }, sc), "#d8604a", head, 0); nose.position.set(0, -0.01, 0.21);
+      const pick = part(MeshBuilder.CreateCylinder("mickPick", { diameter: 0.012, height: 0.12, tessellation: 4 }, sc), "#e8d8a8", head, 0); pick.rotation.z = 1.2; pick.position.set(0.06, -0.1, 0.2);
+      const scarf = part(MeshBuilder.CreateTorus("mickScarf", { diameter: 0.3, thickness: 0.06, tessellation: 12 }, sc), "#8e1f1a", pivot, 0.008); scarf.position.y = 1.4;
     }
     if (v.kind === "sketchy_steve") {
       // R11.4: SKETCHY STEVE: a raccoon in a trench coat (collar up, belt), a battered fedora, the coat held open on a

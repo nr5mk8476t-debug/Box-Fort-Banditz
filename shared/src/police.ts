@@ -238,8 +238,25 @@ export class PoliceSystem {
     return true;
   }
 
+  /** R12.6: players in a smoke bomb's cloud (world time it clears): no cop can see them */
+  private smoke = new Map<string, number>();
+  /** R12.6: a smoke bomb: every cop after this player loses them (they search where the cloud was), nobody can see
+   *  them for `secs`; heat stays (they still know who you are) */
+  lose(p: PlayerSim, secs: number) {
+    const w = this.w;
+    this.smoke.set(p.id, w.time + secs);
+    p.seenT = -99;
+    for (const n of this.cops()) {
+      if (n.state === "ko" || Math.hypot(n.move.x - p.move.x, n.move.z - p.move.z) > 30) continue;
+      if (n.state === "windup" || n.state === "aim" || n.state === "chase") { n.state = "search"; n.lostT = 0; n.path = []; }
+      n.attackCd = Math.max(n.attackCd ?? 0, secs); n.taserCd = Math.max(n.taserCd ?? 0, secs);
+      n.lastX = p.move.x; n.lastZ = p.move.z; n.sees = false;
+      n.move.stunT = Math.max(n.move.stunT ?? 0, 1.2); // (coughing)
+    }
+  }
   canSee(n: NpcSimData, p: PlayerSim): boolean {
     const m = p.move;
+    if ((this.smoke.get(p.id) ?? -1) > this.w.time) return false; // (R12.6: in the smoke)
     const d = Math.hypot(m.x - n.move.x, m.z - n.move.z);
     if (d > (this.night ? COP_SIGHT_NIGHT : COP_SIGHT) || Math.abs(m.y - n.move.y) > 8) return false;
     if (d < COP_HEAR) return true;
@@ -363,7 +380,9 @@ export class PoliceSystem {
           n.taserCd = TASER.cooldown;
           n.state = "chase";
           const clear = this.los(n.move.x, n.move.y + 1.3, n.move.z, m.x, m.y + (m.crouching ? 0.8 : 1.2), m.z);
-          if (clear && d <= TASER.reach && m.dodgeT <= 0 && m.knockT <= 0 && pl.respawnT <= 0 && pl.jailT <= 0) {
+          if (clear && d <= TASER.reach && m.dodgeT <= 0 && m.knockT <= 0 && pl.respawnT <= 0 && pl.jailT <= 0 && w.smokeOut(pl, n.id)) {
+            this.say(n, ["*cough* WHERE'D HE GO?", "SMOKE! *hack* I can't see!"]); // (R12.6: the smoke bomb beats the taser too)
+          } else if (clear && d <= TASER.reach && m.dodgeT <= 0 && m.knockT <= 0 && pl.respawnT <= 0 && pl.jailT <= 0) {
             m.stunT = TASER.stun;
             m.vx *= 0.2; m.vz *= 0.2;
             w.dropHand(pl);
@@ -377,7 +396,9 @@ export class PoliceSystem {
       case "windup": {
         const face = Math.atan2(m.x - n.move.x, m.z - n.move.z);
         if (n.stateT <= 0) {
-          if (d < GRAB_REACH && m.dodgeT <= 0 && Math.abs(m.y - n.move.y) < 1.3 && pl.respawnT <= 0) {
+          if (d < GRAB_REACH && m.dodgeT <= 0 && Math.abs(m.y - n.move.y) < 1.3 && pl.respawnT <= 0 && w.smokeOut(pl, n.id)) {
+            this.say(n, ["*cough* WHERE'D HE GO?", "SMOKE! *hack* I can't see!", "Ah, not again!"]); // (R12.6: WEE MICKEY's smoke bomb)
+          } else if (d < GRAB_REACH && m.dodgeT <= 0 && Math.abs(m.y - n.move.y) < 1.3 && pl.respawnT <= 0) {
             this.say(n, NPC_DEFS.cop.lines.bust);
             this.bust(pl, n.id, false);
           } else {
@@ -541,6 +562,13 @@ export class PoliceSystem {
 
   // ------------------------------------------------------------------ busted / jail
   /** Cuffed: loot confiscated, heat reset, 30 s in a cell. */
+  /** R12.6: how long you're in for (WEE MICKEY's lockpick kit: half, used up) */
+  private stretch(p: PlayerSim): number {
+    if (p.gear.pick < 1) return JAIL_TIME;
+    p.gear.pick = 0;
+    this.w.emit({ t: "gearUsed", p: p.id, gear: "pick", x: p.move.x, z: p.move.z });
+    return JAIL_TIME / 2;
+  }
   bust(p: PlayerSim, by: string, car: boolean) {
     const w = this.w;
     if (p.jailT > 0 || p.respawnT > 0) return;
@@ -554,7 +582,7 @@ export class PoliceSystem {
       // R6: the new city: everybody shares the one holding cell; you can walk about in it (E at the door: pick the lock)
       const sp = hold.spots[p.colorIdx % hold.spots.length];
       w.movePlayer(p, sp.x, sp.z, Math.PI);
-      p.jailT = JAIL_TIME; p.jailCell = 0;
+      p.jailT = this.stretch(p); p.jailCell = 0;
       p.lockSeed = 0; p.lock = null; p.lockT0 = w.time;
     } else {
       const taken = new Set([...w.players.values()].filter((o) => o !== p && o.jailT > 0).map((o) => o.jailCell));
@@ -562,7 +590,7 @@ export class PoliceSystem {
       for (let i = 0; i < cells.length && taken.has(cell); i++) cell = (cell + 1) % cells.length;
       const c = cells[cell] ?? { x: 0, z: 0, yaw: 0 };
       w.movePlayer(p, c.x, c.z, c.yaw);
-      p.jailT = JAIL_TIME; p.jailCell = cell;
+      p.jailT = this.stretch(p); p.jailCell = cell;
       p.lockSeed = 1 + Math.floor(w.random() * 1e9);
       p.lock = newLockRun(p.lockSeed); p.lockT0 = w.time;
     }

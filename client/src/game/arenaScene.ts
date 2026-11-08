@@ -24,7 +24,7 @@ import { NightRenderer } from "./nightRenderer.ts";
 import { PubGamesView } from "./pubGames.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
+  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, MICKEY, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -317,7 +317,7 @@ export class ArenaScene {
   onAction: ((a: WorldAction) => void) | null = null;
   /** Short feedback text for the HUD ("Hands full!", "BONK!"...). */
   onFeedback: ((text: string, kind: "bad" | "good" | "info") => void) | null = null;
-  private puffs: { m: Mesh; t: number; vx: number; vy: number; vz: number }[] = [];
+  private puffs: { m: Mesh; t: number; vx: number; vy: number; vz: number; life?: number; grow?: number }[] = [];
   private pops: { m: Mesh; t: number; life: number }[] = [];
 
   // Punching + pedestrians
@@ -330,6 +330,8 @@ export class ArenaScene {
   heat = 0;
   /** C5c.3: my cash and aura (prompts at Big Crunch's rope and Sal's counter) */
   myCash = 0; myAura = 0;
+  /** R12.6: WEE MICKEY's gear you carry (bit 1 lockpick kit, bit 2 smoke bomb) */
+  myGear = 0;
   /** C5c.3: the club clock (the city clock, run on locally between snapshots) and the pawn case's contents */
   private clubClock = 0; private clubLastLightT = -1;
   pawnCase: { t: string; c: number; o: string; p: number; s: number; v: number }[] = [];
@@ -547,7 +549,7 @@ export class ArenaScene {
         this.serverInv = { hand: p.hand ?? "", pockets: [p.p0 ?? "", p.p1 ?? "", p.p2 ?? ""], sel: p.sel ?? FISTS };
         this.heat = p.heat ?? 0;
         this.hp = p.hp ?? 100;
-        this.myCash = p.cash ?? 0; this.myAura = p.aura ?? 0; // (C5c.3: the club's door, Sal's counter)
+        this.myCash = p.cash ?? 0; this.myAura = p.aura ?? 0; this.myGear = p.gear ?? 0; // (C5c.3: the club's door, Sal's counter)
         this.respawnT = p.respawnT ?? 0;
         this.robT = p.robT ?? -1;
         if (this.robT < 0 && this.holdKind && this.holdArmed) this.holdKind = ""; // (C5c: the hold ended)
@@ -878,7 +880,7 @@ export class ArenaScene {
         case "meatPunch": { const n = this.npcs.pos(e.npc); if (n && gainAt(n.x, 1, n.z) > 0.05) { sfx.heavyLand(); this.pop("WHAM!", n.x, 2.6, n.z, "#ff3b30"); } if (e.p === me) this.addTrauma(0.9); break; }
         case "pawned": if (e.p === me) { sfx.cash(); this.onBanner?.("PAWNED", `$${e.cash} now for the ${lootDef(e.type).name}. Buy it back before dawn, or it goes on sale to anybody.`, "good"); } break;
         case "redeemed": if (e.p === me) { sfx.cash(); this.onFeedback?.(e.sale ? `Bought the ${lootDef(e.type).name} off the sale shelf for $${e.cash}.` : `Got your ${lootDef(e.type).name} back ($${e.cash}).`, "good"); } break;
-        case "pawnNo": if (e.p === me && e.reason === "black") { sfx.offended(); this.onFeedback?.(this.heldInfo()?.type === "cell_key" ? `"A POLICE key? Are you TRYING to get me arrested?"` : `"Is that... THE SPOON? Get it away from me. Only the black market touches that." (Coming soon.)`, "bad"); break; }
+        case "pawnNo": if (e.p === me && e.reason === "black") { sfx.offended(); this.onFeedback?.(this.heldInfo()?.type === "cell_key" ? `"A POLICE key? Are you TRYING to get me arrested?"` : `"Is that... THE SPOON? Get it away from me. Only the black market touches that." (Wee Mickey, behind THE SOGGY SHAMROCK, after dark.)`, "bad"); break; }
           if (e.p === me) { sfx.full(); this.onFeedback?.(e.reason === "hands" ? "Sal squints at your empty hands. \"What, you selling air?\" (Have something out in your hands.)" : e.reason === "full" ? "The case is full. Come back when somebody's bought something." : e.reason === "broke" ? "You can't afford it. Sal doesn't do credit. (Well. He does pawn.)" : "Nothing of yours in the case (and nothing on sale yet).", "info"); } break;
         case "caseSmashed": {
           const d = this.arena.pawnShop; if (d) { const g = gainAt(d.caseX, 1, d.caseZ); if (g > 0.05) sfx.glass(g); this.pop("SMASH & GRAB!", d.caseX, 2.2, d.caseZ, "#ff3b30"); }
@@ -922,6 +924,18 @@ export class ArenaScene {
           break;
         case "npcPop": { const g = gainAt(e.x, e.y + 0.5, e.z); if (g > 0.05) { sfx.coo(g); this.pop("POP!", e.x, e.y + 0.9, e.z, "#5ad87a"); } break; }
         // R11.4: SKETCHY STEVE, the back EXIT
+        // R12.6: WEE MICKEY
+        case "mickey": if (e.p === me) {
+          sfx.cash();
+          if (e.what === "fenced") this.onBanner?.(`+$${e.cash}`, `Wee Mickey takes the ${(lootDef(e.type)?.name ?? e.type).toUpperCase()}. "Never saw it."`, e.heat ? "bad" : "good");
+          else this.onBanner?.(MICKEY.goods[e.gear].name + "!", MICKEY.goods[e.gear].what + ".", e.heat ? "bad" : "good");
+          this.onFeedback?.(e.heat ? "A cop saw that. Heat!" : "A wee bit of heat. That's the price of doing business.", "bad");
+        } break;
+        case "mickeyNo": if (e.p === me) this.onFeedback?.({ day: `"Not in the daylight, ya eejit. Come back when it's dark."`, hands: `"Got anything for me? Hold it up, then."`, junk: `"Rubbish. Literally."`, money: `"That's just money, pal. Spend it."`, broke: `"Come back with cash, sunshine."`, full: "You've already got one of those.", shut: `"Shop's SHUT. You know what you did."`, away: "Wee Mickey's not here." }[e.reason], "bad"); break;
+        case "gearUsed": {
+          if (e.gear === "smoke") { this.smokePuff(e.x, e.z); sfx.dodge(); }
+          if (e.p === me) this.onFeedback?.(e.gear === "smoke" ? "SMOKE BOMB! You slip away in the cloud. Leg it!" : "Wee Mickey's lockpick kit: half the time inside.", "good");
+        } break;
         case "deal": if (e.p === me) { sfx.cash(); const g = DEAL.goods[e.kind]; this.onBanner?.(g.name + "!", e.kind === "zoomies" ? `Zoom zoom. ${g.time} s of speed (then a comedown).` : e.kind === "beef" ? `${g.time} s of BEEF: punches send them flying, heavy loot feels like nothing.` : `${g.time} s of float: SPACE in mid-air to jump again (3 times).`, e.heat ? "bad" : "good"); if (e.heat) this.onFeedback?.("A cop saw that. Heat! (Steve's legged it.)", "bad"); } break;
         case "dealNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"Fifteen. Cash. Don't waste my time, kid."` : "Steve's done a runner (cops about). Come back when it's quiet.", "info"); break;
         case "doorLocked": if (e.p === me) this.onFeedback?.("No handle on this side. It only opens from inside.", "info"); break;
@@ -1683,6 +1697,8 @@ export class ArenaScene {
     if (m.floatT > 0) parts.push(`<b style="color:#5ae0ff">FLOATY</b> ${Math.ceil(m.floatT)}s ${"o".repeat(Math.max(0, BUFFS.floatJumps - m.airJumps))}`);
     if (m.comedownT > 0) parts.push(`<b style="color:#c8a8ff">comedown...</b>`);
     if (m.pints > 0) parts.push(`<b style="color:#e8c050">PINTS ${m.pints}</b>${tipsyAmount(m) > 0 ? " tipsy" : ""}`); // (R12.1)
+    if (this.myGear & 1) parts.push(`<b style="color:#d8a860">LOCKPICK KIT</b>`); // (R12.6: WEE MICKEY's gear)
+    if (this.myGear & 2) parts.push(`<b style="color:#c8c8d0">SMOKE BOMB</b>`);
     const html = parts.join(" &nbsp; ");
     if (html !== this.buffWas) {
       this.buffWas = html;
@@ -1797,14 +1813,26 @@ export class ArenaScene {
     }
   }
 
+  /** R12.6: a smoke bomb's cloud (a few seconds of thick grey, drifting up) */
+  private smokePuff(x: number, z: number) {
+    const y = this.cur.y;
+    for (let i = 0; i < 14; i++) {
+      const m = MeshBuilder.CreateSphere("smoke", { diameter: 0.9, segments: 6 }, this.scene);
+      m.material = toon(this.scene, i % 3 ? "#9a9aa4" : "#c8c8d0", "puff");
+      const a = (i / 14) * Math.PI * 2, r = 0.3 + (i % 4) * 0.25;
+      m.position.set(x + Math.cos(a) * r, y + 0.4 + (i % 5) * 0.35, z + Math.sin(a) * r);
+      m.isPickable = false;
+      this.puffs.push({ m, t: 0, vx: Math.cos(a) * 0.9, vy: 0.25 + (i % 3) * 0.1, vz: Math.sin(a) * 0.9, life: 3.5, grow: 2.2 });
+    }
+  }
   private updatePuffs(dt: number) {
     for (let i = this.puffs.length - 1; i >= 0; i--) {
       const p = this.puffs[i];
       p.t += dt;
       p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
-      p.vx *= 0.9; p.vz *= 0.9;
-      const k = p.t / 0.5;
-      p.m.scaling.setAll(1 + k * 1.5);
+      p.vx *= p.life ? 0.97 : 0.9; p.vz *= p.life ? 0.97 : 0.9;
+      const k = p.t / (p.life ?? 0.5);
+      p.m.scaling.setAll(1 + k * (p.grow ?? 1.5));
       p.m.visibility = Math.max(0, 1 - k);
       if (k >= 1) { p.m.dispose(); this.puffs.splice(i, 1); }
     }

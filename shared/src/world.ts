@@ -20,7 +20,7 @@ export const FLUSH = { cooldown: 6, push: 9, lift: 4.5, stumble: 0.8 };
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, PUB, pintMissMm, pintGrade, SEAMUS, SWARM, JUKEBOX } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, MICKEY, type GearKind, PUB, pintMissMm, pintGrade, SEAMUS, SWARM, JUKEBOX } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
 import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
@@ -181,6 +181,8 @@ export interface PlayerSim {
   pin: { target: string; x: number; z: number; t: number; heat: number; struggle: number; cd: number } | null;
   /** D1: world time until which cars can't hit you again (just got up after a car hit) */
   splatGrace: number;
+  /** R12.6: WEE MICKEY's gear you're carrying (0 or 1 of each): a lockpick kit, a smoke bomb */
+  gear: { pick: number; smoke: number };
 }
 
 export type WorldEvent =
@@ -201,6 +203,11 @@ export type WorldEvent =
   // R11.4: the back EXIT has no handle outside; SKETCHY STEVE sold you something (heat: a cop saw) or wouldn't
   | { t: "doorLocked"; p: string; prop: string }
   | { t: "deal"; p: string; kind: DealKind; paid: number; heat: boolean }
+  // R12.6: WEE MICKEY: fenced something / sold you gear / wouldn't; your gear went off (the kit in the cells, the smoke bomb)
+  | { t: "mickey"; p: string; what: "fenced"; type: string; cash: number; heat: boolean }
+  | { t: "mickey"; p: string; what: "gear"; gear: GearKind; paid: number; heat: boolean }
+  | { t: "mickeyNo"; p: string; reason: "day" | "hands" | "junk" | "money" | "broke" | "full" | "shut" | "away" }
+  | { t: "gearUsed"; p: string; gear: GearKind; x: number; z: number; by?: string }
   | { t: "dealNo"; p: string; reason: "broke" | "away" }
   // C5c.3: THE COMPACTOR: paid the cover / the VIP nod / couldn't pay; the floor's DROP launched people; somebody hijacked the decks
   | { t: "cover"; p: string; paid: number; vip: boolean }
@@ -650,6 +657,7 @@ export class World {
       shopAlarm: (shopId) => { const t = [...w.props.props.values()].find((x) => x.def.kind === "till" && x.def.shop === shopId); if (t) { t.alarmT = 6; w.emit({ t: "alarm", kind: "shop", prop: t.def.id, x: t.def.x, z: t.def.z }); } },
       npcEvent: (e) => { if (e.t === "pubRowdy") { w.swarm(e.p); return; } w.emit(e); if (e.t === "louHit") { const p = w.players.get(e.p); if (p) w.pawn.trouble(p, "punch", e.shop ?? 0); } if (e.t === "donHit") w.npc.guardsAlert(e.p, "velvet_guard"); },
       addNotoriety: (pid, n) => { const p = w.players.get(pid); if (p) w.addHeat(p, n); },
+      mickeyShut: () => { w.mickeyShutT = w.time + MICKEY.sulk; },
       copBrain: (n, dt) => w.police.brain(n, dt),
       cars: () => [...(w.traffic?.cars ?? []), ...(w.police?.cars ?? [])],
       applyToPlayer: (pid, effect) => {
@@ -753,7 +761,7 @@ export class World {
       move: makeMoveState(sp.x, sp.z, sp.yaw), lastSeq: -1, queue: [], credit: 0,
       hand: "", pockets: Array(POCKETS).fill(""), sel: FISTS, actionCd: 0, queued: null,
       punchCd: 0, notoriety: 0, hp: HEALTH.max, hurtT: -99, knockCount: 0, knockWindowT: 0,
-      cash: 0, stolenThisRound: 0, rob: null, respawnT: 0, aura: 0, tagging: null, throwBest: 0, raceBest: 0, lobbyGame: null,
+      gear: { pick: 0, smoke: 0 }, cash: 0, stolenThisRound: 0, rob: null, respawnT: 0, aura: 0, tagging: null, throwBest: 0, raceBest: 0, lobbyGame: null,
       jailT: 0, jailCell: -1, lock: null, lockSeed: 0, lockT0: 0, seenT: -99, knownX: 0, knownZ: 0, crimeT: -99,
       tugCd: 0, raidAlarmT: -99, inFort: -1, raidEnterT: -99, pin: null, splatGrace: -99,
     };
@@ -1194,6 +1202,61 @@ export class World {
     for (const n of this.npc.npcs.values()) if (n.kind === "cop" && n.state !== "ko" && Math.hypot(n.move.x - m.x, n.move.z - m.z) < 25 && this.police.canSee(n, p)) { heat = true; break; }
     if (heat) { this.addHeat(p, DEAL.heat); this.npc.scram(steve.id); } else this.npc.steveSay("sold");
     this.emit({ t: "deal", p: p.id, kind, paid: DEAL.price, heat });
+  }
+  // ---------------------------------------------------------------- R12.6: WEE MICKEY (see MICKEY in arena.ts)
+  /** world time until which Mickey's shop is shut (somebody hit him) */
+  mickeyShutT = -1;
+  private mickeyFor(p: PlayerSim): string | null {
+    const n = this.npc.mickeyAt();
+    if (!n) { this.emit({ t: "mickeyNo", p: p.id, reason: "away" }); return null; }
+    if (this.time < this.mickeyShutT) { this.emit({ t: "mickeyNo", p: p.id, reason: "shut" }); return null; }
+    if (!this.match.night) { this.npc.mickeySay("day"); this.emit({ t: "mickeyNo", p: p.id, reason: "day" }); return null; }
+    if (Math.hypot(n.move.x - p.move.x, n.move.z - p.move.z) > MICKEY.reach + 1) { this.emit({ t: "mickeyNo", p: p.id, reason: "away" }); return null; }
+    return n.id;
+  }
+  /** does a cop near enough see this player right now? */
+  private copSees(p: PlayerSim, range: number): boolean {
+    for (const n of this.npc.npcs.values()) if (n.kind === "cop" && n.state !== "ko" && Math.hypot(n.move.x - p.move.x, n.move.z - p.move.z) < range && this.police.canSee(n, p)) return true;
+    return false;
+  }
+  /** E on WEE MICKEY with loot in your hands (at night): cash for it, above the pawn shops' price; a little heat */
+  fenceMickey(p: PlayerSim) {
+    if (p.jailT > 0 || p.respawnT > 0) return;
+    if (!this.mickeyFor(p)) return;
+    const it = this.activeItem(p)?.item;
+    if (!it) { this.npc.mickeySay("idle"); return this.emit({ t: "mickeyNo", p: p.id, reason: "hands" }); }
+    const d = lootDef(it.type);
+    if (d.money) { this.npc.mickeySay("no"); return this.emit({ t: "mickeyNo", p: p.id, reason: "money" }); }
+    if (d.junk || it.value <= 0) { this.npc.mickeySay("no"); return this.emit({ t: "mickeyNo", p: p.id, reason: "junk" }); }
+    const cash = Math.max(1, Math.round(it.value * (d.blackMarket ? MICKEY.black : MICKEY.fence)));
+    this.consumeItem(p, it.id);
+    p.cash += cash;
+    const seen = this.copSees(p, MICKEY.copRange);
+    this.addHeat(p, MICKEY.heat + (seen ? MICKEY.copHeat : 0));
+    this.npc.mickeySay(seen ? "yell" : "sold");
+    this.emit({ t: "mickey", p: p.id, what: "fenced", type: it.type, cash, heat: seen });
+  }
+  /** E on one of Mickey's bits of gear (at night): one of each at a time */
+  buyGear(p: PlayerSim, kind: GearKind) {
+    const g = MICKEY.goods[kind];
+    if (!g || p.jailT > 0 || p.respawnT > 0) return;
+    if (!this.mickeyFor(p)) return;
+    if (p.gear[kind] >= 1) return this.emit({ t: "mickeyNo", p: p.id, reason: "full" });
+    if (p.cash < g.price) { this.npc.mickeySay("broke"); return this.emit({ t: "mickeyNo", p: p.id, reason: "broke" }); }
+    p.cash -= g.price;
+    p.gear[kind] = 1;
+    const seen = this.copSees(p, MICKEY.copRange);
+    if (seen) this.addHeat(p, MICKEY.copHeat);
+    this.npc.mickeySay(seen ? "yell" : "gear");
+    this.emit({ t: "mickey", p: p.id, what: "gear", gear: kind, paid: g.price, heat: seen });
+  }
+  /** the smoke bomb: a cop's grab or taser lands on you and it goes off instead (true = it went off) */
+  smokeOut(p: PlayerSim, by: string): boolean {
+    if (p.gear.smoke < 1) return false;
+    p.gear.smoke = 0;
+    this.police.lose(p, 5);
+    this.emit({ t: "gearUsed", p: p.id, gear: "smoke", x: p.move.x, z: p.move.z, by });
+    return true;
   }
   // ---------------------------------------------------------------- R12.1: THE SOGGY SHAMROCK
   /** a pint on the go: its gulp rate, when it was poured (it goes flat after PUB.pour s) */

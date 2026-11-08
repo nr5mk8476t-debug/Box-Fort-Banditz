@@ -3888,6 +3888,7 @@ export class CityRenderer {
     const pool = (x: number, z: number, w: number, d: number) => { const p = MeshBuilder.CreateGround("pubSpillP", { width: w, height: d }, sc); p.position.set(x, 0.165, z); parts.push(p); }; // (just above the pavement, 0.15 m up)
     { const [x, z] = mid(P.door); pool(P.out.x * 0.6 + x * 0.4, P.out.z * 0.6 + z * 0.4, 10, 10); }
     for (const b of P.bays) { const [x, z] = mid(b); pool(x, z, Math.max(4, b.maxX - b.minX + 2.5), Math.max(4, b.maxZ - b.minZ + 2.5)); }
+    if (P.hatch) pool((P.hatch.minX + P.hatch.maxX) / 2, P.rect.maxZ + 1.6, 4.5, 3.2); // (R12.6: the yard lamp's pool)
     const all = Mesh.MergeMeshes(parts, true, true);
     if (all) { all.material = m; all.isPickable = false; all.parent = this.pubDyn ?? this.root; }
   }
@@ -4146,6 +4147,33 @@ export class CityRenderer {
           const fr = MB.CreateBox("pbABoardSide", { width: 0.64, height: 0.94, depth: 0.04 }, sc); fr.parent = leaf; fr.material = toon(sc, "#3a2416"); fr.isPickable = false;
           const pl = MB.CreatePlane("pbABoardFace", { width: 0.56, height: 0.84 }, sc); pl.parent = leaf; pl.position.z = sd * 0.025; pl.rotation.y = sd > 0 ? PI : 0; pl.material = am; pl.isPickable = false;
         } }
+      // R12.6: the back yard: the cellar hatch (two slanted green doors on a stone kerb), kegs, a crate stack, a bin, a
+      // caged lamp over the hatch and a sign; WEE MICKEY's gear sits on the keg by the hatch (drawn by the props)
+      for (const b of this.arena.boxes) {
+        if (!b.hide || !b.deco) continue;
+        const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2, top = b.y + b.h / 2;
+        if (b.deco === "keg") {
+          const px = b.poly ? b.poly.reduce((q, v) => q + v[0], 0) / b.poly.length : b.x, pz = b.poly ? b.poly.reduce((q, v) => q + v[1], 0) / b.poly.length : b.z;
+          cyl(0.7, 0.92, px, 0.46, pz, "#a8a8b2", 0.01, 14, 0.66); for (const y of [0.18, 0.74]) cyl(0.73, 0.06, px, y, pz, "#5a5a64", 0, 14); cyl(0.5, 0.05, px, 0.94, pz, "#7a7a84", 0, 12); cyl(0.08, 0.06, px, 0.98, pz, "#3a3a44", 0, 8);
+        } else if (b.deco === "cellarhatch") {
+          sbx(x0, x1, 0, 0.22, z0, z1, "stone", "#8a8278", 0.01);
+          for (const k of [0, 1]) { const lw = (x1 - x0 - 0.12) / 2, cx = x0 + 0.06 + lw / 2 + k * lw; const leaf = box(lw - 0.02, 0.06, z1 - z0 - 0.05, cx, 0.33, (z0 + z1) / 2, "#2f5a3a", 0.008, 0, -0.18); void leaf;
+            for (const zz of [z0 + 0.25, z1 - 0.25]) box(lw - 0.1, 0.02, 0.06, cx, 0.36 + (zz - (z0 + z1) / 2) * 0.18, zz, "#1b1420", 0, 0, -0.18);
+            box(0.05, 0.05, 0.12, cx + (k ? -lw / 2 + 0.08 : lw / 2 - 0.08), 0.42, z1 - 0.2, BRASS, 0); }
+        } else if (b.deco === "yardcrates") {
+          sbx(x0, x1, 0, 0.6, z0, z1, "crate", "#6b4a2b", 0.012); sbx(x0 + 0.1, x1 - 0.1, 0.6, top, z0 + 0.15, z1 - 0.15, "crate", "#5a3e24", 0.012);
+          for (let q = 0; q < 6; q++) cyl(0.07, 0.24, x0 + 0.25 + (q % 3) * 0.35, top + 0.12, z0 + 0.4 + Math.floor(q / 3) * 0.5, q % 2 ? "#1f4a2e" : "#4a2a10", 0.003, 8);
+        } else if (b.deco === "yardbin") {
+          box(x1 - x0, top, z1 - z0, b.x, top / 2, b.z, "#2f5a3a", 0.02); const lid = box(x1 - x0 + 0.06, 0.08, z1 - z0 + 0.06, b.x, top + 0.1, b.z, "#1f3a2a", 0.02); lid.rotation.z = 0.12;
+        }
+      }
+      if (P.hatch) { const hx = (P.hatch.minX + P.hatch.maxX) / 2, wz = r.maxZ;
+        // the lamp: a bulb in a wire cage on a bracket over the hatch (it glows; no real light: the spill's painted on)
+        tube([new Vector3(hx, 2.75, wz + 0.02), new Vector3(hx, 2.75, wz + 0.35), new Vector3(hx, 2.6, wz + 0.35)], 0.02, BLACK, 0, 6);
+        gsph(0.16, hx, 2.48, wz + 0.35, "#ffd890");
+        for (let k = 0; k < 4; k++) box(0.012, 0.24, 0.012, hx + Math.cos(k * PI / 2) * 0.1, 2.48, wz + 0.35 + Math.sin(k * PI / 2) * 0.1, BLACK, 0);
+        const dv = texMat("deliveries", 384, 160, (c) => { c.fillStyle = "#f4ead0"; c.fillRect(0, 0, 384, 160); c.strokeStyle = "#7a1f1a"; c.lineWidth = 10; c.strokeRect(6, 6, 372, 148); c.fillStyle = "#7a1f1a"; c.textAlign = "center"; c.font = "bold 40px Georgia, serif"; c.fillText("DELIVERIES", 192, 64); c.font = "24px Georgia, serif"; c.fillStyle = "#3a2a1a"; c.fillText("ring the bell (don't)", 192, 112); }, 0.4);
+        sheet(0.9, 0.38, hx - 2.4, 2.0, wz + 0.04, 0, 1, dv); }
       // chimney stacks on the roof
       for (const [x, z] of [[r.minX + 3, r.maxZ - 1.5], [(r.minX + r.maxX) / 2, r.maxZ - 1.5], [r.maxX - 4, r.maxZ - 1.5]]) { sbx(x - 0.6, x + 0.6, P.roofY, P.roofY + 1.6, z - 0.5, z + 0.5, "brick", "#6a3022"); for (let k = 0; k < 3; k++) cyl(0.22, 0.45, x - 0.35 + k * 0.35, P.roofY + 1.82, z, "#b86a3a", 0.006, 10); }
     }

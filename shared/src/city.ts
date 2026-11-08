@@ -24,7 +24,7 @@
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
 import {
-  box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind,
+  box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind, type GearKind,
   CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
 } from "./arena.js";
 
@@ -3235,8 +3235,21 @@ export function buildTrashington(): ArenaLayout {
     const readers = [{ x: -86.2, z: 26.0, yaw: -PI / 2 }, { x: -86.2, z: 28.4, yaw: -PI / 2 }];
     for (const rd of readers) wb(rd.x - 0.45, rd.x + 0.45, rd.z - 0.45, rd.z + 0.45, U, U + 0.95, "sofa", { hide: true, deco: "readerchair" });
     wb(-92.8, -92.3, 27.4, 30.4, U, U + 2.2, "shelf", { hide: true, deco: "whiskeyshelf" });
+    // ---- R12.6: the back yard (between the two buildings behind the pub; in off the east street by a gap along the
+    //      pub's back wall, or down the alley from the north): the cellar hatch, kegs, crates, a bin, and WEE MICKEY, the
+    //      night fence, with his gear laid out on a keg ----
+    const YARD = R(-91.5, -83.8, P.maxZ, 49.9), HATCH = R(-86.6, -84.9, P.maxZ, P.maxZ + 1.1), MICK = { x: -87.4, z: P.maxZ + 1.3, yaw: 0.35 };
+    wb(HATCH.minX, HATCH.maxX, HATCH.minZ, HATCH.maxZ, 0, 0.42, "boxes", { color: "#3a4a3a", deco: "cellarhatch", hide: true });
+    for (const [x, z] of [[-90.95, P.maxZ + 0.45], [-90.95, P.maxZ + 1.2], [-90.2, P.maxZ + 0.45]] as Pt[]) disc(x, z, 0.36, 0, 0.95, "boxes", { color: "#8a8a92", deco: "keg", hide: true });
+    disc(-89.3, P.maxZ + 0.6, 0.36, 0, 0.95, "boxes", { color: "#8a8a92", deco: "keg", hide: true }); // (Mickey's "counter")
+    wb(-91.45, -90.15, 37.2, 38.6, 0, 1.25, "boxes", { color: "#6b4a2b", deco: "yardcrates", hide: true });
+    wb(-91.45, -89.95, 43.4, 45.4, 0, 1.45, "boxes", { color: "#2f5a3a", deco: "yardbin", hide: true });
+    for (const [k, dx] of [["pick", -0.15], ["smoke", 0.15]] as [GearKind, number][]) props.push({ id: "mick_" + k, kind: "mickgoods", x: -89.3 + dx, y: 1.0, z: P.maxZ + 0.6, yaw: 0, gear: k });
+    props.push({ id: "mickey1", kind: "mickey", x: MICK.x, y: 1.0, z: MICK.z, yaw: MICK.yaw, hw: 0.35, hd: 0.35 });
+    posts.push({ kind: "wee_mickey", x: MICK.x, z: MICK.z, yaw: MICK.yaw, y: 0.15 }); // (on the yard's paving)
     const door = R(M[0] + nIn[0] * 0.6 - 1.0, M[0] + nIn[0] * 0.6 + 1.0, M[1] + nIn[1] * 0.6 - 1.0, M[1] + nIn[1] * 0.6 + 1.0);
     pub = {
+      yard: YARD, hatch: HATCH, mickey: MICK,
       rect: P, cham: CH, y1: Y1, y2: Y2, roofY: RY, door, out: { x: M[0] - nIn[0] * 2.2, z: M[1] - nIn[1] * 2.2, yaw: Math.atan2(nIn[0], nIn[1]) },
       door2: SD, out2: { x: (SD.minX + SD.maxX) / 2, z: P.minZ - 1.3, yaw: 0 },
       bar: HB, flap: FLAP, gantry: GT, lane: LANE, taps, stairs: ST, snugs, fire: FIRE, stage: STAGE, tables, rounds, windowSeat: WS, outside, stools, barman, bays,

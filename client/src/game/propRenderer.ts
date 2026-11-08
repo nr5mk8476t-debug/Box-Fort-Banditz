@@ -330,6 +330,19 @@ export class PropRenderer {
           const balloon = part(MeshBuilder.CreateSphere("floatyBalloon", { diameter: 0.14, segments: 8 }, scene), glow("#ff8fd0"), 0.008); balloon.position.y = 0.55; balloon.scaling.y = 1.15;
 
         }
+      } else if (d.kind === "mickgoods") {
+        // R12.6: WEE MICKEY's gear on his keg: a leather roll of lockpicks (tied, a few picks poking out) and a cartoon
+        // smoke bomb (a round black bomb with a fuse and a skull-free grey cloud painted on)
+        if (d.gear === "pick") {
+          const roll = part(MeshBuilder.CreateCylinder("mickRoll", { diameter: 0.07, height: 0.2, tessellation: 10 }, scene), "#7a4a24", 0.008); roll.rotation.z = Math.PI / 2; roll.position.y = 0.04;
+          const tie = part(MeshBuilder.CreateTorus("mickTie", { diameter: 0.075, thickness: 0.012, tessellation: 10 }, scene), "#2a1a10", 0); tie.rotation.z = Math.PI / 2; tie.position.y = 0.04;
+          for (let i = 0; i < 3; i++) { const pk = part(MeshBuilder.CreateCylinder("mickPickTool", { diameter: 0.008, height: 0.08, tessellation: 4 }, scene), "#c8ccd4", 0); pk.rotation.z = Math.PI / 2; pk.position.set(0.13, 0.03 + i * 0.012, -0.01 + i * 0.01); }
+        } else {
+          const bomb = part(MeshBuilder.CreateSphere("mickBomb", { diameter: 0.12, segments: 8 }, scene), "#2a2a30", 0.008); bomb.position.y = 0.06;
+          const neck = part(MeshBuilder.CreateCylinder("mickNeck", { diameter: 0.04, height: 0.03, tessellation: 8 }, scene), "#5a5a64", 0); neck.position.y = 0.125;
+          const fuse = part(MeshBuilder.CreateCylinder("mickFuse", { diameter: 0.01, height: 0.06, tessellation: 4 }, scene), "#d8c08a", 0); fuse.position.set(0.01, 0.16, 0); fuse.rotation.z = -0.4;
+          const puff = part(MeshBuilder.CreateSphere("mickPuff", { diameter: 0.05, segments: 4 }, scene), "#c8c8d0", 0); puff.position.set(-0.03, 0.08, 0.05); puff.scaling.set(1.4, 0.8, 0.3);
+        }
       } else if (d.kind === "celldoor") {
         // R6: the cell door is part of the bars (drawn with the city); just its big padlock here
         const lock = MeshBuilder.CreateBox("padlock", { width: 0.22, height: 0.26, depth: 0.12 }, scene); lock.position.set(0, -0.05, 0); part(lock, "#d9a632", 0.012);

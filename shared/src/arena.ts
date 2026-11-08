@@ -115,7 +115,9 @@ export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "new
   // R12.1: THE SOGGY SHAMROCK: the GUZZLE'S taps (E: a pint, then split the G) and the chalkboard of the best splits
   | "pinttap" | "pubboard"
   // R12.2c: SEAMUS O'SHORTLY (E: a word with him: a tip, a job for a pot of gold); R12.2b: the jukebox
-  | "seamus" | "jukebox" | "pooltable" | "dartsoche";
+  | "seamus" | "jukebox" | "pooltable" | "dartsoche"
+  // R12.6: WEE MICKEY at the pub's cellar door (E with loot in your hands: he fences it, at night) and his gear on a keg
+  | "mickey" | "mickgoods";
 export interface PropDef {
   id: string; kind: PropKind; x: number; y: number; z: number; yaw: number; shop?: number; color?: string;
   /** C4a: the arena box this prop is (breakables): index into ArenaLayout.boxes */
@@ -129,7 +131,25 @@ export interface PropDef {
   door?: "glass" | "solid" | "exit"; oneWay?: [number, number];
   /** R11.4: which of STEVE's goods */
   sell?: DealKind;
+  /** R12.6: which of WEE MICKEY's gear */
+  gear?: GearKind;
 }
+/**
+ * R12.6: WEE MICKEY, the night fence at THE SOGGY SHAMROCK's cellar door (Blake: "Night fence + gear"). After dark he buys
+ * the loot in your hands for more than the pawn shops (x0.75 of what it's worth; they pay x0.4), black-market pieces
+ * too (the legit shops won't touch them), but every deal is a little heat (more if a cop sees). He sells two bits of
+ * cartoon gear, one of each at a time: a LOCKPICK KIT (your next stretch in the cells is halved) and a SMOKE BOMB (it
+ * goes off by itself the next time a cop grabs or tasers you: you slip away in the smoke). By day: "come back when it's
+ * dark". Hit him and he shuts up shop for a while.
+ */
+export type GearKind = "pick" | "smoke";
+export const MICKEY = {
+  fence: 0.75, black: 0.9, heat: 6, copHeat: 18, copRange: 25, sulk: 45, reach: 2.4,
+  goods: {
+    pick: { name: "LOCKPICK KIT", price: 30, what: "your next stretch in the cells is halved" },
+    smoke: { name: "SMOKE BOMB", price: 25, what: "the next cop who grabs or tasers you gets a face full of smoke" },
+  } as Record<GearKind, { name: string; price: number; what: string }>,
+};
 /** R11.4: SKETCHY STEVE's goods */
 export type DealKind = "zoomies" | "beef" | "floaty";
 export const DEAL = {
@@ -344,7 +364,7 @@ export interface ArenaLayout {
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
   /** C1.1: people who stand at a spot (the apartment tower's doorman) */
-  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "barmaid" | "leprechaun" | "lep_buddy" | "drunk_dancer"; x: number; z: number; yaw: number;
+  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "barmaid" | "leprechaun" | "lep_buddy" | "drunk_dancer" | "wee_mickey"; x: number; z: number; yaw: number;
     /** R12.1: which one (the regulars, the band's four), and sitting down (stool, bench) */
     v?: number; sit?: number;
     /** C5a: standing height (Uncle Dumpster lives on a rooftop) */
@@ -777,6 +797,8 @@ export interface PubDef {
    *  the landing, where SEAMUS O'SHORTLY sits (R12.2c; Mammy's old chair), where his six buddies hang about, the snug's
    *  fire, the two old fellas reading the paper; BIG DESSIE's patch of floor in front of the band */
   balcony: Rect[]; balTables: { x: number; z: number }[];
+  /** R12.6: the back yard behind the pub (between the two buildings north of it), the cellar hatch, WEE MICKEY's spot */
+  yard?: Rect; hatch?: Rect; mickey?: { x: number; z: number; yaw: number };
   snug2: Rect; hall: Rect; seamus: { x: number; z: number; yaw: number }; buddies: { x: number; z: number }[]; dancer: { x: number; z: number }; snugFire: { x: number; z: number };
   readers: { x: number; z: number; yaw: number }[];
   /** R12.2b (Blake: "a laid back area where you can have fun with your friends"): the island bar under its canopy (its

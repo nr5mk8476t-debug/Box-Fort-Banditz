@@ -152,7 +152,7 @@ export class MatchSystem {
   start(): boolean {
     if (this.phase !== "lobby" && this.phase !== "over") return false;
     this.w.pubGames?.voidAll("The match is starting: game called off, stakes back."); // (R12.3: before the cash resets)
-    for (const p of this.w.players.values()) p.cash = 0;
+    for (const p of this.w.players.values()) { p.cash = 0; p.gear = { pick: 0, smoke: 0 }; } // (R12.6: and WEE MICKEY's gear)
     this.w.lobby.matchStart(); // (C5a: off the roof; aura starts at 0)
     this.w.pubBoard.length = 0; // (R12.1: a clean chalkboard every match)
     this.round = 0;

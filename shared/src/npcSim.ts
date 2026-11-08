@@ -94,6 +94,8 @@ export interface NpcHost {
   npcDropLoot(npcId: string, type: string, x: number, y: number, z: number, awayX: number, awayZ: number): void;
   npcEvent(e: { t: "npcSay"; npc: string; line: string } | { t: "npcAttack"; npc: string; p: string; hit: boolean } | { t: "npcDodge"; npc: string; p: string } | { t: "npcKo"; npc: string; by: string } | { t: "panic"; npc: string } | { t: "louHit"; npc: string; p: string; shop?: number } | { t: "donHit"; npc: string; p: string } | { t: "pubRowdy"; npc: string; p: string } | { t: "npcPop"; npc: string; x: number; y: number; z: number } | BigShotEvent | OldLadyEvent): void;
   addNotoriety(playerId: string, amount: number): void;
+  /** R12.6: somebody hit WEE MICKEY: his shop's shut for a while */
+  mickeyShut?(): void;
   /** a cashier got punched: shop alarm */
   shopAlarm(shopId: number): void;
   applyToPlayer(playerId: string, effect: "trap" | "swarm" | "flash"): void;
@@ -245,6 +247,12 @@ export class NpcSystem {
   pubSay(kind: "barman" | "barmaid" | "regular" | "patron", what: "pour" | "cutoff" | "perfect" | "close" | "miss", all = false) {
     for (const n of this.npcs.values()) if (n.kind === kind && n.state !== "ko") { const l = NPC_DEFS[kind].lines[what]; if (l) this.say(n, l, true); if (!all) return; }
   }
+  /** R12.6: WEE MICKEY, if he's at his spot by the cellar hatch (standing, not knocked about) */
+  mickeyAt(): NpcSimData | null {
+    for (const n of this.npcs.values()) if (n.kind === "wee_mickey") return n.state !== "ko" && n.post && Math.hypot(n.post.x - n.move.x, n.post.z - n.move.z) < 1.5 ? n : null;
+    return null;
+  }
+  mickeySay(what: "sold" | "idle" | "day" | "gear" | "no" | "broke" | "yell" | "hit") { for (const n of this.npcs.values()) if (n.kind === "wee_mickey") { const l = NPC_DEFS.wee_mickey.lines[what]; if (l) this.say(n, l, true); } }
   steveSay(what: "sold" | "idle") { for (const n of this.npcs.values()) if (n.kind === "sketchy_steve") this.say(n, NPC_DEFS.sketchy_steve.lines[what]!, true); }
   /** New round: every cashier back at their till with a fresh float. */
   resetCashiers() {
@@ -385,6 +393,13 @@ export class NpcSystem {
       this.host.shopAlarm(n.shop);
       n.state = "cower"; n.stateT = 6; n.target = byPlayer;
       this.say(n, def.lines.hit, true);
+      return "hit";
+    }
+    if (n.kind === "wee_mickey") {
+      // R12.6: hitting the fence: he shuts up shop for a while (a little heat)
+      this.say(n, def.lines.hit, true);
+      this.host.addNotoriety(byPlayer, def.notoriety);
+      this.host.mickeyShut?.();
       return "hit";
     }
     if (n.kind === "sketchy_steve") {
