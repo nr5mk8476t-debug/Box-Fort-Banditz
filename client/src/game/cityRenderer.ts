@@ -3839,7 +3839,7 @@ export class CityRenderer {
     const dyn = new TransformNode("pubDyn", sc); dyn.parent = this.root; this.pubDyn = dyn;
     const IN = { minX: r.minX + T, maxX: r.maxX - T, minZ: r.minZ + T, maxZ: r.maxZ - T };
     // R12.1b (Blake: "darker, with that nice glossy mahogany feel"): near-black red mahogany, glossy (see skinMat)
-    const MAH = "#26090a", MAH2 = "#160606", RED = "#c8141c", BLACK = "#141010", BRASS = "#d9a632", GOLD = "#e8c050", LEATHER = "#2e1410", CREAM = "#e8dcc4";
+    const MAH = "#26090a", MAH2 = "#160606", RED = "#7a1119", BLACK = "#141010", BRASS = "#d9a632", GOLD = "#e8c050", LEATHER = "#2e1410", CREAM = "#e8dcc4";
     let seed = 1;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     /** a skinned box (merged per material; always drawn) */
@@ -3875,6 +3875,9 @@ export class CityRenderer {
       const fascia = texMat("fascia", 2048, 160, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 2048, 160); c.strokeStyle = GOLD; c.lineWidth = 6; c.strokeRect(10, 10, 2028, 140); lettering(c, "THE SOGGY SHAMROCK", 2048, 160); }, 0.55);
       const fasciaShort = texMat("fasciaS", 1024, 160, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 1024, 160); c.strokeStyle = GOLD; c.lineWidth = 6; c.strokeRect(10, 10, 1004, 140); lettering(c, "THE SOGGY SHAMROCK", 1024, 160); }, 0.55);
       const roundel = texMat("roundel", 128, 128, (c) => { c.fillStyle = RED; c.beginPath(); c.arc(64, 64, 62, 0, 6.3); c.fill(); c.strokeStyle = GOLD; c.lineWidth = 6; c.beginPath(); c.arc(64, 64, 54, 0, 6.3); c.stroke(); lettering(c, "1", 128, 128, GOLD, "Georgia, serif", 0.6); }, 0.5, true);
+      // R12.6 (Blake: "Deep red + mahogany + gold"): oxblood paint (RED, deepened from pillar-box), polished mahogany stall
+      // risers, sills and pilaster bases (WOOD), thin gold lining, cream glazing bars
+      const WOOD = "#3e150c", WOOD2 = "#2a0d07";
       const trail = ["#1f5a26", "#2f7a34", "#16461c"], blooms = ["#d62c2c", "#ff5aa0", "#f4f1ea", "#ffd54a", "#c83aa0", "#ff7a3a"];
       /** flowers and ivy spilling out of a trough (x0..x1 along the face; f: the face line; s: out) */
       const flowers = (alongX: boolean, a0: number, a1: number, f: number, s: number, y: number, depth = 0.4, hang = 1.0) => {
@@ -3888,6 +3891,21 @@ export class CityRenderer {
             if (rnd() < 0.5) { const [fx, , fz] = at(u, depth + 0.12, 0); ball(0.08, fx, y - len * 0.7, fz, blooms[Math.floor(rnd() * blooms.length)], 0, 4); } }
         }
       };
+      /** the balcony's stretch of a front (no baskets under it) */
+      const balc = (alongX: boolean, u: number) => P.balcony.some((b) => alongX ? b.maxZ <= r.minZ + 0.01 && u > b.minX - 0.6 && u < b.maxX + 0.6 : b.minX >= r.maxX - 0.01 && u > b.minZ - 0.6 && u < b.maxZ + 0.6);
+      /** a hanging basket on a scrolled iron bracket (y: the bracket's height; the basket hangs ~0.55 m below it) */
+      const basket = (alongX: boolean, u: number, o: number, s: number, y: number) => {
+        const P3 = (off: number, yy: number) => alongX ? new Vector3(u, yy, o + s * off) : new Vector3(o + s * off, yy, u);
+        tube([P3(0, y), P3(0.72, y), P3(0.78, y - 0.06)], 0.022, BLACK, 0, 6);
+        tube([P3(0, y - 0.45), P3(0.2, y - 0.2), P3(0.45, y - 0.04)], 0.016, BLACK, 0, 6);
+        { const c = P3(0.12, y - 0.36); cyl(0.12, 0.02, c.x, c.y, c.z, BLACK, 0, 8, undefined, alongX ? PI / 2 : 0, alongX ? 0 : PI / 2); }
+        const h = P3(0.62, 0), by = y - 0.55;
+        for (let k = 0; k < 3; k++) { const a = (k / 3) * 2 * PI; tube([new Vector3(h.x, y - 0.02, h.z), new Vector3(h.x + Math.cos(a) * 0.2, by + 0.04, h.z + Math.sin(a) * 0.2)], 0.008, BLACK, 0, 4); }
+        cyl(0.46, 0.2, h.x, by - 0.06, h.z, "#2a2018", 0.006, 10, 0.5);
+        for (let k = 0; k < 9; k++) { const a = rnd() * 2 * PI, rr = rnd() * 0.2; ball(0.16 + rnd() * 0.06, h.x + Math.cos(a) * rr, by + 0.06 + rnd() * 0.08, h.z + Math.sin(a) * rr, trail[k % 3], 0, 4); }
+        for (let k = 0; k < 7; k++) { const a = rnd() * 2 * PI; ball(0.1, h.x + Math.cos(a) * 0.2, by + 0.04 + rnd() * 0.12, h.z + Math.sin(a) * 0.2, blooms[Math.floor(rnd() * blooms.length)], 0, 4); }
+        for (let k = 0; k < 6; k++) { const a = rnd() * 2 * PI, l = 0.3 + rnd() * 0.45; box(0.03, l, 0.03, h.x + Math.cos(a) * 0.24, by - 0.08 - l / 2, h.z + Math.sin(a) * 0.24, trail[k % 3], 0); }
+      };
       /** one street front's shopfront dressing (alongX: the face runs along x; f: its outer face; s: outward sign) */
       const shopfront = (alongX: boolean, a0: number, a1: number, f: number, s: number, doorGap?: [number, number]) => {
         const len = a1 - a0, mid = (a0 + a1) / 2, o = f + s * 0.06;
@@ -3895,24 +3913,24 @@ export class CityRenderer {
         const inGap = (u: number, m = 0) => !!doorGap && u > doorGap[0] - m && u < doorGap[1] + m;
         // the stall riser: raised red panels on a black skirting
         B(len, 0, 0.12, 0.16, mid, BLACK);
-        for (let u = a0 + 0.1; u < a1 - 0.5; u += 1.0) { const w = Math.min(0.85, a1 - 0.1 - u); if (inGap(u + w / 2, 0.45)) continue; B(w, 0.18, 0.68, 0.12, u + w / 2, RED, "panel"); B(w - 0.14, 0.25, 0.61, 0.04, u + w / 2, "#a80e16", "", 0.11); }
-        B(len, 0.68, 0.78, 0.22, mid, RED, "panel"); // (the sill)
+        for (let u = a0 + 0.1; u < a1 - 0.5; u += 1.0) { const w = Math.min(0.85, a1 - 0.1 - u); if (inGap(u + w / 2, 0.45)) continue; B(w, 0.18, 0.68, 0.12, u + w / 2, WOOD, "mahogany"); B(w - 0.14, 0.25, 0.61, 0.04, u + w / 2, WOOD2, "mahogany", 0.11); B(w - 0.2, 0.58, 0.6, 0.02, u + w / 2, GOLD, "", 0.15); }
+        B(len, 0.68, 0.78, 0.22, mid, WOOD, "mahogany"); // (the sill)
         // pilasters (with a base and a capital) at every pier; glazing bars across the big windows
         for (const b of this.arena.boxes) {
           if (b.deco !== "pubshell" || b.poly) continue;
           const y0 = b.y - b.h / 2, y1 = b.y + b.h / 2, u = alongX ? b.x : b.z, w = alongX ? b.w : b.d, ff = alongX ? b.z : b.x;
           if (Math.abs(ff - (f - s * T / 2)) > 0.2 || y0 < 0.7 || y1 > 3.4 || w > 1.0 || u < a0 - 0.3 || u > a1 + 0.3) continue;
-          B(w + 0.2, 0.75, 3.3, 0.16, u, RED, "panel"); B(w + 0.34, 0.75, 1.05, 0.22, u, RED, "panel"); B(w + 0.34, 3.05, 3.35, 0.24, u, BLACK); B(w + 0.4, 3.0, 3.06, 0.26, u, GOLD);
-          for (const k of [1.4, 2.0, 2.6]) B(0.05, k, k + 0.3, 0.02, u, "#a80e16", "", 0.16);
+          B(w + 0.2, 0.75, 3.3, 0.16, u, RED, "panel"); B(w + 0.34, 0.75, 1.05, 0.22, u, WOOD, "mahogany"); B(w + 0.34, 3.05, 3.35, 0.24, u, BLACK); B(w + 0.4, 3.0, 3.06, 0.26, u, GOLD);
+          for (const e of [-1, 1]) B(0.025, 1.15, 2.9, 0.02, u + e * (w / 2 + 0.03), GOLD, "", 0.16); // (thin gold lining: it was three red slots)
         }
         for (const b of this.arena.boxes) {
           if (b.kind !== "glass" || b.deco !== "pubwindow") continue;
           const y0 = b.y - b.h / 2, y1 = b.y + b.h / 2, u = alongX ? b.x : b.z, w = alongX ? b.w : b.d, ff = alongX ? b.z : b.x;
           if (Math.abs(ff - (f - s * T / 2)) > 0.25 || y1 > 3.5 || u < a0 || u > a1) continue;
           const nb = Math.max(2, Math.round(w / 0.42));
-          for (let k = 1; k < nb; k++) B(0.04, y0, y1, 0.06, u - w / 2 + (k * w) / nb, RED, "", -0.1);
-          B(w, 2.5, 2.58, 0.07, u, RED, "", -0.1); // (the transom: small panes over it)
-          for (let k = 1; k < nb * 2; k++) B(0.03, 2.58, y1, 0.05, u - w / 2 + (k * w) / (nb * 2), RED, "", -0.1);
+          for (let k = 1; k < nb; k++) B(0.04, y0, y1, 0.06, u - w / 2 + (k * w) / nb, CREAM, "", -0.1);
+          B(w, 2.5, 2.58, 0.07, u, CREAM, "", -0.1); // (the transom: small panes over it)
+          for (let k = 1; k < nb * 2; k++) B(0.03, 2.58, y1, 0.05, u - w / 2 + (k * w) / (nb * 2), CREAM, "", -0.1);
         }
         // the fascia (gold on black, a roundel each end), the console brackets, a deep dentilled cornice
         B(len + 0.1, 3.3, 3.4, 0.24, mid, RED, "panel");
@@ -3924,8 +3942,10 @@ export class CityRenderer {
         B(len + 0.4, 4.35, 4.48, 0.36, mid, RED, "panel");
         for (let u = a0 + 0.1; u < a1 - 0.05; u += 0.22) B(0.1, 4.48, 4.6, 0.4, u, BLACK, "", 0.02);
         B(len + 0.6, 4.6, 4.78, 0.5, mid, RED, "panel");
-        B(len + 0.4, 4.78, 5.0, 0.42, mid, "#1f4a24", "crate"); // (the flower trough along the top)
-        flowers(alongX, a0, a1, o, s, 4.9, 0.42, 1.0);
+        // R12.6 (Blake: "Hanging baskets + window boxes"): the continuous flower ridge along the cornice is gone; baskets
+        // hang on scrolled iron brackets over the fascia's ends and every ~4.5 m between (not where the balcony is)
+        { const n = Math.max(2, Math.round(len / 4.5)), step = (len - 1.6) / (n - 1);
+          for (let k = 0; k < n; k++) { const u = a0 + 0.8 + k * step; if (inGap(u, 0.8) || balc(alongX, u)) continue; basket(alongX, u, o, s, 5.15); } }
         // upstairs: white sash windows (frames, a meeting rail, glazing bars), cream sills and lintels, flower boxes
         for (const b of this.arena.boxes) {
           if (b.deco !== "pubsash") continue;
@@ -3969,13 +3989,13 @@ export class CityRenderer {
       //  Blake's "weird red line" and the black bar through the top. The plinth stops either side of the door. The hood's
       //  gone (the balcony shelters the door) and the clock's moved round to the east front.)
       const ox = MX + out[0] * 0.08, oz = MZ + out[1] * 0.08, PW2 = (L - 2.4) / 2 - 0.25;
-      for (const sd of [-1, 1]) sb(PW2, 0.78, 0.18, ox + along[0] * sd * (L / 2 - PW2 / 2), 0.39, oz + along[1] * sd * (L / 2 - PW2 / 2), "panel", RED, 0.01, yawOut);
+      for (const sd of [-1, 1]) sb(PW2, 0.78, 0.18, ox + along[0] * sd * (L / 2 - PW2 / 2), 0.39, oz + along[1] * sd * (L / 2 - PW2 / 2), "mahogany", WOOD, 0.01, yawOut);
       for (const sd of [-1, 1]) {
         sb(0.5, 3.3, 0.24, ox + along[0] * sd * 1.45, 1.65, oz + along[1] * sd * 1.45, "panel", RED, 0.01, yawOut);
         sb(0.62, 0.3, 0.3, ox + along[0] * sd * 1.45, 3.15, oz + along[1] * sd * 1.45, "panel", BLACK, 0.01, yawOut);
         const dx = MX - out[0] * 0.55 + along[0] * sd * 1.05, dz = MZ - out[1] * 0.55 + along[1] * sd * 1.05;
         sb(0.08, 2.85, 1.1, dx, Y1 + 1.43, dz, "panel", RED, 0.01, yawOut + PI / 2 + PI / 2);
-        for (const yy of [0.7, 1.6, 2.4]) box(0.03, 0.5, 0.7, dx - out[0] * 0.05, Y1 + yy, dz - out[1] * 0.05, "#a80e16", 0, yawOut + PI);
+        for (const yy of [0.7, 1.6, 2.4]) box(0.03, 0.5, 0.7, dx - out[0] * 0.05, Y1 + yy, dz - out[1] * 0.05, "#5a0c12", 0, yawOut + PI);
         cyl(0.07, 0.07, dx - out[0] * 0.07, Y1 + 1.1, dz - out[1] * 0.07, BRASS, 0.004, 8);
       }
       sb(L - 0.4, 1.0, 0.2, ox, 3.88, oz, "panel", BLACK, 0.01, yawOut);
@@ -3999,11 +4019,35 @@ export class CityRenderer {
       const blue = texMat("blueplaque", 256, 256, (c) => { c.fillStyle = "#1f4aa8"; c.beginPath(); c.arc(128, 128, 124, 0, 6.3); c.fill(); c.strokeStyle = "#f4f1ea"; c.lineWidth = 6; c.beginPath(); c.arc(128, 128, 112, 0, 6.3); c.stroke(); c.fillStyle = "#f4f1ea"; c.textAlign = "center"; c.font = "bold 24px Georgia, serif"; c.fillText("FERGAL'S DA", 128, 92); c.font = "18px Georgia, serif"; c.fillText("poured his first", 128, 124); c.fillText("pint here", 128, 148); c.font = "bold 22px Georgia, serif"; c.fillText("1888", 128, 184); }, 0.5, true);
       sheet(0.5, 0.38, P.door2.maxX + 0.7, 1.6, r.minZ - 0.08, 0, -1, plaque);
       sheet(0.7, 0.7, r.maxX + 0.1, 6.0, r.minZ + P.cham + 1.2, 1, 0, blue);
-      { const sx = r.maxX + 1.0, sz = r.minZ + P.cham + 3.4;
-        tube([new Vector3(r.maxX + 0.05, 6.15, sz), new Vector3(sx + 0.55, 6.15, sz)], 0.035, BLACK, 0);
-        tube([new Vector3(r.maxX + 0.05, 5.6, sz), new Vector3(r.maxX + 0.5, 6.15, sz)], 0.025, BLACK, 0);
-        const sg = texMat("shamsign", 256, 320, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 256, 320); c.strokeStyle = GOLD; c.lineWidth = 10; c.strokeRect(8, 8, 240, 304); c.fillStyle = "#3aa85a"; for (const [a, b] of [[128, 110], [92, 150], [164, 150]]) { c.beginPath(); c.arc(a - 18, b, 30, 0, 6.3); c.arc(a + 18, b, 30, 0, 6.3); c.fill(); } c.strokeStyle = "#3aa85a"; c.lineWidth = 12; c.beginPath(); c.moveTo(128, 160); c.quadraticCurveTo(140, 220, 120, 250); c.stroke(); lettering(c, "SOGGY", 256, 90, GOLD); }, 0.5);
-        const board = MB.CreateBox("pbSignBoard", { width: 0.06, height: 1.25, depth: 1.0 }, sc); board.position.set(sx + 0.15, 5.45, sz); keepM(board, sg); }
+      // R12.6 (Blake: "Hanging pub sign + lanterns"): a traditional hanging sign off the corner on a scrolled iron bracket
+      // (a shamrock and the name, both faces; it replaces the little "SOGGY" board that was up by the balcony), and a brass
+      // lantern on each of the door's pilasters
+      { const sg = texMat("shamsign", 320, 384, (c) => {
+          c.fillStyle = "#123a22"; c.fillRect(0, 0, 320, 384); c.strokeStyle = GOLD; c.lineWidth = 12; c.strokeRect(8, 8, 304, 368); c.lineWidth = 3; c.strokeRect(22, 22, 276, 340);
+          c.fillStyle = "#3aa85a"; c.strokeStyle = "#0c2a16"; c.lineWidth = 4;
+          for (const [a, b] of [[160, 118], [124, 158], [196, 158]]) { c.beginPath(); c.arc(a - 20, b, 32, 0, 6.3); c.arc(a + 20, b, 32, 0, 6.3); c.fill(); }
+          c.strokeStyle = "#3aa85a"; c.lineWidth = 12; c.beginPath(); c.moveTo(160, 170); c.quadraticCurveTo(172, 220, 150, 245); c.stroke();
+          c.save(); c.translate(0, 262); lettering(c, "THE SOGGY", 320, 56, GOLD); c.translate(0, 50); lettering(c, "SHAMROCK", 320, 64, GOLD); c.restore();
+        }, 0.5);
+        const au = L / 2 - 0.45, wx = MX + along[0] * au, wz = MZ + along[1] * au, yb = 3.25;
+        const at = (k: number, y: number) => new Vector3(wx + out[0] * k, y, wz + out[1] * k);
+        tube([at(0, yb), at(1.35, yb), at(1.42, yb - 0.05)], 0.03, BLACK, 0, 6);
+        tube([at(0, yb - 0.75), at(0.3, yb - 0.42), at(0.75, yb - 0.08)], 0.02, BLACK, 0, 6);
+        tube([at(0.3, yb - 0.42), at(0.42, yb - 0.3), at(0.36, yb - 0.2), at(0.26, yb - 0.26)], 0.012, BLACK, 0, 6); // (a scroll)
+        box(0.06, 0.06, 1.3, wx + out[0] * 0.66, yb - 0.04, wz + out[1] * 0.66, GOLD, 0, yawOut); // (gilt finial strip along the arm)
+        for (const k of [0.3, 1.2]) box(0.02, 0.16, 0.02, wx + out[0] * k, yb - 0.11, wz + out[1] * k, BLACK, 0);
+        const board = MB.CreateBox("pbSignBoard", { width: 0.06, height: 0.92, depth: 0.78 }, sc); board.position.set(wx + out[0] * 0.75, yb - 0.66, wz + out[1] * 0.75); board.rotation.y = yawOut; keepM(board, sg);
+        box(0.09, 0.05, 0.84, wx + out[0] * 0.75, yb - 0.19, wz + out[1] * 0.75, BLACK, 0, yawOut); box(0.09, 0.05, 0.84, wx + out[0] * 0.75, yb - 1.13, wz + out[1] * 0.75, BLACK, 0, yawOut);
+        // the lanterns: a brass box lantern on a short arm off each pilaster, either side of the door
+        for (const sd of [-1, 1]) {
+          const px = MX + out[0] * 0.2 + along[0] * sd * 1.45, pz = MZ + out[1] * 0.2 + along[1] * sd * 1.45, ly = 2.45;
+          const lp = (k: number, y: number) => new Vector3(px + out[0] * k, y, pz + out[1] * k);
+          tube([lp(0, ly + 0.42), lp(0.32, ly + 0.42), lp(0.32, ly + 0.3)], 0.016, BLACK, 0, 6);
+          const lx = px + out[0] * 0.32, lz = pz + out[1] * 0.32;
+          keepM(MB.CreateBox("pbLantern", { width: 0.18, height: 0.28, depth: 0.18 }, sc), glow("#ffcf80")).position.set(lx, ly, lz);
+          cyl(0.28, 0.12, lx, ly + 0.2, lz, BRASS, 0.004, 4, 0.04); cyl(0.22, 0.04, lx, ly - 0.16, lz, BRASS, 0.004, 4);
+          for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(0.02, 0.3, 0.02, lx + a * 0.095, ly, lz + b * 0.095, BRASS, 0);
+        } }
       // fairy lights draped across the upper floors (warm, sagging strings), and along the cornice
       { const bulbs: Mesh[] = [];
         const string = (ax: number, ay: number, az: number, bx2: number, by: number, bz: number, sag: number) => { const n = Math.max(4, Math.round(Math.hypot(bx2 - ax, bz - az) / 0.28)); for (let k = 0; k <= n; k++) { const t = k / n; const m = MB.CreatePolyhedron("pbFairy", { type: 1, size: 0.035 }, sc); /* (R12.5: an 8-triangle bulb: a sphere was ~100 each, 68k in all) */ m.position.set(ax + (bx2 - ax) * t, ay + (by - ay) * t - Math.sin(t * PI) * sag, az + (bz - az) * t); bulbs.push(m); } };
@@ -4054,7 +4098,7 @@ export class CityRenderer {
         }
       }
       const inn = [-1 / S2, 1 / S2], ix = MX + inn[0] * 0.33, iz = MZ + inn[1] * 0.33;
-      for (const sd of [-1, 1]) { const cx = ix + along[0] * sd * (L / 4 + 0.6), cz = iz + along[1] * sd * (L / 4 + 0.6); sb(L / 2 - 1.2, 1.15, 0.02, cx, Y1 + 0.58, cz, "mahogany", MAH, 0, yawOut); sb(L / 2 - 1.2, CEIL - 1.35, 0.02, cx, (1.35 + CEIL) / 2, cz, "damask", "#163a26", 0, yawOut + PI / 2); }
+      for (const sd of [-1, 1]) { const cx = ix + along[0] * sd * (L / 4 + 0.6), cz = iz + along[1] * sd * (L / 4 + 0.6); sb(L / 2 - 1.2, 1.15, 0.02, cx, Y1 + 0.58, cz, "mahogany", MAH, 0, yawOut); sb(L / 2 - 1.2, CEIL - 1.35, 0.02, cx, (1.35 + CEIL) / 2, cz, "damask", "#163a26", 0, yawOut); } // (R12.6: flat on the cut corner (it was turned 90°: two green slabs stuck out through the corner, either side of the door))
       sb(2.6, CEIL - 3.1, 0.02, ix, (3.1 + CEIL) / 2, iz, "damask", "#163a26", 0, yawOut);
       // the dado rail (brass-capped) and the picture rail right round
       for (const [x0, x1, z0, z1, nx, nz] of [[IN.minX, IN.maxX - P.cham, IN.minZ, IN.minZ, 0, 1], [IN.minX, IN.maxX, IN.maxZ, IN.maxZ, 0, -1], [IN.minX, IN.minX, IN.minZ, IN.maxZ, 1, 0], [IN.maxX, IN.maxX, IN.minZ + P.cham, IN.maxZ, -1, 0]] as [number, number, number, number, number, number][]) {
