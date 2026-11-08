@@ -9,6 +9,24 @@ pub outside, downstairs, upstairs pool and darts, the balcony, back out, then th
 On the test box: `CLIENT_URL=... OUT_DIR=... LABEL=... node tests/perf-route.mjs`; compare two runs with
 `node tests/perf-compare.mjs before.json after.json`.
 
+## The reference PC: Blake's, measured (R12.5b, build 04d267f)
+
+Brave on Windows, 2560×1277 (pixel ratio 1), full detail, solo, the BENCHMARK route. (The first run came out at
+15 FPS: Brave had switched its hardware acceleration off. The game now warns about that on the title screen.)
+
+| Stretch | Median | 99th | What limits it |
+|---|---|---|---|
+| Downstairs bar, fireside, upstairs pool and darts | 3.1–4.2 ms (240–310 FPS) | under 6.2 ms | |
+| Pub from across the road, the entrance, a city street | 5.3–6.3 ms (~160 FPS) | under 8.4 ms | |
+| Out of the pub window | 7.4 ms (~135 FPS) | 9.8 ms | |
+| Balcony, along the front (busiest) | 8.0 ms (~125 FPS) | 10.2 ms | 1,870 draw calls |
+| Walks | 3.6–4.8 ms | 7–12 ms | |
+
+**60 FPS is met with about 2× headroom in the busiest view.** On this PC the frame time is almost exactly the CPU's
+render call (issuing the draw calls): it's **draw-call bound, not GPU bound**. About 1,900 draws ≈ 7 ms of render
+call. Garbage: about 60 MB a second while walking (no spikes yet: 99th 11 ms), worth trimming before the city is busier.
+Still needed: the slowest friend's PC, and a 4-player hosting run.
+
 ## The frame budget (16.7 ms on the reference PC)
 
 | Part | Budget | What's in it | Where it shows in the benchmark |
@@ -25,7 +43,7 @@ On the test box: `CLIENT_URL=... OUT_DIR=... LABEL=... node tests/perf-route.mjs
 
 | | Budget | Measured now (test box, before R12.5) | Notes |
 |---|---|---|---|
-| Draw calls | 900 (busy street), 500 (indoors) | 1,000–1,450 street, 470 bar | each outlined mesh is two draws |
+| Draw calls | 1,500 (busiest view), 600 (indoors): Blake's PC is draw-call bound (~1,900 ≈ 7 ms) | 1,000–1,450 street, 470 bar | each outlined mesh is two draws |
 | Triangles | 800k street, 500k indoors | 0.9–1.7 M everywhere (1.05 M at the darts!) | half were city-wide merged meshes nobody could see |
 | Real lights on one mesh | 6 (sun + sky + 4) | 7 | interiors: 4 a floor at most (LIGHT_BUDGET) |
 | Shadow casters | as now (drawn once) | 33 merged casters, one 2048 map, refreshed once | shadows cost 7–9% here: not the problem |

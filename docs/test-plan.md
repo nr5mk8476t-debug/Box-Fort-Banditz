@@ -546,6 +546,19 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.5b: GPU warning, review fixes (2026-11-08)
+
+| Area | Check | How | Before the fix | Result |
+|---|---|---|---|---|
+| GPU warning | software rendering detected; the warning and steps shown; hidden with hardware (the test box is always software: checked with ?gpucheck=1) | browser (1280×720, 960×540) | (new) | shown with ?gpucheck=1 at both sizes; hidden without |
+| Adaptive resolution | down to 60% at 30 ms frames, back to 100% at a capped 60 FPS (16.7 ms); right on the edge, at most 14 changes in 10 minutes; between the thresholds, left alone | client unit (new, 3) | stuck at 60% at 60 FPS (needed under 14 ms) | pass |
+| Benchmark | room for ~10 min at 300 FPS; paused tab frames left out and reported; empty stretches marked; settings recorded; starts at full resolution | Blake's run (filled at 20,000 frames: 5 night views empty; a 162 s "frame" from a background tab) | | fixed (re-run by Blake pending) |
+| Pint | losing the window mid-drink lets go | e2e (new check) | kept gulping | E2E_BLUR |
+| Darts | watching: one dart showing at a time, one impact, when the host's state arrives before the throw's event | client unit (new; fails on the old code) | two darts, two impacts | pass |
+| Crowds | 30 people pressed together step apart | shared unit (new) | (all pairs: same result) | pass |
+| Everything | 301 shared + 26 client unit; typecheck; smokes | full suite | | pass |
+| | browser e2e, normal / 110 ms | e2e | | E2E_RESULT |
+
 ## R12.5: performance and a foundation for a bigger city (2026-11-07)
 
 Before/after on the same test box, same build settings, same route (the BENCHMARK, `tests/perf-route.mjs`), and the same

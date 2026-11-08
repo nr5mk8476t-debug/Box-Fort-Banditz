@@ -1987,3 +1987,21 @@ decoration, the bigger Split the G).
 - `tests/perf-compare.mjs` flags any stretch over the per-change budget (median +10%, 99th +20%, draws +15%, triangles
   +15%); `docs/perf-budget.md` has the frame and scene budgets (proposals until Blake's result is in).
 - `docs/expansion-plan.md`: the staged plan and the design proposals for Blake to choose from.
+
+## R12.5b: the graphics card warning and review fixes (Blake, 2026-11-08)
+
+- **What happened**: Blake's first BENCHMARK came out at 15 FPS (it had been 180-200). His brave://gpu showed WebGL and
+  GPU compositing disabled: Brave was drawing in software. With acceleration back on: 3–8 ms medians at 2560×1277
+  (draw-call bound: the frame ≈ the CPU's render call). The update wasn't the cause; the revert wasn't needed.
+- **The warning** (`client/src/gpuCheck.ts`): a WebGL context with `failIfMajorPerformanceCaveat` (refused under
+  software rendering) and the renderer's name where the browser shares it (Brave hides it). On the title screen, the
+  steps for the browser in use. Not shown in test mode (the test box is software) unless `?gpucheck=1`.
+- **Review fixes** (a code review Blake shared; each checked against the code first):
+  - adaptive resolution: back up when the slow end of frames meets 60 FPS (under 18.5 ms) for 4 s; a step up that
+    has to be undone within 8 s makes it wait (20 s, doubling, 300 s at most) (`client/src/game/adaptive.ts`)
+  - the benchmark: 200,000-frame buffers, paused frames (over 1.5 s or a hidden tab) left out and counted, empty
+    stretches marked, the render settings recorded, every run from full resolution
+  - the pint: `input.clear()` (window blur) lets go of the drink
+  - darts, watching: the flight takes the slot of the dart it is (matched by where it landed) and is set up before the
+    sound is decided: one dart, one impact
+  - crowds: separation looks at neighbouring 1 m cells only

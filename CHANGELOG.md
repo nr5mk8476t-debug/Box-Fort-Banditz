@@ -2,6 +2,27 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.5b: a warning when the graphics card isn't being used, and fixes from review (2026-11-08)
+
+**New**
+- **"Your browser isn't using your graphics card"**: if the browser is drawing the game in software (hardware
+  acceleration off), the title screen says so, with the steps for your browser (Chrome, Edge, Brave, Firefox).
+  Blake's PC went from 180-200 FPS to 15 like this: Brave had switched it off.
+
+**Fixed** (several found by a review Blake shared)
+- **Adaptive resolution stayed blurry**: on a 60 FPS screen it never came back up (it wanted frames under 14 ms, which a
+  60 Hz cap never gives). Now it comes back when the 60 FPS target's met, and waits longer each time a step up doesn't
+  hold, so it doesn't flicker between sharp and soft.
+- **The benchmark on a fast PC**: it stopped recording after 20,000 frames (the night views came out empty); a tab in
+  the background counted as a huge freeze. Now it records any length, leaves paused moments out (and says so), and
+  marks anything it couldn't measure. It also records the render scale, adaptive resolution and high-DPI settings, and
+  every run starts at full resolution.
+- **Split the G**: alt-tabbing (or clicking away) mid-drink kept the pint gulping. Now losing the window lets go.
+- **Watching a mate throw darts**: you could see the dart twice (stuck in the board and flying in) and hear the
+  impact twice. Now one dart, one thud.
+- **Crowds**: people stepping apart now only check those next to them (it checked every pair: fine now, but it would
+  have grown fast with a bigger population).
+
 ## R12.5: faster round THE SOGGY SHAMROCK, a BENCHMARK button, and a foundation for a bigger city (2026-11-07)
 
 **Faster**
