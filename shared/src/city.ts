@@ -3068,6 +3068,9 @@ export function buildTrashington(): ArenaLayout {
     const taps = [{ x: -91.0, y: Y1 + 1.12, z: HB.minZ + 0.25, face: [0, -1] as [number, number] }, { x: -86.0, y: Y1 + 1.12, z: HB.minZ + 0.25, face: [0, -1] as [number, number] }, { x: HB.maxX - 0.25, y: Y1 + 1.12, z: 18.6, face: [1, 0] as [number, number] }];
     taps.forEach((t, i) => props.push({ id: `pinttap${i + 1}`, kind: "pinttap", x: t.x, y: t.y, z: t.z, yaw: Math.atan2(t.face[0], t.face[1]) }));
     props.push({ id: "pubboard1", kind: "pubboard", x: (GT.minX + GT.maxX) / 2, y: Y1 + 2.65, z: GT.minZ - 0.04, yaw: PI });
+    // R12.6: the SPLIT THE G CHALLENGE's chalk tent card on the bar top, between the taps (the chalkboard's up on the
+    // gantry, out of reach across the bar): E here opens a challenge / joins / backs out
+    props.push({ id: "gchcard1", kind: "pubboard", x: taps[0].x + 2.5, y: taps[0].y + 0.12, z: taps[0].z - 0.05, yaw: Math.atan2(taps[0].face[0], taps[0].face[1]) });
     const barman = { x: -89.0, z: 15.4, yaw: PI };
     posts.push({ kind: "barman", x: barman.x, z: barman.z, yaw: barman.yaw, y: Y1 });
     // the stools all round the outside (none in front of a tap); the regulars' two are on the west side

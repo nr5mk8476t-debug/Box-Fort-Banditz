@@ -4220,6 +4220,11 @@ export class CityRenderer {
       const doorTile = (text: string, x: number, z: number, w: number, d: number, ry: number) => { const m = texMat("doortile-" + text, 512, 256, (c) => { c.fillStyle = "#e8dcc4"; c.fillRect(0, 0, 512, 256); for (let k = 0; k < 900; k++) { c.fillStyle = `rgba(${Math.random() < 0.5 ? "0,0,0" : "255,255,255"},0.06)`; c.fillRect(Math.random() * 512, Math.random() * 256, 8, 8); } c.strokeStyle = "#7a1f1a"; c.lineWidth = 18; c.strokeRect(14, 14, 484, 228); c.strokeStyle = "#1f4a2e"; c.lineWidth = 8; c.strokeRect(36, 36, 440, 184); lettering(c, text, 512, 256, "#1f4a2e", "Georgia, serif", 0.3); }, 0.3);
         const g = MB.CreateGround("pbDoorTile", { width: w, height: d }, sc); g.position.set(x, Y1 + 0.005, z); g.rotation.y = ry; keepM(g, m); };
       doorTile("THE SOGGY SHAMROCK", MX + inn[0] * 1.3, MZ + inn[1] * 1.3, 2.6, 1.6, yawOut + PI);
+      // R12.6: the SPLIT THE G CHALLENGE's chalk tent card on the bar (the prop "gchcard1": E there)
+      { const card = this.arena.props?.find((q) => q.id === "gchcard1");
+        if (card) { const ct = texMat("gchcard", 256, 160, (c) => { c.fillStyle = "#1e2a22"; c.fillRect(0, 0, 256, 160); c.strokeStyle = "#7a4a22"; c.lineWidth = 10; c.strokeRect(0, 0, 256, 160); c.fillStyle = "#ffe14a"; c.textAlign = "center"; c.font = "bold 30px 'Comic Sans MS', cursive"; c.fillText("G CHALLENGE", 128, 52); c.fillStyle = "#f4f1ea"; c.font = "20px 'Comic Sans MS', cursive"; c.fillText("3 pints each", 128, 90); c.fillText("lowest total wins", 128, 120); }, 0.35);
+          const fx = Math.sin(card.yaw), fz = Math.cos(card.yaw);
+          for (const sd of [-1, 1]) { const p = MB.CreatePlane("pbGchCard", { width: 0.3, height: 0.19 }, sc); p.position.set(card.x + fx * sd * 0.045, card.y - 0.02, card.z + fz * sd * 0.045); p.rotation.set(-sd * 0.42, card.yaw + (sd > 0 ? PI : 0), 0); keepM(p, ct); } } }
       doorTile("SIDE BAR", (P.door2.minX + P.door2.maxX) / 2, IN.minZ + 0.9, 2.2, 1.2, 0); // (R12.6: reads from the street, like the main door's: it was upside down coming in)
       // milk-glass schoolhouse globes on brass rods (round the bar, over the tables), little wall lamps in the snugs
       const globes: Mesh[] = [];

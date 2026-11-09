@@ -20,7 +20,7 @@ export const FLUSH = { cooldown: 6, push: 9, lift: 4.5, stumble: 0.8 };
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
 import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
-import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, MICKEY, type GearKind, PUB, pintMissMm, pintGrade, SEAMUS, SWARM, JUKEBOX } from "./arena.js";
+import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, MICKEY, type GearKind, GCH, pintLevel, PUB, pintMissMm, pintGrade, SEAMUS, SWARM, JUKEBOX } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
 import { PropSystem, RESTO, PROP_RADIUS, SMASHABLE, BREAKABLE, propSurfaceDist, propNearest, type PropEvent } from "./props.js";
 import { TrafficSystem, type TrafficEvent } from "./traffic.js";
@@ -219,7 +219,10 @@ export type WorldEvent =
   // pint (broke, cut off, one on the go already), the gulp's verdict (how far off the G's bar, mm)
   | { t: "pint"; p: string; paid: number; rate: number }
   | { t: "pintNo"; p: string; reason: "broke" | "cutoff" | "busy" }
-  | { t: "pintDone"; p: string; mm: number; grade: "perfect" | "close" | "miss"; won: number; pints: number; best: boolean }
+  | { t: "pintDone"; p: string; mm: number; grade: "perfect" | "close" | "miss"; won: number; pints: number; best: boolean; lvl?: number; x?: number; y?: number; z?: number }
+  // R12.6: the SPLIT THE G CHALLENGE: opened / someone's in or out / it's on / a pint counted / over
+  | { t: "gch"; what: "open" | "join" | "leave" | "start" | "pint" | "out" | "cancel" | "end"; p?: string; why?: string; n?: number; mm?: number; total?: number;
+      rank?: { p: string; name: string; total: number; n: number; out: boolean }[]; winner?: string; prize?: number }
   // R12.2: the céilí (you joined the dance: when it starts on the city clock (mod 600); you tripped; how you did) and
   // R12.2c: SEAMUS O'SHORTLY (a tip, a job, a big job, a job done, still waiting); his buddies swarm you (on) / let you be
   | { t: "jukebox"; p: string; tune: number }
@@ -319,6 +322,7 @@ export type WorldAction =
   | { a: "robStop" }
   | { a: "pick"; pin: number; t: number } // jail lock-pick press (t = seconds since locked up)
   | { a: "gulp"; hold: number } // R12.1: let go of the gulp after `hold` seconds (splitting the G)
+  | { a: "sip" } // R12.6: started drinking (everyone sees the glass go up and the line go down)
   // Phase 5A
   | { a: "tug" } // mash E in a tug of war
   | { a: "arrest"; p: string } | { a: "struggle" } // C5c.1: pin a knocked-down wanted bandit for the cops / wriggle free
@@ -837,6 +841,7 @@ export class World {
     if (p.move.stunT > 0) return; // tased
     if (act.a === "tug") { this.tugPress(p); return; }
     if (act.a === "gulp") { this.gulpPint(p, Number((act as any).hold)); return; } // (R12.1)
+    if (act.a === "sip") { const cur = this.pints.get(p.id); if (cur && cur.sipAt < 0) cur.sipAt = this.time; return; } // (R12.6)
     if (act.a === "dance") { // (R11: B: start / stop dancing; only standing on the ground, hands free of big things)
       const m = p.move;
       if (m.danceT > 0) { m.danceT = 0; this.emit({ t: "dance", p: p.id, on: false }); return; }
@@ -1260,7 +1265,84 @@ export class World {
   }
   // ---------------------------------------------------------------- R12.1: THE SOGGY SHAMROCK
   /** a pint on the go: its gulp rate, when it was poured (it goes flat after PUB.pour s) */
-  private pints = new Map<string, { rate: number; at: number }>();
+  private pints = new Map<string, { rate: number; at: number; sipAt: number }>();
+  /** R12.6: the SPLIT THE G CHALLENGE (see GCH): null = none going */
+  gch: { state: "open" | "on"; t: number; host: string; ps: Map<string, { name: string; n: number; mm: number; out: string }> } | null = null;
+  /** E at the chalkboard: open a challenge, opt in, or (before it starts) back out */
+  gchUse(p: PlayerSim) {
+    const g = this.gch;
+    if (!g) {
+      this.gch = { state: "open", t: GCH.joinT, host: p.id, ps: new Map([[p.id, { name: p.name || "?", n: 0, mm: 0, out: "" }]]) };
+      return this.emit({ t: "gch", what: "open", p: p.id });
+    }
+    if (g.state !== "open") return; // (it's on: no joining halfway)
+    if (g.ps.has(p.id)) { g.ps.delete(p.id); this.emit({ t: "gch", what: "leave", p: p.id }); if (!g.ps.size) { this.gch = null; this.emit({ t: "gch", what: "cancel", why: "empty" }); } return; }
+    g.ps.set(p.id, { name: p.name || "?", n: 0, mm: 0, out: "" });
+    this.emit({ t: "gch", what: "join", p: p.id });
+  }
+  /** a split counts for the challenge (the first GCH.pints after it starts) */
+  private gchPint(p: PlayerSim, mm: number) {
+    const g = this.gch, e = g?.state === "on" ? g.ps.get(p.id) : undefined;
+    if (!g || !e || e.out || e.n >= GCH.pints) return;
+    e.n++; e.mm = Math.round((e.mm + mm) * 10) / 10;
+    this.emit({ t: "gch", what: "pint", p: p.id, n: e.n, mm, total: e.mm });
+    this.gchCheck();
+  }
+  private gchOut(pid: string, why: string) {
+    const e = this.gch?.ps.get(pid);
+    if (!e || e.out || e.n >= GCH.pints) return;
+    e.out = why;
+    this.emit({ t: "gch", what: "out", p: pid, why });
+  }
+  /** over when everybody still in has had their 3 (or the clock runs out: the unfinished are out) */
+  private gchCheck() {
+    const g = this.gch;
+    if (!g || g.state !== "on") return;
+    const live = [...g.ps.values()].filter((e) => !e.out);
+    if (live.some((e) => e.n < GCH.pints) && g.t > 0) return;
+    for (const [id, e] of g.ps) if (!e.out && e.n < GCH.pints) { e.out = "time"; this.emit({ t: "gch", what: "out", p: id, why: "time" }); }
+    const rank = [...g.ps.entries()].map(([id, e]) => ({ p: id, name: e.name, total: e.mm, n: e.n, out: !!e.out })).sort((a, b) => (a.out ? 1 : 0) - (b.out ? 1 : 0) || a.total - b.total);
+    const win = rank.find((r) => !r.out);
+    const winner = win && rank.filter((r) => !r.out && r.total === win.total).length === 1 ? win.p : "";
+    const wp = winner ? this.players.get(winner) : undefined;
+    if (wp) wp.cash += GCH.prize;
+    this.gch = null;
+    this.emit({ t: "gch", what: "end", rank, winner, prize: wp ? GCH.prize : 0 });
+  }
+  private gchTick(dt: number) {
+    const g = this.gch;
+    if (!g) return;
+    g.t -= dt;
+    const pb = this.arena.pub, cx = pb ? (pb.rect.minX + pb.rect.maxX) / 2 : 0, cz = pb ? (pb.rect.minZ + pb.rect.maxZ) / 2 : 0;
+    for (const [id, e] of g.ps) {
+      const p = this.players.get(id);
+      if (!p || !p.connected) { if (g.state === "open") { g.ps.delete(id); this.emit({ t: "gch", what: "leave", p: id, why: "gone" }); } else this.gchOut(id, "gone"); continue; }
+      if (pb && Math.hypot(p.move.x - cx, p.move.z - cz) > GCH.leaveR) { if (g.state === "open") { g.ps.delete(id); this.emit({ t: "gch", what: "leave", p: id, why: "left" }); } else this.gchOut(id, "left"); }
+      else if (p.jailT > 0 && g.state === "on") this.gchOut(id, "jail");
+      void e;
+    }
+    if (g.state === "open") {
+      if (!g.ps.size) { this.gch = null; return this.emit({ t: "gch", what: "cancel", why: "empty" }); }
+      if (g.t > 0) return;
+      if (g.ps.size < 2) { this.gch = null; return this.emit({ t: "gch", what: "cancel", why: "alone" }); }
+      g.state = "on"; g.t = GCH.timeT;
+      return this.emit({ t: "gch", what: "start" });
+    }
+    this.gchCheck();
+  }
+  /** for every window: the challenge as it stands (on the chalkboard, the HUD): state|seconds left|id,name,n,mm,out;... */
+  gchNote(): string {
+    const g = this.gch;
+    if (!g) return "";
+    return `${g.state}|${Math.max(0, Math.ceil(g.t))}|` + [...g.ps.entries()].map(([id, e]) => `${id},${e.name.replace(/[|;,#]/g, "")},${e.n},${e.mm},${e.out}`).join(";");
+  }
+  /** R12.6: a player's pint as everyone sees it: 0 = none, else the line's level x1000 (+ drinking) */
+  pintView(pid: string): { lvl: number; drinking: boolean } {
+    const cur = this.pints.get(pid);
+    if (!cur || this.time - cur.at > PUB.pour) return { lvl: 0, drinking: false };
+    const drinking = cur.sipAt >= 0;
+    return { lvl: Math.max(1, Math.round((drinking ? pintLevel(Math.min(60, this.time - cur.sipAt), cur.rate) : PUB.start) * 1000)), drinking };
+  }
   /** the chalkboard: the best splits of the match (closest first) */
   readonly pubBoard: { name: string; mm: number }[] = [];
   pubBoardNote(): string { return this.pubBoard.map((b) => `${b.name.replace(/[|;]/g, "")}|${b.mm.toFixed(1)}`).join(";"); }
@@ -1274,7 +1356,7 @@ export class World {
     if (p.cash < PUB.price) return this.emit({ t: "pintNo", p: p.id, reason: "broke" });
     p.cash -= PUB.price;
     const rate = Math.round((PUB.rateMin + this.rng() * (PUB.rateMax - PUB.rateMin)) * 1000) / 1000;
-    this.pints.set(p.id, { rate, at: this.time });
+    this.pints.set(p.id, { rate, at: this.time, sipAt: -1 });
     this.npc.pubSay(this.serverOf(p), "pour");
     this.emit({ t: "pint", p: p.id, paid: PUB.price, rate });
   }
@@ -1284,7 +1366,11 @@ export class World {
     if (!cur || !Number.isFinite(hold)) return;
     this.pints.delete(p.id);
     if (this.time - cur.at > PUB.pour) return; // (gone flat)
-    const mm = Math.round(pintMissMm(Math.max(0, Math.min(60, hold)), cur.rate) * 10) / 10, grade = pintGrade(mm);
+    // (R12.6: the host saw when you started drinking: the hold you send can't be far off it, a network wobble apart)
+    if (cur.sipAt >= 0) { const seen = this.time - cur.sipAt; hold = Math.max(seen - 0.4, Math.min(seen + 0.4, hold)); }
+    hold = Math.max(0, Math.min(60, hold));
+    const mm = Math.round(pintMissMm(hold, cur.rate) * 10) / 10, grade = pintGrade(mm);
+    const lvl = Math.round(pintLevel(hold, cur.rate) * 1000) / 1000;
     const won = grade === "perfect" ? PUB.prize : grade === "close" ? PUB.price : 0;
     p.cash += won;
     const m = p.move;
@@ -1296,7 +1382,8 @@ export class World {
     }
     this.npc.pubSay(this.serverOf(p), grade);
     if (grade === "perfect") { this.npc.pubSay("patron", "perfect", true); this.npc.pubSay("regular", "perfect", true); } // (R12.1b: the whole pub cheers)
-    this.emit({ t: "pintDone", p: p.id, mm, grade, won, pints: m.pints, best });
+    this.emit({ t: "pintDone", p: p.id, mm, grade, won, pints: m.pints, best, lvl, x: m.x, y: m.y, z: m.z });
+    this.gchPint(p, mm);
   }
   // ---------------------------------------------------------------- R12.2: MAMMY MOLONEY; R12.2b: the jukebox
   /** R12.2b: the upstairs jukebox's tune (0..JUKEBOX.tunes-1); E on it puts on the next one */
@@ -1835,6 +1922,7 @@ export class World {
     this.restoDoor();
     this.clubTick();
     this.feverTick(SIM_DT);
+    this.gchTick(SIM_DT); // (R12.6)
     this.swarmTick(); // (R12.2c)
     this.pubTick(SIM_DT); // (R12.3)
     // C1.1: fall in the canal and whatever's in your hands floats off

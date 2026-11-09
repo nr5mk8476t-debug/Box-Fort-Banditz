@@ -309,6 +309,8 @@ export class PintUI {
   wobble = 0;
   /** the gulp's over: hold seconds */
   onGulp: ((hold: number) => void) | null = null;
+  /** R12.6: started drinking (the host shows everyone your glass going up) */
+  onSip: (() => void) | null = null;
   constructor(parent: HTMLElement) {
     this.root = document.createElement("div");
     this.root.id = "pint";
@@ -325,16 +327,16 @@ export class PintUI {
   /** for tests: is the G showing? (R12.4: always) */
   get gShown() { return this.open; }
   /** the head's settled (the result can show) */
-  get settled() { return this.sent && this.since > 0.6; }
+  get settled() { return this.sent && this.since > (PUB.settle > 0 ? 0.6 : 0.05); } // (R12.6: release = result: no wait)
   start(rate: number) {
     this.rate = rate; this.hold = 0; this.since = 0; this.stung = false; this.holding = false; this.sent = false; this.verdict = null; this.verdictT = 0; this.tip = 0;
-    this.help.innerHTML = "<b>HOLD CLICK</b> (or <b>SPACE</b>) to drink. Let go just above the <b>G</b>'s bar: the head settles a touch after.";
+    this.help.innerHTML = "<b>HOLD CLICK</b> (or <b>SPACE</b>) to drink. Let go right on the <b>G</b>'s bar: where you let go is your score.";
     this.root.classList.remove("hidden"); document.body.classList.add("pint-on");
   }
   /** mouse / SPACE down or up */
   press(down: boolean) {
     if (!this.open || this.sent) return;
-    if (down && !this.holding) { this.holding = true; this.swallowT = 0.42; this.swallows = 0; return; }
+    if (down && !this.holding) { this.holding = true; this.swallowT = 0.42; this.swallows = 0; this.onSip?.(); return; }
     if (!down && this.holding) this.release();
   }
   private release() {
@@ -345,7 +347,7 @@ export class PintUI {
   result(mm: number, grade: string, won: number) { this.verdict = { mm, grade, won }; this.verdictT = 3.9; this.sent = true; this.holding = false; }
   private showVerdict() {
     const { mm, grade, won } = this.verdict!;
-    if (!this.stung) { this.stung = true; sfx.pintResult(grade); if (grade !== "miss") sfx.cash(); if (grade === "perfect") sfx.cheer(1); }
+    if (!this.stung) { this.stung = true; sfx.pintResult(grade); if (grade !== "miss") sfx.cash(); if (grade === "perfect") sfx.cheer(0.6); } // (R12.6: a restrained cheer)
     this.help.innerHTML = grade === "perfect" ? `<b>SPLIT IT!</b> ${mm.toFixed(1)} mm off. +$${won}` : grade === "close" ? `So close: ${mm.toFixed(1)} mm. Your $${won} back.` : `Missed by ${mm.toFixed(1)} mm.`; }
   close() { this.rate = 0; this.holding = false; this.root.classList.add("hidden"); document.body.classList.remove("pint-on"); }
   update(dt: number) {

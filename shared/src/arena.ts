@@ -825,7 +825,17 @@ export const PUB = { price: 6, glassMm: 160, start: 0.86, g: 0.62, rateMin: 0.1,
    *  hidden surges. When you put it down the head settles: the line carries on a touch, the same way every time (it
    *  slows to a stop, `settle` s worth of the speed it had), so the skill is letting go just before the bar. Perfect
    *  is within 1.5 mm (the gold bar's drawn exactly that thick), close within 5 mm */
-  ease: 0.25, settle: 0.15 };
+  ease: 0.25,
+  /** R12.6 (Blake: "Release = result"): the line stops where you let go: no settling on afterwards (it was 0.15 s) */
+  settle: 0 };
+/**
+ * R12.6: the SPLIT THE G CHALLENGE (Blake: "3 pints each, lowest total"): E at the chalkboard opens one; anybody in the
+ * pub has `joinT` s to opt in (E at the chalkboard again: in, or back out); with 2+ it starts. Each of you splits
+ * `pints` pints (bought at the taps as usual); your misses add up, lowest total wins `prize`. Nobody can hold it up:
+ * whoever leaves the pub (more than `leaveR` m off), drops out of the game or hasn't finished by `timeT` s is OUT, and
+ * the rest finish without them.
+ */
+export const GCH = { joinT: 25, timeT: 300, pints: 3, prize: 10, leaveR: 45 };
 /** where the line is after drinking for `t` seconds (0..1 of the glass): a smooth ease-in, then steady */
 export function pintLevel(t: number, rate: number): number {
   const E = PUB.ease;
@@ -836,6 +846,7 @@ export function pintSpeed(t: number, rate: number): number { return rate * (1 - 
 /** R12.4: where the line ends up once the head's settled, after letting go at `hold` s; and, `since` s after letting
  *  go, where it is on its way there (it slows exponentially: no jump, done in about half a second) */
 export function pintSettled(hold: number, rate: number, since = Infinity): number {
+  if (!(PUB.settle > 0)) return pintLevel(hold, rate); // (R12.6: release = result)
   const l = pintLevel(hold, rate), drop = pintSpeed(hold, rate) * PUB.settle;
   return Math.max(0, l - drop * (1 - Math.exp(-since / PUB.settle)));
 }

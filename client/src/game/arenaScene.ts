@@ -24,7 +24,7 @@ import { NightRenderer } from "./nightRenderer.ts";
 import { PubGamesView } from "./pubGames.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, MICKEY, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
+  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, MICKEY, GCH, unpackPk, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -160,7 +160,7 @@ export class ArenaScene {
 
   // Loot
   private items: ItemRenderer;
-  private myId = "";
+  myId = "";
   private serverInv: Inventory = { hand: "", pockets: ["", "", ""], sel: FISTS };
   private optimistic: (Inventory & { until: number }) | null = null;
   private itemTypes = new Map<string, string>();
@@ -411,6 +411,7 @@ export class ArenaScene {
     input.jailMouse = (dx, dy) => this.lock.mouse(dx, dy);
     this.pint = new PintUI(document.getElementById("hud") ?? document.body);
     this.pint.onGulp = (hold) => this.onAction?.({ a: "gulp", hold });
+    this.pint.onSip = () => this.onAction?.({ a: "sip" }); // (R12.6)
     // R12.3: pool and darts upstairs at the Soggy Shamrock
     this.pg = new PubGamesView(scene, arena, { act: (a) => this.onAction?.(a as never), feedback: (t, k) => this.onFeedback?.(t, k) });
     this.npcs.pubPosts = (arena.posts ?? []).filter((q) => ["regular", "trad_band", "barman", "patron", "barmaid", "leprechaun", "lep_buddy", "drunk_dancer"].includes(q.kind)); // (R12.1; R12.2: upstairs too)
@@ -549,7 +550,7 @@ export class ArenaScene {
         this.serverInv = { hand: p.hand ?? "", pockets: [p.p0 ?? "", p.p1 ?? "", p.p2 ?? ""], sel: p.sel ?? FISTS };
         this.heat = p.heat ?? 0;
         this.hp = p.hp ?? 100;
-        this.myCash = p.cash ?? 0; this.myAura = p.aura ?? 0; this.myGear = p.gear ?? 0; // (C5c.3: the club's door, Sal's counter)
+        this.myCash = p.cash ?? 0; this.myAura = p.aura ?? 0; this.myGear = unpackPk(p.pk ?? 0).gear; // (C5c.3: the club's door, Sal's counter)
         this.respawnT = p.respawnT ?? 0;
         this.robT = p.robT ?? -1;
         if (this.robT < 0 && this.holdKind && this.holdArmed) this.holdKind = ""; // (C5c: the hold ended)
@@ -577,7 +578,7 @@ export class ArenaScene {
     // props (dumpsters emptied, booths smashed, alarms) + traffic
     view.props?.forEach((pv, id) => {
       this.propsR.sync(id, pv); this.propState.set(id, pv.ready);
-      if (pv.note !== undefined && id.startsWith("pubboard")) this.city.setPubBoard(pv.note); // (R12.1: the chalkboard)
+      if (pv.note !== undefined && id.startsWith("pubboard")) { const [board, g] = String(pv.note).split("#"); this.city.setPubBoard(board); this.gchFromNote(g ?? ""); } // (R12.6: + the challenge) // (R12.1: the chalkboard)
       if (pv.note !== undefined && id.startsWith("jukebox")) { const k = Number(pv.note) || 0; if (k !== this.jukeTune) { this.jukeTune = k; this.city.setJukebox(k); } } // (R12.2b)
       if (pv.note !== undefined && (id.startsWith("pooltable") || id.startsWith("dartsoche"))) this.pg.setNote(id, pv.note, this.match.lightT ?? 0); // (R12.3)
       if (pv.note !== undefined && id.startsWith("pawncase")) { try { this.pawnCase = pv.note ? JSON.parse(pv.note) : []; } catch { this.pawnCase = []; } } // (C5c.3)
@@ -898,10 +899,28 @@ export class ArenaScene {
         case "mocktailNo": if (e.p === me) this.onFeedback?.(`"That's $${FEVER.mocktail}, champ." You're short.`, "info"); break;
         // R12.1: THE SOGGY SHAMROCK
         case "pint": if (e.p === me) { sfx.pour(); this.pint.start(e.rate); this.input.gulp = (down) => this.pint.press(down); /* (R12.5b: the moment it's poured, not the next frame: a release or a lost window in between went nowhere) */ this.onFeedback?.(`A pint of GUZZLE'S, $${e.paid}. Now split the G!`, "good"); } break;
+        // R12.6: the SPLIT THE G CHALLENGE
+        case "gch": {
+          const pub = this.arena.pub, near = !!pub && Math.hypot(this.cur.x - (pub.rect.minX + pub.rect.maxX) / 2, this.cur.z - (pub.rect.minZ + pub.rect.maxZ) / 2) < 30;
+          const nm = (id?: string) => (id === me ? "You" : this.nameOf(id ?? "") ?? "Somebody");
+          const inIt = !!this.gch?.ps.some((q) => q.id === me) || e.p === me;
+          if (e.what === "open" && near) this.onFeedback?.(`${nm(e.p)} ${e.p === me ? "open" : "opens"} a SPLIT THE G CHALLENGE: 3 pints each, lowest total wins $${GCH.prize}. E at the chalkboard to join (${GCH.joinT} s).`, "info");
+          else if (e.what === "join" && (near || inIt)) this.onFeedback?.(`${nm(e.p)} ${e.p === me ? "are" : "is"} in the challenge.`, "info");
+          else if (e.what === "start" && inIt) { this.onBanner?.("SPLIT THE G CHALLENGE", `3 pints each at the taps. Lowest total wins. ${Math.round(GCH.timeT / 60)} minutes.`, "good"); sfx.cash(); }
+          else if (e.what === "pint" && e.p === me) this.onFeedback?.(`Challenge: pint ${e.n}/${GCH.pints}, ${e.mm?.toFixed(1)} mm. Total ${e.total?.toFixed(1)} mm.`, "info");
+          else if (e.what === "out" && inIt) this.onFeedback?.(`${nm(e.p)} ${e.p === me ? "are" : "is"} out of the challenge (${e.why === "left" ? "left the pub" : e.why === "gone" ? "gone" : e.why === "jail" ? "locked up" : "out of time"}).`, "info");
+          else if (e.what === "cancel" && (near || inIt)) this.onFeedback?.(e.why === "alone" ? "Nobody took on the challenge. Called off." : "The challenge is off.", "info");
+          else if (e.what === "end" && (near || inIt)) {
+            const w = e.winner ? (e.winner === me ? "YOU WIN" : `${this.nameOf(e.winner) ?? "?"} WINS`) : "A DRAW";
+            this.onBanner?.(w, (e.rank ?? []).map((q) => `${q.p === me ? "You" : q.name} ${q.out ? "OUT" : q.total.toFixed(1) + " mm"}`).join(" · ") + (e.winner === me ? ` (+$${e.prize})` : ""), e.winner === me ? "good" : "info");
+            if (e.winner === me) { sfx.cash(); pubFlourish(); }
+          }
+        } break;
         case "pintNo": if (e.p === me) this.onFeedback?.(e.reason === "broke" ? `"That's $${PUB.price}, pal." You're short.` : e.reason === "cutoff" ? `"You've had plenty, pal." Fergal won't serve you till you've sobered up.` : "Finish the one you've got first.", "info"); break;
         case "pintDone": {
           const pub = this.arena.pub, near = !!pub && Math.hypot(this.cur.x - (pub.rect.minX + pub.rect.maxX) / 2, this.cur.z - (pub.rect.minZ + pub.rect.maxZ) / 2) < 22;
           if (e.p === me) { this.pint.result(e.mm, e.grade, e.won); this.onFeedback?.(e.grade === "perfect" ? `SPLIT THE G! ${e.mm.toFixed(1)} mm. +$${e.won}${e.best ? " (best tonight!)" : ""}` : e.grade === "close" ? `Close: ${e.mm.toFixed(1)} mm off. Your $${e.won} back.` : `Missed the G by ${e.mm.toFixed(1)} mm.`, e.grade === "miss" ? "info" : "good"); if (e.pints === PUB.cutoff) this.onFeedback?.("That's six. Fergal's cutting you off.", "info"); }
+          if (e.lvl !== undefined && e.x !== undefined) this.pintReveal(e.p, e.mm, e.grade, e.lvl, e.x, e.y ?? 0, e.z ?? 0); // (R12.6: the shared reveal on the bar)
           if (e.grade === "perfect" && near) { if (e.p !== me) sfx.cheer(0.6); pubFlourish(); } // (R12.4: your own cheer comes when the head's settled and the result shows)
           break;
         }
@@ -1670,6 +1689,7 @@ export class ArenaScene {
       if (!this.pint.open || !p.taps.some((t) => Math.hypot(t.x - x, t.z - z) < 3.2 && Math.abs(t.y - this.cur.y) < 2.5)) { this.pint.close(); this.input.gulp = null; }
     } else if (this.input.gulp) this.input.gulp = null;
     this.city.updatePub(dt, this.night.level, this.camera.position.x, this.camera.position.z);
+    this.updateReveals(dt);
     // R12.6: the people, the games' balls/cues/darts and your own hands in the pub are lit by its lamps too (they were lit
     // by the sky only: grey-blue figures in a warm room at night)
     if ((this.pubLitT -= dt) <= 0) { this.pubLitT = 0.25; this.city.pubLightDynamic([...this.npcs.roots(), ...this.remotes.roots(), this.pg.root, this.viewmodel.node]); }
@@ -1697,6 +1717,10 @@ export class ArenaScene {
     if (m.floatT > 0) parts.push(`<b style="color:#5ae0ff">FLOATY</b> ${Math.ceil(m.floatT)}s ${"o".repeat(Math.max(0, BUFFS.floatJumps - m.airJumps))}`);
     if (m.comedownT > 0) parts.push(`<b style="color:#c8a8ff">comedown...</b>`);
     if (m.pints > 0) parts.push(`<b style="color:#e8c050">PINTS ${m.pints}</b>${tipsyAmount(m) > 0 ? " tipsy" : ""}`); // (R12.1)
+    if (this.gch) { const g = this.gch, mine = g.ps.find((q) => q.id === this.myId), pb = this.arena.pub; // (R12.6: the challenge)
+      const near = !!pb && Math.hypot(m.x - (pb.rect.minX + pb.rect.maxX) / 2, m.z - (pb.rect.minZ + pb.rect.maxZ) / 2) < 30;
+      if (g.state === "open" && (mine || near)) parts.push(`<b style="color:#ffd86a">G CHALLENGE</b> ${mine ? "you're in" : "E at the chalkboard to join"} ${g.left}s (${g.ps.length} in)`);
+      else if (g.state === "on" && mine) parts.push(`<b style="color:#ffd86a">G CHALLENGE</b> ${Math.floor(g.left / 60)}:${String(g.left % 60).padStart(2, "0")} ` + g.ps.map((q) => `${q.id === this.myId ? "YOU" : q.name} ${q.out ? "OUT" : `${q.n}/${GCH.pints} ${q.mm.toFixed(1)}`}`).join(" · ")); }
     if (this.myGear & 1) parts.push(`<b style="color:#d8a860">LOCKPICK KIT</b>`); // (R12.6: WEE MICKEY's gear)
     if (this.myGear & 2) parts.push(`<b style="color:#c8c8d0">SMOKE BOMB</b>`);
     const html = parts.join(" &nbsp; ");
@@ -1813,6 +1837,47 @@ export class ArenaScene {
     }
   }
 
+  /** R12.6: the challenge as the chalkboard has it (null: none on) */
+  gch: { state: string; left: number; ps: { id: string; name: string; n: number; mm: number; out: string }[] } | null = null;
+  private gchFromNote(g: string) {
+    if (!g) { this.gch = null; return; }
+    const [state, left, list] = g.split("|");
+    this.gch = { state, left: Number(left) || 0, ps: (list ?? "").split(";").filter(Boolean).map((q) => { const [id, name, n, mm, out] = q.split(","); return { id, name, n: Number(n) || 0, mm: Number(mm) || 0, out: out ?? "" }; }) };
+  }
+  /** R12.6: the reveal: the glass set down on the bar where they drank it, the line where they let go, the distance
+   *  over it (everyone sees it, for 10 s); a perfect gets a thin gold ring and a gold label, nothing more */
+  private reveals: { node: TransformNode; label: Mesh; t: number }[] = [];
+  private pintReveal(pid: string, mm: number, grade: string, lvl: number, x: number, y: number, z: number) {
+    const pub = this.arena.pub;
+    if (!pub || Math.hypot(this.cur.x - x, this.cur.z - z) > 40) return;
+    let tap = pub.taps[0], best = 1e9;
+    for (const t of pub.taps) { const d = Math.hypot(t.x - x, t.z - z) + Math.abs(t.y - y - 1) * 3; if (d < best) { best = d; tap = t; } }
+    const along = [-tap.face[1], tap.face[0]], k = (this.reveals.length % 3 - 1) * 0.28 + ((pid.charCodeAt(pid.length - 1) || 0) % 3 - 1) * 0.12;
+    const node = new TransformNode("gReveal", this.scene);
+    node.position.set(tap.x + along[0] * (0.5 + k) + tap.face[0] * 0.05, tap.y + 0.01, tap.z + along[1] * (0.5 + k) + tap.face[1] * 0.05);
+    const sc = this.scene, H = 0.17;
+    const shell = MeshBuilder.CreateCylinder("gRevealGlass", { diameterTop: 0.11, diameterBottom: 0.085, height: H, tessellation: 14 }, sc);
+    const gm = new StandardMaterial("gRevealGlassM", sc); gm.diffuseColor = Color3.FromHexString("#d8e8f0"); gm.alpha = 0.3; gm.specularColor = Color3.White(); shell.material = gm; shell.parent = node; shell.position.y = H / 2; shell.isPickable = false;
+    const h = Math.max(0.004, lvl * H);
+    const stout = MeshBuilder.CreateCylinder("gRevealStout", { diameterTop: 0.1, diameterBottom: 0.082, height: h, tessellation: 14 }, sc); stout.material = toon(sc, "#1b0a06"); stout.parent = node; stout.position.y = h / 2; stout.isPickable = false;
+    const head = MeshBuilder.CreateCylinder("gRevealHead", { diameter: 0.1, height: 0.012, tessellation: 14 }, sc); head.material = toon(sc, "#f2e2bc"); head.parent = node; head.position.y = h + 0.006; head.isPickable = false;
+    const gbar = MeshBuilder.CreateCylinder("gRevealG", { diameter: 0.1, height: 0.003, tessellation: 14 }, sc); gbar.material = toon(sc, "#e8c050"); gbar.parent = node; gbar.position.y = PUB.g * H; gbar.isPickable = false; // (the G's bar, for comparison)
+    if (grade === "perfect") { const ring = MeshBuilder.CreateTorus("gRevealRing", { diameter: 0.16, thickness: 0.012, tessellation: 18 }, sc); const rm = new StandardMaterial("gRevealRingM", sc); rm.disableLighting = true; rm.emissiveColor = Color3.FromHexString("#ffd86a"); ring.material = rm; ring.parent = node; ring.position.y = 0.006; ring.isPickable = false; }
+    const who = pid === this.myId ? "" : (this.nameOf(pid) ?? "") + ": ";
+    const text = `${who}${grade === "perfect" ? "PERFECT " : ""}${mm.toFixed(1)} mm`;
+    const label = MeshBuilder.CreatePlane("gRevealLabel", { width: 0.56, height: 0.14 }, sc);
+    label.material = unlitTextured(sc, textTexture(sc, text, { w: 512, h: 128, fg: grade === "perfect" ? "#ffd86a" : grade === "close" ? "#f4f1ea" : "#c8c4cc", stroke: "#1b1420" }), "gRevealLabelM");
+    label.billboardMode = Mesh.BILLBOARDMODE_ALL; label.parent = node; label.position.y = 0.34; label.isPickable = false;
+    this.reveals.push({ node, label, t: 0 });
+    while (this.reveals.length > 6) { const o = this.reveals.shift()!; o.label.material?.dispose(true, true); o.node.dispose(false, true); }
+  }
+  private updateReveals(dt: number) {
+    for (let i = this.reveals.length - 1; i >= 0; i--) {
+      const r = this.reveals[i]; r.t += dt;
+      r.label.position.y = 0.34 + Math.min(0.06, r.t * 0.1);
+      if (r.t > 10) { r.label.material?.dispose(true, true); r.node.dispose(false, true); this.reveals.splice(i, 1); }
+    }
+  }
   /** R12.6: a smoke bomb's cloud (a few seconds of thick grey, drifting up) */
   private smokePuff(x: number, z: number) {
     const y = this.cur.y;

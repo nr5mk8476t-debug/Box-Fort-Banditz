@@ -13,8 +13,8 @@ export interface PlayerView extends Record<string, any> {
   heat: number;
   /** Phase 3: cash from finished rounds + value locked in the fort right now */
   cash: number;
-  /** R12.6: WEE MICKEY's gear (bit 1 lockpick kit, bit 2 smoke bomb) */
-  gear?: number;
+  /** R12.6, packed in one field (the server's schema holds 63 at most): see packPk / unpackPk */
+  pk?: number;
   bank: number;
   /** Phase 3.5: seconds until respawn after a car wipeout (0 = fine); hold-up progress (-1 = none) */
   respawnT: number;
@@ -107,6 +107,9 @@ export interface WorldView extends Partial<MatchView> {
   code: string;
 }
 
+/** R12.6: WEE MICKEY's gear (bit 1 lockpick kit, bit 2 smoke bomb), drinking (bit 4), the pint's level x1000 (x8) */
+export function packPk(gear: number, drinking: boolean, lvl: number): number { return (gear & 3) | (drinking ? 4 : 0) | (Math.max(0, Math.min(1023, Math.round(lvl))) << 3); }
+export function unpackPk(pk: number): { gear: number; drinking: boolean; lvl: number } { pk = Number(pk) || 0; return { gear: pk & 3, drinking: !!(pk & 4), lvl: (pk >> 3) / 1000 }; }
 export const PLAYER_EXTRA_KEYS = ["hand", "p0", "p1", "p2", "sel", "lastSeq", "connected", "name", "colorIdx"] as const;
 export const ITEM_KEYS = ["type", "value", "x", "y", "z", "rot", "mode", "holder", "holder2", "resting"] as const;
 
@@ -119,7 +122,7 @@ export function playerView(w: World, id: string, out: Record<string, any> = {}):
   out.hand = p.hand; out.p0 = p.pockets[0]; out.p1 = p.pockets[1]; out.p2 = p.pockets[2]; out.sel = p.sel;
   out.heat = Math.round(p.notoriety);
   out.cash = p.cash;
-  out.gear = p.gear.pick + p.gear.smoke * 2; // (R12.6: WEE MICKEY's gear: bit 1 the lockpick kit, bit 2 the smoke bomb)
+  { const pv = w.pintView(id); out.pk = packPk(p.gear.pick + p.gear.smoke * 2, pv.drinking, pv.lvl); } // (R12.6: your gear, your pint as everyone sees it) // (R12.6: WEE MICKEY's gear: bit 1 the lockpick kit, bit 2 the smoke bomb)
   out.bank = w.match.bankedValue(p);
   out.respawnT = Math.max(0, Math.ceil(p.respawnT * 10) / 10);
   out.robT = p.rob ? Math.round(p.rob.t * 20) / 20 : -1;

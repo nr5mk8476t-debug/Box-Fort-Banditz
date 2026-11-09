@@ -2183,7 +2183,7 @@ test("R11.4 the goods' timers sync packed in one number (the player schema is at
 
 // ---- R12.1: THE SOGGY SHAMROCK ----
 import { PUB, pintLevel, pintSpeed, pintSettled, pintMissMm, pintGrade, pintHoldFor, tipsyDrift, tipsyAmount } from "../src/index.js";
-test("R12.4 split the G (visible, fair, skilled): a smooth drink (eases in, then steady, always down, no surges); the head settles a set amount after you let go; 1.5 mm perfect, 5 mm close; a short window", () => {
+test("R12.4 split the G (visible, fair, skilled): a smooth drink (eases in, then steady, always down, no surges); release = result (R12.6; it settled a set amount before); 1.5 mm perfect, 5 mm close; a short window", () => {
   for (const rate of [PUB.rateMin, 0.11, PUB.rateMax]) {
     for (let t = 0; t < 8; t += 0.05) assert.ok(pintLevel(t + 0.05, rate) <= pintLevel(t, rate) && pintSettled(t + 0.05, rate) <= pintSettled(t, rate), "always going down");
     // smooth: the speed never jumps (no surges): it only ever rises, by less than a 30th of a frame's worth
@@ -2191,11 +2191,9 @@ test("R12.4 split the G (visible, fair, skilled): a smooth drink (eases in, then
     const t = pintHoldFor(PUB.g, rate);
     assert.ok(t > 1.5 && t < 3.5, `about 2-3 s of drinking (${t.toFixed(2)} s)`);
     assert.ok(pintMissMm(t, rate) < 0.01);
-    // the settle: the same short carry-on every time (let go ~2-3 mm above the bar), smooth (no jump), done in half a second
-    const carry = (pintLevel(t, rate) - pintSettled(t, rate)) * PUB.glassMm;
-    assert.ok(carry > 2 && carry < 3.5, `the head settles ${carry.toFixed(2)} mm`);
-    assert.ok(Math.abs(pintSettled(t, rate, 0) - pintLevel(t, rate)) < 1e-9, "no jump when you let go");
-    assert.ok((pintSettled(t, rate, 0.6) - pintSettled(t, rate)) * PUB.glassMm < 0.1, "settled in about half a second");
+    // (R12.6, Blake: "Release = result": no settling on after you let go: the line stays where it was)
+    assert.equal(pintSettled(t, rate), pintLevel(t, rate), "release = result");
+    assert.equal(pintSettled(t, rate, 0), pintLevel(t, rate), "no jump when you let go");
     assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 1.2 / PUB.glassMm, rate), rate)), "perfect");
     assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g + 1.2 / PUB.glassMm, rate), rate)), "perfect");
     assert.equal(pintGrade(pintMissMm(pintHoldFor(PUB.g - 4 / PUB.glassMm, rate), rate)), "close");

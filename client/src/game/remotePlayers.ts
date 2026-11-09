@@ -5,7 +5,7 @@
 // animation approach as the first-person hands, so they can't get stuck.
 import { Scene, MeshBuilder, TransformNode, Mesh, Vector3, StandardMaterial, Color3 } from "./babylon.ts";
 import { toon, ink, PALETTE, textTexture, unlitTextured } from "./look.ts";
-import { PLAYER, PLAYER_COLORS, movePose, readMoveState, type MovePose } from "@bfb/shared";
+import { PLAYER, PLAYER_COLORS, movePose, readMoveState, unpackPk, type MovePose } from "@bfb/shared";
 
 export const INTERP_DELAY_MS = 110;
 
@@ -32,6 +32,8 @@ interface Remote {
   punchT: number;
   /** D1: cartwheeling through the air after a car hit; the dizzy stars over a knocked-out head */
   spin?: number; stars?: TransformNode;
+  /** R12.6: their pint (the line's level 0..1, 0 = none; drinking it?), the glass in their hand, how far it's raised */
+  pl: number; pd: boolean; glass?: TransformNode; stout?: Mesh; head2?: Mesh; raise: number;
 }
 
 export type CarryKind = "none" | "small" | "big" | "giant";
@@ -126,7 +128,7 @@ export class RemotePlayers {
     return {
       root, bodyPivot, body, head, armL, armR, tag, snaps: [], pose: "idle", connected: true, phase: 0,
       lastPos: new Vector3(info.x, info.y, info.z), meshes,
-      crouch: 0, lean: 0, roll: 0, armUp: 0, squash: 0, armFwd: 0, armFwdR: 0, carry: "none", yaw: 0, punchT: 0,
+      crouch: 0, lean: 0, roll: 0, armUp: 0, squash: 0, armFwd: 0, armFwdR: 0, carry: "none", yaw: 0, punchT: 0, pl: 0, pd: false, raise: 0,
     };
   }
 
@@ -140,6 +142,7 @@ export class RemotePlayers {
     r.snaps.push({ t: now, x: info.x, y: info.y, z: info.z, yaw: info.yaw, pitch: info.pitch });
     if (r.snaps.length > 30) r.snaps.splice(0, r.snaps.length - 30);
     r.pose = movePose(readMoveState(info));
+    { const k = unpackPk(info.pk ?? 0); r.pl = k.lvl; r.pd = k.drinking; } // (R12.6)
     if (r.connected !== info.connected) {
       r.connected = info.connected;
       for (const m of r.meshes) m.visibility = info.connected ? 1 : 0.35;
@@ -279,8 +282,39 @@ export class RemotePlayers {
       }
       if (p === "dance") { const k = performance.now() / 1000 * Math.PI * 128 / 60; r.bodyPivot.position.y = Math.abs(Math.sin(k)) * 0.14; r.bodyPivot.rotation.y = Math.sin(k * 0.5) * 0.35; r.armL.rotation.z -= Math.sin(k) * 0.4; r.armR.rotation.z += Math.cos(k) * 0.4; }
       else r.bodyPivot.rotation.y = 0;
+      this.pintPose(r, dt);
       r.tag.position.y = 2.1 - r.crouch * 0.5;
     }
+  }
+
+  /** R12.6: SPLIT THE G as everyone sees it: the pint in their right hand (the black going down, the cream head on
+   *  top), held out in front; drinking, it's up to their mouth, head tipped back. In step with the host's clock (the
+   *  level comes from it), so a spectator sees the same line the drinker does */
+  private pintPose(r: Remote, dt: number) {
+    const has = r.pl > 0;
+    if (has && !r.glass) {
+      const g = new TransformNode("rpint", this.scene); g.parent = r.armR; g.position.set(0, -0.58, 0.08);
+      const shell = MeshBuilder.CreateCylinder("rpintGlass", { diameterTop: 0.11, diameterBottom: 0.085, height: 0.18, tessellation: 12 }, this.scene);
+      const gm = new StandardMaterial("rpintGlassM", this.scene); gm.diffuseColor = Color3.FromHexString("#d8e8f0"); gm.alpha = 0.3; gm.specularColor = Color3.White(); shell.material = gm; shell.parent = g; shell.position.y = 0.09; shell.isPickable = false;
+      const stout = MeshBuilder.CreateCylinder("rpintStout", { diameterTop: 0.1, diameterBottom: 0.08, height: 1, tessellation: 12 }, this.scene); stout.material = toon(this.scene, "#1b0a06"); stout.parent = g; stout.isPickable = false;
+      const head = MeshBuilder.CreateCylinder("rpintHead", { diameter: 0.1, height: 0.02, tessellation: 12 }, this.scene); head.material = toon(this.scene, "#f2e2bc"); head.parent = g; head.isPickable = false;
+      r.glass = g; r.stout = stout; r.head2 = head;
+    }
+    if (!r.glass) return;
+    r.glass.setEnabled(has);
+    const f = 1 - Math.exp(-dt * 8);
+    r.raise += ((has ? (r.pd ? 1 : 0.35) : 0) - r.raise) * f;
+    if (!has) return;
+    // the arm: out in front holding it, up to the mouth drinking (on top of whatever else it's doing)
+    const armX = -1.0 - 1.45 * Math.max(0, (r.raise - 0.35) / 0.65);
+    r.armR.rotation.x = r.armR.rotation.x * (1 - r.raise) + armX * r.raise;
+    r.armR.rotation.z *= 1 - r.raise;
+    if (r.pd) r.head.rotation.x -= 0.35 * r.raise; // (head back)
+    // the glass stays upright in the hand, tipping toward the mouth as they drink
+    r.glass.rotation.x = -r.armR.rotation.x - (r.pd ? 0.9 * r.raise : 0);
+    const h = Math.max(0.005, Math.min(0.16, r.pl * 0.17));
+    r.stout!.scaling.y = h; r.stout!.position.y = h / 2 + 0.005;
+    r.head2!.position.y = h + 0.012;
   }
 
   count() { return this.map.size; }

@@ -22,7 +22,7 @@ export const PlayerState = schema({
   sel: t.uint8(),
   heat: t.uint8(),
   cash: t.number(),
-  gear: t.uint8(), // (R12.6: WEE MICKEY's gear: bit 1 lockpick kit, bit 2 smoke bomb)
+  pk: t.uint16(), // (R12.6, packed (the schema holds 63 fields at most): WEE MICKEY's gear (bits 0-1), drinking (bit 2), the pint's level x1000 (bits 3+): see packPk)
   bank: t.number(),
   respawnT: t.float32(),
   robT: t.float32(),

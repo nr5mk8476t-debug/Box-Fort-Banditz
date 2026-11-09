@@ -72,7 +72,7 @@ export function propNearest(d: PropDef, x: number, z: number): { x: number; z: n
 export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "pizzacart", "gelato", "ricordi", "depositbox", "stash", "cloakroom", "dessertcart", "chefstable", "kitchen",
   "clubbar", "rider", "lockers", "sortbin", "vipbooth"]);
 /** C5c.3: E on these does something of its own: pay Big Crunch's cover, hijack the DJ's decks, sell to Sal, the pawn case */
-export const CLUB_USE = new Set<PropKind>(["clubrope", "mocktail", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door", "dealgoods", "pinttap", "seamus", "jukebox", "pooltable", "dartsoche", "mickey", "mickgoods"]);
+export const CLUB_USE = new Set<PropKind>(["clubrope", "mocktail", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door", "dealgoods", "pinttap", "seamus", "jukebox", "pooltable", "dartsoche", "mickey", "mickgoods", "pubboard"]);
 /** R11.4: a one-way fire door swings shut this long after it opens */
 export const ONE_WAY_SHUT = 3;
 /** R8: NPCs doing these don't open doors (standing at a post, down, sitting on someone) */
@@ -309,6 +309,7 @@ export class PropSystem {
     if (d.kind === "toilet") { this.w.flush(p); return; } // (R6)
     if (d.kind === "dealgoods") { this.w.buyDeal(p, d.sell ?? "zoomies"); return; } // (R11.4)
     if (d.kind === "mickey") { this.w.fenceMickey(p); return; } // (R12.6)
+    if (d.kind === "pubboard") { this.w.gchUse(p); return; } // (R12.6: the SPLIT THE G CHALLENGE)
     if (d.kind === "mickgoods") { this.w.buyGear(p, d.gear ?? "pick"); return; } // (R12.6)
     if (d.kind === "door") {
       // R11.4: a one-way door (the club's back EXIT): no handle on the outside
@@ -614,7 +615,7 @@ export class PropSystem {
 
   stateOf(id: string): { ready: boolean; alarm: boolean; note: string } {
     const ps = this.props.get(id)!;
-    return { ready: ps.ready, alarm: ps.alarmT > 0, note: ps.def.kind === "pawncase" ? this.w.pawn.caseNote() : ps.def.kind === "pubboard" ? this.w.pubBoardNote() : ps.def.kind === "jukebox" ? this.w.jukeNote() : ps.def.kind === "pooltable" || ps.def.kind === "dartsoche" ? this.w.pubGames.note(ps.def.id) : "" };
+    return { ready: ps.ready, alarm: ps.alarmT > 0, note: ps.def.kind === "pawncase" ? this.w.pawn.caseNote() : ps.def.kind === "pubboard" ? this.w.pubBoardNote() + "#" + this.w.gchNote() : ps.def.kind === "jukebox" ? this.w.jukeNote() : ps.def.kind === "pooltable" || ps.def.kind === "dartsoche" ? this.w.pubGames.note(ps.def.id) : "" };
   }
 }
 

@@ -745,7 +745,7 @@ test("R12.1b THE SOGGY SHAMROCK: the whole block (the alley between goes); in th
   assert.equal(posts.filter((q) => q.kind === "patron" && (q.y ?? 0) < p.y2 - 0.5).length, 8);
   assert.equal(posts.filter((q) => q.kind === "patron" && !inRect(p.rect, q.x, q.z)).length, 2, "two drinkers out on the pavement");
   assert.equal(nc.props!.filter((q) => q.kind === "pinttap" && q.y < p.y2).length, 3);
-  assert.equal(nc.props!.filter((q) => q.kind === "pubboard").length, 1);
+  assert.equal(nc.props!.filter((q) => q.kind === "pubboard").length, 2, "the chalkboard and (R12.6) the challenge card on the bar");
   assert.equal(posts.filter((q) => q.kind === "drunk_dancer").length, 1, "R12.2c: BIG DESSIE");
   // nobody's standing or sitting inside something solid (a posted person in a box gets shoved about)
   for (const q of posts) assert.ok(!nc.boxes.some((b) => b.y + b.h / 2 > (q.y ?? 0) + 0.12 && b.y - b.h / 2 < (q.y ?? 0) + 1.5 && inFoot(b, q.x, q.z, 0.22)), `${q.kind} ${q.v ?? ""} at ${q.x.toFixed(1)},${q.z.toFixed(1)} is clear`);
