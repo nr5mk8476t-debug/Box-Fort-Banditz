@@ -69,6 +69,7 @@ export function sphereSegs(d: number, want: number): number { return Math.min(wa
 /** R12.5: the outline widths the city's merged meshes use (every distinct width was its own mesh, and its own outline
  *  pass, in every tile; 17 widths in one view). The nearest step (in proportion): at most a quarter thinner or thicker,
  *  under a pixel on screen at any normal distance */
+type AbstractMeshT = import("@babylonjs/core/Meshes/abstractMesh.js").AbstractMesh;
 export const OUTLINE_STEPS = [0, 0.004, 0.008, 0.012, 0.02, 0.03, 0.05, 0.08];
 export function snapOutline(w: number): number {
   if (!(w > 0.001)) return 0;
@@ -3753,7 +3754,7 @@ export class CityRenderer {
    *  only its own floor's pieces; Performance mode has none. `flick`: a fire's flicker */
   private pubLights: { l: PointLight; base: number; flick: number; floor: number; nStatic: number }[] = [];
   /** R12.6: the moving things the pub's lamps light now (per floor) */
-  private pubLitDyn: Set<import("@babylonjs/core/Meshes/abstractMesh.js").AbstractMesh>[] = [new Set(), new Set()];
+  private pubLitDyn: Set<AbstractMeshT>[] = [new Set(), new Set()];
   private pubLitMats = new WeakSet<object>();
   /**
    * R12.6: light the people, the games' pieces and your hands with the pub's lamps when they're inside (each floor's
@@ -3765,12 +3766,12 @@ export class CityRenderer {
     const P = this.arena.pub;
     if (!P || !this.pubLights.length) return;
     const r = P.rect, M = 0.3, inside = (x: number, z: number, m = M) => x > r.minX - m && x < r.maxX + m && z > r.minZ - m && z < r.maxZ + m;
-    const next: Set<import("@babylonjs/core/Meshes/abstractMesh.js").AbstractMesh>[] = [new Set(), new Set()];
+    const next: Set<AbstractMeshT>[] = [new Set(), new Set()];
     if (this.pubNear) for (const n of nodes) {
       const rp = n.getAbsolutePosition();
       if (!inside(rp.x, rp.z, 40)) continue; // (most of the city's people: one check)
       for (const m of n.getChildMeshes(false)) {
-        if (!m.isEnabled() || !m.isVisible) continue;
+        // (R12.6b: shown or hidden doesn't matter (a bubble, a prop): only who's in the room changes the lists)
         const mt = m.material as (StandardMaterial & { maxSimultaneousLights?: number }) | null;
         if (!mt || (mt as StandardMaterial).disableLighting) continue;
         const c = m.getAbsolutePosition();
@@ -3781,11 +3782,19 @@ export class CityRenderer {
     for (let f = 0; f < 2; f++) {
       const cur = this.pubLitDyn[f], nw = next[f];
       if (cur.size === nw.size && [...nw].every((m) => cur.has(m))) continue;
+      // (R12.6b: Babylon's own push/splice on this list re-checks EVERY mesh in the scene against it, once per call (on
+      //  Blake's PC: stutters several times a second). Change the list underneath its hooks and re-check just the
+      //  meshes that came or went)
+      const changed: AbstractMeshT[] = [];
       for (const L of this.pubLights) {
         if (L.floor !== f) continue;
         const arr = L.l.includedOnlyMeshes;
-        for (let i = arr.length - 1; i >= L.nStatic; i--) if (!nw.has(arr[i])) arr.splice(i, 1);
-        for (const m of nw) if (!cur.has(m)) arr.push(m);
+        let w = L.nStatic;
+        for (let i = L.nStatic; i < arr.length; i++) { const m = arr[i]; if (nw.has(m)) arr[w++] = m; else changed.push(m); }
+        arr.length = w;
+        for (const m of nw) if (!cur.has(m)) { Array.prototype.push.call(arr, m); changed.push(m); }
+        for (const m of changed) (m as unknown as { _resyncLightSource(l: PointLight): void })._resyncLightSource(L.l);
+        changed.length = 0;
       }
       for (const m of nw) if (!cur.has(m)) { const mt = m.material as { maxSimultaneousLights?: number } | null; if (mt && !this.pubLitMats.has(mt) && (mt.maxSimultaneousLights ?? 4) < LIGHT_BUDGET.perMesh) { mt.maxSimultaneousLights = LIGHT_BUDGET.perMesh; this.pubLitMats.add(mt); } }
       this.pubLitDyn[f] = nw;
