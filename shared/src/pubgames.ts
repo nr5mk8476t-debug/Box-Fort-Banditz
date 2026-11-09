@@ -969,7 +969,9 @@ export class StationFeed {
 export const REPLAY_CATCHUP = 2.5;
 export function replayStep(t: number, dt: number, hostEl: number | null, dur: number): number {
   const target = hostEl === null ? dur : Math.min(dur, hostEl);
-  let nt = t + dt * (target - t > 0.3 ? REPLAY_CATCHUP : 1);
+  // (R12.6: the last 0.6 s of a shot always plays at its own speed: caught up at x2.5, a short shot used to flash by in a
+  //  single frame on a slow screen)
+  let nt = t + dt * (target - t > 0.3 && dur - t > 0.6 ? REPLAY_CATCHUP : 1);
   if (hostEl !== null) nt = Math.min(nt, hostEl + 0.1);
   return Math.min(dur, Math.max(t, nt));
 }

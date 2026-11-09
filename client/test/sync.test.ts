@@ -126,7 +126,9 @@ async function playOut(rig: any, o: { sec: number; fps: number; lat: number; sta
   let T = 0, nextFrame = 0, nextPatch = 0;
   const shots0 = rig.shots.length;
   const step = 1 / 60;
+  let shotsCut = -1; // (R12.6: shots taken in the last 6 s haven't had their chance on screen yet when the run stops)
   for (let k = 0; k < o.sec * 60; k++) {
+    if (shotsCut < 0 && T >= o.sec - 6) shotsCut = rig.shots.length;
     o.each?.(); hostTick(); T += step;
     if (T >= nextPatch) { nextPatch += 1 / 20; sent.push({ at: T, lt: lightT(), n: notes() }); }
     const stalled = (o.stalls ?? []).some(([a, d]) => T >= a && T < a + d);
@@ -141,7 +143,7 @@ async function playOut(rig: any, o: { sec: number; fps: number; lat: number; sta
         if (s.kind !== "pool" || !s.sim) continue;
         // (each shot by its name where the window has one, else by the replay itself)
         const key = (s as any).key ? id + "/" + (s as any).key : s.sim;
-        const r = shown.get(key) ?? { mid: 0, dur: 0, st: id, why: (s as any).why, gid: s.note?.gid }; shown.set(key, r);
+        const r = shown.get(key) ?? { mid: 0, dur: 0, st: id, why: (s as any).why, gid: s.note?.gid, key }; shown.set(key, r);
         if (!s.sim.done && s.simT > 0) r.mid++;
       }
     }
@@ -149,8 +151,9 @@ async function playOut(rig: any, o: { sec: number; fps: number; lat: number; sta
   // (a shot still rolling on the host when the time's up hasn't had its chance yet)
   let rolling = 0; for (const s of w.pubGames.st.values()) if (s.shot) rolling++;
   const seen = new Set([...shown.entries()].filter(([, q]) => q.mid >= 2).map(([k]) => k));
-  const missing = rig.shots.slice(shots0).filter((k: string) => !seen.has(k));
-  return { hostShots: rig.shots.length - shots0 - rolling, shown: [...shown.values()], missing };
+  const missing = rig.shots.slice(shots0, shotsCut < 0 ? undefined : shotsCut).filter((k: string) => !seen.has(k));
+  const late = new Set<string>(shotsCut < 0 ? [] : rig.shots.slice(shotsCut));
+  return { hostShots: rig.shots.length - shots0 - rolling, lateN: [...late].filter((k) => !rig.shots.slice(rig.shots.length - rolling).includes(k)).length, shown: [...shown.values()].filter((q: any) => !late.has(q.key)), missing };
 }
 async function poolGames(rig: any) {
   const { w, pb } = rig;
@@ -184,7 +187,7 @@ for (const net of [{ fps: 60, lat: 0.05, name: "60 fps, 50 ms" }, { fps: 12, lat
     const told = rig.fb.filter((t: string) => /^Missed \d+ shot/.test(t)).reduce((a: number, t: string) => a + Number(t.match(/\d+/)![0]), 0);
     if (!net.stalls?.some(([, d]) => d > 3)) assert.equal(r.missing.length, 0, `not shown: ${r.missing.join(" ")}`);
     else assert.equal(told, r.missing.length, `${r.missing.length} shots not shown (${r.missing.join(" ")}), ${told} reported missed`);
-    assert.ok(visible >= r.hostShots - told, `${r.hostShots} shots taken; only ${visible} played out on screen`);
+    assert.ok(visible >= r.hostShots - told - r.lateN, `${r.hostShots} shots taken; only ${visible} played out on screen`);
   });
 }
 
