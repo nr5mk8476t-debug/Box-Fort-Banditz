@@ -568,6 +568,8 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 | Server | the player schema fits Colyseus's 63 fields (gear + pint packed in one) | server smoke | the server wouldn't start with 3 new fields | pass |
 | Smokes | `signal-smoke.ts`, `server-smoke.ts` (NPCs: 63, + Mickey) | smoke | - | pass |
 | Unit | shared + client | `npm test` | - | 312 + 31 pass |
+| Browser e2e | the whole run (4 windows, solo, online, the new city, the pub, games) | `node tests/e2e-phase0.mjs` | - | 438/438 pass |
+| Browser e2e | the same at 110 ms latency | `LATENCY=110 node tests/e2e-phase0.mjs` | - | 439/439 pass |
 
 **Audit of R12.5's open bugs** (inspection / automated / gameplay):
 
