@@ -148,6 +148,7 @@ export class ArenaScene {
   private mantleTotal = 0;
   private viewmodel: Viewmodel;
   private pubLitT = 0;
+  private mickShown = true; private camInPub = false;
   // camera feel
   private eye: number = PLAYER.eyeHeight;
   private fovKick = 0;
@@ -395,6 +396,7 @@ export class ArenaScene {
     if (sm) sm.refreshRate = 0; // RenderTargetTexture.REFRESHRATE_RENDER_ONCE
     this.items = new ItemRenderer(scene, this.arena);
     this.npcs = new NpcRenderer(scene);
+    this.npcs.hiddenFrom = (kind) => kind === "wee_mickey" && this.camInPub; // (R12.6b)
     { const ps = arena.pawnShop, sh = ps ? arena.shops?.find((x) => x.id === ps.shop) : undefined; if (sh) this.npcs.salAt = { x: sh.cashier.x, z: sh.cashier.z }; } // (C5c.3)
     this.events = new EventRenderer(scene);
     if (this.arena.chinatown) this.dragon = new DragonRenderer(scene, this.arena.chinatown.route, { n: PARADE.segments, gap: PARADE.gap });
@@ -1690,6 +1692,11 @@ export class ArenaScene {
     } else if (this.input.gulp) this.input.gulp = null;
     this.city.updatePub(dt, this.night.level, this.camera.position.x, this.camera.position.z);
     this.updateReveals(dt);
+    // R12.6b: the yard behind the pub's back wall: Wee Mickey and his gear aren't drawn from inside the pub, or from far off
+    { const c = this.camera.position, r = p.rect, inside = c.x > r.minX && c.x < r.maxX && c.z > r.minZ && c.z < r.maxZ, M = p.mickey;
+      const show = !inside && !!M && Math.hypot(c.x - M.x, c.z - M.z) < 40;
+      if (show !== this.mickShown) { this.mickShown = show; this.propsR.setVisible("mick_pick", show); this.propsR.setVisible("mick_smoke", show); }
+      this.camInPub = inside; }
     // R12.6: the people, the games' balls/cues/darts and your own hands in the pub are lit by its lamps too (they were lit
     // by the sky only: grey-blue figures in a warm room at night)
     if ((this.pubLitT -= dt) <= 0) { this.pubLitT = 0.25; this.city.pubLightDynamic([...this.npcs.roots(), ...this.remotes.roots(), this.pg.root, this.viewmodel.node]); }

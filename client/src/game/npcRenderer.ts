@@ -147,6 +147,8 @@ interface Vis {
 export class NpcRenderer {
   private map = new Map<string, Vis>();
   /** R12.6: the people being drawn (for lighting them with the room they're in) */
+  /** R12.6b: kinds the camera can't see from where it is (behind a wall it's inside) */
+  hiddenFrom: ((kind: string) => boolean) | null = null;
   *roots(): Iterable<TransformNode> { for (const v of this.map.values()) if (v.enabled) yield v.root; }
   private bubbleTex = new Map<string, ReturnType<typeof unlitTextured>>();
   private time = 0;
@@ -669,7 +671,8 @@ export class NpcRenderer {
       const yaw = a.yaw + dy * k;
       // distance culling (keeps the crowd affordable)
       const far = Math.hypot(x - cam.x, z - cam.z) > (n.big ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" && n.view.state !== "beat" ? COP_DRAW_DISTANCE : DRAW_DISTANCE)
-        || n.view.state === "sleep"; // (C4b: the old lady asleep upstairs isn't drawn)
+        || n.view.state === "sleep" // (C4b: the old lady asleep upstairs isn't drawn)
+        || (this.hiddenFrom?.(n.view.kind) ?? false); // (R12.6b: e.g. Wee Mickey from inside the pub: he's behind its back wall)
       if (far === n.enabled) { n.enabled = !far; n.root.setEnabled(!far); }
       const speed = dt > 0 ? Math.hypot(x - n.lastX, z - n.lastZ) / dt : 0;
       n.lastX = x; n.lastZ = z;
