@@ -546,6 +546,49 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.6: façade, balcony, flicker, night lighting, WEE MICKEY, Split the G social (2026-11-09)
+
+| Area | Check | How | Before | Result |
+|---|---|---|---|---|
+| Façade | front, angled, side, corner: day and night, before/after | screenshots (`screenshots/r12_6/facade-*`) | bright red, flower ridge, green slabs at the corner, tin triangle on the roof | pass (reviewed) |
+| Façade | the SIDE BAR mat reads from the street; no sill across the side door | screenshots | upside down; a sill at knee height | pass |
+| Balcony | cantilever: brackets off both walls, nothing on the pavement; floor continuous | screenshots (`balcony-before-after-*`) | posts on the pavement | pass |
+| Flicker | z-fight finder (`tests/flicker-find.mjs`: 7 frames 5 mm apart, A→B→A pixels) at Little Italy (near, far, night, angled), pub walls, façade, 40-60 m views | automated + by eye | arch bands flipping; lines on the board | pass: none left on the arch (moving people/cars flag, checked by eye) |
+| Flicker | mirrors, clocks, pictures, signs from below, the side and far | screenshots + clips (`flicker-italy.mp4`, `flicker-mirrors.mp4`, frame-stepped) | solid gold mirrors, gold boards | pass |
+| Night | people and the games' pieces inside lit by the floor's lamps | screenshots (`night-bar-people.jpg`, `night-upstairs-people.jpg`) | grey-blue figures | pass |
+| Mickey | in the yard, reachable, the gap from the east street open; shut by day; x0.75 / black market x0.9; heat on every deal; no money or junk; one payment per item; out of reach = nothing | unit (`shared/test/mickey.test.ts`) | - | pass (6 tests) |
+| Mickey | gear: one of each, broke = no; a punch shuts him; the kit halves your stretch once; the smoke bomb beats a grab once; both reset with the match | unit | - | pass |
+| Mickey | the yard, him, his gear, the lamp at night; overhead | screenshots (`mickey-*`) | - | pass (reviewed) |
+| Split the G | release = result; the host clamps a hold more than 0.4 s off what it saw; everyone sees your pint (level, drinking) | unit (`shared/test/splitg.test.ts`) | settled 2-3 mm on after you let go | pass |
+| Split the G | a spectator sees the glass in hand and the drink to the mouth; the reveal on the bar with the distance | 2 browsers (host + guest), screenshots (`splitg-*`) | - | pass (reviewed) |
+| Challenge | open, opt in/out, 2+ to start, no joining halfway, 3 pints counted, lowest wins the prize, nothing after it's over | unit | - | pass |
+| Challenge | leavers (walk out, drop out) are OUT and the rest finish; time runs out = OUT; nobody joins = called off | unit | - | pass |
+| Challenge | the card on the bar: prompt, open, a guest joins, it starts, the HUD | 2 browsers, screenshots | - | pass |
+| Pool | a short shot never flashes by in one frame (5 fps); sync tests count only shots the window had time to show | client unit (`sync.test.ts`) | 2 shots skipped at 5 fps (exposed when Mickey shifted the random sequence) | pass |
+| Server | the player schema fits Colyseus's 63 fields (gear + pint packed in one) | server smoke | the server wouldn't start with 3 new fields | pass |
+| Smokes | `signal-smoke.ts`, `server-smoke.ts` (NPCs: 63, + Mickey) | smoke | - | pass |
+| Unit | shared + client | `npm test` | - | 312 + 31 pass |
+
+**Audit of R12.5's open bugs** (inspection / automated / gameplay):
+
+| Bug | Automated coverage | Status |
+|---|---|---|
+| Traffic deadlock | `R12.3b: police cruisers... never lock up (4 seeds x 4 min)`, `the reproduced jam`, `chases`, `a parade closing a street` | pass (automated) |
+| Pavement overlaps | `R12.3b pavement: no two pieces overlap`, `no gaps`, `walking along and across the joins` | pass (automated + R12.3b screenshots) |
+| Pool skips and turns | sync tests (5 network conditions, two tables, game after game), `the line of shots...`, `replay timing` | pass (automated; the 5 fps case fixed this round) |
+| Pool camera | the stand-up blend: eased, real time, capped step | inspection + R12.4 clip |
+| Darts handover and sync | `darts (R12.4): your third dart's in the air...`, `the other board`, `darts (R12.5): watching a mate throw` | pass (automated) |
+| Leave and reconnect | `PeerRoom (R12.4)` x2, e2e reconnect / host-leaves checks | pass (automated) |
+| Minigame cleanup | e2e: leave mid-pint (+ blur) on the new city; `ArenaScene.dispose` | pass (automated, e2e) |
+| Benchmark at 30/60/144/240 FPS, a background tab | `client/test/bench.test.ts` | pass; settings recorded; now puts you back where you were |
+
+## Manual checklist for Blake (R12.6)
+- [ ] Split the G: does "where you let go is your score" feel fair? Try the challenge with a mate.
+- [ ] Watch a mate drink: does the glass in their hand and the reveal on the bar read well?
+- [ ] Wee Mickey: are his prices and the heat right? Does the smoke bomb feel worth $25?
+- [ ] The new front at night and by day; the balcony from the street.
+- [ ] Any flicker left anywhere (Little Italy, the pub's walls, far-off buildings)?
+
 ## R12.5b: GPU warning, review fixes (2026-11-08)
 
 | Area | Check | How | Before the fix | Result |

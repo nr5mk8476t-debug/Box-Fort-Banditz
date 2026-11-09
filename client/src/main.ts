@@ -730,6 +730,8 @@ async function startBench() {
   show("pause", false); show("bench-status", true); document.body.classList.add("benching");
   // (R12.5: every run starts from the same place: adaptive resolution back to full and held there while it runs)
   dynScale = 1; adapt.slow = adapt.easy = 0; applyScaling();
+  // (R12.6: and afterwards you're put back where you were, looking the way you were (it used to drop you at the spawn))
+  const was = a.position ? { x: a.position.x, y: a.position.y, z: a.position.z, yaw: input.yaw, pitch: input.pitch } : null;
   const res = await runBench({
     scene: a.scene, engine, arena: CITY, canvas,
     mode: local ? "solo" : room?.isHost ? "hosting" : "joining",
@@ -744,7 +746,7 @@ async function startBench() {
     status: (s) => { $("bench-status").textContent = s; },
   });
   show("bench-status", false); document.body.classList.remove("benching");
-  if (local) { const sp = CITY.spawns[0]; local.teleport(sp.x, sp.z, 0, 0); a.debugTeleport(sp.x, sp.z, 0, 0); }
+  if (local) { const sp = was ?? { x: CITY.spawns[0].x, y: 0, z: CITY.spawns[0].z, yaw: 0, pitch: 0 }; local.teleport(sp.x, sp.z, sp.yaw, sp.y); a.debugTeleport(sp.x, sp.z, sp.yaw, sp.y); input.yaw = sp.yaw; input.pitch = sp.pitch; }
   if (!res) { showPause(true); return; }
   $<HTMLTextAreaElement>("bench-text").value = res.text + "\n\n---- data ----\n" + res.json;
   $("btn-bench-copy").textContent = "COPY RESULT";

@@ -2,6 +2,43 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.6: a proper pub front, no more flicker, WEE MICKEY, and Split the G with your mates (2026-11-09)
+
+**THE SOGGY SHAMROCK**
+- **The balcony** hangs off the wall on curved iron brackets (a cantilever): nothing on the pavement holding it up.
+- **The front**: deep oxblood paint, polished mahogany panels and sills, thin gold lines, cream window bars; hanging
+  baskets on iron brackets instead of the strip of flowers along the top; at the corner door a hanging pub sign and
+  two brass lanterns.
+- Fixed: two green slabs sticking out at the corner; a ceiling triangle poking out over the door and on the roof; the
+  SIDE BAR mat upside down; a sill across the side door.
+- **At night the people inside are lit by the pub's lamps** (they were lit by the sky: grey-blue in a warm room), and so
+  are the pool balls, cues and darts.
+
+**No more flicker**
+- **Little Italy's sign**: the arch's coloured bands fought over the same spot (and drew lines over the name board). It's
+  one clean arch now.
+- **Mirrors, pictures, clocks and signs** in the pub sat a hair in front of their frames and flickered (some showed as
+  solid gold boards). They all sit properly clear now.
+
+**WEE MICKEY** (new): the night fence in the pub's back yard, by the cellar hatch (in along the back of the pub from the
+east street, or down the alley from the north).
+- After dark he buys the loot in your hands for more than the pawn shops (75% of its worth), even the black-market
+  stuff nobody else touches. Every deal is a bit of heat (more if a cop sees). By day: "come back when it's dark".
+- His gear (one of each): a **LOCKPICK KIT** ($30: your next stretch in the cells is halved) and a **SMOKE BOMB** ($25:
+  the next time a cop grabs or tasers you, it goes off and you slip away).
+
+**Split the G with your mates**
+- **Where you let go is your score** (the head doesn't settle on any more).
+- **Everyone sees you drink**: the pint in your hand, raised to your mouth, the line going down.
+- **The reveal**: your glass is set down on the bar with the distance over it, for everyone to see.
+- **The G CHALLENGE**: press E on the chalk card on the bar. Anyone in the pub has 25 s to join; 3 pints each, the lowest
+  total wins $10. Walk out, drop out or run out of time and you're out: nobody can hold the others up.
+
+**Also**: the pool tables and dartboards across the room sound quieter than the one you're at; a short pool shot no
+longer flashes by in one frame on a slow screen; after the BENCHMARK you're put back where you were.
+
+**Performance**: no measurable cost (draw calls flat or down, frame times within noise, on the test box).
+
 ## R12.5b: a warning when the graphics card isn't being used, and fixes from review (2026-11-08)
 
 **New**

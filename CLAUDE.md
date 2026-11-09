@@ -31,11 +31,31 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
    ```
 8. **Push to `main` on GitHub (nr5mk8476t-debug/box-fort-banditz) every update.** Never force-push.
 
+## Performance (saved R12.6, from Blake's brief)
+- Target: a steady 60 FPS at 1920x1080 on Blake's PC (the reference; draw-call bound: ~1,900 draws ≈ 7 ms). Budgets
+  live in `docs/perf-budget.md`; the per-change budget: median +10%, 99th +20%, draws +15%, triangles +15%, no new
+  frames over 50 ms on any stretch of the BENCHMARK route (`tests/perf-compare.mjs` flags it).
+- Measure before and after every content or rendering change (the BENCHMARK, `tests/perf-route.mjs`, or fixed views)
+  on the same machine and settings. The test box renders in software: its numbers are relative only; say so.
+- Fix what a change costs at its source (merge, LOD, interior areas, fewer lights); never pay for it by turning the
+  whole game's graphics down, and ask Blake before any visible downgrade.
+- No blanket depth-bias changes. Mounted things sit clear of their backing's ink outline (it writes depth, 4-12 mm
+  proud, with a bias that grows at grazing angles): 1.5-2.5 cm.
+- Don't invent universal NPC or building limits without measurements.
+- Every update's report has a short **performance impact note**: what was measured, what changed, any regression or
+  trade-off, what's unverified.
+- New content: `docs/content-guide.md` (where things live, interior areas, lights: 6 per mesh, 4 per floor).
+
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R12.5)
-- R12.5 shipped the performance foundation: the city merged by 64 m tiles (small pieces drawn within 80-95 m), glow batches, outline widths in 8 steps, size-scaled spheres, no material scans while building, NPC simulation levels (far from every player: 10 Hz), interior areas (`client/src/game/areas.ts`, the pub as the worked example), render scale / adaptive resolution / the developer overlay, the BENCHMARK (pause menu), `tests/perf-route.mjs` and `tests/perf-compare.mjs`.
-- Before adding content: read `docs/content-guide.md`; check `docs/perf-budget.md` with the BENCHMARK before and after.
-- Waiting on Blake: his and his mate's BENCHMARK results (to set the real budgets), and his picks from `docs/expansion-plan.md`.
-- Paused (Blake): the black market dealer, extra decoration, the bigger Split the G. Then: the pub brawl, the quiz and the G-split champ; R13: the alleys and fire escapes.
+## Next up (as of R12.6)
+- R12.6 shipped: the cantilever balcony and the oxblood/mahogany/gold façade (hanging baskets, the corner sign and
+  lanterns), the flicker fixes (Little Italy's arch; decorations clear of their outlines; `tests/flicker-find.mjs`), the
+  pub's lamps lighting the people and the games' pieces, WEE MICKEY (night fence + gear) in the back yard, Split the
+  G social (release = result, the glass in hand for everyone, the reveal on the bar, the 3-pint challenge), quieter
+  far-off pub-game sounds, the benchmark putting you back where you were.
+- Waiting on Blake: a play of Split the G (and the challenge) before polishing it; his verdict on Mickey's prices
+  (x0.75, black market x0.9, kit $30, smoke $25); his and his mate's BENCHMARK results; picks from
+  `docs/expansion-plan.md`.
+- Then: the pub brawl, the quiz and the G-split champ; R13: the alleys and fire escapes.

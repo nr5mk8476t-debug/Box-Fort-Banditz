@@ -111,7 +111,7 @@ export function wornFloor(c: C2D, S: number) {
 import { MeshBuilder, Mesh, StandardMaterial, Color3, Vector3, TransformNode, DynamicTexture, Quaternion, type Scene } from "./babylon.ts";
 import { unlitTextured } from "./look.ts";
 import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh.js";
-import { sfx } from "../audio.ts";
+import { sfxFrom, sfx } from "../audio.ts";
 import { settings } from "../settings.ts";
 import { PoolSim, cueSpotOk, checkout, ballColour, PUB_NPCS, inFoot, nearBoxes, StationFeed, replayStep, wrapDelta, timeLeftAt, type ArenaLayout, type Ball, type ReplayPlan, type WireShot } from "@bfb/shared";
 
@@ -311,17 +311,19 @@ export class PubGamesView {
     const sh = plan.shot, start: Ball[] = sh.b.map(([id, x, z, d]) => ({ id, x, z, vx: 0, vz: 0, down: !!d }));
     s.sim = new PoolSim(start, sh.dx, sh.dz, sh.v); s.key = sh.k; s.dur = sh.dur; s.why = plan.why;
     s.simT = plan.at; s.sim.runTo(plan.at);
-    s.sim.onHit = (k, sp) => { if (!this.near(s, 14)) return; if (k === "ball") sfx.ballClick(sp); else if (k === "cushion") sfx.cushion(sp); else sfx.pocketDrop(); };
+    s.sim.onHit = (k, sp) => { if (!this.near(s, 14)) return; this.sound(s, () => { if (k === "ball") sfx.ballClick(sp); else if (k === "cushion") sfx.cushion(sp); else sfx.pocketDrop(); }); };
     for (const b of start) s.ballPos[b.id] = { x: b.x, z: b.z, down: b.down };
     s.drop.clear();
     const own = performance.now() - s.struckAt < 3000; s.struckAt = -1e9;
-    if (plan.at < 0.3 && !own) { const cue = start.find((b) => b.id === 0)!; s.cueT = 0; s.cueDir = { x: sh.dx, z: sh.dz }; s.cueFrom = { x: cue.x, z: cue.z }; if (this.near(s, 14)) sfx.cueStrike(sh.v / POOL.vMax); }
+    if (plan.at < 0.3 && !own) { const cue = start.find((b) => b.id === 0)!; s.cueT = 0; s.cueDir = { x: sh.dx, z: sh.dz }; s.cueFrom = { x: cue.x, z: cue.z }; if (this.near(s, 14)) this.sound(s, () => sfx.cueStrike(sh.v / POOL.vMax)); }
     this.showBalls(s, s.sim.balls.map((b) => ({ id: b.id, x: b.x, z: b.z, down: b.down })));
   }
   /** is it my turn at this station (a game on, my seat, nothing rolling on the host)? */
   private myTurn(s: Station) { const n = s.note; const seat = s.seatOf(this.ctx.me); return !!n && n.ph === "play" && seat >= 0 && s.turn === seat && !n.shot; }
   /** the shot / throw clock as this window should show it (whole seconds, never more than the host has left) */
   clockOf(s: Station): number { const n = s.note; if (!n || n.ph !== "play") return 0; return n.dl >= 0 ? Math.ceil(timeLeftAt(n.dl, this.ctx.clock) - 0.05) : n.left; }
+  /** R12.6: a station's sound, as loud as it is from where you are */
+  private sound(s: Station, fn: () => void) { sfxFrom(Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) + Math.abs(this.ctx.y - this.U) * 2, fn); }
   private near(s: Station, r: number) { return Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < r && Math.abs(this.ctx.y - this.U) < 2.5; }
   private showBalls(s: Station, bs: { id: number; x: number; z: number; down: boolean }[]) {
     const pb = this.arena.pub!, q = pb.pools[s.idx]; let k = 0;
@@ -367,8 +369,8 @@ export class PubGamesView {
       // R12.4: the sound when the dart lands (it may still be in the air: then it plays as it hits the board, once)
       if (this.near(s, 12)) {
         if (s.fly && s.fly.mine === (e.who === me)) s.fly.label = label;
-        else if (performance.now() - s.landAt < 1500) { s.landAt = 0; sfx.dartSting(label, g); }
-        else sfx.dartLand(label, g);
+        else if (performance.now() - s.landAt < 1500) { s.landAt = 0; this.sound(s, () => sfx.dartSting(label, g)); }
+        else this.sound(s, () => sfx.dartLand(label, g));
       }
       if (e.who === me && e.bust) this.hooks.feedback(String(e.bust), "bad");
     } else if (e.t === "pgMsg") { if (e.to === me && e.msg) { this.lastMsg = String(e.msg); this.hooks.feedback(this.lastMsg, "info"); } }
@@ -456,7 +458,7 @@ export class PubGamesView {
       const p = Vector3.Lerp(f.from, to, k); p.y += Math.sin(k * Math.PI) * 0.06;
       const d = s.darts[Math.min(5, f.k)]; d.position.copyFrom(p); d.setEnabled(true);
       if (k >= 1) {
-        if (this.near(s, 12)) { if (f.label !== undefined) sfx.dartLand(f.label, f.mine ? 1 : 0.7); else { sfx.dartThunk(f.mine ? 1 : 0.7); s.landAt = performance.now(); } }
+        if (this.near(s, 12)) this.sound(s, () => { if (f.label !== undefined) sfx.dartLand(f.label, f.mine ? 1 : 0.7); else { sfx.dartThunk(f.mine ? 1 : 0.7); s.landAt = performance.now(); } });
         s.fly = null;
         // (R12.4: your last dart's landed: if the turn's gone over meanwhile, step back from the oche once you've seen
         //  where it went (0.7 s): not left waiting for the next message from the host, which may be a while if the

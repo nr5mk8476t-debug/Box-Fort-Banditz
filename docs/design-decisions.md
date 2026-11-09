@@ -2005,3 +2005,62 @@ decoration, the bigger Split the G).
   - darts, watching: the flight takes the slot of the dart it is (matched by where it landed) and is set up before the
     sound is decided: one dart, one impact
   - crowds: separation looks at neighbouring 1 m cells only
+
+## R12.6: the pub's front and balcony, flicker, night lighting, WEE MICKEY, Split the G social (Blake, 2026-11-08/09)
+
+**Blake's answers** (asked first): G release: "Release = result"; tolerance: keep 1.5 / 5 mm; the challenge: 3 pints
+each, lowest total; the dealer: "Night fence + gear"; the balcony: "a nice designed cantilever"; the shopfront: "Deep red
++ mahogany + gold"; the flowers: "Hanging baskets + window boxes"; the corner door: "Hanging pub sign + lanterns".
+Blake then went to bed ("act on your own behalf to finish the update fully"): the dealer's spot, his prices and gear,
+and the challenge's details below are my calls, written down for him to change.
+
+- **Balcony** (cantilever): timber joists on curved wrought-iron knee braces off both walls (three each), a green
+  fascia all round, a warm soffit under the boards; nothing stands on the pavement.
+- **Façade**: oxblood paint (deepened twice: pillar-box red, then #7a1119, then #52090f, which reads as oxblood under
+  the toon light); mahogany stall risers, sills and pilaster bases; thin gold lines on the pilasters (the three red slots
+  went); cream glazing bars; the flower ridge along the cornice replaced by hanging baskets on scrolled iron brackets
+  (~4.5 m apart, none under the balcony); the corner: a hanging sign (shamrock, THE SOGGY SHAMROCK, both faces) on a
+  scrolled bracket and a brass lantern on each door pilaster; the little "SOGGY" board by the balcony went.
+- **Bugs found on the way**: the corner's damask lining was turned 90° (two green slabs through the corner); the
+  pressed-tin ceilings and beams were square, so they poked out through the cut corner (a tin triangle over the door
+  and on the roof): now cut along the corner's inner wall; the SIDE BAR mat was upside down from the street; the
+  side door's sill ran across the doorway.
+- **Flicker** (found with a new tool, `tests/flicker-find.mjs` + `.py`: frames 5 mm apart, pixels that flip back and
+  forth): Little Italy's arch was rows of overlapping blocks with their fronts in one plane (z-fighting), and their
+  hidden faces, pulled forward by the ink outline's depth bias when seen edge-on, drew lines across the LITTLE ITALY
+  board. Now one solid inked arch with the white and red bands inlaid. The "flickering decorations": every outlined
+  mesh also writes its outline's depth a few mm proud of it; mirrors, clock faces, name boards, tin signs, notices and
+  pictures sat 1-7 mm in front of their frames (several were losing outright: solid gold boards). All moved 1.5-2.5 cm
+  clear; no depth-bias change. Rule saved in CLAUDE.md and the content guide.
+- **Night lighting, people and props**: the pub's lamps lit only the building (`includedOnlyMeshes`); the people, the
+  balls, cues, darts and your hands were lit by the sky alone. Now `pubLightDynamic` adds whatever's inside to its
+  floor's lamps a few times a second (only changes are applied; each light has its own copy of the list). Cost: draws
+  and triangles unchanged; frame times within noise (test box).
+- **WEE MICKEY** (`MICKEY` in arena.ts, world.ts `fenceMickey`, `buyGear`, `smokeOut`, police `stretch`/`lose`): the
+  back yard behind the pub (in from the east street along the back wall, or down the alley from the north; it's the
+  mirror of Sketchy Steve's alley on the far side). After dark he buys what's in your hands at x0.75 (pawn shops x0.4),
+  black-market pieces at x0.9 (nobody legit takes them); every deal +6 heat (x2 at night as all heat), +18 more if a
+  cop sees; no money items, no junk; hit him and he's shut for 45 s; by day "come back when it's dark". Gear, one of
+  each: LOCKPICK KIT $30 (your next stretch in the cells is halved), SMOKE BOMB $25 (when a cop's grab or taser lands:
+  no bust, every cop near loses you for 5 s, a cloud on screen); both reset with the match; synced packed in one
+  field. Yard: a cellar hatch, kegs, crates, a bin, a caged lamp and its painted pool of light, a DELIVERIES sign.
+- **Split the G, social**: release = result (`PUB.settle` 0: the line stops where you let go; the verdict at once);
+  the host hears when you start drinking ("sip") and pulls a hold more than 0.4 s off what it saw back to that;
+  everyone sees your pint in your hand (level from the host), raised to your mouth with your head back as you drink;
+  the reveal: the glass set down on the bar by the tap, the line where you let go, the G's bar beside it, the distance
+  over it (gold for perfect, with a thin gold ring; the cheer's quieter), for everyone within 40 m, 10 s.
+- **The challenge** (`GCH`): E at a chalk tent card on the bar (the chalkboard's on the gantry, out of reach): open,
+  others have 25 s to opt in (or back out), 2+ to start; 3 pints each (bought as usual), the misses add up, lowest
+  wins $10 (a tie: no winner). Nobody can hold it up: leaving the pub (45 m), dropping out, getting locked up or not
+  finishing in 5 minutes = OUT; the rest finish. On the chalkboard's note (`state|left|players`), the HUD, banners.
+- **Server schema limit**: Colyseus allows 63 fields per schema; the player was at the limit. Gear, drinking and the
+  pint level go in one packed field (`pk`, `packPk`/`unpackPk`).
+- **Pool**: the replay's last 0.6 s always plays at its own speed (a short shot caught up at x2.5 flashed by in one
+  frame on a slow screen); the stand-up blend caps its step so a slow frame can't jump it.
+- **Sound**: the pub games' sounds fall off with distance (`sfxFrom`): the table across the room is quieter.
+- **Benchmark**: afterwards it puts you back where you were, looking the same way (it dropped you at the spawn).
+
+**Performance impact** (test box, software rendering: relative only): fixed views vs R12.5b: draws −7% to +6%,
+triangles −1% to −11% (façade + balcony); at night, after the flicker and lighting changes: draws 0 to −2%, triangles
+flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the city tiles. Unverified: a real GPU
+(Blake's BENCHMARK), the people-lighting cost with a full pub on a slow card.

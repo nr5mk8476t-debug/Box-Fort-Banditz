@@ -67,7 +67,17 @@ export function whenAudioUnlocked(f: () => void): void {
 // ---------------------------------------------------------------------------
 // Sound effects
 
+/** R12.6: how loud a sound is for where it comes from (1 = right here); see sfxFrom */
+let spatial = 1;
+/** R12.6: play the sounds `fn` makes as if from `dist` metres away (the pub's games: a table across the room is
+ *  quieter than the one you're at; past ~16 m, nothing) */
+export function sfxFrom(dist: number, fn: () => void) {
+  const was = spatial;
+  spatial = was * Math.pow(Math.max(0, Math.min(1, 1.12 - dist / 16)), 1.4);
+  try { if (spatial > 0.01) fn(); } finally { spatial = was; }
+}
 function env(g: GainNode, t: number, a: number, peak: number, d: number) {
+  peak *= spatial;
   if (!(peak > 0.0001)) peak = 0.0001; // (C5c.3: a sound faded right out must never be 0 here: that throws and stops the frame)
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + a);

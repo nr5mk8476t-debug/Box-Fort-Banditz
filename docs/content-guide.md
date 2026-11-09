@@ -81,6 +81,19 @@ switched off when nobody's within 90 m.
 - Its screen parts (HUD panels, overlays) must be removed in `dispose()`; leaving a game must leave nothing behind (the
   e2e checks this for the pint and the pub games).
 
+## 5b. Things on walls, and things that move (R12.6)
+
+- **Clearance**: every outlined mesh also writes its ink outline's depth, a few mm proud of it (the outline width:
+  4-12 mm), with a depth bias that grows at grazing angles. Anything mounted on it (a picture's canvas, a mirror, a
+  clock face, a sign board) sits **1.5-2.5 cm** in front of it, or it flickers and, from the side, vanishes behind the
+  frame. Textured sheets (`sheet()`) also have a small polygon offset; don't rely on it alone.
+- **No overlapping faces in one plane** (two colours of a sign overlapping flat): build bands as one solid with inlays
+  in front (see Little Italy's arch). `tests/flicker-find.mjs` + `.py` finds z-fighting: frames 5 mm apart, pixels
+  that flip back and forth (moving people and cars flag too: check by eye).
+- **Lit with the room**: an interior's lamps light only its floor's meshes. People and moving props inside get added
+  to the lamps of the floor they're on (`CityRenderer.pubLightDynamic`, a few times a second): copy that for a new
+  interior, or its people stay sky-lit (grey-blue in a warm room at night).
+
 ## 6. Before you call it done
 
 1. `npm test`, `npm run typecheck`

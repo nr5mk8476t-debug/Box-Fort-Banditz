@@ -1990,7 +1990,7 @@ export class ArenaScene {
     const bl = this.pg.blend;
     if (bl && !pgc && !co) {
       if (!bl.init) { bl.init = true; this.input.yaw = bl.from.yaw; this.input.pitch = Math.min(0.6, Math.max(0.25, this.input.pitch)); } // (facing the way you shot, looking down at the table)
-      bl.t += dt / bl.dur;
+      bl.t += Math.min(dt, 1 / 20) / bl.dur; // (R12.6: a slow frame doesn't jump it)
       if (bl.t >= 1) this.pg.blend = null;
       else {
         const k = bl.t * bl.t * (3 - 2 * bl.t), f = bl.from, cp = this.camera.position, cr = this.camera.rotation;
