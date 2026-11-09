@@ -546,6 +546,17 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.6b: the pub's frame time (2026-11-09)
+
+| Area | Check | How | Before | Result |
+|---|---|---|---|---|
+| Draws | the fireside view: active meshes | in-page count, R12.5b / R12.6 / R12.6b | 171 / 190 | 179 (Mickey and his gear hidden from inside; the rest: the new façade through the windows) |
+| Stutter | Babylon re-checks of lights while standing at the bar 30 s | in-page counter | 0 / 0 | 0 (the hooks are bypassed now anyway) |
+| Route | R12.5b vs R12.6 on the test box | `perf-route` + `perf-compare` | - | medians -11%..+5%; the fireside's draws +18-22% (fixed above) |
+| Unit, smokes | | `npm test`, smokes | | 312 + 31, pass |
+| Browser e2e | normal / 110 ms | e2e | | 438/438, 439/439 |
+| Real PC | Blake's BENCHMARK | Blake | R12.6: bar 4.7, fireside 4.0 ms (R12.5b 3.8, 3.1) | to do |
+
 ## R12.6: façade, balcony, flicker, night lighting, WEE MICKEY, Split the G social (2026-11-09)
 
 | Area | Check | How | Before | Result |

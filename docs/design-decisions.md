@@ -2064,3 +2064,18 @@ and the challenge's details below are my calls, written down for him to change.
 triangles −1% to −11% (façade + balcony); at night, after the flicker and lighting changes: draws 0 to −2%, triangles
 flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the city tiles. Unverified: a real GPU
 (Blake's BENCHMARK), the people-lighting cost with a full pub on a slow card.
+
+## R12.6b: the pub's frame time (Blake's BENCHMARK, 2026-11-09)
+
+- Blake's R12.6 run vs R12.5b (same PC, Brave): the bar 3.8 → 4.7 ms, the fireside 3.1 → 4.0, pool 4.2 → 4.8, darts
+  3.2 → 3.7, the street 6.3 → 7.6 (same draws: some of it is session noise). Still 60+ everywhere (1% lows 70+), but over
+  the per-change budget.
+- Found: Wee Mickey (an NPC) and his gear (a prop) were drawn from inside the pub (NPCs and props are culled by distance
+  only); hidden now from inside and past 40 m (`NpcRenderer.hiddenFrom`, `PropRenderer.setVisible`), and the gear is 4
+  plain meshes. The pub lamps' `includedOnlyMeshes`: Babylon's push/splice hooks re-check every mesh in the scene; the
+  lists are now changed underneath and only the meshes that came or went are re-checked.
+- Suspected, unmeasured: the people lit by up to 5 lights (was 4). Next: a switch to compare on Blake's PC; if it's the
+  cost, one combined light for the people.
+- Engine question (Blake: why does a native game run better?): browser WebGL costs several times more per draw, from one
+  thread; ink outlines double the draws. Plan: a screen-wide outline pass, inside/outside hiding, instancing, WebGPU as an
+  option; port to a native engine (Godot) only if the slowest friend's PC can't hold 60 with the planned content after that.

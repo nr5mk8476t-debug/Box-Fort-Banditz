@@ -2,6 +2,15 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.6b: claw back some of the pub's frame time (2026-11-09)
+
+Blake's BENCHMARK on R12.6 was 4-29% slower than R12.5b in places (worst inside the pub: the bar +24%, the fireside +29%).
+- **Wee Mickey and his gear aren't drawn from inside the pub** any more (they were, through the back wall), and his
+  gear is 4 plain pieces instead of 9 outlined ones: about 13 draw calls fewer at the fireside.
+- **The pub's lamps' lists** are changed without Babylon re-checking every mesh in the scene each time (a stutter
+  waiting to happen whenever people came and went).
+- Still to measure on a real PC: lighting the people inside with the lamps (the likely remaining cost).
+
 ## R12.6: a proper pub front, no more flicker, WEE MICKEY, and Split the G with your mates (2026-11-09)
 
 **THE SOGGY SHAMROCK**
