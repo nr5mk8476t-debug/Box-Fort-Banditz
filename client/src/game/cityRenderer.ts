@@ -6,7 +6,7 @@ import {
   Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer, Vector3, VertexData, Quaternion, PointLight,
   type ShadowGenerator, type CellMaterial,
 } from "./babylon.ts";
-import { toon, ink, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
+import { toon, ink, bakeGroup, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
 import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
 import { areaZone, areaGroupId, floorVisible, checkAreaLights, LIGHT_BUDGET, type InteriorArea } from "./areas.ts";
@@ -5701,7 +5701,7 @@ export class CityRenderer {
       const node = new TransformNode("pigeon", sc); node.parent = this.root;
       const body = MB.CreateSphere("pbody", { diameterX: 0.22, diameterY: 0.2, diameterZ: 0.32, segments: 6 }, sc); body.material = pigeonBody; body.parent = node; body.position.y = 0.13;
       const head = MB.CreateSphere("phead", { diameter: 0.13, segments: 6 }, sc); head.material = pigeonHead; head.parent = node; head.position.set(0, 0.26, 0.14);
-      for (const m of [body, head]) { ink(m, 0.012); m.isPickable = false; }
+      bakeGroup(sc, node, 0.012); // (R12.7: one mesh a pigeon, not two)
       node.position.set(hx, 0, hz); node.rotation.y = hash(i, 5) * 6.28;
       this.pigeons.push({ mesh: node, hx, hz, x: hx, z: hz, y: 0, vx: 0, vy: 0, vz: 0, flee: 0, peck: hash(i, 7) * 3 });
     }
@@ -5890,7 +5890,7 @@ export class CityRenderer {
   }
 
   /** C1: traffic-light lamps (red / amber / green per approach), recoloured every frame from the light clock */
-  private lamps: { node: number; approach: number; red: StandardMaterial; amber: StandardMaterial; green: StandardMaterial; state: string }[] = [];
+  private lamps: { node: number; approach: number; red: Mesh; amber: Mesh; green: Mesh; state: string }[] = [];
 
   // =================================================================================================
   // R5: HOT STUFF PAWN & LOAN (looks only). A crooked, grimy little shop: Twitchy Lou's barred booth in the middle
@@ -6608,15 +6608,18 @@ export class CityRenderer {
         pole.position.set(d.x, 2.1, d.z); this.add(pole, "#3a3444", 0.02);
         const head = MB.CreateBox("tlhead", { width: 0.45, height: 1.3, depth: 0.35 }, sc);
         head.position.set(d.x, 4.0, d.z); head.rotation.y = yaw; this.add(head, "#2b2433", 0.03);
-        const mk = (name: string, y: number) => {
-          const m = MB.CreateDisc("tl" + name, { radius: 0.14, tessellation: 12 }, sc);
+        // R12.7: the three dark lenses are part of the merged city; only the lit one is a mesh of its own (three shared
+        // glowing materials for the whole city). It was three meshes and three materials a light: 3 draws each, now 1
+        const mk = (name: "red" | "amber" | "green", y: number) => {
+          const dark = MB.CreateDisc("tloff", { radius: 0.14, tessellation: 12 }, sc);
+          dark.position.set(d.x + fx * 0.27, y, d.z + fz * 0.27); dark.rotation.y = yaw + Math.PI; this.add(dark, "#2b2433", 0, false); // (clear of the head's ink outline)
+          const m = MB.CreateDisc("tl" + name[0], { radius: 0.14, tessellation: 12 }, sc);
           // (faces the cars coming toward it)
-          m.position.set(d.x + fx * 0.27, y, d.z + fz * 0.27); m.rotation.y = yaw + Math.PI; // (clear of the head's ink outline)
-          const mat = new StandardMaterial("tlMat" + name, sc); mat.disableLighting = true;
-          m.material = mat; m.parent = this.root; m.isPickable = false;
-          return mat;
+          m.position.set(d.x + fx * 0.275, y, d.z + fz * 0.275); m.rotation.y = yaw + Math.PI;
+          m.material = this.tlMat(name); m.parent = this.root; m.isPickable = false; m.setEnabled(false);
+          return m;
         };
-        const lamp = { node: d.node ?? 0, approach: d.approach ?? 0, red: mk("r", 4.4), amber: mk("a", 4.0), green: mk("g", 3.6), state: "" };
+        const lamp = { node: d.node ?? 0, approach: d.approach ?? 0, red: mk("red", 4.4), amber: mk("amber", 4.0), green: mk("green", 3.6), state: "" };
         this.lamps.push(lamp);
       } else if (d.kind === "ladder") {
         // two rails and rungs down the quay wall (the way out of the canal)
@@ -6647,16 +6650,18 @@ export class CityRenderer {
   updateLights(t: number) {
     const net = this.arena.roadNet;
     if (!net) return;
-    const on = { red: Color3.FromHexString("#ff3b3b"), amber: Color3.FromHexString("#ffb13b"), green: Color3.FromHexString("#3bff7a") };
-    const off = Color3.FromHexString("#2b2433");
     for (const l of this.lamps) {
       const st = lightState(net, l.node, l.approach, t);
       if (st === l.state) continue;
       l.state = st;
-      l.red.emissiveColor = st === "red" ? on.red : off;
-      l.amber.emissiveColor = st === "amber" ? on.amber : off;
-      l.green.emissiveColor = st === "green" ? on.green : off;
+      l.red.setEnabled(st === "red"); l.amber.setEnabled(st === "amber"); l.green.setEnabled(st === "green");
     }
+  }
+  private tlMats: Partial<Record<"red" | "amber" | "green", StandardMaterial>> = {};
+  private tlMat(k: "red" | "amber" | "green"): StandardMaterial {
+    let m = this.tlMats[k];
+    if (!m) { m = new StandardMaterial("tlMat" + k[0], this.scene); m.disableLighting = true; m.emissiveColor = Color3.FromHexString({ red: "#ff3b3b", amber: "#ffb13b", green: "#3bff7a" }[k]); this.tlMats[k] = m; }
+    return m;
   }
 
   /** Parody billboards: clearly fictional, never clickable, never ask for money. */

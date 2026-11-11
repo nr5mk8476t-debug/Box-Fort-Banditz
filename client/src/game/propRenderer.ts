@@ -1,7 +1,7 @@
 // The parts of props that change: dumpster lids (open once searched), phone-booth handsets
 // (gone when smashed), vending machine glass (cracked), parked car windows (smashed) and
 // flashing alarm lights on cars and shop tills. Static bodies are merged into the city.
-import { Scene, MeshBuilder, Mesh, StandardMaterial, Color3, TransformNode, Vector3, DynamicTexture } from "./babylon.ts";
+import { Scene, MeshBuilder, Mesh, StandardMaterial, CellMaterial, VertexBuffer, Color3, TransformNode, Vector3, DynamicTexture } from "./babylon.ts";
 import { toon, ink, textTexture, unlitTextured } from "./look.ts";
 import { buildCarGlass } from "./carModel.ts";
 import { buildLootModel } from "./models.ts";
@@ -48,6 +48,20 @@ export class PropRenderer {
     const tex = new DynamicTexture("tag-" + key, { width: 256, height: 128 }, this.scene, true);
     const c = tex.getContext() as unknown as CanvasRenderingContext2D;
     c.clearRect(0, 0, 256, 128);
+    this.paintTag(c, word, color, seed);
+    tex.hasAlpha = true; tex.update();
+    m = this.tagMaterial(tex);
+    this.tagMats.set(key, m);
+    return m;
+  }
+  private tagMaterial(tex: DynamicTexture): StandardMaterial {
+    const m = new StandardMaterial("tagMat", this.scene);
+    m.diffuseTexture = tex; m.emissiveTexture = tex; m.disableLighting = true; m.useAlphaFromDiffuseTexture = true; m.backFaceCulling = false;
+    m.zOffset = -3; m.zOffsetUnits = -6;
+    return m;
+  }
+  /** a tag's paint, in a 256 x 128 cell whose top-left corner is the canvas origin */
+  private paintTag(c: CanvasRenderingContext2D, word: string, color: string, seed: number) {
     c.save(); c.translate(128, 64); c.rotate((seed % 7 - 3) * 0.04);
     let size = 58;
     c.font = `bold ${size}px "Bungee", "Arial Black", sans-serif`;
@@ -59,12 +73,6 @@ export class PropRenderer {
     c.fillStyle = color;
     for (let i = 0; i < 4; i++) { const x = -90 + ((seed * 37 + i * 53) % 180); c.fillRect(x, 20, 4, 14 + ((seed + i * 11) % 22)); }
     c.restore();
-    tex.hasAlpha = true; tex.update();
-    m = new StandardMaterial("tagMat", this.scene);
-    m.diffuseTexture = tex; m.emissiveTexture = tex; m.disableLighting = true; m.useAlphaFromDiffuseTexture = true; m.backFaceCulling = false;
-    m.zOffset = -3; m.zOffsetUnits = -6;
-    this.tagMats.set(key, m);
-    return m;
   }
   private decal(x: number, y: number, z: number, nx: number, nz: number, w: number, mat: StandardMaterial, out = 0.26): Mesh {
     const p = MeshBuilder.CreatePlane("tag", { width: w, height: w / 2 }, this.scene);
@@ -94,12 +102,28 @@ export class PropRenderer {
     this.layout = arena;
     const cols = ["#ff5a3c", "#43c7a6", "#ffe14a", "#ff8fa3", "#9f5fd6", "#4fb3ff", "#b6ff3c"];
     let n = 0;
+    // R12.7: the background graffiti is ONE mesh with one texture (every word-and-colour painted into a grid of cells): it
+    // was a mesh and a texture for each (40-odd draw calls in a street view). Players' own tags stay separate (they come and go)
+    const CW = 256, CH = 128, NX = 8, NY = 8;
+    const atlas = new DynamicTexture("tagAtlas", { width: CW * NX, height: CH * NY }, this.scene, true), ac = atlas.getContext() as unknown as CanvasRenderingContext2D;
+    ac.clearRect(0, 0, CW * NX, CH * NY);
+    const cells = new Map<string, number>(), planes: Mesh[] = [];
+    const art = (x: number, y: number, z: number, nx: number, nz: number, w: number, word: string, color: string, seed: number, out = 0.26) => {
+      const key = word + color; let cell = cells.get(key);
+      if (cell === undefined) { if (cells.size >= NX * NY) return; cell = cells.size; cells.set(key, cell); ac.save(); ac.translate((cell % NX) * CW, Math.floor(cell / NX) * CH); ac.beginPath(); ac.rect(0, 0, CW, CH); ac.clip(); this.paintTag(ac, word, color, seed); ac.restore(); }
+      const p = MeshBuilder.CreatePlane("tag", { width: w, height: w / 2 }, this.scene);
+      p.position.set(x + nx * out, y, z + nz * out); p.rotation.y = Math.atan2(-nx, -nz);
+      const uv = p.getVerticesData(VertexBuffer.UVKind)!, cx = cell % NX, cy = Math.floor(cell / NX);
+      for (let i = 0; i < uv.length; i += 2) { uv[i] = (cx + uv[i]) / NX; uv[i + 1] = 1 - (cy + 1 - uv[i + 1]) / NY; }
+      p.setVerticesData(VertexBuffer.UVKind, uv);
+      planes.push(p);
+    };
     arena.boxes.forEach((b, i) => {
       if (b.art) { // (C4b: THE PIT's walls: covered both sides)
         const along = b.w > b.d ? [1, 0] : [0, 1], len = Math.max(b.w, b.d), k = Math.max(1, Math.floor(len / 3.2));
         for (const s of [-1, 1]) for (let j = 0; j < k; j++) {
           const off = (j - (k - 1) / 2) * (len / k), nx = along[1] * s, nz = along[0] * s;
-          this.decal(b.x + along[0] * off + nx * b.w / 2, 1.2, b.z + along[1] * off + nz * b.d / 2, nx, nz, Math.min(4, len / k - 0.3), this.tagMat(WALL_ART[(i + j * 3 + s + 7) % WALL_ART.length], cols[(i + j + s + 2) % cols.length], i * 7 + j * 3 + s), 0.03);
+          art(b.x + along[0] * off + nx * b.w / 2, 1.2, b.z + along[1] * off + nz * b.d / 2, nx, nz, Math.min(4, len / k - 0.3), WALL_ART[(i + j * 3 + s + 7) % WALL_ART.length], cols[(i + j + s + 2) % cols.length], i * 7 + j * 3 + s, 0.03);
         }
         return;
       }
@@ -112,9 +136,12 @@ export class PropRenderer {
       const len = nx ? b.d : b.w;
       if (len < 4) return;
       const x = b.x + nx * b.w / 2, z = b.z + nz * b.d / 2;
-      this.decal(x, 1.6, z, nx, nz, Math.min(3, len - 1), this.tagMat(WALL_ART[i % WALL_ART.length], cols[i % cols.length], i));
+      art(x, 1.6, z, nx, nz, Math.min(3, len - 1), WALL_ART[i % WALL_ART.length], cols[i % cols.length], i);
       n++;
     });
+    atlas.hasAlpha = true; atlas.update();
+    const all = planes.length > 1 ? Mesh.MergeMeshes(planes, true, true) : planes[0];
+    if (all) { all.name = "tagArt"; all.material = this.tagMaterial(atlas); all.isPickable = false; all.alphaIndex = 3; }
   }
 
   constructor(private scene: Scene, props: PropDef[]) {
@@ -348,8 +375,44 @@ export class PropRenderer {
       } else {
         continue; // bins, meters, newsboxes: nothing changes visibly (they just go empty)
       }
+      this.bakeStatic(v);
       this.map.set(d.id, v);
     }
+  }
+
+  /**
+   * R12.7: a prop's plain-coloured parts that never move or change (everything hung straight off its node that isn't
+   * its lid, handset, glass, glint or lamps) become one mesh per outline width, colours baked into the vertices. A
+   * street stall was 20-30 draw calls; now 2-3. Looks the same.
+   */
+  private bakeStatic(v: Vis) {
+    const keep = new Set<unknown>([v.lid, v.handset, v.glass, v.glint, ...(v.lights ?? [])]);
+    const groups = new Map<number, Mesh[]>();
+    for (const m of v.node.getChildMeshes(true)) {
+      if (!(m instanceof Mesh) || keep.has(m) || !(m.material instanceof CellMaterial) || m.material === this.vendGlass || m.material === this.crackedMat) continue;
+      if (m.getTotalVertices() === 0 || !m.isEnabled(false) || m.visibility !== 1 || m.getChildren().length || m.billboardMode || m.instances?.length) continue;
+      const o = m.renderOutline ? m.outlineWidth : 0;
+      (groups.get(o) ?? groups.set(o, []).get(o)!).push(m);
+    }
+    let n = 0; for (const g of groups.values()) n += g.length;
+    if (n < 2) return;
+    // (merged in the node's own space: the node is put at the origin for the merge, then back)
+    const node = v.node, pos = node.position.clone(), rot = node.rotation.clone(), par = node.parent;
+    node.parent = null; node.position.set(0, 0, 0); node.rotation.set(0, 0, 0); node.computeWorldMatrix(true);
+    for (const [o, parts] of groups) {
+      if (parts.length < 2) continue;
+      for (const m of parts) {
+        m.computeWorldMatrix(true);
+        const c = (m.material as CellMaterial).diffuseColor, k = m.getTotalVertices(), cols = new Float32Array(k * 4);
+        for (let i = 0; i < k; i++) { cols[i * 4] = c.r; cols[i * 4 + 1] = c.g; cols[i * 4 + 2] = c.b; cols[i * 4 + 3] = 1; }
+        m.setVerticesData(VertexBuffer.ColorKind, cols);
+      }
+      const merged = Mesh.MergeMeshes(parts, true, true, undefined, false, false);
+      if (!merged) continue;
+      merged.name = "propStatic"; merged.parent = node; merged.material = toon(this.scene, "#ffffff", "vc"); merged.useVertexColors = true; merged.isPickable = false;
+      if (o > 0) ink(merged, o);
+    }
+    node.position.copyFrom(pos); node.rotation.copyFrom(rot); node.parent = par;
   }
 
   private glintMat: StandardMaterial | null = null;
