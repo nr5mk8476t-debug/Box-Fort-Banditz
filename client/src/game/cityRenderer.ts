@@ -70,6 +70,8 @@ export function sphereSegs(d: number, want: number): number { return Math.min(wa
  *  pass, in every tile; 17 widths in one view). The nearest step (in proportion): at most a quarter thinner or thicker,
  *  under a pixel on screen at any normal distance */
 type AbstractMeshT = import("@babylonjs/core/Meshes/abstractMesh.js").AbstractMesh;
+/** R12.7: the merged city's one outline width; each piece's own width is carried by its normals' length (see flush) */
+const INK_BASE = 0.05;
 export const OUTLINE_STEPS = [0, 0.004, 0.008, 0.012, 0.02, 0.03, 0.05, 0.08];
 export function snapOutline(w: number): number {
   if (!(w > 0.001)) return 0;
@@ -785,8 +787,13 @@ export class CityRenderer {
         const cols = new Float32Array(n * 4);
         for (let i = 0; i < n; i++) { cols[i * 4] = c.r; cols[i * 4 + 1] = c.g; cols[i * 4 + 2] = c.b; cols[i * 4 + 3] = 1; }
         m.setVerticesData(VertexBuffer.ColorKind, cols);
+        // R12.7: each piece's outline width rides on its normals (their length = width / INK_BASE): the outline shader
+        // pushes a vertex out by normal x width, and the toon shader normalises normals before lighting, so the look is
+        // the same but every width shares one mesh. It was a mesh for each of 7 widths in every tile.
+        const ow = Number(outline);
+        if (ow > 0 && ow !== INK_BASE) { const nr = m.getVerticesData(VertexBuffer.NormalKind); if (nr) { const k = ow / INK_BASE; for (let i = 0; i < nr.length; i++) nr[i] *= k; m.setVerticesData(VertexBuffer.NormalKind, nr); } }
       }
-      const gk = outline + "|" + cast + "|" + grp + "|" + tile;
+      const gk = (Number(outline) > 0 ? INK_BASE : 0) + "|" + cast + "|" + grp + "|" + tile;
       (groups.get(gk) ?? groups.set(gk, []).get(gk)!).push(...meshes);
     }
     for (const [gk, meshes] of groups) {

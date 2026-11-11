@@ -2,7 +2,7 @@
 // the same on any machine, so this runs on the test box (software rendering) and still means something.
 // For each fixed view: draws = meshes drawn + outlined meshes (an ink outline is a second draw), by class.
 //   node tests/draw-budget.mjs                 compare with tests/draw-budgets.json (exit 1 when a view's over)
-//   UPDATE=1 node tests/draw-budget.mjs        write the budgets (what's measured now + 5%)
+//   UPDATE=1 node tests/draw-budget.mjs        write the budgets (what's measured now + 12%)
 //   CLIENT_URL=http://localhost:4173  OUT=report.json  SHOTS=dir (a screenshot of each view)
 import { chromium } from "playwright";
 import fs from "node:fs";
@@ -51,7 +51,7 @@ if (process.env.OUT) fs.writeFileSync(process.env.OUT, JSON.stringify(out, null,
 const cols = ["draws", "est", "meshes", "cityMerged", "citySingles", "citySkins", "cityOtherMerged", "props", "tags", "people", "cars", "loot", "other"];
 console.log("view".padEnd(14) + cols.map((c) => c.slice(0, 9).padStart(10)).join(""));
 for (const [n, r] of Object.entries(out)) console.log(n.padEnd(14) + cols.map((c) => String(r[c] ?? 0).padStart(10)).join(""));
-if (process.env.UPDATE) { const b = {}; for (const [n, r] of Object.entries(out)) b[n] = Math.ceil(r.draws * 1.05); fs.writeFileSync(file, JSON.stringify(b, null, 1) + "\n"); console.log("budgets written"); process.exit(0); }
+if (process.env.UPDATE) { const b = {}; for (const [n, r] of Object.entries(out)) b[n] = Math.ceil(r.draws * 1.12); // (people and cars come and go: the same view varies by ~8% run to run) fs.writeFileSync(file, JSON.stringify(b, null, 1) + "\n"); console.log("budgets written"); process.exit(0); }
 const budgets = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
 let over = 0;
 for (const [n, r] of Object.entries(out)) { const b = budgets[n]; if (b === undefined) { console.log(`  (no budget for ${n})`); continue; } if (r.draws > b) { over++; console.log(`OVER BUDGET: ${n}: ${r.draws} draws (budget ${b})`); } }
