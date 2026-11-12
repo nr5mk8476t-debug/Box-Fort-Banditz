@@ -468,7 +468,11 @@ export class CityRenderer {
   private extraGroups: { id: number; x: number; z: number; rect: { minX: number; maxX: number; minZ: number; maxZ: number }; y0: number; y1: number; dist?: number; vis?: (x: number, y: number, z: number, was: boolean) => boolean; noBoxes?: boolean }[] = [];
   /** R12.4: while the pub's being built: which visibility group each piece goes in (by where it is) */
   private pubZone: ((m: Mesh) => number) | null = null;
-  private zoneOf(m: Mesh): number { return this.group >= 0 || !this.pubZone ? this.group : this.pubZone(m); }
+  private zoneOf(m: Mesh): number { return this.outsideOnly ? -1 : this.group >= 0 || !this.pubZone ? this.group : this.pubZone(m); }
+  /** R12.9: while set, what's built is outside (always drawn), whatever room its middle happens to fall in (the balcony's
+   *  floor over the cut corner has its middle inside the pub's footprint: it was put in an upstairs room and vanished
+   *  from the others) */
+  private outsideOnly = false;
   private intoGroup(m: Mesh, g: number) { (this.unitMeshes.get(g) ?? this.unitMeshes.set(g, []).get(g)!).push(m); m.setEnabled(false); this.unitOn.set(g, false); }
   private groupOfBox(b: Box): number {
     if (b.unit !== undefined) return b.unit;
@@ -4059,6 +4063,36 @@ export class CityRenderer {
       shopfront(true, r.minX, r.maxX - P.cham, r.minZ, -1, [P.door2.minX, P.door2.maxX]);
       shopfront(false, r.minZ + P.cham, r.maxZ, r.maxX, 1);
       shopfront(false, r.minZ, r.maxZ, r.minX, -1);
+      // R12.9 (Blake: "the cornicing kind of ends on the corner... it doesn't flow around"): the cream cornice carries on
+      // round the back (north) wall, butting up to the side fronts' cornices with small caps over the corners (no two faces
+      // in the same place: no flicker), and stone quoins up every outside corner of the upper floor
+      this.outsideOnly = true;
+      {
+        const zN = r.maxZ;
+        for (const [y0, y1, dep, over] of [[P.roofY + 0.6, P.roofY + 0.9, 0.34, 0.1], [P.roofY + 0.45, P.roofY + 0.6, 0.22, 0.05]] as const) {
+          sbx(r.minX, r.maxX, y0, y1, zN, zN + dep, "panel", CREAM, 0.004);
+          sbx(r.minX - dep, r.minX, y0, y1, zN + over, zN + dep, "panel", CREAM, 0.004);
+          sbx(r.maxX, r.maxX + dep, y0, y1, zN + over, zN + dep, "panel", CREAM, 0.004);
+        }
+        // quoins: alternately long and short dressed stones, 6 cm proud, a mortar gap between; the face that gets the long
+        // stone swaps each course. (cx, cz) the corner; (ax, az) and (bx, bz) the two walls' directions away from it
+        const quoins = (cx: number, cz: number, ax: number, az: number, bx: number, bz: number) => {
+          const D = 0.06, H = 0.36, G = 0.06;
+          let k = 0;
+          for (let y = 4.86; y + H <= P.roofY + 0.42; y += H + G, k++) {
+            const la = k % 2 ? 0.6 : 0.34, lb = k % 2 ? 0.34 : 0.6, ym = y + H / 2;
+            // the stone on wall A wraps the corner (it covers the corner's own little square); the one on B starts at the wall
+            { const u0 = -D, u1 = la, x0 = cx + ax * u0 - bx * D, x1 = cx + ax * u1, z0 = cz + az * u0 - bz * D, z1 = cz + az * u1;
+              sbx(Math.min(x0, x1), Math.max(x0, x1), ym - H / 2, ym + H / 2, Math.min(z0, z1), Math.max(z0, z1), "panel", CREAM, 0.004); }
+            { const x0 = cx, x1 = cx + bx * lb - ax * D, z0 = cz, z1 = cz + bz * lb - az * D;
+              sbx(Math.min(x0, x1), Math.max(x0, x1), ym - H / 2, ym + H / 2, Math.min(z0, z1), Math.max(z0, z1), "panel", CREAM, 0.004); }
+          }
+        };
+        quoins(r.minX, r.minZ, 1, 0, 0, 1);  // south-west: along the front (east), up the west side (north)
+        quoins(r.minX, r.maxZ, 1, 0, 0, -1); // north-west: along the back, down the west side
+        quoins(r.maxX, r.maxZ, -1, 0, 0, -1); // north-east: along the back, down the east front
+      }
+      this.outsideOnly = false;
       // the bays: red frames round small panes, a panelled base, a lead roof with a little cornice
       const lead = "#4a4a54";
       for (const b of P.bays) {
@@ -4098,11 +4132,22 @@ export class CityRenderer {
         const cl = MB.CreateCylinder("pbClock", { diameter: 0.8, height: 0.14, tessellation: 24 }, sc); cl.position.set(cx, cy, cz); cl.rotation.set(PI / 2, 0, 0); this.add(cl, BLACK, 0.01, false);
         for (const sd of [-1, 1]) sheet(0.7, 0.7, cx, cy, cz + sd * 0.09, 0, sd, face); // (R12.6: the faces were inside the case's outline (12 mm): they flickered)
         const rim = MB.CreateTorus("pbClockRim", { diameter: 0.82, thickness: 0.05, tessellation: 24 }, sc); rim.position.set(cx, cy, cz); rim.rotation.set(PI / 2, 0, 0); this.add(rim, GOLD, 0, false); }
-      // the side door: one red door swung in, a fanlight, two lanterns, the step
-      { const D2 = P.door2, dx = (D2.minX + D2.maxX) / 2, w = D2.maxX - D2.minX;
-        sbx(D2.minX + 0.05, D2.minX + 0.13, Y1, Y1 + 2.8, IN.minZ, IN.minZ + w - 0.2, "panel", RED, 0.01);
-        const fan = texMat("fan", 512, 128, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 512, 128); lettering(c, "SIDE BAR", 512, 128); }, 0.5);
+      // the side door. R12.9 (Blake: "the side bar... looks a little bit low budget... just make it a door opening"): a
+      // proper pub doorway like the corner's: two panelled red doors folded back against the jambs inside (sunk panels, brass
+      // knobs and kick plates), a glazed fanlight with glazing bars and the name in gold leaf, the stone step. (It was one
+      // flat red slab swung in, "SIDE BAR" in big letters over it and on the mat.)
+      { const D2 = P.door2, dx = (D2.minX + D2.maxX) / 2, w = D2.maxX - D2.minX, lw = w / 2 - 0.08;
+        for (const sd of [-1, 1]) {
+          const jx = sd < 0 ? D2.minX + 0.09 : D2.maxX - 0.09, face = -sd; // (the leaf's face toward the doorway)
+          sbx(jx - 0.04, jx + 0.04, Y1 + 0.02, Y1 + 2.82, IN.minZ + 0.04, IN.minZ + 0.04 + lw, "panel", RED, 0.01);
+          for (const [yy, hh] of [[0.55, 0.7], [1.45, 0.75], [2.35, 0.6]] as const) for (const f2 of [face, -face]) box(0.02, hh, lw - 0.22, jx + f2 * 0.045, Y1 + yy, IN.minZ + 0.04 + lw / 2, "#5a0c12", 0);
+          box(0.015, 0.24, lw - 0.1, jx + face * 0.05, Y1 + 0.14, IN.minZ + 0.04 + lw / 2, BRASS, 0); // (the kick plate)
+          cyl(0.07, 0.07, jx + face * 0.075, Y1 + 1.1, IN.minZ + 0.04 + lw - 0.12, BRASS, 0.004, 8, undefined, 0, PI / 2);
+        }
+        const fan = texMat("fan2", 512, 128, (c) => { c.fillStyle = "#1a2a2a"; c.fillRect(0, 0, 512, 128); c.fillStyle = "rgba(160,200,200,0.18)"; c.fillRect(0, 0, 512, 60); lettering(c, "THE SOGGY SHAMROCK", 512, 128, GOLD, "Georgia, serif", 0.5); }, 0.5);
         sheet(w, 0.35, dx, 3.12, r.minZ - 0.08, 0, -1, fan);
+        for (let k = 1; k < 4; k++) box(0.03, 0.35, 0.03, D2.minX + (k * w) / 4, 3.12, r.minZ - 0.1, CREAM, 0); // (glazing bars, clear of the glass)
+        box(w, 0.04, 0.05, dx, 2.93, r.minZ - 0.1, CREAM, 0.004); // (the transom bar)
         box(w + 0.3, 0.12, 0.6, dx, 0.13, r.minZ - 0.3, "#8a8a92", 0.006); }
       // brass plaques by the doors, a blue history plaque, a shamrock hanging sign off the east front
       const plaque = texMat("plaque", 256, 192, (c) => { c.fillStyle = "#c89a3a"; c.fillRect(0, 0, 256, 192); c.strokeStyle = "#7a5a1a"; c.lineWidth = 8; c.strokeRect(6, 6, 244, 180); c.fillStyle = "#3a2a10"; c.font = "bold 26px Georgia, serif"; c.textAlign = "center"; c.fillText("FINE STOUTS", 128, 64); c.fillText("& WHISKEYS", 128, 100); c.font = "20px Georgia, serif"; c.fillText("LIVE MUSIC NIGHTLY", 128, 146); }, 0.5);
@@ -4241,7 +4286,7 @@ export class CityRenderer {
         if (card) { const ct = texMat("gchcard", 256, 160, (c) => { c.fillStyle = "#1e2a22"; c.fillRect(0, 0, 256, 160); c.strokeStyle = "#7a4a22"; c.lineWidth = 10; c.strokeRect(0, 0, 256, 160); c.fillStyle = "#ffe14a"; c.textAlign = "center"; c.font = "bold 30px 'Comic Sans MS', cursive"; c.fillText("G CHALLENGE", 128, 52); c.fillStyle = "#f4f1ea"; c.font = "20px 'Comic Sans MS', cursive"; c.fillText("3 pints each", 128, 90); c.fillText("lowest total wins", 128, 120); }, 0.35);
           const fx = Math.sin(card.yaw), fz = Math.cos(card.yaw);
           for (const sd of [-1, 1]) { const p = MB.CreatePlane("pbGchCard", { width: 0.3, height: 0.19 }, sc); p.position.set(card.x + fx * sd * 0.045, card.y - 0.02, card.z + fz * sd * 0.045); p.rotation.set(-sd * 0.42, card.yaw + (sd > 0 ? PI : 0), 0); keepM(p, ct); } } }
-      doorTile("SIDE BAR", (P.door2.minX + P.door2.maxX) / 2, IN.minZ + 0.9, 2.2, 1.2, 0); // (R12.6: reads from the street, like the main door's: it was upside down coming in)
+      doorTile("FÁILTE", (P.door2.minX + P.door2.maxX) / 2, IN.minZ + 0.9, 2.2, 1.2, 0); // (R12.6: reads from the street, like the main door's: it was upside down coming in. R12.9: "welcome", not "SIDE BAR")
       // milk-glass schoolhouse globes on brass rods (round the bar, over the tables), little wall lamps in the snugs
       const globes: Mesh[] = [];
       const globe = (x: number, z: number, drop: number) => { cyl(0.02, drop, x, CEIL - drop / 2, z, BRASS, 0, 4); cyl(0.2, 0.08, x, CEIL - drop - 0.02, z, BRASS, 0.004, 10, 0.12); const g = MB.CreateSphere("pbGlobe", { diameter: 0.42, segments: 7 }, sc); g.position.set(x, CEIL - drop - 0.22, z); g.scaling.y = 1.1; globes.push(g); };
@@ -4265,13 +4310,18 @@ export class CityRenderer {
         while (u < a1) {
           const w = 0.3 + rnd() * 0.55, h = 0.3 + rnd() * 0.5, y = 1.75 + rnd() * 1.3;
           if (!skip(u + w / 2)) { const x = nx ? fixed + nx * 0.05 : u + w / 2, z = nx ? u + w / 2 : fixed + nz * 0.05; framed(x, y, z, nx, nz, w, h, picCols[Math.floor(rnd() * picCols.length)]);
-            if (rnd() < 0.55) { const w2 = 0.25 + rnd() * 0.3, y2 = y > 2.4 ? y - h / 2 - 0.3 : y + h / 2 + 0.3; framed(nx ? x : x + (rnd() - 0.5) * 0.2, y2, nx ? z + (rnd() - 0.5) * 0.2 : z, nx, nz, w2, 0.25 + rnd() * 0.2, picCols[Math.floor(rnd() * picCols.length)]); } }
+            // (R12.9 flicker: the second picture's gap ignored its own height, so a tall one overlapped the first and the two
+            //  frames fought in the same plane (left of the fireplace): now clear by 10 cm. Same random draws, same order.)
+            if (rnd() < 0.55) { const w2 = 0.25 + rnd() * 0.3, jx = nx ? 0 : (rnd() - 0.5) * 0.2, jz = nx ? (rnd() - 0.5) * 0.2 : 0, h2 = 0.25 + rnd() * 0.2, c2 = picCols[Math.floor(rnd() * picCols.length)];
+              const gap = (h + h2) / 2 + 0.2, y2 = y > 2.4 ? y - gap : y + gap; framed(x + jx, y2, z + jz, nx, nz, w2, h2, c2); } }
           u += w + 0.1 + rnd() * 0.3;
         }
       };
       const nearWin = (fixed: "east" | "south" | "west") => (u: number) => this.arena.boxes.some((b) => b.deco === "pubwindow" && b.y < Y2 && (fixed === "south" ? Math.abs(b.z - r.minZ - T / 2) < 0.3 && Math.abs(b.x - u) < b.w / 2 + 0.3 : Math.abs(b.x - (fixed === "east" ? r.maxX - T / 2 : r.minX + T / 2)) < 0.3 && Math.abs(b.z - u) < b.d / 2 + 0.3));
-      wallRun(0, -1, IN.maxZ, P.stairs.maxX + 1.2, IN.maxX - 6.2, (u) => Math.abs(u - P.fire.x) < 2.2);
-      wallRun(1, 0, IN.minX, IN.minZ + 0.4, IN.maxZ - 1.5, (u) => nearWin("west")(u) || (u > 23.8 && u < 28.6));
+      // (R12.9 flicker (Blake: "the painting... to the left of the fireplace"): it was the gilt mirror at x -92 (and the west
+      //  wall's at z 17.1) with pictures hung over it in its own plane: the runs leave the mirrors' spans clear now)
+      wallRun(0, -1, IN.maxZ, P.stairs.maxX + 1.2, IN.maxX - 6.2, (u) => Math.abs(u - P.fire.x) < 2.2 || Math.abs(u + 92.0) < 1.15);
+      wallRun(1, 0, IN.minX, IN.minZ + 0.4, IN.maxZ - 1.5, (u) => nearWin("west")(u) || (u > 23.8 && u < 28.6) || Math.abs(u - 17.1) < 1.15);
       wallRun(-1, 0, IN.maxX, IN.minZ + P.cham + 0.5, IN.maxZ - 0.5, nearWin("east"));
       wallRun(0, 1, IN.minZ, IN.minX + 0.5, IN.maxX - P.cham - 0.4, (u) => nearWin("south")(u) || (u > P.door2.minX - 0.4 && u < P.door2.maxX + 0.4));
       // tin signs (parody adverts) in among them
@@ -4305,7 +4355,10 @@ export class CityRenderer {
       // bunting across the room (green, white, orange flags), an oar, a bicycle, lanterns, copper pots by the fire
       const flags: Mesh[] = [];
       const bunting = (ax: number, az: number, bx2: number, bz: number, y: number) => { const n = Math.round(Math.hypot(bx2 - ax, bz - az) / 0.32); for (let k = 0; k < n; k++) { const t = (k + 0.5) / n, sag = Math.sin(t * PI) * 0.5; const f = MB.CreateCylinder("pbFlag", { diameterTop: 0.26, diameterBottom: 0, height: 0.28, tessellation: 3 }, sc); f.position.set(ax + (bx2 - ax) * t, y - sag - 0.12, az + (bz - az) * t); f.rotation.y = Math.atan2(bx2 - ax, bz - az); f.scaling.z = 0.08; this.add(f, ["#1f8a3a", "#f4f1ea", "#ff8a1a"][k % 3], 0, false); flags.push(f); } };
-      bunting(IN.minX + 0.3, IN.minZ + 3, IN.maxX - 3, IN.maxZ - 3, CEIL - 0.35); bunting(IN.minX + 3, IN.maxZ - 0.3, IN.maxX - 0.3, IN.minZ + 6, CEIL - 0.4);
+      bunting(IN.minX + 0.3, IN.minZ + 3, IN.maxX - 3, IN.maxZ - 3, CEIL - 0.35);
+      // (R12.9 (Blake: "triangle flags that go through the staircase"): the second string started at the stairs and hung across
+      //  the stairwell, so you climbed through it: it starts 1.1 m short of them now)
+      bunting(IN.minX + 4.5, P.stairs.minZ - 1.1, IN.maxX - 0.3, IN.minZ + 6, CEIL - 0.4);
       { const ox2 = -97.0, oz2 = 24.5; box(3.2, 0.06, 0.12, ox2, CEIL - 0.6, oz2, "#c8a070", 0.006, 0.2); box(0.6, 0.04, 0.24, ox2 + 1.6, CEIL - 0.58, oz2 + 0.3, "#c8a070", 0.006, 0.2); for (const dx of [-1.2, 1.2]) cyl(0.015, 0.55, ox2 + dx, CEIL - 0.3, oz2, BLACK, 0, 4); }
       { const bx = -80.0, bz = 24.0, by = CEIL - 0.9; for (const dx of [-0.55, 0.55]) { const w = MB.CreateTorus("pbWheel", { diameter: 0.7, thickness: 0.04, tessellation: 20 }, sc); w.rotation.x = PI / 2; w.rotation.y = 0; w.rotation.set(0, 0, PI / 2); w.position.set(bx + dx, by, bz); this.add(w, "#1b1420", 0, false); } box(1.1, 0.05, 0.05, bx, by + 0.25, bz, "#2f6a3a", 0.004, 0, 0, 0.1); box(0.05, 0.35, 0.05, bx + 0.3, by + 0.1, bz, "#2f6a3a", 0.004); box(0.25, 0.05, 0.12, bx + 0.32, by + 0.3, bz, BLACK, 0); for (const dx of [-0.4, 0.4]) cyl(0.015, 0.6, bx + dx, CEIL - 0.3, bz, BLACK, 0, 4); }
       for (let k = 0; k < 4; k++) { const px = P.fire.x - 1.5 + k * 1.0, pz = IN.maxZ - 0.9; cyl(0.015, 0.5, px, CEIL - 0.28, pz, BLACK, 0, 4); cyl(0.3 - k * 0.03, 0.18, px, CEIL - 0.62, pz, "#c87a3a", 0.004, 14); box(0.25, 0.03, 0.03, px + 0.25, CEIL - 0.6, pz, "#3a2418", 0); }
@@ -4534,8 +4587,21 @@ export class CityRenderer {
       }
       // the snug's doorway frame
       for (const [x, z, ax] of [[-92.94, 25.95, true]] as [number, number, boolean][]) { for (const e of [-0.78, 0.78]) box(ax ? 0.22 : 0.12, 2.45, ax ? 0.12 : 0.22, x + (ax ? 0 : e), U + 1.22, z + (ax ? e : 0), MAH2, 0.006); box(ax ? 0.24 : 1.7, 0.16, ax ? 1.7 : 0.24, x, U + 2.5, z, MAH2, 0.006); }
-      const sign2 = (text: string, x: number, z: number, nx: number, nz: number) => sheet(1.4, 0.32, x, U + 2.8, z, nx, nz, texMat("sign2-" + text, 512, 116, (c) => { c.fillStyle = "#0e0a0a"; c.fillRect(0, 0, 512, 116); c.strokeStyle = GOLD; c.lineWidth = 6; c.strokeRect(6, 6, 500, 104); lettering(c, text, 512, 116); }, 0.5));
-      sign2("SEAMUS'S SNUG", -93.07, 25.95, -1, 0);
+      // R12.9 (Blake: "in Seamus's snug... a wooden door and... a neon light saying Seamus's snug"): shamrock-green neon
+      // tubes on a dark board over the snug's door (the door itself is a real one now: the prop "snugdoor", E opens it)
+      { const x = -93.0, z = 25.95, W = 1.75, H = 0.5, y = U + 2.82;
+        box(0.05, H + 0.12, W + 0.14, x - 0.025, y, z, "#141a16", 0.004); // (the backing board, on the wall)
+        const T = 1024, TH = Math.round(1024 * H / W), t = new DynamicTexture("snugNeon", { width: T, height: TH }, sc, true);
+        const c = t.getContext() as unknown as CanvasRenderingContext2D, txt = "SEAMUS'S SNUG";
+        c.clearRect(0, 0, T, TH);
+        let size = TH * 0.62; const font = () => `bold ${size}px "Arial Rounded MT Bold", "Trebuchet MS", sans-serif`; c.font = font();
+        while (size > 12 && c.measureText(txt).width > T * 0.9) { size -= 4; c.font = font(); }
+        c.textAlign = "center"; c.textBaseline = "middle"; c.lineJoin = "round";
+        c.strokeStyle = "#2bff6a"; c.globalAlpha = 0.3; c.lineWidth = TH * 0.2; c.strokeText(txt, T / 2, TH / 2); // (the glow)
+        c.globalAlpha = 1; c.lineWidth = TH * 0.07; c.strokeText(txt, T / 2, TH / 2); // (the tube)
+        c.fillStyle = "#eaffef"; c.fillText(txt, T / 2, TH / 2); // (the hot core)
+        t.hasAlpha = true; t.update();
+        sheet(W, H, x - 0.075, y, z, -1, 0, unlitTextured(sc, t, "snugNeonMat")); } // (2.5 cm clear of the board's outline)
       // the ceiling: pressed tin and beams; milk-glass globes
       tinCeil(IN.minX, IN.maxX, IN.minZ, IN.maxZ, UC);
       for (let z = IN.minZ + 1.8; z < IN.maxZ - 0.5; z += 3.0) sbx(IN.minX, Math.min(IN.maxX, cutK + z - 0.13), UC - 0.28, UC - 0.025, z - 0.13, z + 0.13, "mahogany", MAH2);
@@ -4556,7 +4622,7 @@ export class CityRenderer {
         const walk = (pts: Vector3[], step: number, fn: (x: number, z: number) => void) => { let carry = 0; for (let k = 0; k + 1 < pts.length; k++) { const a2 = pts[k], b2 = pts[k + 1], L2 = Math.hypot(b2.x - a2.x, b2.z - a2.z); let u = carry; while (u < L2) { const t = u / L2; fn(a2.x + (b2.x - a2.x) * t, a2.z + (b2.z - a2.z) * t); u += step; } carry = u - L2; } };
         const cy0 = U + 2.95, cy1 = U + 3.55;
         fascia(0.35, cy0, cy1, "#8e1414");
-        tube(ring(0.4, cy0), 0.05, MAH2, 0.004, 6); tube(ring(0.4, cy1), 0.06, MAH2, 0.004, 6); tube(ring(0.41, (cy0 + cy1) / 2), 0.018, GOLD, 0, 6);
+        tube(ring(0.4, cy0), 0.05, MAH2, 0.004, 6); tube(ring(0.4, cy1), 0.06, MAH2, 0.004, 6); // (R12.9 (Blake): the gold piping ring at mid-height went: it ran 1 cm in front of the name boards, through THE SOGGY SHAMROCK and GUZZLE'S)
         walk(ring(0.45, 0), 0.24, (x, z) => { gsph(0.085, x, cy0 - 0.03, z, bulb); gsph(0.085, x, cy1 + 0.03, z, bulb); });
         const cr0 = U + 3.63, cr1 = U + 3.86; // (R12.2c: under the beams)
         fascia(-0.6, cr0, cr1, CREAM);
@@ -4793,6 +4859,7 @@ export class CityRenderer {
       { const inn2 = [-1 / S2, 1 / S2]; for (const sd of [-1, 1]) { const dx = MX - out[0] * 0.5 + along[0] * sd * 0.95, dz = MZ - out[1] * 0.5 + along[1] * sd * 0.95; sb(0.06, 2.5, 0.9, dx + inn2[0] * 0.2, U + 1.25, dz + inn2[1] * 0.2, "panel", "#f4f1ea", 0.008, yawOut); } }
       // ---------------------------------------------------------------- the balcony: boards, wrought-iron railings with
       // curly balusters, a brass top rail, fairy lights along it, planters spilling flowers, standing tables, iron brackets
+      this.outsideOnly = true; // (R12.9: the balcony, its underside and its brackets: outside, always drawn; off again after the brackets)
       for (const b of this.arena.boxes) if (b.deco === "balcony") {
         if (b.poly) { const m = footPrism(sc, b.poly, b.y - b.h / 2, b.y + b.h / 2); this.skinPush(m, "boards", "#4a2a18", 0.008); continue; }
         sbx(b.x - b.w / 2, b.x + b.w / 2, b.y - b.h / 2, b.y + b.h / 2, b.z - b.d / 2, b.z + b.d / 2, "boards", "#4a2a18", 0.008);
@@ -4815,25 +4882,39 @@ export class CityRenderer {
       // Looks only: it's all above head height (the brace's foot is 1.35 m under the floor, ~3.4 m up), so no collision.
       {
         const BF = P.balcony[0], BS = P.balcony[1] ?? P.balcony[0], TIMBER = "#2a1810", FASCIA = "#1e4a32", SOFFIT = "#c9b791";
+        // R12.9 (Blake: "the brackets... not really connected to the brickwork"): each one bolts to an iron plate on the face
+        // of the black fascia board (it sits 0.2 m proud of the brick, so the old ones started inside it and seemed to float),
+        // and they only go where there IS wall behind: two of them used to hang in mid-air in front of the cut corner (its
+        // wall is 2 m further back), which now gets its own pair, square off the angled wall, out to the balcony's edge.
+        const OFF = 0.2; // (how far the fascia board stands off the brick)
         const bracket = (wx: number, wz: number, ox: number, oz: number, depth: number) => {
-          const ex = wx + ox * (depth - 0.12), ez = wz + oz * (depth - 0.12), yB = U - 0.15 - 0.09;
-          // the joist, from just inside the wall to the fascia
-          if (ox) box(depth + 0.05, 0.18, 0.12, wx + ox * (depth / 2 - 0.02), yB, wz, TIMBER, 0.006); else box(0.12, 0.18, depth + 0.05, wx, yB, wz + oz * (depth / 2 - 0.02), TIMBER, 0.006);
-          // the knee brace: a quarter curve from the wall (1.35 m down) up and out to the joist's end
-          const y0 = U - 1.35, y1 = U - 0.33, pts: Vector3[] = [];
-          for (let k = 0; k <= 10; k++) { const th = (k / 10) * Math.PI / 2, h = (depth - 0.18) * (1 - Math.cos(th)); pts.push(new Vector3(wx + ox * (0.04 + h), y0 + (y1 - y0) * Math.sin(th), wz + oz * (0.04 + h))); }
+          const ry = Math.atan2(ox, oz), at = (d: number, y: number) => new Vector3(wx + ox * d, y, wz + oz * d), yB = U - 0.15 - 0.09;
+          // the joist, from the wall to the fascia (a timber beam: under the floor all the way)
+          box(0.12, 0.18, depth + 0.05, wx + ox * (depth / 2 - 0.02), yB, wz + oz * (depth / 2 - 0.02), TIMBER, 0.006, ry);
+          // the wall plate on the fascia's face, with gold bolt heads (so it reads as fixed to the building)
+          const y0 = U - 1.35, y1 = U - 0.33;
+          box(0.2, 0.95, 0.05, wx + ox * (OFF + 0.025), y0 + 0.4, wz + oz * (OFF + 0.025), iron, 0.003, ry);
+          for (const yy of [y0 + 0.05, y0 + 0.75]) { const b = at(OFF + 0.06, yy); cyl(0.05, 0.03, b.x, b.y, b.z, "#c9a24a", 0, 8, undefined, ox ? 0 : Math.PI / 2, ox ? Math.PI / 2 : 0); }
+          // the knee brace: a quarter curve from the plate (1.35 m down) up and out to the joist
+          const reach = Math.min(depth - 0.18, 1.9), pts: Vector3[] = [];
+          for (let k = 0; k <= 10; k++) { const th = (k / 10) * Math.PI / 2, h = (reach - OFF) * (1 - Math.cos(th)); pts.push(at(OFF + 0.05 + h, y0 + (y1 - y0) * Math.sin(th))); }
           tube(pts, 0.035, iron, 0.004, 6);
-          // a straight strut from the curve's heel to the joist's middle (the triangle reads as structure)
-          tube([new Vector3(wx + ox * 0.06, y0 + 0.08, wz + oz * 0.06), new Vector3(wx + ox * (depth * 0.55), yB - 0.08, wz + oz * (depth * 0.55))], 0.022, iron, 0.003, 5);
+          // a straight strut from the curve's heel to the joist (the triangle reads as structure)
+          tube([at(OFF + 0.07, y0 + 0.08), at(OFF + (reach - OFF) * 0.55, yB - 0.08)], 0.022, iron, 0.003, 5);
           // the scroll at the heel: a curl winding in
-          { const c: Vector3[] = []; for (let k = 0; k <= 14; k++) { const a = Math.PI * 0.5 + (k / 14) * Math.PI * 1.6, r = 0.13 - k * 0.006; c.push(new Vector3(wx + ox * (0.2 + Math.cos(a) * r), y0 + 0.42 + Math.sin(a) * r, wz + oz * (0.2 + Math.cos(a) * r))); } tube(c, 0.018, iron, 0.003, 5); }
-          // the wall plate (bolted to the brick) and the brace's foot
-          if (ox) box(0.04, 0.55, 0.16, wx + ox * 0.02, y0 + 0.22, wz, iron, 0.003); else box(0.16, 0.55, 0.04, wx, y0 + 0.22, wz + oz * 0.02, iron, 0.003);
-          void ex; void ez;
+          { const c: Vector3[] = []; for (let k = 0; k <= 14; k++) { const a = Math.PI * 0.5 + (k / 14) * Math.PI * 1.6, r = 0.13 - k * 0.006; c.push(at(OFF + 0.2 + Math.cos(a) * r, y0 + 0.42 + Math.sin(a) * r)); } tube(c, 0.018, iron, 0.003, 5); }
         };
         const front = BF.maxZ, side = BS.minX; // (the walls the balcony hangs off)
-        for (const x of [-81.6, -79.0, -76.4]) bracket(x, front, 0, -1, front - BF.minZ);
-        for (const z of [8.8, 11.6, 14.0]) bracket(side, z, 1, 0, BS.maxX - side);
+        const frontEnd = side - P.cham, sideStart = front + P.cham; // (where the straight walls stop and the cut corner starts)
+        for (const x of [-81.7, -80.1]) if (x < frontEnd - 0.7) bracket(x, front, 0, -1, front - BF.minZ);
+        for (const z of [12.5, 14.0]) if (z > sideStart + 0.7) bracket(side, z, 1, 0, BS.maxX - side);
+        // the cut corner: square off its wall, clear of the door in its middle, out to wherever the balcony's edge is
+        { const S2c = Math.SQRT1_2, nx = S2c, nz = -S2c; // (outward, off the angled wall)
+          for (const t of [0.17, 0.83]) {
+            const wx = frontEnd + (side - frontEnd) * t, wz = front + (sideStart - front) * t;
+            const toFront = (wz - BF.minZ) / -nz, toSide = (BS.maxX - wx) / nx; // (distance to the floor's front and side edges)
+            bracket(wx, wz, nx, nz, Math.min(toFront, toSide) - 0.05);
+          } }
         // the fascia round the outer edge (front, side) and the soffit under every piece of the floor
         box(BF.maxX - BF.minX + 0.04, 0.3, 0.05, (BF.minX + BF.maxX) / 2, U - 0.17, BF.minZ - 0.025, FASCIA, 0.006);
         box(0.05, 0.3, BS.maxZ - BF.minZ + 0.04, BS.maxX + 0.025, U - 0.17, (BF.minZ + BS.maxZ) / 2, FASCIA, 0.006);
@@ -4844,6 +4925,7 @@ export class CityRenderer {
           sbx(b.x - b.w / 2, b.x + b.w / 2, b.y - b.h / 2 - 0.04, b.y - b.h / 2 - 0.02, b.z - b.d / 2, b.z + b.d / 2, "boards", SOFFIT, 0);
         }
       }
+      this.outsideOnly = false;
       // ---------------------------------------------------------------- MAMMY MOLONEY's whiskey snug: a fire, a wall of
       // whiskey, her high-backed chair, two old fellas in leather chairs behind their newspapers, a rug, a lamp
       const SF = P.snugFire;

@@ -51,7 +51,14 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R12.8)
+## Next up (as of R12.9)
+- R12.9: movement +15% (cops on foot too); Blake's pub list fixed (brackets, cornice + quoins, fireplace mirror flicker,
+  side doorway, stair bunting, Seamus's snug door + neon, the canopy's gold line, the balcony floor from inside).
+  Building outside pieces from inside the pub's build: wrap them in `outsideOnly` or they're filed into a room.
+- Next: Blake's pick (the pub brawl, the quiz, the G-split champ, R13's alleys); still waiting on his verdict on
+  Mickey's prices and a proper play of Split the G.
+
+## Earlier: Next up (as of R12.8)
 - R12.8: ink outlines are one draw, not two (`client/src/game/inkOutline.ts`; `?ink=old` for the old way): −20 to −25%
   draws everywhere. The simulation's garbage 87 → ~10 MB/s (`canonBoxes`, `carSim`, `hyp()`): keep shared objects that
   hot code reads (boxes, cars, move states) in ONE shape, and use `hyp()` not `Math.hypot` in per-tick code. A 240 FPS

@@ -3139,6 +3139,9 @@ export function buildTrashington(): ArenaLayout {
     // the snug's walls (x -93.0..-84.6), with its doorway off the landing; the pool area east of it is open to the front
     const SNUG2 = R(-93.0 + WT2, -84.6, BW + WT2, IN.maxZ), POOLA = R(-84.6 + WT2, IN.maxX, BW, IN.maxZ), HALL = R(IN.minX, -93.0, BW, IN.maxZ);
     wb(-93.0, -93.0 + WT2, BW, 25.2, U, UC, "wall", wc); wb(-93.0, -93.0 + WT2, 26.7, IN.maxZ, U, UC, "wall", wc); wb(-93.0, -93.0 + WT2, 25.2, 26.7, U + 2.4, UC, "wall", wc); // (the snug's door, off the landing)
+    // R12.9 (Blake: "in Seamus's snug... a wooden door"): a real one in that doorway: E opens it, it swings shut behind you
+    wb(-93.0, -93.0 + WT2, 25.2, 26.7, U, U + 2.4, "wall", { hide: true, deco: "doorleaf" });
+    props.push({ id: "snugdoor", kind: "door", x: -93.0 + WT2 / 2, y: U + 1.3, z: 25.95, yaw: -PI / 2, hw: 0.15, hd: 0.75, box: boxes.length - 1, door: "wood", closer: 4 });
     wb(-93.0, -84.6, BW, BW + WT2, U, UC, "wall", wc);
     wb(-84.6, -84.6 + WT2, BW, IN.maxZ, U, UC, "wall", wc);
     // ---- the island bar (a ring of counter with rounded corners, the staff's flap at the back) round a back bar ----
@@ -3322,6 +3325,9 @@ export function buildTrashington(): ArenaLayout {
     if (!R2) for (const [x, z] of [[50, -11.5], [60, -11.5], [97, 75], [97, 88]]) put("smelly_fish", x, z, 0.15);
   }
 
+  // (R12.9: the snug's door finds its leaf again: the pub's build splices boxes out after it's made (the cut corner's
+  //  re-cut), which moved the leaf down one)
+  for (const pd of props) if (pd.id === "snugdoor") pd.box = boxes.findIndex((b) => b.deco === "doorleaf" && Math.abs(b.x - pd.x) < 0.2 && Math.abs(b.z - pd.z) < 0.2);
   return {
     halfSize: HALF, boxes: canonBoxes(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,

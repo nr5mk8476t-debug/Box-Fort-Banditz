@@ -555,7 +555,7 @@ export class PropSystem {
   /** R8: open or shut a glass door (by a player, or an NPC walking up to it) */
   toggleDoor(ps: PropSim, by: string) {
     const d = ps.def;
-    ps.ready = !ps.ready; ps.t = d.oneWay ? ONE_WAY_SHUT : REFILL.door; // (R11.4: a fire door swings shut by itself)
+    ps.ready = !ps.ready; ps.t = d.oneWay ? ONE_WAY_SHUT : d.closer ?? REFILL.door; // (R11.4: a fire door swings shut by itself; R12.9: so does one with a closer)
     if (d.box !== undefined) setBoxOff(this.w.arena, d.box, !ps.ready);
     this.w.emit({ t: "door", prop: d.id, open: !ps.ready, by });
   }

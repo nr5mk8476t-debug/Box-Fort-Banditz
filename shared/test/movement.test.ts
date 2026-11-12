@@ -49,7 +49,7 @@ test("releasing keys decelerates to a stop", () => {
 test("cannot walk through a wall, and slides along it", () => {
   const arena: ArenaLayout = { ...empty, boxes: [{ x: 0, y: 1.5, z: 3, w: 10, h: 3, d: 1, kind: "wall" }] };
   // walk diagonally into wall at z = 2.5 (its near face)
-  const s = run(makeMoveState(0, 0), arena, 1.2, { mz: 1, mx: 1 });
+  const s = run(makeMoveState(0, 0), arena, 1.0, { mz: 1, mx: 1 }); // (R12.9: 1.2 s took you round the wall's end at the faster walk)
   assert.ok(s.z <= 2.5 - PLAYER.radius + 1e-3, `z=${s.z}`);
   assert.ok(s.x > 2.5, `should slide along wall, x=${s.x}`);
 });
@@ -62,7 +62,7 @@ test("walks up a low curb automatically but is blocked by a tall crate", () => {
       { x: 10, y: 1, z: 3, w: 4, h: 2, d: 2, kind: "crate" },
     ],
   };
-  const a = run(makeMoveState(0, 0), arena, 0.8, { mz: 1 });
+  const a = run(makeMoveState(0, 0), arena, 0.6, { mz: 1 }); // (R12.9: 0.8 s walked right over it at the faster walk)
   assert.ok(Math.abs(a.y - 0.25) < 1e-6 && a.grounded, `curb y=${a.y}`);
   const b = run(makeMoveState(10, 0), arena, 1.5, { mz: 1 });
   assert.ok(b.y === 0 && b.z < 2, `crate y=${b.y} z=${b.z}`);

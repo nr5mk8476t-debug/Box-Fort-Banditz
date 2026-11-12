@@ -24,7 +24,7 @@ const startZ = st.players.get(a.sessionId).z;
 for (let i = 0; i < 60; i++) { a.send(MSG.INPUT, [{ seq: i, mx: 0, mz: 1, yaw: Math.PI, pitch: 0, sprint: false, jump: false, crouch: false, dodge: false }]); await sleep(16); }
 await sleep(300);
 const alice = (b.state as any).players.get(a.sessionId);
-assert(startZ - alice.z > 4 && startZ - alice.z < 6, `Bob sees Alice moved ~5m: ${(startZ - alice.z).toFixed(2)}`);
+assert(startZ - alice.z > 4.8 && startZ - alice.z < 7.2, `Bob sees Alice moved ~6m: ${(startZ - alice.z).toFixed(2)}`); // (R12.9: walking is 6.67 m/s now, +15%)
 assert(alice.lastSeq === 59, `server acked all inputs: ${alice.lastSeq}`);
 
 // Speed hack attempt: 200 inputs at once should NOT all be applied instantly

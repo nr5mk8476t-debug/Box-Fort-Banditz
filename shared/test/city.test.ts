@@ -515,7 +515,7 @@ test("R12.3b pavement: walking along and across the joins (round the roundabout,
   // 2. along a diagonal, 1.2 m from its kerb (where the cut pieces meet the grid)
   const net = w.arena.roadNet!, e = net.edges.find((q) => q.name === "Dodgy Cut-Through")!, A = net.nodes[e.a], B = net.nodes[e.b];
   const L = Math.hypot(B.x - A.x, B.z - A.z), ux = (B.x - A.x) / L, uz = (B.z - A.z) / L, nx = -uz, nz = ux, off = e.hw + 1.2;
-  const r2 = walk(A.x + ux * L * 0.3 + nx * off, A.z + uz * L * 0.3 + nz * off, () => ({ yaw: Math.atan2(ux, uz) }), 6);
+  const r2 = walk(A.x + ux * L * 0.3 + nx * off, A.z + uz * L * 0.3 + nz * off, () => ({ yaw: Math.atan2(ux, uz) }), 5); // (R12.9: 6 s walked off its end at the faster walk)
   // 3. away from that diagonal's kerb, straight across the cut pieces into the grid
   // (0.6 s: across the cut pieces into the grid, stopping short of the buildings 4 m back; against the same along the pavement)
   const r3 = walk(A.x + ux * L * 0.5 + nx * (e.hw + 0.3), A.z + uz * L * 0.5 + nz * (e.hw + 0.3), () => ({ yaw: Math.atan2(nx, nz) }), 0.6);
@@ -523,6 +523,6 @@ test("R12.3b pavement: walking along and across the joins (round the roundabout,
   for (const [k, r] of [["round the roundabout", r1], ["along the diagonal", r2], ["across the diagonal's cuts", r3]] as const) {
     assert.ok(r.minY > 0.13 && r.maxY < 0.17, `${k}: feet stay on the pavement's top (y ${r.minY.toFixed(3)}..${r.maxY.toFixed(3)})`);
     if (k === "across the diagonal's cuts") assert.ok(r.dist > ref.dist * 0.95, `${k}: no snag (walked ${r.dist.toFixed(2)} m, ${ref.dist.toFixed(2)} m on plain pavement)`);
-    else assert.ok(r.dist > ({ "round the roundabout": 3, "along the diagonal": 6 } as Record<string, number>)[k] * 3.2, `${k}: no snag (walked ${r.dist.toFixed(1)} m)`);
+    else assert.ok(r.dist > ({ "round the roundabout": 3, "along the diagonal": 5 } as Record<string, number>)[k] * 3.2, `${k}: no snag (walked ${r.dist.toFixed(1)} m)`);
   }
 });

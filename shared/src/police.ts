@@ -34,8 +34,8 @@ export function starsOf(heat: number): number { return heat >= STAR_HEAT[2] ? 3 
 export const JAIL_TIME = 30;
 /** Heat right after a break-out: 1 star, and it takes a while to cool. */
 export const BREAKOUT_HEAT = 55;
-export const COP_RUN = 6.5; // walk 5.8 < cop 6.5 < sprint 9.4 (D1: scaled with the faster movement; was 5.6)
-export const COP_JOG = 3.8;
+export const COP_RUN = 7.48; // walk 6.67 < cop 7.48 < sprint 10.81 (D1: scaled with the faster movement; was 5.6. R12.9: +15% with the players)
+export const COP_JOG = 4.37; // (R12.9: +15%)
 export const COP_SIGHT = 24;
 export const COP_HEAR = 3; // this close they notice you even without line of sight
 const GRAB_RANGE = 1.2; // start the grab
@@ -58,7 +58,7 @@ export const COPCAR = { speed: 15, halfLen: 2.2, halfWidth: 1.0, deployDist: 15,
  * day, and the station's own cops (one walking the ground floor, one guarding the evidence room). They ignore you
  * unless you're wanted (or they see a crime); then they're ordinary cops till they lose you, and go back on patrol.
  */
-export const PATROL = { foot: 10, footNight: 14, cars: 2, walk: 1.7, cruise: 9, carSight: 30, respawn: 10, hidden: 30 };
+export const PATROL = { foot: 10, footNight: 14, cars: 2, walk: 1.96, cruise: 9, carSight: 30, respawn: 10, hidden: 30 };
 
 export interface CopCarSim {
   id: string; x: number; z: number; yaw: number; v: number;

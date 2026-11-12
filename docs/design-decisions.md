@@ -2138,3 +2138,37 @@ flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the 
   The simulation's results are unchanged (all 343 unit tests, which include determinism and replay tests, pass).
 - **Left for later** (Blake's next BENCHMARK decides): the people's draws (4-6 outlined pieces each), the club's crowd
   from the crossroads, traffic's remaining ~3 MB/s.
+
+## R12.9: Blake's playtest list (2026-11-12)
+
+- **Speed** (Blake: "a little bit slower... increase the speed by... 15%"; asked: the police too, so chases balance the
+  same): `PLAYER` walk 6.67, sprint 10.81, crouch 3.1, slide 12.88 (min 8.05), dodge 13.8, ground accel 55.2, decel
+  39.1 (all ×1.15: the same time to get going and to stop). `COP_RUN` 7.48, `COP_JOG` 4.37, patrol walk 1.96 (×1.15).
+  Other NPCs walk at their own absolute speeds (npcSim divides by the player's walk speed), so they're unchanged.
+  Tests that walked for a fixed time and expected to be somewhere (a wall, a curb, a pavement's end, the canal's paddle
+  speed, the server smoke's ~5 m) were re-timed; the patrol test now asks that most foot patrols walk their beat (one
+  stepping round someone for a few seconds failed it); the pool window test excuses a shot over in under two frames.
+- **The balcony's brackets**: each one's iron wall plate (gold bolt heads) sits on the face of the fascia board (0.2 m
+  proud of the brick), the brace starting from it; only where there's straight wall behind (front x −81.7, −80.1; side
+  z 12.5, 14.0); the cut corner gets two square off its angled wall (at 17% and 83% along it, clear of the door), joists
+  out to the floor's edge. The two old corner ones were 2-2.5 m in front of the chamfered wall, in mid-air.
+- **The balcony floor from inside**: pieces built inside the pub are filed into the interior's rooms by their middle;
+  the floor's triangle over the cut corner has its middle inside the pub's footprint, so it went into an upstairs room's
+  group and was switched off from the others. `CityRenderer.outsideOnly` marks a run of building as outside (always
+  drawn): the balcony, its underside and brackets, and the new cornice and quoins.
+- **Cornice and quoins**: the top cornice (both profiles) runs the back wall, with small caps over the back corners
+  butting up to the side fronts' cornices (no two faces in the same place). Quoins: alternately 0.6/0.34 m stones, 36 cm
+  courses, 6 cm proud, from the fascia's top to the cornice, at the south-west, north-west and north-east corners (not
+  the cut corner's obtuse angles).
+- **The fireplace flicker**: pictures were hung over the gilt mirrors (north wall x −92, west wall z 17.1) in the same
+  plane; the picture runs leave the mirrors' spans clear. Also: a second picture above or below another now clears it by
+  its own height (a tall one could overlap). `tests/flicker-find.mjs` on that wall: 870 flipping pixels → 0.
+- **The side entrance** (Blake: "just make it a door opening"): two panelled red leaves folded back against the jambs
+  (sunk panels, brass knobs and kick plates), a glazed fanlight (bars, a transom) with THE SOGGY SHAMROCK, a FÁILTE mat.
+- **The stairwell bunting**: the second string starts 1.1 m short of the stairs.
+- **Seamus's snug door**: a door prop (`snugdoor`, style "wood": a mahogany leaf, four sunk panels, brass knobs, 2.35 m
+  for the lower doorway) with a new `closer` (seconds: it swings shut by itself, not while someone's in the doorway);
+  NPCs open it as they reach it like any door. Its leaf's box index is looked up again at the end of the city build (the
+  pub's cut-corner re-cut splices a box out after it's made). The neon: green tubes (a soft glow, the tube, a white core)
+  on a dark board over the door, 2.5 cm clear of the board's outline.
+- **The upstairs bar's canopy**: its mid-height gold piping ring ran 1 cm in front of the name boards: removed.

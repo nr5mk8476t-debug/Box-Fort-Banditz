@@ -2,6 +2,27 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.9: faster on your feet, and Blake's pub playtest list (2026-11-12)
+
+- **Movement +15%**: walk 5.8 → 6.67 m/s, sprint 9.4 → 10.8, crouch, slide and dodge with them, and getting going and
+  stopping 15% snappier so it feels the same, just quicker. **The police on foot +15% too** (run 6.5 → 7.5), so a chase
+  balances like before: you still outrun a cop at a sprint, not at a walk.
+- **The balcony's brackets** bolt to an iron plate on the black fascia board (they started inside it and seemed to
+  float), and the two that hung in mid-air in front of the cut corner (its wall is 2 m further back) are replaced by a
+  pair coming square off the angled wall.
+- **The cornice** carries on round the back of the pub instead of stopping at the corners, and **stone quoins** run up
+  every outside corner of the upper floor.
+- **The flickering painting left of the fireplace** was a gilt mirror with pictures hung over it in its own plane (the
+  west wall's mirror too): the pictures keep clear of the mirrors now.
+- **The side entrance** is a proper pub doorway: two panelled red doors folded back, the name in gold in the fanlight,
+  a FÁILTE ("welcome") mat. No more SIDE BAR boards.
+- **The bunting** no longer hangs across the stairwell.
+- **Seamus's snug** has a real wooden door (E opens it; it swings shut behind you a few seconds later, never on someone
+  standing in it) and **SEAMUS'S SNUG in shamrock-green neon** over it.
+- **The upstairs bar**: the gold line through THE SOGGY SHAMROCK and GUZZLE'S on the canopy is gone.
+- **The balcony floor outside the French doors** is back: seen from inside the pub it vanished (it was filed under an
+  upstairs room's lights-and-visibility group by mistake).
+
 ## R12.8: a steadier frame rate: one draw per outline, a fifth of the garbage, and a 240 FPS cap (2026-11-12)
 
 Blake's BENCHMARK on R12.7: the slowest views were upstairs in the pub looking out (~160 FPS, dips to 83-98), and the

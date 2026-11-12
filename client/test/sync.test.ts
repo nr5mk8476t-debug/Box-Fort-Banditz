@@ -144,13 +144,14 @@ async function playOut(rig: any, o: { sec: number; fps: number; lat: number; sta
         // (each shot by its name where the window has one, else by the replay itself)
         const key = (s as any).key ? id + "/" + (s as any).key : s.sim;
         const r = shown.get(key) ?? { mid: 0, dur: 0, st: id, why: (s as any).why, gid: s.note?.gid, key }; shown.set(key, r);
+        r.dur = Math.max(r.dur, (s as any).dur ?? 0);
         if (!s.sim.done && s.simT > 0) r.mid++;
       }
     }
   }
   // (a shot still rolling on the host when the time's up hasn't had its chance yet)
   let rolling = 0; for (const s of w.pubGames.st.values()) if (s.shot) rolling++;
-  const seen = new Set([...shown.entries()].filter(([, q]) => q.mid >= 2).map(([k]) => k));
+  const seen = new Set([...shown.entries()].filter(([, q]) => q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / o.fps)).map(([k]) => k)); // (R12.9: or over in under two frames, and on screen)
   const missing = rig.shots.slice(shots0, shotsCut < 0 ? undefined : shotsCut).filter((k: string) => !seen.has(k));
   const late = new Set<string>(shotsCut < 0 ? [] : rig.shots.slice(shotsCut));
   return { hostShots: rig.shots.length - shots0 - rolling, lateN: [...late].filter((k) => !rig.shots.slice(rig.shots.length - rolling).includes(k)).length, shown: [...shown.values()].filter((q: any) => !late.has(q.key)), missing };
@@ -174,10 +175,12 @@ for (const net of [{ fps: 60, lat: 0.05, name: "60 fps, 50 ms" }, { fps: 12, lat
     await poolGames(rig);
     if (process.env.PGLOG) for (const s of rig.view.st.values()) s.feed.log = [];
     const r = await playOut(rig, { sec: 150, ...net, me: "me", each: () => { const w = rig.w; poolBot(rig.S, w, "pooltable2", "me"); poolBot(rig.S, w, "pooltable1", "hana", true); poolBot(rig.S, w, "pooltable1", "gus"); concede(w); reopen(w); } });
-    const visible = r.shown.filter((q) => q.mid >= 2).length, skipped = r.shown.length - visible;
+    // (R12.9: a shot over in less than two of the window's frames can't be on screen for two: it counts if it showed at all)
+    const visible = r.shown.filter((q) => q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / net.fps)).length, skipped = r.shown.length - visible;
+    for (const q of r.shown as any[]) if (!(q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / net.fps))) console.log(`  skipped: ${q.key} shown in ${q.mid} frames, ${q.dur.toFixed(2)} s long`);
     const why: Record<string, number> = {}; for (const q of r.shown as any[]) why[q.why] = (why[q.why] ?? 0) + 1;
     const games = new Set((r.shown as any[]).map((q) => q.st + "#" + q.gid));
-    if (process.env.PGLOG) console.log(rig.view.st.get("pooltable1").feed.log.join("\n"));
+    if (process.env.PGLOG) console.log(rig.view.st.get(process.env.PGT ?? "pooltable1").feed.log.join("\n"));
     console.log(`  ${net.name}: ${r.hostShots} shots, ${games.size} games, replays by kind ${JSON.stringify(why)}${r.missing.length ? `, not shown: ${r.missing.join(" ")}` : ""}`);
     assert.ok(r.hostShots >= 20, `enough shots to judge (${r.hostShots})`);
     assert.equal(skipped, 0, `${r.hostShots} shots taken; ${skipped} jumped straight to the end in the window`);

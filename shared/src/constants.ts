@@ -24,12 +24,14 @@ export const PLAYER = {
   crouchEyeHeight: 1.0,
   slideEyeHeight: 0.75,
 
-  walkSpeed: 5.8,
-  sprintSpeed: 9.4,
-  crouchSpeed: 2.7,
+  // R12.9 (Blake, playtest: "a little bit slower... increase the speed by 15%"): walk, sprint, crouch, slide and dodge
+  // all +15% (and the police on foot with them, so a chase balances the same)
+  walkSpeed: 6.67,
+  sprintSpeed: 10.81,
+  crouchSpeed: 3.1,
   backwardFactor: 0.75,
-  groundAccel: 48, // lower = heavier (0 -> walk speed in ~0.12 s)
-  groundDecel: 34, // stopping from a sprint takes ~0.28 s: a little skid
+  groundAccel: 55.2, // lower = heavier (0 -> walk speed in ~0.12 s)
+  groundDecel: 39.1, // stopping from a sprint takes ~0.28 s: a little skid
   turnBoost: 1.6, // D1: pushing against your own momentum (reversing, hard turns) bites this much harder
   airAccel: 8, // limited steering in the air
   gravity: 26,
@@ -44,8 +46,8 @@ export const PLAYER = {
   windedRecover: 0.35, // after emptying the bar, sprint unlocks again at this level
 
   // Belly slide: sprint + press crouch
-  slideMinSpeed: 7.0,
-  slideSpeed: 11.2,
+  slideMinSpeed: 8.05,
+  slideSpeed: 12.88,
   slideTime: 0.85,
   slideFriction: 6.5,
   slideSteer: 3,
@@ -53,7 +55,7 @@ export const PLAYER = {
   slideStamina: 0.1,
 
   // Dodge / dive
-  dodgeSpeed: 12.0,
+  dodgeSpeed: 13.8,
   dodgeHop: 3.2,
   dodgeTime: 0.22,
   dodgeCooldown: 1.4,

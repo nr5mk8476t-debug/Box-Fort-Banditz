@@ -129,7 +129,9 @@ export interface PropDef {
   loot?: string[];
   /** R11.4: a door's look (glass by default; a painted panel; the green steel fire exit) and, for a one-way door, the
    *  way out (a unit vector): from that side there's no handle; such a door swings shut by itself */
-  door?: "glass" | "solid" | "exit"; oneWay?: [number, number];
+  door?: "glass" | "solid" | "exit" | "wood"; oneWay?: [number, number];
+  /** R12.9: a door that swings shut by itself this many seconds after it's opened (not while someone's in the doorway) */
+  closer?: number;
   /** R11.4: which of STEVE's goods */
   sell?: DealKind;
   /** R12.6: which of WEE MICKEY's gear */

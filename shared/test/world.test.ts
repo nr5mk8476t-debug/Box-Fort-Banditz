@@ -436,7 +436,7 @@ test("C1.1 the canal: fall in = float slowly, no jumping or climbing the kerb, l
   const x0 = p.move.x;
   drive(w, "a", 60, { yaw: Math.PI / 2, mz: 1, sprint: true });
   const v = p.move.x - x0;
-  assert.ok(v > 1 && v < 2.2, `paddled ${v.toFixed(2)} m in 1 s (walking is 5)`);
+  assert.ok(v > 1 && v < 2.6, `paddled ${v.toFixed(2)} m in 1 s (walking is 6.7)`); // (R12.9: +15% with the walk)
   // can't jump or climb out over the kerb on the far side
   w.debugTeleport("a", water.maxX - 1, 15, Math.PI / 2);
   for (let i = 0; i < 60 * 3; i++) { w.pushInputs("a", [inp(p.lastSeq + 1, { yaw: Math.PI / 2, mz: 1, jump: i % 20 < 10 })]); w.tick(); }
@@ -1788,10 +1788,13 @@ test("R7 police presence: foot patrols walk the town and cruisers drive round al
   assert.equal(w.police.cars.filter((c) => c.patrol).length, PATROL.cars, "cruisers");
   assert.ok(w.police.cars.every((c) => c.mode === "cruise"), "cruising (no sirens)");
   assert.equal(cops().filter((c) => c.beat !== undefined).length, 4, "the station's own four (R8)");
-  const p0 = cops().find((c) => c.patrol)!;
-  const x0 = p0.move.x, z0 = p0.move.z;
+  // (R12.9: most of them, not just the first one: any one of them can be held up a few seconds stepping round
+  //  someone, which is what the first one was doing at the faster walk)
+  const pats = cops().filter((c) => c.patrol), at0 = pats.map((c) => [c.move.x, c.move.z]);
   settle(w, 6);
-  assert.ok(Math.hypot(p0.move.x - x0, p0.move.z - z0) > 3, "they walk their beat");
+  const moved = pats.map((c, i) => Math.hypot(c.move.x - at0[i][0], c.move.z - at0[i][1]));
+  assert.ok(moved.filter((d) => d > 3).length >= Math.ceil(pats.length * 0.7), `they walk their beat (${moved.map((d) => d.toFixed(1)).join(", ")} m in 6 s)`);
+  const p0 = pats[moved.findIndex((d) => d > 3)];
   // stand right in front of one, clean: nothing
   w.debugTeleport(a.id, p0.move.x + 2, p0.move.z, 0); settle(w, 2);
   assert.equal(p0.state, "beat", "a clean bandit is left alone");

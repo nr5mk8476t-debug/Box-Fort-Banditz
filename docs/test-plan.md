@@ -546,6 +546,22 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.9: speed +15% and the pub playtest list (2026-11-12)
+
+| Area | Check | How | Before | Result |
+|---|---|---|---|---|
+| Speed | walk/sprint/crouch/slide/dodge +15%, accel too; cops +15% | `npm test` (movement, chases, police) | walk 5.8, sprint 9.4, cop run 6.5 | 6.67, 10.81, 7.48; re-timed tests: wall, curb, pavement joins, canal paddle, server smoke ~6 m |
+| Snug door | shut blocks; E opens; shuts itself after 4 s; never on someone in the doorway | `shared/test/snugdoor.test.ts` (new) | - | pass |
+| Brackets | bolted to the fascia's face; none in mid-air at the cut corner | screenshots `screenshots/r12_9/before-/after-brk*` | 2 floating, the rest starting inside the board | fixed (reviewed) |
+| Balcony floor | from inside the French doors | screenshot `after-balcDoor` | the street showed through | floor there |
+| Cornice, quoins | back corners | screenshots `after-cornerNE/NW` | stopped at the corners | wraps; quoins up 3 corners |
+| Flicker | the wall left of the fireplace | `tests/flicker-find.mjs` | 870 px | 0 |
+| Side door, snug neon, bar canopy, stair bunting | | screenshots `after-*` | | as asked (reviewed) |
+| Draw budget | 10 views | `tests/draw-budget.mjs` | | within (first run: darts 192 over 179, all of it people in the booth; re-run 175) |
+| Unit | | `npm test` | | 313 + 31, pass |
+| Smokes | signal, server | | | pass (the server smoke failed once on "pedestrians are walking around": one walker paused 1.5 s; passed twice after) |
+| Browser e2e | normal / 110 ms | e2e | | PENDING / PENDING |
+
 ## R12.8: one-draw outlines, the simulation's garbage, the frame-rate cap (2026-11-12)
 
 | Area | Check | How | Before (R12.7) | Result |

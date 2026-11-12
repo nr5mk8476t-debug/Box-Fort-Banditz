@@ -315,7 +315,7 @@ export class PropRenderer {
         const handle = MeshBuilder.CreateBox("thandle", { width: 0.14, height: 0.03, depth: 0.04 }, scene); handle.position.set(-0.2, 0.36, -0.15); part(handle, "#8e96a8", 0.006);
       } else if (d.kind === "door") {
         // R8: a glass door: one leaf (a pawn shop's) or two (the station's), hinged at the outer edges, swinging out
-        const turned = Math.abs(Math.sin(d.yaw)) > 0.5, W = 2 * ((turned ? d.hd : d.hw) ?? 0.9), H = 2.6;
+        const turned = Math.abs(Math.sin(d.yaw)) > 0.5, W = 2 * ((turned ? d.hd : d.hw) ?? 0.9), H = d.door === "wood" ? 2.35 : 2.6; // (R12.9: the snug's doorway is lower)
         const n = W > 2.2 ? 2 : 1, lw = W / n;
         const glassMat = this.doorGlass ?? (() => { const m = new StandardMaterial("doorGlass", scene); m.diffuseColor = Color3.FromHexString("#bfe8ff"); m.emissiveColor = Color3.FromHexString("#2a5a70"); m.alpha = 0.3; m.backFaceCulling = false; return (this.doorGlass = m); })();
         v.leaves = [];
@@ -324,14 +324,18 @@ export class PropRenderer {
           const hinge = new TransformNode("doorHinge", scene); hinge.parent = node; hinge.position.set(side * W / 2, -1.3 + H / 2 + 0.02, 0); // (R11.4: on whatever floor it's on)
           const cxl = -side * lw / 2;
           // R11.4: a painted panel door (the club's restroom wing) or the green steel fire EXIT, instead of glass
-          const panel = d.door === "exit" ? toon(scene, "#2f8f4e") : d.door === "solid" ? toon(scene, "#3a2440") : glassMat;
+          const panel = d.door === "exit" ? toon(scene, "#2f8f4e") : d.door === "solid" ? toon(scene, "#3a2440") : d.door === "wood" ? toon(scene, "#4a2010") : glassMat;
           const pane = MeshBuilder.CreateBox("doorPane", { width: lw - 0.12, height: H - 0.14, depth: d.door ? 0.06 : 0.04 }, scene); pane.parent = hinge; pane.position.set(cxl, 0, 0); pane.material = panel; pane.isPickable = false;
           if (d.door === "solid") { for (const y2 of [0.55, -0.45]) { const inset = MeshBuilder.CreateBox("doorInset", { width: lw - 0.4, height: 0.75, depth: 0.075 }, scene); inset.parent = hinge; inset.position.set(cxl, y2, 0); inset.material = toon(scene, "#4a2e54"); inset.isPickable = false; } const knob = MeshBuilder.CreateSphere("doorKnob", { diameter: 0.08, segments: 6 }, scene); knob.parent = hinge; knob.position.set(-side * (lw - 0.15), -0.15, 0.06); knob.material = toon(scene, "#c9a227"); knob.isPickable = false; const k2 = knob.clone("doorKnob2"); k2.position.z = -0.06; }
+          if (d.door === "wood") { // (R12.9: Seamus's snug: a mahogany door, four sunk panels, a brass knob each side)
+            for (const [y2, hp] of [[0.5, 0.75], [-0.42, 0.85]] as const) for (const x2 of [-0.2, 0.2]) for (const zz of [-0.034, 0.034]) { const inset = MeshBuilder.CreateBox("doorInsetW", { width: (lw - 0.5) / 2, height: hp, depth: 0.01 }, scene); inset.parent = hinge; inset.position.set(cxl + x2 * (lw - 0.3) / 0.8, y2, zz); inset.material = toon(scene, "#2e1208"); inset.isPickable = false; }
+            for (const zz of [-0.06, 0.06]) { const knob = MeshBuilder.CreateSphere("doorKnob", { diameter: 0.08, segments: 6 }, scene); knob.parent = hinge; knob.position.set(-side * (lw - 0.12), -0.15, zz); knob.material = toon(scene, "#d9a632"); knob.isPickable = false; }
+          }
           if (d.door === "exit") { const kick = MeshBuilder.CreateBox("doorKick", { width: lw - 0.14, height: 0.25, depth: 0.07 }, scene); kick.parent = hinge; kick.position.set(cxl, -H / 2 + 0.2, 0); kick.material = toon(scene, "#9aa0a8"); kick.isPickable = false; }
           for (const [w2, h2, x2, y2] of [[lw, 0.08, cxl, H / 2 - 0.04], [lw, 0.12, cxl, -H / 2 + 0.06], [0.07, H, -side * 0.035, 0], [0.07, H, -side * (lw - 0.035), 0]] as [number, number, number, number][]) {
             const f = MeshBuilder.CreateBox("doorFrame", { width: w2, height: h2, depth: 0.07 }, scene); f.parent = hinge; f.position.set(x2, y2, 0); f.material = toon(scene, "#3a3444"); f.isPickable = false;
           }
-          if (d.door !== "solid") {
+          if (d.door !== "solid" && d.door !== "wood") {
             // (R11.4: the EXIT's push bar is on the inside only: the outside's bare steel)
             const inZ = d.oneWay ? -(Math.cos(d.yaw) * d.oneWay[1] + Math.sin(d.yaw) * d.oneWay[0]) * 0.07 : 0.06;
             const bar = MeshBuilder.CreateBox("doorBar", { width: lw * (d.door === "exit" ? 0.8 : 0.55), height: 0.06, depth: 0.06 }, scene); bar.parent = hinge; bar.position.set(-side * lw * (d.door === "exit" ? 0.5 : 0.55), 0.05, inZ); bar.material = toon(scene, "#c9ccd4"); bar.isPickable = false;

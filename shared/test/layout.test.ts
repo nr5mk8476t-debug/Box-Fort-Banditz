@@ -605,7 +605,7 @@ test("R8 the station's real glass: ribbon windows on the ground floor's front an
   assert.ok(glass.some((b) => b.y < 3 && b.z > st.rect.maxZ - 0.8), "ground-floor glass on the front");
   const ch = g.chief;
   assert.ok(glass.some((b) => b.y > g.upY && Math.abs(b.x - st.rect.maxX + 0.2) < 0.2 && b.z > ch.minZ && b.z < ch.maxZ + 0.5), "the chief's corner: glass on the side too");
-  const doors = nc.props!.filter((p) => p.kind === "door" && !p.id.startsWith("feverdoor")); // (R11.4: the club's doors are their own test)
+  const doors = nc.props!.filter((p) => p.kind === "door" && !p.id.startsWith("feverdoor") && p.id !== "snugdoor"); // (R11.4: the club's doors are their own test; R12.9: so is the snug's)
   assert.equal(doors.length, 3, "the station's front doors and the two pawn shops' doors");
   for (const d of doors) assert.ok(d.box !== undefined && nc.boxes[d.box].kind === "glass", "each blocks while shut");
   for (const d of doors) assert.ok(!nc.props!.some((q) => q !== d && q.box === d.box), "R9: nothing else uses a door's box (no smashing them)");
