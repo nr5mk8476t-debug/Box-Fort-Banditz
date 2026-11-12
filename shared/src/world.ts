@@ -8,6 +8,7 @@
 import { PLAYER, SIM_DT, MAX_PLAYERS, MAX_INPUTS_PER_TICK, PLAYER_COLORS } from "./constants.js";
 import { makeMoveState, stepMovement, sanitizeInput, groundHeightAt, type MoveInput, type MoveState } from "./movement.js";
 import { stepItem, type ItemBody } from "./itemPhysics.js";
+import { STORE_TRADE, STORE_BUY_GAP, SPRITZ_HEAT, type StoreId } from "./stores.js";
 import { LOOT, lootDef, rollValue, carrySpeedMul, type LootDef } from "./loot.js";
 import type { ArenaLayout, LootZone, PropDef } from "./arena.js";
 import { buildTrashington } from "./city.js";
@@ -208,6 +209,10 @@ export type WorldEvent =
   | { t: "mickey"; p: string; what: "fenced"; type: string; cash: number; heat: boolean }
   | { t: "mickey"; p: string; what: "gear"; gear: GearKind; paid: number; heat: boolean }
   | { t: "mickeyNo"; p: string; reason: "day" | "hands" | "junk" | "money" | "broke" | "full" | "shut" | "away" }
+  // R13: the stores' counters
+  | { t: "storeSold"; p: string; store: string; type: string; cash: number }
+  | { t: "storeBought"; p: string; store: string; what: string; cash: number }
+  | { t: "storeNo"; p: string; store: string; reason: "shut" | "wrong" | "nobuy" | "black" | "hands" | "broke" }
   | { t: "gearUsed"; p: string; gear: GearKind; x: number; z: number; by?: string }
   | { t: "dealNo"; p: string; reason: "broke" | "away" }
   // C5c.3: THE COMPACTOR: paid the cover / the VIP nod / couldn't pay; the floor's DROP launched people; somebody hijacked the decks
@@ -1194,6 +1199,42 @@ export class World {
   }
   /** R11.4: E on one of SKETCHY STEVE's goods in his briefcase ($15): ZOOMIES (speed 20 s), BEEF JUICE (strength
    *  20 s), FLOATY FIZZ (float 8 s); a cop seeing it: heat, and Steve legs it */
+  /** R13: E at a store's counter. With something in your hands: the specialist buys it (or the salvage yard pays a few
+   *  dollars for junk); empty-handed: buy the store's one service. The keeper has to be there (not out cold, not cowering
+   *  through a hold-up). One purchase per press (and not two inside STORE_BUY_GAP: a held key repeats). */
+  private storeBuyT = new Map<string, number>();
+  storeCounter(p: PlayerSim, storeId: string) {
+    const tr = STORE_TRADE[storeId as StoreId], st = this.arena.stores?.find((s) => s.id === storeId);
+    if (!tr || !st) return;
+    const shop = (this.arena.shops ?? []).find((s) => s.name === st.name);
+    const keeper = shop ? this.npc.cashierOf(shop.id) : undefined;
+    const no = (reason: "shut" | "wrong" | "nobuy" | "black" | "hands" | "broke") => this.emit({ t: "storeNo", p: p.id, store: storeId, reason });
+    if (!keeper || keeper.state === "ko" || keeper.state === "cower") return no("shut");
+    const held = this.activeItem(p)?.item;
+    if (held) {
+      const def = lootDef(held.type);
+      if (def.blackMarket) return no("black");
+      let offer = 0;
+      if (tr.buys?.types?.includes(held.type)) offer = Math.max(1, Math.round(held.value * (tr.buys.mult ?? 0.5)));
+      else if (tr.buys?.junk && def.junk) { const [a, b] = tr.buys.junk; offer = a + Math.floor(this.random() * (b - a + 1)); }
+      if (!offer) return no(tr.buys ? "wrong" : "nobuy");
+      this.consumeItem(p, held.id);
+      p.cash += offer;
+      this.emit({ t: "storeSold", p: p.id, store: storeId, type: held.type, cash: offer });
+      return;
+    }
+    const sv = tr.sells;
+    if (!sv) return no("hands");
+    const key = p.id + "|" + storeId, last = this.storeBuyT.get(key) ?? -1e9;
+    if (this.time - last < STORE_BUY_GAP) return;
+    if (p.cash < sv.price) return no("broke");
+    p.cash -= sv.price; this.storeBuyT.set(key, this.time);
+    if (sv.what === "trailmix") p.move.boostT = FEVER.boost;
+    else if (sv.what === "spritz") p.notoriety = Math.max(0, p.notoriety - SPRITZ_HEAT);
+    else p.move.speedT = DEAL.goods.zoomies.time;
+    this.emit({ t: "storeBought", p: p.id, store: storeId, what: sv.what, cash: sv.price });
+  }
+
   buyDeal(p: PlayerSim, kind: DealKind) {
     const g = DEAL.goods[kind];
     if (!g) return;

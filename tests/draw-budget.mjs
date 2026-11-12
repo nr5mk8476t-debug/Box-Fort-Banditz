@@ -30,6 +30,9 @@ const views = {
   crossroads: [0, 1.7, 0, 0.8, 0],
   uptown: [40, 1.7, 60, 2.4, -0.05],
 };
+// R13: the six stores, outside (from across the street) and inside (just in from the door), and each district from above
+// (tests/store-views.json, made from shared/src/stores.ts: the same cameras before and after the stores were built)
+{ const f = new URL("./store-views.json", import.meta.url); if (fs.existsSync(f) && !process.env.NO_STORES) Object.assign(views, JSON.parse(fs.readFileSync(f, "utf8"))); }
 const out = {};
 for (const [n, v] of Object.entries(views)) {
   await ev((v) => window.__bfb.camAt(...v), v); await sleep(8000);

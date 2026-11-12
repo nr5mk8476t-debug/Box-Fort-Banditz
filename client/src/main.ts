@@ -8,6 +8,7 @@ import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
+import { STORE_TRADE, STORE_VOICE, lootDef as lootDefOf, type StoreId } from "@bfb/shared";
 import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, MICKEY, GCH, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
 import { softwareRendering, gpuHelpHtml } from "./gpuCheck.ts";
 import { adaptStep } from "./game/adaptive.ts";
@@ -914,7 +915,7 @@ function updateHud(a: ArenaScene) {
   const tagT = a.tagTarget, tagHolding = a.throwCharge >= 0 && !!tagT && a.canUses > 0;
   const at = a.arrestTarget;
   const cellUse = jailed && !a.lock.open && ut && (ut.kind === "toilet" || ut.kind === "celldoor") ? ut.kind : ""; // (R6: the holding cell)
-  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "mickey" || ut.kind === "mickgoods" ? JSON.stringify(a.heldInfo()) + a.myGear : "") + (ut.kind === "pubboard" ? JSON.stringify(a.gch) : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
+  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "mickey" || ut.kind === "mickgoods" || ut.kind === "storecounter" ? JSON.stringify(a.heldInfo()) + a.myGear : "") + (ut.kind === "pubboard" ? JSON.stringify(a.gch) : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
     const key = document.createElement("span"); key.className = "key"; key.textContent = keyText; if (!keyText) key.style.display = "none";
@@ -940,6 +941,18 @@ function updateHud(a: ArenaScene) {
     else if (!t && ut && ut.kind === "door") simple("E", ut.empty ? " Close " : " Open ", "the door", "");
     else if (!t && ut && ut.kind === "pubboard") { const g = a.gch, mine = !!g?.ps.some((q) => q.id === a.myId); simple(g && g.state === "on" ? "" : "E", !g ? " Start a SPLIT THE G CHALLENGE " : g.state === "open" ? (mine ? " Back out of the challenge " : " Join the challenge ") : " The challenge is on ", "", !g ? `3 pints each, lowest total wins $${GCH.prize}: the others in the pub get ${GCH.joinT} s to join` : g.state === "open" ? `starts in ${g.left} s with ${g.ps.length} in (2+ to go)` : `${g.ps.length} in: no joining halfway`); } // (R12.6)
     else if (!t && ut && ut.kind === "mickey") { const held = a.heldInfo(); simple(held && a.match.phase === "night" ? "E" : "", held ? " Fence it to Wee Mickey " : " Wee Mickey ", held && a.match.phase === "night" ? `(about $${Math.round(held.value * MICKEY.fence)})` : "", a.match.phase !== "night" ? `"Come back when it's dark."` : held ? "more than the pawn shops pay, but it's heat" : "the night fence: hold up some loot and E. His gear's on the keg."); } // (R12.6)
+    // R13: the stores' counters and rummage spots
+    else if (!t && ut && ut.kind === "storecounter" && ut.def?.store) {
+      const tr = STORE_TRADE[ut.def.store as StoreId], vo = STORE_VOICE[ut.def.store as StoreId], held = a.heldInfo();
+      if (held) {
+        const d = lootDefOf(held.type), buys = !!tr.buys?.types?.includes(held.type) || (!!tr.buys?.junk && !!d?.junk);
+        const est = tr.buys?.types?.includes(held.type) ? `(about $${Math.max(1, Math.round(held.value * (tr.buys.mult ?? 0.5)))})` : tr.buys?.junk ? `($${tr.buys.junk[0]}-${tr.buys.junk[1]})` : "";
+        if (buys) simple("E", ` Sell the ${(d?.name ?? held.type).toUpperCase()} to ${vo.keeper} `, est, "");
+        else simple("", ` ${vo.keeper} `, "", tr.buys ? vo.wrong : vo.nobuy);
+      } else if (tr.sells) simple("E", " Buy " + tr.sells.name + ": ", `$${tr.sells.price}`, tr.sells.blurb);
+      else simple("", ` ${vo.keeper} `, "", vo.hands);
+    }
+    else if (!t && ut && ut.kind === "storedig") simple(ut.empty ? "" : "E", ut.def?.store === "needledrop" ? " Dig through the crate " : " Rummage the scrap pile ", "", ut.empty ? "already turned over today" : "once a day: you never know");
     else if (!t && ut && ut.kind === "mickgoods" && ut.def?.gear) { const g = MICKEY.goods[ut.def.gear], have = a.myGear & (ut.def.gear === "pick" ? 1 : 2); simple(have || a.match.phase !== "night" ? "" : "E", " Buy a " + g.name + ": ", `$${g.price}`, have ? "you've got one already" : a.match.phase !== "night" ? `"Not in daylight."` : g.what); } // (R12.6)
     else if (!t && ut && ut.kind === "dealgoods" && ut.def?.sell) { const g = DEAL.goods[ut.def.sell]; simple("E", " Buy " + g.name + ": ", `$${DEAL.price}`, ut.def.sell === "zoomies" ? `glowing gummies: ${g.time} s of SPEED (then a comedown)` : ut.def.sell === "beef" ? `a can of BEEF: ${g.time} s of strength (big punches, heavy loot carries easy)` : `fizzy and floaty: ${g.time} s of low gravity, 3 jumps off thin air`); }
     else if (a.pinBy) simple("SPACE", " PINNED! Mash to wriggle free ", "", `${Math.round(a.pinS * 100)}% free - or hope a friend knocks them off you`);

@@ -19,3 +19,4 @@ export * from "./lockpick.js";
 export * from "./debug.js";
 export * from "./pawn.js";
 export * from "./pubgames.js";
+export * from "./stores.js";

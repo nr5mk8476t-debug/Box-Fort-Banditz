@@ -23,6 +23,7 @@
 // Every block is lined with buildings wall to wall (a gap for the alley into the courtyard behind);
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
+import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS } from "./stores.js";
 import { canonBoxes,
   box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind, type GearKind,
   CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
@@ -123,6 +124,13 @@ export const TIER_TOWERS: string[][] = [
 
 /** What each kind of shop has on its shelves (Slice 2C adds themed items for the new shops). */
 export const SHOP_POOLS: Record<ShopType, string[]> = {
+  // R13: the six stores' shelves (a few real things each, the rest of the stock is scenery)
+  salvage: ["traffic_cone", "giant_toaster", "gold_sign", "cardboard_cutout"],
+  repair: ["crt_tv", "giant_toaster", "phone_handset", "laptop", "disposable_camera"],
+  records: ["vinyl_record", "mixtape", "guitar", "dj_headphones"],
+  outdoor: ["protein_shaker", "sunglasses", "energy_drink", "disposable_camera"],
+  perfume: ["fancy_fizz", "designer_scarf", "pearl_necklace"],
+  sweets: ["macaron_box", "golden_truffle", "fancy_fizz", "birthday_cake"],
   mart: ["canned_beans", "energy_drink", "candy_bar", "soda_can", "lottery_ticket", "fancy_cheese"],
   pawn: ["gold_chain", "guitar", "sunglasses", "golden_spork", "snow_globe", "mixtape", "crt_tv", "award_trophy", "vinyl_record", "rolecks_watch"],
   bakery: ["bagel", "baguette", "birthday_cake", "fancy_cheese", "donut"],
@@ -211,6 +219,7 @@ export function buildTrashington(): ArenaLayout {
   const decor: NonNullable<ArenaLayout["decor"]> = [];
   const scenery: NonNullable<ArenaLayout["scenery"]> = [];
   const shops: ShopDef[] = [];
+  const stores: NonNullable<ArenaLayout["stores"]> = []; // (R13)
   const units: UnitDef[] = [];
   const navChains: { x: number; z: number }[][] = [];
   const posts: NonNullable<ArenaLayout["posts"]> = [];
@@ -1408,6 +1417,34 @@ export function buildTrashington(): ArenaLayout {
       decor.push({ ...dd, x: -dd.x, yaw: -(dd.yaw ?? 0), yaw2: -(dd.yaw2 ?? 0), text });
     }
     for (const ch of navChains.slice(chainStart)) navChains.push(ch.map((q) => ({ x: -q.x, z: q.z })));
+    // R13: the six stores take their plots: the decorative buildings the generator put there come out (and the loot spots
+    // on their roofs), so nothing else in the city moves; each store's shell goes in (stores.ts)
+    for (const st of STORES) {
+      for (let q = boxes.length - 1; q >= boxStart; q--) { const b = boxes[q]; if ((b.kind === "building" || b.kind === "tower") && inRect(st.plot, b.x, b.z, 0.2)) boxes.splice(q, 1); }
+      for (let q = loot.length - 1; q >= 0; q--) if (inRect(st.plot, loot[q].x, loot[q].z, -0.5)) loot.splice(q, 1);
+      const sh = storeShell(st);
+      boxes.push(...sh.boxes);
+      const doorProp = "storedoor_" + st.id;
+      props.push({ id: doorProp, kind: "door", x: sh.door.x, y: 1.3, z: sh.door.z, yaw: sh.door.yaw, hw: sh.door.hw, hd: sh.door.hd, box: boxes.length - 1, closer: 5 });
+      stores.push({ id: st.id, name: st.name, tier: st.tier, door: { x: sh.door.x, z: sh.door.z }, doorProp, keeper: sh.keeper, counter: sh.counter, inside: sh.inside });
+      // its trade: a ShopDef (the keeper, the till, the shelves' stock: shoplifting), the counter, a rummage spot, a case
+      const tr = STORE_TRADE[st.id], fx = STORE_FIXTURES[st.id], fr = storeFrame(st), spc = STORE_SHELLS[st.id], sid = shops.length;
+      const tw = fr.at(fx.till[0], fx.till[1]);
+      shops.push({ id: sid, name: st.name, type: tr.type, rect: sh.inside, cashier: sh.keeper, till: { x: tw.x, y: 1.05, z: tw.z }, floorColor: spc.floor, wallColor: spc.wall, maxY: 3, heat: tr.heat });
+      props.push({ id: "till" + (sid + 1), kind: "till", x: tw.x, y: 1.05, z: tw.z, yaw: fr.yawOut, shop: sid });
+      const cc = sh.counter;
+      props.push({ id: "storecounter_" + st.id, kind: "storecounter", x: (cc.minX + cc.maxX) / 2, y: 1.0, z: (cc.minZ + cc.maxZ) / 2, yaw: 0, hw: (cc.maxX - cc.minX) / 2, hd: (cc.maxZ - cc.minZ) / 2, store: st.id, shop: sid });
+      if (fx.dig) { const q = fr.at(fx.dig[0], fx.dig[1]); props.push({ id: "storedig_" + st.id, kind: "storedig", x: q.x, y: 0.5, z: q.z, yaw: 0, store: st.id, shop: sid }); }
+      if (fx.case) {
+        const [u0, u1, v0, v1, h] = fx.case, r = fr.rect(u0, u1, v0, v1);
+        boxes.push(fr.box(u0, u1, v0, v1, h, "case", 0, { color: "#c9d6dc", deco: "storecase:" + st.id, hide: true }));
+        props.push({ id: "storecase_" + st.id, kind: "storecase", x: (r.minX + r.maxX) / 2, y: h, z: (r.minZ + r.maxZ) / 2, yaw: 0, hw: (r.maxX - r.minX) / 2, hd: (r.maxZ - r.minZ) / 2, box: boxes.length - 1, store: st.id, shop: sid });
+      }
+      for (const [u0, u1, v0, v1, h] of fx.shelves) boxes.push(fr.box(u0, u1, v0, v1, h, "shelf", 0, { color: "#6a5040" }));
+      for (const [u, v, k] of fx.stock) { const q = fr.at(u, v); loot.push({ x: q.x, z: q.z, y: fx.shelves[k][4] + 0.05, zone: "shop", pool: SHOP_POOLS[tr.type], shop: sid }); }
+    }
+    // (the real record shop is NEEDLE DROP now: the other painted-on VINTAGE RECORDS becomes a candle shop, so there aren't two)
+    for (let q = boxStart; q < boxes.length; q++) if (boxes[q].sign === "VINTAGE RECORDS") boxes[q].sign = "CANDLE WITH CARE";
   };
   // (R2: the road test builds its own plain blocks and skips every landmark below, down to Tent Town)
   let bank: NonNullable<ArenaLayout["bank"]> | undefined, statue: NonNullable<ArenaLayout["statue"]> | undefined, resto: NonNullable<ArenaLayout["resto"]> | undefined;
@@ -3328,8 +3365,10 @@ export function buildTrashington(): ArenaLayout {
   // (R12.9: the snug's door finds its leaf again: the pub's build splices boxes out after it's made (the cut corner's
   //  re-cut), which moved the leaf down one)
   for (const pd of props) if (pd.id === "snugdoor") pd.box = boxes.findIndex((b) => b.deco === "doorleaf" && Math.abs(b.x - pd.x) < 0.2 && Math.abs(b.z - pd.z) < 0.2);
+  for (const pd of props) if (pd.id.startsWith("storedoor_")) pd.box = boxes.findIndex((b) => b.deco === "storedoor:" + pd.id.slice(10)); // (R13: the same for the stores' doors)
+  for (const pd of props) if (pd.id.startsWith("storecase_")) pd.box = boxes.findIndex((b) => b.deco === "storecase:" + pd.id.slice(10)); // (and their cases)
   return {
-    halfSize: HALF, boxes: canonBoxes(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
+    halfSize: HALF, boxes: canonBoxes(boxes), spawns, ...(stores.length ? { stores } : {}), lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
     roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop, littleItaly, stationUpper, hotShops: R2 ? hotShops : undefined, fever, pub,
   };

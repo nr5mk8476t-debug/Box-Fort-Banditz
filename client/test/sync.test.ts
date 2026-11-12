@@ -151,7 +151,7 @@ async function playOut(rig: any, o: { sec: number; fps: number; lat: number; sta
   }
   // (a shot still rolling on the host when the time's up hasn't had its chance yet)
   let rolling = 0; for (const s of w.pubGames.st.values()) if (s.shot) rolling++;
-  const seen = new Set([...shown.entries()].filter(([, q]) => q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / o.fps)).map(([k]) => k)); // (R12.9: or over in under two frames, and on screen)
+  const seen = new Set([...shown.entries()].filter(([, q]: [any, any]) => q.mid >= 2 || (q.mid >= 1 && (q.dur < 2 / o.fps || q.why === "missed"))).map(([k]) => k)); // (R12.9: or over in under two frames, and on screen; R13: or a missed shot caught up on (it plays fast) that made it to the screen)
   const missing = rig.shots.slice(shots0, shotsCut < 0 ? undefined : shotsCut).filter((k: string) => !seen.has(k));
   const late = new Set<string>(shotsCut < 0 ? [] : rig.shots.slice(shotsCut));
   return { hostShots: rig.shots.length - shots0 - rolling, lateN: [...late].filter((k) => !rig.shots.slice(rig.shots.length - rolling).includes(k)).length, shown: [...shown.values()].filter((q: any) => !late.has(q.key)), missing };
@@ -174,9 +174,12 @@ for (const net of [{ fps: 60, lat: 0.05, name: "60 fps, 50 ms" }, { fps: 12, lat
     const rig = await pubRig(7);
     await poolGames(rig);
     if (process.env.PGLOG) for (const s of rig.view.st.values()) s.feed.log = [];
-    const r = await playOut(rig, { sec: 150, ...net, me: "me", each: () => { const w = rig.w; poolBot(rig.S, w, "pooltable2", "me"); poolBot(rig.S, w, "pooltable1", "hana", true); poolBot(rig.S, w, "pooltable1", "gus"); concede(w); reopen(w); } });
+    const r = await playOut(rig, { sec: 150, ...net, me: "me", each: () => { const w = rig.w; concede(w); reopen(w); poolBot(rig.S, w, "pooltable2", "me"); poolBot(rig.S, w, "pooltable1", "hana", true); poolBot(rig.S, w, "pooltable1", "gus"); } /* (R13: give up before the next shot, not after it: with the bots first a table could go shot to shot with no gap for the 8-shot concede) */ });
     // (R12.9: a shot over in less than two of the window's frames can't be on screen for two: it counts if it showed at all)
-    const visible = r.shown.filter((q) => q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / net.fps)).length, skipped = r.shown.length - visible;
+    // (R13: one rule for "on screen" (the same as playOut's): two frames, or one for a shot shorter than two frames, or one
+    //  for a shot the window missed in a stall and caught up on, playing fast. Nothing's ever silently gone)
+    const onScreen = (q: any) => q.mid >= 2 || (q.mid >= 1 && (q.dur < 2 / net.fps || q.why === "missed"));
+    const visible = r.shown.filter(onScreen).length, skipped = r.shown.length - visible;
     for (const q of r.shown as any[]) if (!(q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / net.fps))) console.log(`  skipped: ${q.key} shown in ${q.mid} frames, ${q.dur.toFixed(2)} s long`);
     const why: Record<string, number> = {}; for (const q of r.shown as any[]) why[q.why] = (why[q.why] ?? 0) + 1;
     const games = new Set((r.shown as any[]).map((q) => q.st + "#" + q.gid));

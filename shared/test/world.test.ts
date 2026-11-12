@@ -2398,6 +2398,7 @@ import { NPC_LOD } from "../src/index.js";
 test("R12.5 NPC levels: a passer-by far from every player updates one NPC step in three (and still walks); next to ANY player (here the second one) it updates every step", () => {
   const { w, ps: [a, b] } = hotWorld(2);
   const n = w.npc.spawn("tourist")!;
+  n.move.x = 0; n.move.z = -20; // (R13: a fixed open spot (the park's plaza): where the spawn lands moves whenever the city gains a person)
   n.state = "walk";
   const far = (p: typeof a, dx: number) => { w.debugTeleport(p.id, n.move.x + dx, n.move.z + 0.5, 0); };
   far(a, NPC_LOD.far + 60); far(b, -(NPC_LOD.far + 60));

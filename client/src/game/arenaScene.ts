@@ -2,6 +2,7 @@
 // Your own movement is simulated immediately in the browser ("prediction") using the
 // exact same rules as the server. When the server's answer arrives we quietly correct
 // any difference ("reconciliation"), smoothing small corrections so you never feel a snap.
+import { STORE_TRADE, STORE_VOICE, type StoreId } from "@bfb/shared";
 import {
   Scene, Engine, UniversalCamera, Camera, HemisphericLight, DirectionalLight, ShadowGenerator,
   Vector3, Color3, Color4, MeshBuilder, Mesh, TransformNode, StandardMaterial,
@@ -954,6 +955,10 @@ export class ArenaScene {
           else this.onBanner?.(MICKEY.goods[e.gear].name + "!", MICKEY.goods[e.gear].what + ".", e.heat ? "bad" : "good");
           this.onFeedback?.(e.heat ? "A cop saw that. Heat!" : "A wee bit of heat. That's the price of doing business.", "bad");
         } break;
+        // R13: the stores
+        case "storeSold": if (e.p === me) { sfx.cash(); const v = STORE_VOICE[e.store as StoreId]; this.onBanner?.(`+$${e.cash}`, `${v?.keeper ?? "The shop"} takes the ${(lootDef(e.type)?.name ?? e.type).toUpperCase()}. ${v?.sold ?? ""}`, "good"); } break;
+        case "storeBought": if (e.p === me) { sfx.cash(); const tr = STORE_TRADE[e.store as StoreId], v = STORE_VOICE[e.store as StoreId]; this.onBanner?.((tr?.sells?.name ?? "BOUGHT") + "!", `${tr?.sells?.blurb ?? ""}. ${v?.bought ?? ""}`, "good"); } break;
+        case "storeNo": if (e.p === me) { const v = STORE_VOICE[e.store as StoreId]; if (v) this.onFeedback?.(v[e.reason] || v.hands || v.nobuy, "info"); } break;
         case "mickeyNo": if (e.p === me) this.onFeedback?.({ day: `"Not in the daylight, ya eejit. Come back when it's dark."`, hands: `"Got anything for me? Hold it up, then."`, junk: `"Rubbish. Literally."`, money: `"That's just money, pal. Spend it."`, broke: `"Come back with cash, sunshine."`, full: "You've already got one of those.", shut: `"Shop's SHUT. You know what you did."`, away: "Wee Mickey's not here." }[e.reason], "bad"); break;
         case "gearUsed": {
           if (e.gear === "smoke") { this.smokePuff(e.x, e.z); sfx.dodge(); }

@@ -86,6 +86,8 @@ export const inRect = (r: Rect, x: number, z: number, pad = 0) => x >= r.minX - 
 
 /** Things you can search, smash or rob (Phase 3.5). Static list; their state lives in the World. */
 export type PropKind = "dumpster" | "bin" | "phone" | "vending" | "meter" | "newsbox" | "car" | "till"
+  // R13: the stores: the counter (sell to the specialist / buy the service), a rummage spot, a display case to smash
+  | "storecounter" | "storedig" | "storecase"
   // C4a: street things you can smash (each is one of the arena's boxes; broken = it stops blocking until dawn)
   | "shopglass" | "busstop" | "hydrant" | "mailbox" | "bench" | "planter" | "table" | "pallet"
   // C4b: the laundromat's machines (E: open quietly, slowly; punch: force it, loud)
@@ -130,6 +132,8 @@ export interface PropDef {
   /** R11.4: a door's look (glass by default; a painted panel; the green steel fire exit) and, for a one-way door, the
    *  way out (a unit vector): from that side there's no handle; such a door swings shut by itself */
   door?: "glass" | "solid" | "exit" | "wood"; oneWay?: [number, number];
+  /** R13: which store this belongs to (stores.ts) */
+  store?: string;
   /** R12.9: a door that swings shut by itself this many seconds after it's opened (not while someone's in the doorway) */
   closer?: number;
   /** R11.4: which of STEVE's goods */
@@ -166,7 +170,9 @@ export const DEAL = {
 
 export type ShopType = "mart" | "pawn" | "bakery" | "gadget"
   // Slice 2A
-  | "donut" | "pharmacy" | "pizza" | "taco" | "arcade" | "thrift" | "sneaker" | "jeweller" | "phone" | "laundry" | "barber" | "pet";
+  | "donut" | "pharmacy" | "pizza" | "taco" | "arcade" | "thrift" | "sneaker" | "jeweller" | "phone" | "laundry" | "barber" | "pet"
+  // R13
+  | "salvage" | "repair" | "records" | "outdoor" | "perfume" | "sweets";
 export interface ShopDef {
   id: number; name: string; type: ShopType;
   /** inside of the shop (for "caught shoplifting" checks) */
@@ -178,6 +184,8 @@ export interface ShopDef {
   floorColor: string; wallColor: string;
   /** Slice 2A: the shop floor is at ground level; anyone higher up (the floor above) isn't "in the shop" */
   maxY?: number;
+  /** R13: how much heat theft here costs, against the low-end's 1 (the high-end stores call it in faster) */
+  heat?: number;
 }
 
 /**
@@ -327,6 +335,8 @@ export interface ArenaLayout {
   /** R12.8: bumped whenever a box is switched off or on (the cached "what still blocks" lists know they're stale) */
   offGen?: number;
   boxes: Box[];
+  /** R13: the six stores (two per district): their layout as built (see stores.ts) */
+  stores?: { id: string; name: string; tier: number; door: { x: number; z: number }; doorProp: string; keeper: { x: number; z: number; yaw: number }; counter: Rect; inside: Rect }[];
   spawns: { x: number; z: number; yaw: number }[];
   /** loot spawn points (Phase 2+) */
   lootSpawns?: SpawnPoint[];

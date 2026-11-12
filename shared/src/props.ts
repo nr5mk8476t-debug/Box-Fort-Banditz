@@ -5,6 +5,7 @@
 //   - shoplifting: swipe something off a shelf while the cashier is watching -> they yell (heat)
 // Every source refills after a while (parked cars: once per round). Loud things raise heat and
 // set off alarms (the police will listen to those in Phase 4).
+import { STORE_TRADE, type StoreId } from "./stores.js";
 import { inRect, setBoxOff, inLobby, type PropDef, type PropKind, type LobbyDef } from "./arena.js";
 import { pickWeighted } from "./npc.js";
 import type { World, PlayerSim, ItemSim } from "./world.js";
@@ -38,6 +39,7 @@ const REFILL: Record<PropKind, number> = {
   door: 1e9, // (R8: a door stays how it's left; all shut at dawn)
   dealgoods: 0,
   pinttap: 0, pubboard: 0, seamus: 0, jukebox: 0, pooltable: 0, dartsoche: 0, mickey: 0, mickgoods: 0, // (R12.1: the taps never run dry; R12.2c: Seamus is always in)
+  storecounter: 0, storedig: 1e9, storecase: 1e9, // (R13: the counter's always open; the rummage once a day; a smashed case is fixed at dawn)
 };
 /** How far a prop's surface is from its centre (for punch / use reach). Breakables use their box (hw/hd) instead. */
 export const PROP_RADIUS: Record<PropKind, number> = {
@@ -48,12 +50,13 @@ export const PROP_RADIUS: Record<PropKind, number> = {
   podium: 0.4, cloakroom: 0.6, dessertcart: 0.6, piano: 0.9, chefstable: 0.6, kitchen: 0.8,
   clubrope: 0.4, mocktail: 0.8, djdecks: 0.9, clubbar: 1.2, clubsafe: 0.45, rider: 0.6, lockers: 0.9, sortbin: 0.9, vipbooth: 0.8, pawncounter: 0.9, pawncase: 0,
   toilet: 0.45, celldoor: 0.9, glasscounter: 0, door: 0, dealgoods: 0.18, pinttap: 0.5, pubboard: 0, seamus: 0.5, jukebox: 0.45, pooltable: 0, dartsoche: 0, mickey: 0, mickgoods: 0,
+  storecounter: 0.9, storedig: 0.6, storecase: 0, // (R13; the case is a breakable: its box)
 };
-export const SMASHABLE = new Set<PropKind>(["phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank", "deli", "pawncase", "glasscounter"]);
+export const SMASHABLE = new Set<PropKind>(["storecase", "phone", "vending", "meter", "newsbox", "car", "shopglass", "busstop", "hydrant", "mailbox", "bench", "planter", "table", "pallet", "washer", "dryer", "dummy", "fishtank", "deli", "pawncase", "glasscounter"]);
 /** C5a: the lobby's mini-game machines (E to play) */
 export const LOBBY_GAMES = new Set<PropKind>(["throwgame", "racegame"]);
 /** C4a: things that break (and stop blocking) after this many hits, by size */
-export const BREAK_HP: Partial<Record<PropKind, number>> = { pawncase: 3, glasscounter: 2, shopglass: 2, busstop: 1, hydrant: 2, mailbox: 2, bench: 2, planter: 2, table: 1, pallet: 1 };
+export const BREAK_HP: Partial<Record<PropKind, number>> = { storecase: 2, pawncase: 3, glasscounter: 2, shopglass: 2, busstop: 1, hydrant: 2, mailbox: 2, bench: 2, planter: 2, table: 1, pallet: 1 };
 export const BREAKABLE = new Set(Object.keys(BREAK_HP) as PropKind[]);
 /** C4a: how far away a noise is heard (m) */
 export const NOISE = { smash: 12, alarm: 25, machine: 10 };
@@ -71,7 +74,7 @@ export function propNearest(d: PropDef, x: number, z: number): { x: number; z: n
   return { x: Math.max(d.x - d.hw, Math.min(d.x + d.hw, x)), z: Math.max(d.z - d.hd, Math.min(d.z + d.hd, z)) };
 }
 export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer", "steamer", "trinkets", "pizzacart", "gelato", "ricordi", "depositbox", "stash", "cloakroom", "dessertcart", "chefstable", "kitchen",
-  "clubbar", "rider", "lockers", "sortbin", "vipbooth"]);
+  "clubbar", "rider", "lockers", "sortbin", "vipbooth", "storedig"]);
 /** C5c.3: E on these does something of its own: pay Big Crunch's cover, hijack the DJ's decks, sell to Sal, the pawn case */
 export const CLUB_USE = new Set<PropKind>(["clubrope", "mocktail", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door", "dealgoods", "pinttap", "seamus", "jukebox", "pooltable", "dartsoche", "mickey", "mickgoods", "pubboard"]);
 /** R11.4: a one-way fire door swings shut this long after it opens */
@@ -92,7 +95,7 @@ export const KEYCARD_TIME = 3;
 export const BANK = { drillHeat: 92, keycardSeenHeat: 30, noseHeat: 25, noiseEvery: 2 };
 const DEPOSIT_LOOT: [string, number][] = [["pearl_necklace", 3], ["rolecks_watch", 2], ["bearer_bond", 1.5], ["family_photo", 3], ["cash_bag", 2], ["gold_bar", 0.8]];
 /** C5c: things that reset once a day, at dawn (not at night) */
-const DAILY = new Set<PropKind>(["washer", "dryer", "fishtank", "deli", "vaultdoor", "depositbox", "nose", "stash", "cloakroom", "dessertcart", "piano", "chefstable", "kitchen", "clubsafe", "rider", "lockers", "sortbin", "vipbooth", "pawncase"]);
+const DAILY = new Set<PropKind>(["storedig", "storecase", "washer", "dryer", "fishtank", "deli", "vaultdoor", "depositbox", "nose", "stash", "cloakroom", "dessertcart", "piano", "chefstable", "kitchen", "clubsafe", "rider", "lockers", "sortbin", "vipbooth", "pawncase"]);
 /** C5c.2: LE DUMPSTÈRE: the table fee, what counts as dressed up, the piano's aura (and noise), the chef's yell,
  *  what the cloakroom, the dessert trolley, the chef's table and the kitchen hold */
 export const RESTO = { fee: 20, pianoAura: 3, pianoNoise: 12, chefHeat: 3, dressy: ["designer_hoodie", "designer_scarf", "sunglasses", "gold_chain", "rolecks_watch", "pearl_necklace"] };
@@ -264,7 +267,7 @@ export class PropSystem {
         const ax = p.move.x - d.x, az = p.move.z - d.z;
         const id = this.w.popLoot("cash_bundle", d.x, d.y + 0.4, d.z, ax, az);
         ps.ready = false; ps.t = REFILL.till;
-        this.w.addHeat(p, 20);
+        this.w.addHeat(p, Math.round(20 * this.heatMul(d.shop)));
         this.alarm(ps, "shop");
         this.w.emit({ t: "robDone", p: p.id, prop: d.id, value: this.w.items.get(id)?.value ?? 0 });
       }
@@ -296,6 +299,7 @@ export class PropSystem {
     if (!ps || !this.inReach(p, ps, 0.4)) return;
     const d = ps.def;
     if (d.kind === "till") return this.startRob(p, ps);
+    if (d.kind === "storecounter") { this.w.storeCounter(p, d.store ?? ""); return; } // (R13)
     if (HOLD_TIME[d.kind] !== undefined) return this.startHold(p, ps);
     if (LOBBY_GAMES.has(d.kind)) { this.w.lobby.start(p, d.kind === "throwgame" ? "throw" : "race"); return; }
     if (d.kind === "podium") { this.w.bookTable(p); return; }
@@ -356,6 +360,13 @@ export class PropSystem {
       for (let i = 0; i < n; i++) this.w.popLoot(pickWeighted(table, () => this.w.random()), d.x, d.y + 0.9, d.z, p.move.x - d.x, p.move.z - d.z);
       this.w.emit({ t: "search", p: p.id, prop: d.id, found: n, raccoon: false });
       if (d.kind === "stash") this.w.emit({ t: "stashFound", p: p.id, prop: d.id });
+      return;
+    }
+    if (d.kind === "storedig") { // R13: the scrap pile / the record crate: 1-2 things, once a day
+      const table = STORE_TRADE[d.store as StoreId]?.dig ?? [["brick", 1]];
+      const n = 1 + (this.w.random() < 0.4 ? 1 : 0);
+      for (let i = 0; i < n; i++) this.w.popLoot(pickWeighted(table, () => this.w.random()), d.x, d.y + 0.6, d.z, p.move.x - d.x, p.move.z - d.z);
+      this.w.emit({ t: "search", p: p.id, prop: d.id, found: n, raccoon: false });
       return;
     }
     const club = CLUB_LOOT[d.kind];
@@ -466,6 +477,9 @@ export class PropSystem {
     }
   }
 
+  /** R13: a store's theft heat multiplier (the high-end call it in faster); 1 elsewhere */
+  private heatMul(shop: number | undefined): number { return (this.w.arena.shops ?? []).find((s) => s.id === shop)?.heat ?? 1; }
+
   private startRob(p: PlayerSim, ps: PropSim) {
     if (!ps.ready || !this.registerOnCounter(ps)) { this.w.emit({ t: "empty", p: p.id, prop: ps.def.id }); return; }
     if (p.rob) return;
@@ -539,6 +553,18 @@ export class PropSystem {
     const ax = p.move.x - at.x, az = p.move.z - at.z;
     const rnd = () => this.w.random();
     if (d.kind === "pawncase") { this.w.pawn.smash(p, at.x, at.z); return true; } // (C5c.3: everything in it spills; Vinnie comes swinging)
+    if (d.kind === "storecase") { // R13: a store's display case: what's in it spills, the alarm goes, the keeper yells
+      const table = STORE_TRADE[d.store as StoreId]?.caseLoot ?? [["vinyl_record", 1]];
+      const n = 1 + (rnd() < 0.5 ? 1 : 0);
+      for (let i = 0; i < n; i++) this.w.popLoot(pickWeighted(table, rnd), at.x, d.y + 0.2, at.z, ax, az);
+      const till = [...this.props.values()].find((x) => x.def.kind === "till" && x.def.shop === d.shop);
+      if (till) this.alarm(till, "shop");
+      const cashier = this.w.npc.cashierOf(d.shop ?? -1);
+      if (cashier) this.w.npc.cashierSay(cashier.id, "yell");
+      if (seen || (cashier && cashier.state !== "ko")) this.w.addHeat(p, Math.round(10 * this.heatMul(d.shop)));
+      this.w.noise(p, at.x, at.z, NOISE.alarm);
+      return true;
+    }
     if (d.kind === "glasscounter") { if (seen) this.w.addHeat(p, 4); this.w.pawn.trouble(p, "smash", d.shop ?? 0); return true; } // (R7: nothing in it worth having; the bouncer comes)
     if (d.kind === "mailbox") { this.w.popLoot(pickWeighted([["newspaper", 3], ["expired_coupon", 3], ["coin_pile", 1], ["mystery_wallet", 0.4]], rnd), at.x, 1.0, at.z, ax, az); }
     if (d.kind === "shopglass") {
@@ -599,13 +625,13 @@ export class PropSystem {
     if (it.type === "cash_register") {
       // going loud: the whole till
       if (till) { till.register = ""; this.alarm(till, "shop"); }
-      this.w.addHeat(p, 25);
+      this.w.addHeat(p, Math.round(25 * (shop.heat ?? 1)));
       if (cashier) { this.w.npc.cower(cashier.id, 5); this.w.npc.cashierSay(cashier.id, "yell"); }
       return;
     }
     // shoplifting: only counts if the cashier is awake and you're inside the shop
     if (!cashier || cashier.state === "ko" || !inRect(shop.rect, p.move.x, p.move.z, 0.5) || p.move.y > (shop.maxY ?? 99)) return;
-    this.w.addHeat(p, 8);
+    this.w.addHeat(p, Math.round(8 * (shop.heat ?? 1)));
     this.w.npc.cashierSay(cashier.id, "yell");
     this.w.emit({ t: "shoplift", p: p.id, shop: shop.id, npc: cashier.id });
   }
