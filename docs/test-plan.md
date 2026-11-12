@@ -546,6 +546,16 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.7: draw calls (2026-11-12)
+
+| Area | Check | How | Before | Result |
+|---|---|---|---|---|
+| Draw calls | 10 fixed views, real counts (the engine's counter) | `tests/draw-budget.mjs` | balcony 1,550, street 1,146, window 1,433, across the road 512, bar 495, fireside 352, darts 244, Little Italy 1,329, crossroads 1,194, uptown 1,449 | 942, 713, 856, 344, 443, 274, 202, 980, 1,012, 1,160; budgets recorded |
+| Looks | screenshots of every view, before and after | pixel diff + by eye | - | identical apart from people and cars that moved |
+| Unit, smokes | | `npm test`, smokes | | 312 + 31, pass |
+| Browser e2e | normal / 110 ms | e2e | | 438/438; at 110 ms one run failed one check ("results: lost 0": the chicken at sunrise, game rules, not drawing), the re-run passed 438/438 |
+| Real PC | Blake's BENCHMARK | Blake | - | to do |
+
 ## R12.6b: the pub's frame time (2026-11-09)
 
 | Area | Check | How | Before | Result |

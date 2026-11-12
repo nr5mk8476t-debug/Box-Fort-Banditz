@@ -2,6 +2,21 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.7: a third fewer draw calls outdoors, and a draw-call budget test (2026-11-12)
+
+**Faster** (no visual change: before/after screenshots match pixel for pixel, apart from people and cars moving):
+- **The city's outlines**: each 64 m tile had a separate mesh for each of 7 outline widths. Each piece's width now
+  rides on its shape, so they share one mesh. The biggest single win.
+- **Props** (street stalls, doors, vending machines...): their fixed parts are merged; a stall was 20-30 draws, now 2-3.
+- **Background graffiti**: one mesh and one texture sheet instead of 40-odd.
+- **Traffic lights**: one draw each (was three). **Pigeons**: one each (was two).
+
+Draw calls per frame (test machine): balcony front 1,550 → 942 (−39%), street 1,146 → 713 (−38%), out of the pub
+window 1,433 → 856 (−40%), Little Italy 1,329 → 980 (−26%), the pub bar 495 → 443 (−11%).
+
+**New**: `tests/draw-budget.mjs` counts the draw calls in 10 fixed views and fails when one goes over its budget
+(`tests/draw-budgets.json`). Draw counts are the same on any machine, so this catches what made R12.6 slower.
+
 ## R12.6b: claw back some of the pub's frame time (2026-11-09)
 
 Blake's BENCHMARK on R12.6 was 4-29% slower than R12.5b in places (worst inside the pub: the bar +24%, the fireside +29%).

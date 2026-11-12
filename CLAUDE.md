@@ -18,6 +18,7 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Every update ("slice")
 1. Unit tests: `npm test` (shared + client), and `npm run typecheck`.
 2. Smoke tests, with the server running from server/ (`npx tsx src/index.ts`): `npx tsx tests/signal-smoke.ts` and `npx tsx tests/server-smoke.ts`. The server smoke checks the NPC count; update it when NPCs are added or removed.
+2b. The draw-call budget (vite preview on 4173): `node tests/draw-budget.mjs`. Over budget = find what it costs and fix that; raise a budget only on purpose (`UPDATE=1`).
 3. The browser e2e: `node tests/e2e-phase0.mjs`, with vite preview on port 4173 started from client/ (`npx vite preview --port 4173`), and `OUT_DIR` set for the screenshots.
    - Run it twice: at normal speed and with `LATENCY=110`.
    - Keep the machine idle during the run.
@@ -49,7 +50,13 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R12.6)
+## Next up (as of R12.7)
+- R12.7: the city's outline widths share one mesh per tile, props' fixed parts merged, graffiti one mesh, traffic lights
+  one draw: outdoor views −26% to −40% draw calls. `tests/draw-budget.mjs` guards it.
+- Next performance work: the people (4-6 outlined pieces each), the club crowd seen from the crossroads, memory churn.
+- Waiting on Blake: a BENCHMARK on R12.7.
+
+## Earlier: Next up (as of R12.6)
 - R12.6 shipped: the cantilever balcony and the oxblood/mahogany/gold façade (hanging baskets, the corner sign and
   lanterns), the flicker fixes (Little Italy's arch; decorations clear of their outlines; `tests/flicker-find.mjs`), the
   pub's lamps lighting the people and the games' pieces, WEE MICKEY (night fence + gear) in the back yard, Split the

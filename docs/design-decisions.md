@@ -2079,3 +2079,22 @@ flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the 
 - Engine question (Blake: why does a native game run better?): browser WebGL costs several times more per draw, from one
   thread; ink outlines double the draws. Plan: a screen-wide outline pass, inside/outside hiding, instancing, WebGPU as an
   option; port to a native engine (Godot) only if the slowest friend's PC can't hold 60 with the planned content after that.
+
+## R12.7: draw calls (Blake: "go over everything and really see what's wrong", 2026-11-12)
+
+- **The review's finding**: Blake's PC is draw-call bound, and most draws were batching overhead, not detail. In the
+  balcony view 30% of draws were the city's vertex-colour batches (split 7 ways by outline width in every tile), 24%
+  city pieces never merged (traffic lights, the club's crowd and lights, pigeons, signs), 17% props drawn part by
+  part, 4% graffiti (a mesh and a texture each).
+- **Outline width on the normals**: Babylon's outline shader pushes each vertex out by normal × width, and the toon
+  shader normalises normals before lighting, so scaling a piece's normals by (its width / 0.05) gives it its own
+  outline width inside one mesh drawn with width 0.05. One inked batch per tile and shadow flag instead of seven.
+- **Props**: their parts that never move or change (all but the lid, handset, glass, glint, lamps) are merged per
+  outline width with colours in the vertices (`PropRenderer.bakeStatic`). **Graffiti**: the background art is painted
+  into one 2048×1024 atlas and merged into one mesh; players' own tags stay separate. **Traffic lights**: the dark
+  lenses are part of the city; only the lit one is a mesh (3 shared materials). **Pigeons**: `bakeGroup`.
+- **The budget test**: `tests/draw-budget.mjs` (10 views, the engine's draw counter, by class) against
+  `tests/draw-budgets.json` (measured + 12%: people and cars make a view vary by ~8%). Run it on every change that
+  draws something; raise a budget only on purpose.
+- **Next**: the people (each 4-6 outlined pieces: 30-40% of the pub's draws), the club's crowd (instanced, but 600
+  instances drawn from the crossroads), then the memory churn (~60 MB/s).
