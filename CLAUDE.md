@@ -33,7 +33,8 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 8. **Push to `main` on GitHub (nr5mk8476t-debug/box-fort-banditz) every update.** Never force-push.
 
 ## Performance (saved R12.6, from Blake's brief)
-- Target: a steady 60 FPS at 1920x1080 on Blake's PC (the reference; draw-call bound: ~1,900 draws ≈ 7 ms). Budgets
+- Target: a steady 60 FPS at 1920x1080 on Blake's PC (the reference; CPU bound by MESHES drawn, ~7 µs each: R12.8 cut
+  draws 20% with meshes unchanged and the frame didn't move, so count meshes, not just draws). Budgets
   live in `docs/perf-budget.md`; the per-change budget: median +10%, 99th +20%, draws +15%, triangles +15%, no new
   frames over 50 ms on any stretch of the BENCHMARK route (`tests/perf-compare.mjs` flags it).
 - Measure before and after every content or rendering change (the BENCHMARK, `tests/perf-route.mjs`, or fixed views)

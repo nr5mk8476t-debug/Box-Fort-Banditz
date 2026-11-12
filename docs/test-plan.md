@@ -560,7 +560,7 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 | Frame cap | the setting exists, defaults to 240, the BENCHMARK lifts it | settings + code | - | by inspection; the real effect needs Blake's PC (the test box can't reach 60) |
 | Smokes | | signal + server smoke | | pass |
 | Browser e2e | normal / 110 ms | e2e | | PENDING / PENDING |
-| Real PC | Blake's BENCHMARK, upstairs views | Blake | balcony front 6.1 ms (1% low 83-98 FPS), window 5.9 ms | to do |
+| Real PC | Blake's BENCHMARK (build 0248648) | Blake | R12.7: median 4.0 ms, 99th 8.4, 1% low 104 FPS, worst 22 ms; balcony front 6.1 ms (1% low 98), window 5.9 (89); first walk ~98 MB/s of garbage | median 4.1, 99th 8.2, 1% low 108, worst 24; balcony front 6.0 (141), window 6.2 (89); first walk ~16 MB/s. Draws −17 to −23% but the render call didn't drop (balcony 4.9 → 4.9 ms): see perf-budget.md |
 
 ## R12.7: draw calls (2026-11-12)
 

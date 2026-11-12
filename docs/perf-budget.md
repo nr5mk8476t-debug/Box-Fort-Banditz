@@ -9,6 +9,22 @@ pub outside, downstairs, upstairs pool and darts, the balcony, back out, then th
 On the test box: `CLIENT_URL=... OUT_DIR=... LABEL=... node tests/perf-route.mjs`; compare two runs with
 `node tests/perf-compare.mjs before.json after.json`.
 
+## The reference PC after R12.8 (build 0248648, Blake's BENCHMARK, 2026-11-12): it's the MESHES, not the draws
+
+Same PC and settings. **Overall about the same as R12.7**: median 4.0 → 4.1 ms, 99th 8.4 → 8.2, 1% low 104 → 108 FPS,
+worst 22 → 24 ms. Balcony along the front 6.1 → 6.0 ms (1% low 98 → 141), out of the window 5.9 → 6.2 (89 → 89).
+
+**The lesson**: R12.8 cut draw calls 17-23% (balcony front 1,105 → 911) with the number of meshes the engine processes
+unchanged (654 → 667), and the render call didn't move (4.9 → 4.9 ms). So on this PC the frame follows the **meshes
+drawn** (Babylon's CPU work per mesh: its world matrix, binding its material, uniforms and lights; ~7 µs each), not the
+WebGL draw calls themselves: the outline's depth-only pass was nearly free. R12.7 worked because merging cut meshes
+and draws together. **To make a view faster: fewer meshes (merge, instance, hide what's far or behind walls) or less
+CPU per mesh (freeze static meshes' world matrices and materials)**; draw counts alone don't predict it.
+
+**Garbage**: the first walk 98 → 16 MB/s (−84%). The 4-second legs' heap figures are rough (the browser updates its
+heap size lazily): ~35-45 MB/s standing still, so the frame side (drawing, the HUD) still makes some; no frame over
+24 ms anywhere, and the odd 13-24 ms frame remains (not the GC: its pauses are ~1 ms now).
+
 ## The reference PC after R12.7 (build 01ce133, Blake's BENCHMARK, 2026-11-12)
 
 Same PC, browser, window (2560×1277) and settings as the runs below. Compared with R12.6 (005a42f): **the median frame
