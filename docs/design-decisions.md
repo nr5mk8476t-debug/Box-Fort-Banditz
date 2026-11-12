@@ -2098,3 +2098,43 @@ flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the 
   draws something; raise a budget only on purpose.
 - **Next**: the people (each 4-6 outlined pieces: 30-40% of the pub's draws), the club's crowd (instanced, but 600
   instances drawn from the crossroads), then the memory churn (~60 MB/s).
+
+## R12.8: the upstairs view and the frame-rate swings (Blake: "the FPS does still jump around a lot upstairs", 2026-11-12)
+
+- **Blake's answers**: a 240 Hz screen; upstairs he doesn't *feel* stutter, but the counter swings. Cap: 240 by default.
+- **The frame-rate cap**: Babylon's own `engine.maxFPS` (it accumulates time across skipped frames, and the engine's
+  delta time spans the skipped ones, so the clock and animations stay right). Set 1% above the chosen cap, so a screen at
+  exactly that refresh never drops a frame to timing jitter. Settings: Off / 240 / 165 / 144 / 120 / 60. The BENCHMARK
+  lifts it while it runs (it measures how fast frames *could* go) and puts it back after.
+- **One draw per ink outline** (`client/src/game/inkOutline.ts`): Babylon's outline renderer draws the shell in colour
+  with depth writes off before the mesh, then AGAIN with colour off to write depth: 3 draws per outlined mesh. For
+  opaque, back-face-culled materials (nearly everything) the shell is now drawn once, before the mesh, with its front
+  faces culled, depth writes on and no polygon offset: what's left of the shell is behind the mesh, so the mesh covers it
+  and the ring round the silhouette is what shows; its depth is the shell's back, not its proud front. Transparent,
+  two-sided and overlay meshes keep Babylon's passes. `?ink=old` brings the old way back for comparisons.
+  - Looks: before/after screenshots of 7 views; differences are outline edges moving by about a pixel (e.g. a window
+    transom's ink line now on its lower edge, not its upper one). Little Italy's arch now shows its green-white-red from
+    the balcony (the old shell's proud front was covering the stripes: a bug). Outlines between parts of one merged mesh
+    can now show (they couldn't before); nothing obvious in the screenshots.
+  - Flicker (`tests/flicker-find.mjs`, 7 views): balcony 525 → 191 flipping pixels, pub front 975 → 300, at night
+    2,862 → 1,606, Little Italy 395 → 182, the façade close up 351 → 152, the bar 2,641 → 2,330; out of the window
+    12,588 → 21,749, all of it a pub customer moving right in front of the camera in both.
+- **The garbage was the simulation, not the drawing**. Measured with V8's own GC trace on the shared code compiled the
+  way the browser build is (the sampling profiler and `tsx` both mislead here: `tsx` wraps every function to keep its
+  name, which defeats V8's optimisations): **87 MB/s at R12.7 (Blake's benchmark: 80-100) → 9.7 MB/s**, 333 → 37
+  collections a minute, 0.94 → 0.31 ms per tick. In order of what it bought:
+  1. **One shape for every box** (`canonBoxes`, at the end of the city build): the 3,932 boxes came in 25 shapes, so
+     collision code's property reads were megamorphic, and V8's generic load hands back a NEW heap number for each
+     decimal field it reads (a ground check: 1.6 KB of garbage; with plain copies of the same boxes: 18 bytes). Safe
+     because nothing keeps the original objects: props and the club floor refer to boxes by index.
+  2. **`Math.hypot` → `hyp()`** (`shared/src/fmath.ts`, a square root): TurboFan can't inline `Math.hypot`, and each call
+     made a heap number. A square root is exactly rounded everywhere, so peers on different browsers also agree to the
+     bit (hypot isn't specified that tightly). Not changed: the city/nav builders and the pool physics (their tests pin
+     exact layouts and shots).
+  3. `footSd` writes into one reused result; `localArena` reuses one view per arena (it copied the whole city layout
+     object every step of everyone); `nearBoxes` caches its multi-cell lists and its "smashed boxes filtered out" lists.
+  4. **Traffic**: every car in one shape (`carSim`), the people listed once a tick, the points along each car's way
+     worked out once per car instead of once per car per obstacle.
+  The simulation's results are unchanged (all 343 unit tests, which include determinism and replay tests, pass).
+- **Left for later** (Blake's next BENCHMARK decides): the people's draws (4-6 outlined pieces each), the club's crowd
+  from the crossroads, traffic's remaining ~3 MB/s.

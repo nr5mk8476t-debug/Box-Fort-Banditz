@@ -27,6 +27,7 @@ import { TrafficSystem, type TrafficEvent } from "./traffic.js";
 import { PoliceSystem, type PoliceEvent } from "./police.js";
 import type { LockRun } from "./lockpick.js";
 import { PubGames, PUBGAMES, type PubEvent, type PubAction, type StationGeom, type StationKind } from "./pubgames.js";
+import { hyp, hyp3 } from "./fmath.js";
 
 /** C4a: how far away a pedestrian notices you breaking something (they also need a clear line of sight) */
 export const WITNESS_RANGE = 20;
@@ -402,7 +403,7 @@ export class World {
     for (const o of this.players.values()) {
       const m = o.move;
       if (!o.connected || m.x < h.cell.minX - 0.5 || m.x > h.cell.maxX + 0.5 || m.z < h.cell.minZ - 0.5 || m.z > h.cell.maxZ + 0.5) continue;
-      const dx = m.x - h.toilet.x, dz = m.z - h.toilet.z, l = Math.max(0.3, Math.hypot(dx, dz));
+      const dx = m.x - h.toilet.x, dz = m.z - h.toilet.z, l = Math.max(0.3, hyp(dx, dz));
       const k = FLUSH.push * Math.max(0.45, 1 - l / 12);
       m.vx += (dx / l) * k; m.vz += (dz / l) * k; m.vy = Math.max(m.vy, FLUSH.lift); m.grounded = false;
       m.stumbleT = Math.max(m.stumbleT, FLUSH.stumble);
@@ -437,7 +438,7 @@ export class World {
     const m = p.move;
     for (const n of this.npc.npcs.values()) {
       if (n.state === "ko" || n.state === "sleep" || n.kind === "raccoon") continue;
-      const d = Math.hypot(n.move.x - m.x, n.move.z - m.z);
+      const d = hyp(n.move.x - m.x, n.move.z - m.z);
       if (d > WITNESS_RANGE || Math.abs(n.move.y - m.y) > 6) continue;
       if (n.kind === "cop" ? this.police.canSee(n, p) : this.police.los(n.move.x, n.move.y + 1.6, n.move.z, m.x, m.y + 1.2, m.z)) return true;
     }
@@ -485,11 +486,11 @@ export class World {
   /** R7: tagged and bagged: onto a free spot on the evidence room's shelves (full: the oldest bag is "lost") */
   private toEvidence(it: ItemSim, spots: { x: number; y: number; z: number }[]) {
     const held = [...this.items.values()].filter((o) => o.evidence && o !== it && o.mode === "free");
-    let spot = spots.find((sp) => !held.some((o) => Math.hypot(o.body.x - sp.x, o.body.z - sp.z) < 0.5 && Math.abs(o.body.y - sp.y) < 0.6));
+    let spot = spots.find((sp) => !held.some((o) => hyp(o.body.x - sp.x, o.body.z - sp.z) < 0.5 && Math.abs(o.body.y - sp.y) < 0.6));
     if (!spot) {
       const oldest = held.sort((a, b) => (a.evidenceT ?? 0) - (b.evidenceT ?? 0))[0];
       if (!oldest) { this.items.delete(it.id); return; }
-      spot = spots.find((sp) => Math.hypot(oldest.body.x - sp.x, oldest.body.z - sp.z) < 0.5) ?? spots[0];
+      spot = spots.find((sp) => hyp(oldest.body.x - sp.x, oldest.body.z - sp.z) < 0.5) ?? spots[0];
       this.items.delete(oldest.id);
     }
     it.holder = ""; it.holder2 = ""; it.fort = -1; it.locked = false; it.bankT = 0; it.shop = -1;
@@ -505,7 +506,7 @@ export class World {
    */
   stockShops(full: boolean) {
     const spots = (this.arena.lootSpawns ?? []).filter((s) => s.pool && s.shop !== undefined);
-    const empty = spots.filter((sp) => ![...this.items.values()].some((it) => it.mode === "free" && Math.hypot(it.body.x - sp.x, it.body.z - sp.z) < 0.6 && Math.abs(it.body.y - sp.y) < 1));
+    const empty = spots.filter((sp) => ![...this.items.values()].some((it) => it.mode === "free" && hyp(it.body.x - sp.x, it.body.z - sp.z) < 0.6 && Math.abs(it.body.y - sp.y) < 1));
     const pick = full ? empty.filter(() => this.rng() < STOCK_FILL) : (this.arena.shops ?? []).map((sh) => { const e = empty.filter((x) => x.shop === sh.id); return e[Math.floor(this.rng() * e.length)]; }).filter(Boolean);
     for (const sp of pick) {
       if (this.items.size >= ITEM_MAX + SHELF_MAX) break;
@@ -622,7 +623,7 @@ export class World {
         const p = w.players.get(pid);
         if (!p || p.move.knockT > 0 || p.move.immuneT > 0) return;
         const n = w.npc.npcs.get(npcId);
-        if (n) { const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, Math.hypot(dx, dz)); p.move.vx += (dx / l) * 3.5; p.move.vz += (dz / l) * 3.5; }
+        if (n) { const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, hyp(dx, dz)); p.move.vx += (dx / l) * 3.5; p.move.vz += (dz / l) * 3.5; }
         if (n?.kind === "champ") {
           // R6: the Champ: one hit, you're down, and he sits on you till you're up
           w.knockdown(p, npcId);
@@ -635,7 +636,7 @@ export class World {
           // R5: one punch: out cold, everything you carry flies, and you sail out onto the pavement
           w.knockdown(p, npcId);
           p.move.knockT = Math.max(p.move.knockT, MEAT_LOCKER.knock); p.move.immuneT = Math.max(p.move.immuneT, p.move.knockT + 1.5);
-          const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, Math.hypot(dx, dz));
+          const dx = p.move.x - n.move.x, dz = p.move.z - n.move.z, l = Math.max(0.01, hyp(dx, dz));
           p.move.vx = (dx / l) * MEAT_LOCKER.throw; p.move.vz = (dz / l) * MEAT_LOCKER.throw - 2; p.move.vy = MEAT_LOCKER.lift; p.move.grounded = false;
           w.emit({ t: "meatPunch", npc: npcId, p: pid });
           w.npc.gloat(npcId);
@@ -693,7 +694,7 @@ export class World {
       npcDropCarried: (itemId, x, y, z, ax, az) => {
         const it = w.items.get(itemId);
         if (!it) return;
-        const l = Math.max(0.01, Math.hypot(ax, az));
+        const l = Math.max(0.01, hyp(ax, az));
         it.holder = ""; it.holder2 = "";
         w.freeItem(it, x, y, z, (ax / l) * 1.5, 3.5, (az / l) * 1.5);
       },
@@ -712,7 +713,7 @@ export class World {
   popLoot(type: string, x: number, y: number, z: number, ax: number, az: number): string {
     const def = lootDef(type);
     const id = "i" + this.nextItem++;
-    const l = Math.max(0.01, Math.hypot(ax, az));
+    const l = Math.max(0.01, hyp(ax, az));
     this.items.set(id, {
       id, type, value: rollValue(def, this.rng),
       body: { x, y, z, vx: (ax / l) * 2 + (this.rng() - 0.5), vy: 4.5, vz: (az / l) * 2 + (this.rng() - 0.5), rot: 0, spin: 6, resting: false },
@@ -883,7 +884,7 @@ export class World {
     let best: { kind: "npc" | "player" | "prop"; id: string; score: number } | null = null;
     const consider = (kind: "npc" | "player" | "prop", id: string, x: number, y: number, z: number, surface = 0) => {
       const dx = x - m.x, dz = z - m.z;
-      const d = Math.max(0.3, Math.hypot(dx, dz) - surface);
+      const d = Math.max(0.3, hyp(dx, dz) - surface);
       if (d > PUNCH_RANGE + 0.3 || Math.abs(y - m.y) > 1.3) return;
       let ang = Math.atan2(dx, dz) - aim;
       while (ang > Math.PI) ang -= Math.PI * 2;
@@ -917,7 +918,7 @@ export class World {
     const victim = this.players.get(b.id)!;
     if (victim.move.immuneT > 0) return this.emit({ t: "punch", p: p.id, hit: "blocked", target: b.id });
     this.emit({ t: "punch", p: p.id, hit: "player", target: b.id });
-    const dx = victim.move.x - m.x, dz = victim.move.z - m.z, l = Math.max(0.01, Math.hypot(dx, dz));
+    const dx = victim.move.x - m.x, dz = victim.move.z - m.z, l = Math.max(0.01, hyp(dx, dz));
     const k = m.strongT > 0 ? 2 : 1; // (R11.4: BEEF JUICE: twice the knock, a proper stagger)
     victim.move.vx += (dx / l) * 4 * k; victim.move.vz += (dz / l) * 4 * k;
     victim.move.stumbleT = Math.max(victim.move.stumbleT, k > 1 ? 0.6 : 0.2); // flinch
@@ -936,9 +937,9 @@ export class World {
     // Reach check: close enough and roughly in front of you
     const e = this.eye(p);
     const dx = it.body.x - e.x, dy = it.body.y - e.y, dz = it.body.z - e.z;
-    const dist = Math.hypot(dx, dy, dz) - lootDef(it.type).radius;
-    const facing = (dx * Math.sin(p.move.yaw) + dz * Math.cos(p.move.yaw)) / Math.max(0.001, Math.hypot(dx, dz));
-    if (dist > GRAB_RANGE || (Math.hypot(dx, dz) > 0.8 && facing < 0.2)) return this.emit({ t: "whiff", p: p.id, reason: "far" });
+    const dist = hyp3(dx, dy, dz) - lootDef(it.type).radius;
+    const facing = (dx * Math.sin(p.move.yaw) + dz * Math.cos(p.move.yaw)) / Math.max(0.001, hyp(dx, dz));
+    if (dist > GRAB_RANGE || (hyp(dx, dz) > 0.8 && facing < 0.2)) return this.emit({ t: "whiff", p: p.id, reason: "far" });
 
     if (it.mode === "free" && it.fort >= 0) this.raidCheck(p, it);
 
@@ -1044,7 +1045,7 @@ export class World {
     if (loser) {
       loser.hand = "";
       this.updateCarry(loser);
-      if (winner) { const dx = loser.move.x - winner.move.x, dz = loser.move.z - winner.move.z, l = Math.max(0.01, Math.hypot(dx, dz)); loser.move.vx += (dx / l) * 4; loser.move.vz += (dz / l) * 4; }
+      if (winner) { const dx = loser.move.x - winner.move.x, dz = loser.move.z - winner.move.z, l = Math.max(0.01, hyp(dx, dz)); loser.move.vx += (dx / l) * 4; loser.move.vz += (dz / l) * 4; }
       loser.move.stumbleT = Math.max(loser.move.stumbleT, 0.5);
     }
     if (winner) this.updateCarry(winner);
@@ -1077,9 +1078,9 @@ export class World {
     p.tagging = null;
     const can = this.sprayCan(p);
     if (!t || !can || ![x, y, z, nx, nz].every(Number.isFinite)) return false;
-    if (Math.hypot(p.move.x - t.x, p.move.z - t.z) > 0.6) return false;
-    if (Math.hypot(x - p.move.x, z - p.move.z) > TAG.reach || y < p.move.y + 0.3 || y > p.move.y + 2.6) return false;
-    const nl = Math.hypot(nx, nz);
+    if (hyp(p.move.x - t.x, p.move.z - t.z) > 0.6) return false;
+    if (hyp(x - p.move.x, z - p.move.z) > TAG.reach || y < p.move.y + 0.3 || y > p.move.y + 2.6) return false;
+    const nl = hyp(nx, nz);
     if (nl < 0.5) return false;
     let ux = nx / nl, uz = nz / nl;
     // a real wall face right there (R3: any face, angled ones too: the tag takes that face's normal)
@@ -1092,7 +1093,7 @@ export class World {
       if (f) { wall = b; ux = f.nx; uz = f.nz; break; }
     }
     if (!wall) return false;
-    for (const o of this.tags.values()) if (Math.hypot(o.x - x, o.z - z) < TAG.spacing && Math.abs(o.y - y) < 1.5) return false;
+    for (const o of this.tags.values()) if (hyp(o.x - x, o.z - z) < TAG.spacing && Math.abs(o.y - y) < 1.5) return false;
     const id = "t" + this.nextTag++;
     this.tags.set(id, { id, x, y, z, nx: ux, nz: uz, colorIdx: p.colorIdx, by: p.id, style: Math.floor(this.rng() * 6) });
     can.uses = (can.uses ?? TAG.uses) - 1;
@@ -1204,7 +1205,7 @@ export class World {
     if (kind === "zoomies") m.speedT = g.time; else if (kind === "beef") m.strongT = g.time; else { m.floatT = g.time; m.airJumps = 0; }
     m.comedownT = 0;
     let heat = false;
-    for (const n of this.npc.npcs.values()) if (n.kind === "cop" && n.state !== "ko" && Math.hypot(n.move.x - m.x, n.move.z - m.z) < 25 && this.police.canSee(n, p)) { heat = true; break; }
+    for (const n of this.npc.npcs.values()) if (n.kind === "cop" && n.state !== "ko" && hyp(n.move.x - m.x, n.move.z - m.z) < 25 && this.police.canSee(n, p)) { heat = true; break; }
     if (heat) { this.addHeat(p, DEAL.heat); this.npc.scram(steve.id); } else this.npc.steveSay("sold");
     this.emit({ t: "deal", p: p.id, kind, paid: DEAL.price, heat });
   }
@@ -1216,12 +1217,12 @@ export class World {
     if (!n) { this.emit({ t: "mickeyNo", p: p.id, reason: "away" }); return null; }
     if (this.time < this.mickeyShutT) { this.emit({ t: "mickeyNo", p: p.id, reason: "shut" }); return null; }
     if (!this.match.night) { this.npc.mickeySay("day"); this.emit({ t: "mickeyNo", p: p.id, reason: "day" }); return null; }
-    if (Math.hypot(n.move.x - p.move.x, n.move.z - p.move.z) > MICKEY.reach + 1) { this.emit({ t: "mickeyNo", p: p.id, reason: "away" }); return null; }
+    if (hyp(n.move.x - p.move.x, n.move.z - p.move.z) > MICKEY.reach + 1) { this.emit({ t: "mickeyNo", p: p.id, reason: "away" }); return null; }
     return n.id;
   }
   /** does a cop near enough see this player right now? */
   private copSees(p: PlayerSim, range: number): boolean {
-    for (const n of this.npc.npcs.values()) if (n.kind === "cop" && n.state !== "ko" && Math.hypot(n.move.x - p.move.x, n.move.z - p.move.z) < range && this.police.canSee(n, p)) return true;
+    for (const n of this.npc.npcs.values()) if (n.kind === "cop" && n.state !== "ko" && hyp(n.move.x - p.move.x, n.move.z - p.move.z) < range && this.police.canSee(n, p)) return true;
     return false;
   }
   /** E on WEE MICKEY with loot in your hands (at night): cash for it, above the pawn shops' price; a little heat */
@@ -1317,7 +1318,7 @@ export class World {
     for (const [id, e] of g.ps) {
       const p = this.players.get(id);
       if (!p || !p.connected) { if (g.state === "open") { g.ps.delete(id); this.emit({ t: "gch", what: "leave", p: id, why: "gone" }); } else this.gchOut(id, "gone"); continue; }
-      if (pb && Math.hypot(p.move.x - cx, p.move.z - cz) > GCH.leaveR) { if (g.state === "open") { g.ps.delete(id); this.emit({ t: "gch", what: "leave", p: id, why: "left" }); } else this.gchOut(id, "left"); }
+      if (pb && hyp(p.move.x - cx, p.move.z - cz) > GCH.leaveR) { if (g.state === "open") { g.ps.delete(id); this.emit({ t: "gch", what: "leave", p: id, why: "left" }); } else this.gchOut(id, "left"); }
       else if (p.jailT > 0 && g.state === "on") this.gchOut(id, "jail");
       void e;
     }
@@ -1425,7 +1426,7 @@ export class World {
   /** something true about today's city, from where he sits */
   private seamusTipLine(pb: NonNullable<ArenaLayout["pub"]>): string {
     const cx = (pb.rect.minX + pb.rect.maxX) / 2, cz = (pb.rect.minZ + pb.rect.maxZ) / 2;
-    const where = (x: number, z: number) => { const d = Math.hypot(x - cx, z - cz), a = Math.atan2(x - cx, z - cz); const dir = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]; return d < 25 ? "right on our doorstep" : `about ${Math.round(d / 10) * 10} m ${dir} of here`; };
+    const where = (x: number, z: number) => { const d = hyp(x - cx, z - cz), a = Math.atan2(x - cx, z - cz); const dir = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]; return d < 25 ? "right on our doorstep" : `about ${Math.round(d / 10) * 10} m ${dir} of here`; };
     const kind = Math.floor(this.rng() * 3);
     if (kind === 0) {
       let best: ItemSim | null = null;
@@ -1434,7 +1435,7 @@ export class World {
     }
     if (kind <= 1) {
       const cops = [...this.npc.npcs.values()].filter((n) => n.kind === "cop" && n.state !== "ko");
-      if (cops.length) { const c = cops.reduce((a, b) => (Math.hypot(a.move.x - cx, a.move.z - cz) < Math.hypot(b.move.x - cx, b.move.z - cz) ? a : b)); return `There's ${cops.length} bluebottle${cops.length > 1 ? "s" : ""} about. The nearest is ${where(c.move.x, c.move.z)}. Mind yourself.`; }
+      if (cops.length) { const c = cops.reduce((a, b) => (hyp(a.move.x - cx, a.move.z - cz) < hyp(b.move.x - cx, b.move.z - cz) ? a : b)); return `There's ${cops.length} bluebottle${cops.length > 1 ? "s" : ""} about. The nearest is ${where(c.move.x, c.move.z)}. Mind yourself.`; }
       return "Not a copper in sight, sunshine. Make hay.";
     }
     const big = [...this.npc.npcs.values()].find((n) => NPC_DEFS[n.kind].bigShot && n.state !== "ko");
@@ -1490,7 +1491,7 @@ export class World {
     for (const n of this.npc.npcs.values()) {
       if (n.kind !== "patron") continue;
       const h = kept && n.post && (n as any).pubGame === k ? kept : n.post;
-      if (h && Math.hypot(h.x - home.x, h.z - home.z) < 0.3) return n;
+      if (h && hyp(h.x - home.x, h.z - home.z) < 0.3) return n;
     }
     return null;
   }
@@ -1507,7 +1508,7 @@ export class World {
   }
   private pubNpcHome(k: StationKind) {
     const n = this.pubNpc(k), home = this.pubNpcHomes[k], pb = this.arena.pub; if (!n || !home || !pb) return;
-    const st = [...this.pubGames.geom.values()].find((g) => g.kind === k && Math.hypot(g.x - n.move.x, g.z - n.move.z) < 6);
+    const st = [...this.pubGames.geom.values()].find((g) => g.kind === k && hyp(g.x - n.move.x, g.z - n.move.z) < 6);
     const back = st ? [...st.npcPath].reverse() : [];
     let pts = [...back.map((q) => ({ ...q, yaw: home.yaw })), { x: home.x, z: home.z, yaw: home.yaw }];
     if (k === "pool" && st) pts = [...this.roundTable(n.move.x, n.move.z, pts[0]), ...pts.slice(1)];
@@ -1517,7 +1518,7 @@ export class World {
   }
   /** a walk from (x, z) to `to` that goes round the pool table in the way (via its corners, 0.6 m out) */
   private roundTable(x: number, z: number, to: { x: number; z: number; yaw: number }) {
-    const pb = this.arena.pub!; const q = pb.pools.reduce((a, b) => (Math.hypot(b.x - to.x, b.z - to.z) < Math.hypot(a.x - to.x, a.z - to.z) ? b : a));
+    const pb = this.arena.pub!; const q = pb.pools.reduce((a, b) => (hyp(b.x - to.x, b.z - to.z) < hyp(a.x - to.x, a.z - to.z) ? b : a));
     const hx = q.w / 2, hz = q.d / 2, ox = hx + 0.6, oz = hz + 0.6;
     const hits = (ax: number, az: number, bx: number, bz: number) => { for (let t = 0; t <= 1; t += 0.05) { const px = ax + (bx - ax) * t - q.x, pz = az + (bz - az) * t - q.z; if (Math.abs(px) < hx + 0.25 && Math.abs(pz) < hz + 0.25) return true; } return false; };
     if (!hits(x, z, to.x, to.z)) return [to];
@@ -1526,7 +1527,7 @@ export class World {
     for (let i = 0; i < 4; i++) for (const j of [-1, i, (i + 1) % 4, (i + 3) % 4]) {
       const via = j < 0 || j === i ? [C[i]] : [C[i], C[j]];
       const pts = [{ x, z }, ...via, to]; let ok = true, L = 0;
-      for (let k = 0; k + 1 < pts.length; k++) { if (hits(pts[k].x, pts[k].z, pts[k + 1].x, pts[k + 1].z)) { ok = false; break; } L += Math.hypot(pts[k + 1].x - pts[k].x, pts[k + 1].z - pts[k].z); }
+      for (let k = 0; k + 1 < pts.length; k++) { if (hits(pts[k].x, pts[k].z, pts[k + 1].x, pts[k + 1].z)) { ok = false; break; } L += hyp(pts[k + 1].x - pts[k].x, pts[k + 1].z - pts[k].z); }
       if (ok && L < bl) { bl = L; best = [...via, to]; }
     }
     return best;
@@ -1546,9 +1547,9 @@ export class World {
     for (const k of ["pool", "darts"] as StationKind[]) {
       const route = this.pubNpcRoute[k]; if (!route.length || !pb) continue;
       const n = this.pubNpc(k); if (!n || !n.post) continue;
-      if (Math.hypot(n.move.x - n.post.x, n.move.z - n.post.z) < 0.35) {
+      if (hyp(n.move.x - n.post.x, n.move.z - n.post.z) < 0.35) {
         const nx = route.shift()!; n.post = { x: nx.x, z: nx.z, yaw: nx.yaw, y: pb.y2 };
-        if (!route.length && !this.pubGames.stationOf("npc:" + k)) { const home = this.pubNpcHomes[k]; if (home && Math.hypot(home.x - nx.x, home.z - nx.z) < 0.05) { n.post = { ...home }; (n as any).pubGame = undefined; this.pubNpcHomes[k] = null; } }
+        if (!route.length && !this.pubGames.stationOf("npc:" + k)) { const home = this.pubNpcHomes[k]; if (home && hyp(home.x - nx.x, home.z - nx.z) < 0.05) { n.post = { ...home }; (n as any).pubGame = undefined; this.pubNpcHomes[k] = null; } }
       }
     }
   }
@@ -1588,7 +1589,7 @@ export class World {
       this.steveT = 0.25;
       const st = [...this.npc.npcs.values()].find((n) => n.kind === "sketchy_steve");
       if (st) for (const c of this.npc.npcs.values()) {
-        if (c.kind !== "cop" || c.state === "ko" || Math.hypot(c.move.x - st.move.x, c.move.z - st.move.z) > DEAL.copRange) continue;
+        if (c.kind !== "cop" || c.state === "ko" || hyp(c.move.x - st.move.x, c.move.z - st.move.z) > DEAL.copRange) continue;
         if (this.police.los(c.move.x, c.move.y + 1.6, c.move.z, st.move.x, st.move.y + 1.2, st.move.z)) { this.npc.scram(st.id); break; }
       }
     }
@@ -1682,7 +1683,7 @@ export class World {
     const no = (reason: string) => this.emit({ t: "pinFail", p: p.id, reason });
     if (!t || t === p || p.pin || p.rob || p.jailT > 0) return;
     if (this.lobby.on(p) || this.lobby.on(t)) return no("lobby");
-    if (Math.hypot(t.move.x - p.move.x, t.move.z - p.move.z) > ARREST.reach || Math.abs(t.move.y - p.move.y) > 1.2) return no("far");
+    if (hyp(t.move.x - p.move.x, t.move.z - p.move.z) > ARREST.reach || Math.abs(t.move.y - p.move.y) > 1.2) return no("far");
     if (t.notoriety < ARREST.minHeat) return no("clean");
     if (t.move.knockT <= 0 || t.jailT > 0 || t.respawnT > 0) return no("standing");
     if (this.pinnerOf(t)) return no("taken");
@@ -1713,7 +1714,7 @@ export class World {
       if (!t || !t.connected || t.jailT > 0 || t.respawnT > 0) { this.endPin(q, "gone"); continue; }
       if (pin.struggle >= ARREST.breakFree) { this.endPin(q, "free"); continue; }
       if (q.move.knockT > 0 || q.move.stunT > 0 || q.respawnT > 0 || q.jailT > 0 || !q.connected) { this.endPin(q, "rescued"); continue; }
-      if (Math.hypot(q.move.x - pin.x, q.move.z - pin.z) > ARREST.moveCancel || Math.hypot(t.move.x - q.move.x, t.move.z - q.move.z) > ARREST.reach + 0.6) { this.endPin(q, "moved"); continue; }
+      if (hyp(q.move.x - pin.x, q.move.z - pin.z) > ARREST.moveCancel || hyp(t.move.x - q.move.x, t.move.z - q.move.z) > ARREST.reach + 0.6) { this.endPin(q, "moved"); continue; }
       if (pin.t > ARREST.maxTime) { this.endPin(q, "time"); continue; }
       // held down: they stay flat, the heat stays on, and the cops know exactly where
       t.move.knockT = Math.max(t.move.knockT, 0.25);
@@ -1967,7 +1968,7 @@ export class World {
           // tug of war: nobody moves (carry speed 0) until someone wins or time runs out
           it.tugT += SIM_DT;
           if (it.tugT > TUG_MAX_TIME) { if (it.tug === 0) it.tug = -1e-6; this.endTug(it); continue; }
-          const gap = Math.hypot(h1.move.x - h2.move.x, h1.move.z - h2.move.z);
+          const gap = hyp(h1.move.x - h2.move.x, h1.move.z - h2.move.z);
           if (gap > GIANT_TETHER) {
             // pulled apart (shoved, knocked): it tumbles to the ground and both let go
             it.holder = ""; it.holder2 = ""; it.tug = 0; it.tugT = 0;
@@ -2039,12 +2040,12 @@ export class World {
         }
       }
       // thrown items bonk players (a comedy shove; stuns + loot drops may come later)
-      const sp = Math.hypot(it.body.vx, it.body.vy, it.body.vz);
+      const sp = hyp3(it.body.vx, it.body.vy, it.body.vz);
       if (sp > 6 && it.thrownT < 2 && it.lastThrower) {
         for (const n of this.npc.npcs.values()) {
           if (n.state === "ko" || n.state === "stunned" || n.state === "sleep" || n.state === "yell") continue; // (C4b: the old lady's upstairs)
           const dx = it.body.x - n.move.x, dz = it.body.z - n.move.z, dy = it.body.y - (n.move.y + 0.9);
-          if (Math.hypot(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
+          if (hyp(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
             const r = this.npc.hit(n.id, it.lastThrower, it.body.x - it.body.vx * 0.1, it.body.z - it.body.vz * 0.1);
             if (r === "hit") this.emit({ t: "npcHit", npc: n.id, by: it.lastThrower, how: "throw" });
             it.body.vx *= -0.3; it.body.vz *= -0.3;
@@ -2059,8 +2060,8 @@ export class World {
           const m = p.move;
           const cy = m.y + 0.9;
           const dx = it.body.x - m.x, dz = it.body.z - m.z, dy = it.body.y - cy;
-          if (Math.hypot(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
-            const nx = -dx, nz = -dz, nl = Math.max(0.001, Math.hypot(nx, nz));
+          if (hyp(dx, dz) < def.radius + PLAYER.radius && Math.abs(dy) < 1.0) {
+            const nx = -dx, nz = -dz, nl = Math.max(0.001, hyp(nx, nz));
             const hit = throwImpact(def, sp);
             m.vx += (nx / nl) * hit.knock; m.vz += (nz / nl) * hit.knock; // heavier = shoved harder
             if (hit.stagger) m.stumbleT = Math.max(m.stumbleT, hit.stagger);
@@ -2082,13 +2083,13 @@ export class World {
     const bank = this.arena.bank;
     if (newDay && bank) {
       for (const it of [...this.items.values()]) if (it.type === "bank_keycard") this.items.delete(it.id);
-      for (const v of bank.vaultSpots) if (![...this.items.values()].some((it) => it.type === v.type && Math.hypot(it.body.x - v.x, it.body.z - v.z) < 0.3 && Math.abs(it.body.y - v.y) < 0.6)) this.placeItem(v.type, v.x, v.y, v.z);
+      for (const v of bank.vaultSpots) if (![...this.items.values()].some((it) => it.type === v.type && hyp(it.body.x - v.x, it.body.z - v.z) < 0.3 && Math.abs(it.body.y - v.y) < 0.6)) this.placeItem(v.type, v.x, v.y, v.z);
       const k = bank.keycardSpots[Math.floor(this.rng() * bank.keycardSpots.length)];
       if (k) this.placeItem("bank_keycard", k.x, k.y, k.z);
     }
     // C4a: street junk back at its spots (chairs by the café tables, lids by the bins, bricks on the building site...)
     for (const j of this.arena.junkSpots ?? []) {
-      if ([...this.items.values()].some((it) => it.type === j.type && it.mode === "free" && Math.hypot(it.body.x - j.x, it.body.z - j.z) < 0.8)) continue;
+      if ([...this.items.values()].some((it) => it.type === j.type && it.mode === "free" && hyp(it.body.x - j.x, it.body.z - j.z) < 0.8)) continue;
       const id = this.placeItem(j.type, j.x, j.y ?? 0.15, j.z);
       const it = this.items.get(id);
       if (it) it.body.rot = j.yaw ?? 0;
@@ -2138,7 +2139,7 @@ export class World {
       if (sp.pool) continue; // shop shelves are stocked separately
       let busy = false;
       for (const it of this.items.values()) {
-        if (it.mode === "free" && Math.hypot(it.body.x - sp.x, it.body.z - sp.z) < 1.6 && Math.abs(it.body.y - sp.y) < 2) { busy = true; break; }
+        if (it.mode === "free" && hyp(it.body.x - sp.x, it.body.z - sp.z) < 1.6 && Math.abs(it.body.y - sp.y) < 2) { busy = true; break; }
       }
       if (busy) continue;
       const def = forceType ? lootDef(forceType) : this.pickType(sp.zone, sp.y === 0, giants < GIANT_MAX);

@@ -29,6 +29,7 @@ import {
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
 import { settings } from "../settings.ts";
+import { installOneDrawOutlines } from "./inkOutline.ts";
 import { sfx, chargeTone, feverMusic, pubMusic, pubFlourish, pubMusicOn, jukeboxMusic, jukeboxMusicOn } from "../audio.ts";
 
 export type ServerPlayerView = RemoteInfo & { lastSeq: number };
@@ -425,6 +426,7 @@ export class ArenaScene {
     input.onAction = (a, src) => this.lootAction(a, src);
     void toon;
     scene.blockMaterialDirtyMechanism = false;
+    installOneDrawOutlines(scene); // (R12.8: an ink outline is one draw, not two)
   }
 
   /** Compile every shader before the player drops in (avoids a freeze on the first frames). */

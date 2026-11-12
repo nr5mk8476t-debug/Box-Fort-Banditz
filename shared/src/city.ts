@@ -23,7 +23,7 @@
 // Every block is lined with buildings wall to wall (a gap for the alley into the courtyard behind);
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
-import {
+import { canonBoxes,
   box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind, type GearKind,
   CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
 } from "./arena.js";
@@ -3323,7 +3323,7 @@ export function buildTrashington(): ArenaLayout {
   }
 
   return {
-    halfSize: HALF, boxes, spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
+    halfSize: HALF, boxes: canonBoxes(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
     roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop, littleItaly, stationUpper, hotShops: R2 ? hotShops : undefined, fever, pub,
   };

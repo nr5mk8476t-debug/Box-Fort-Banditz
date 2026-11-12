@@ -15,6 +15,7 @@
 import { PLAYER } from "./constants.js";
 import type { RoadNet, RoadEdge } from "./arena.js";
 import type { World, PlayerSim } from "./world.js";
+import { hyp } from "./fmath.js";
 
 export const CAR_HALF_LEN = 2.1;
 export const CAR_HALF_WIDTH = 0.95;
@@ -107,7 +108,7 @@ export function lightState(net: RoadNet, node: number, edge: number, t: number):
 // ---------------------------------------------------------------------------------------------------
 function polyline(pts: { x: number; z: number }[]) {
   const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + hyp(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
   return { pts, cum, len: cum[cum.length - 1] };
 }
 /** Cut a polyline to [s0, s1] (distances along it). */
@@ -125,7 +126,7 @@ function cut(pts: { x: number; z: number }[], s0: number, s1: number) {
   return out;
 }
 function densify(a: { x: number; z: number }, b: { x: number; z: number }) {
-  const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z)));
+  const n = Math.max(1, Math.ceil(hyp(b.x - a.x, b.z - a.z)));
   const out = [];
   for (let i = 0; i <= n; i++) out.push({ x: a.x + ((b.x - a.x) * i) / n, z: a.z + ((b.z - a.z) * i) / n });
   return out;
@@ -148,7 +149,7 @@ export function buildLanes(net: RoadNet): Lane[] {
     const others = edgesAt(node).filter((o) => o !== e);
     if (n.ctl === "end") return Math.max(...others.map((o) => o.hw)) + 0.5;
     const p = e.a === node ? endP(e, "a") : endP(e, "b"), q = e.a === node ? endP(e, "b") : endP(e, "a");
-    const l = Math.hypot(q.x - p.x, q.z - p.z), dx = (q.x - p.x) / l, dz = (q.z - p.z) / l;
+    const l = hyp(q.x - p.x, q.z - p.z), dx = (q.x - p.x) / l, dz = (q.z - p.z) / l;
     let reach = 0;
     for (const o of others) {
       if (o.arc) continue;
@@ -178,7 +179,7 @@ export function buildLanes(net: RoadNet): Lane[] {
       if (off) {
         pts = pts.map((p, i) => {
           const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
-          const l = Math.hypot(b.x - a.x, b.z - a.z) || 1, fx = (b.x - a.x) / l, fz = (b.z - a.z) / l;
+          const l = hyp(b.x - a.x, b.z - a.z) || 1, fx = (b.x - a.x) / l, fz = (b.z - a.z) / l;
           return { x: p.x + fz * off, z: p.z - fx * off }; // keep right
         });
       }
@@ -202,12 +203,12 @@ export function buildLanes(net: RoadNet): Lane[] {
       if (lo.edge === ins.edge && !net.edges[lo.edge].arc) continue; // U-turn
       const p0 = ins.pts[ins.pts.length - 1], p1 = ins.pts[ins.pts.length - 2];
       const q0 = lo.pts[0], q1 = lo.pts[1];
-      const hx = p0.x - p1.x, hz = p0.z - p1.z, hl = Math.hypot(hx, hz) || 1;
-      const gx = q1.x - q0.x, gz = q1.z - q0.z, gl = Math.hypot(gx, gz) || 1;
+      const hx = p0.x - p1.x, hz = p0.z - p1.z, hl = hyp(hx, hz) || 1;
+      const gx = q1.x - q0.x, gz = q1.z - q0.z, gl = hyp(gx, gz) || 1;
       const ux = hx / hl, uz = hz / hl, vx = gx / gl, vz = gz / gl;
       const cross = ux * vz - uz * vx, dot = ux * vx + uz * vz;
       const bez = (a: { x: number; z: number }, c: { x: number; z: number }, b: { x: number; z: number }) => {
-        const n = Math.max(3, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) * 1.2));
+        const n = Math.max(3, Math.ceil(hyp(b.x - a.x, b.z - a.z) * 1.2));
         const out = [];
         for (let i = 0; i <= n; i++) {
           const t = i / n;
@@ -218,15 +219,15 @@ export function buildLanes(net: RoadNet): Lane[] {
       let pts: { x: number; z: number }[];
       const t = Math.abs(cross) < 0.2 ? NaN : ((q0.x - p0.x) * vz - (q0.z - p0.z) * vx) / cross;
       const c = { x: p0.x + ux * t, z: p0.z + uz * t };
-      if (Number.isNaN(t) || t < 0 || Math.hypot(c.x - p0.x, c.z - p0.z) > 40 || Math.hypot(c.x - q0.x, c.z - q0.z) > 40) {
+      if (Number.isNaN(t) || t < 0 || hyp(c.x - p0.x, c.z - p0.z) > 40 || hyp(c.x - q0.x, c.z - q0.z) > 40) {
         pts = bez(p0, { x: (p0.x + q0.x) / 2, z: (p0.z + q0.z) / 2 }, q0);
       } else {
         // drive on to near the corner, turn (tight for a right turn: never over the kerb), drive on out
-        const r = Math.min(Math.hypot(c.x - p0.x, c.z - p0.z), Math.hypot(c.x - q0.x, c.z - q0.z), cross < 0 ? 2.5 : 7);
+        const r = Math.min(hyp(c.x - p0.x, c.z - p0.z), hyp(c.x - q0.x, c.z - q0.z), cross < 0 ? 2.5 : 7);
         const A = { x: c.x - ux * r, z: c.z - uz * r }, B = { x: c.x + vx * r, z: c.z + vz * r };
         pts = [...densify(p0, A).slice(0, -1), ...bez(A, c, B), ...densify(B, q0).slice(1)];
       }
-      const pl = polyline(pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z) > 1e-4));
+      const pl = polyline(pts.filter((p, i) => i === 0 || hyp(p.x - pts[i - 1].x, p.z - pts[i - 1].z) > 1e-4));
       const straight = dot > 0.7;
       const id = lanes.length;
       lanes.push({ id, ...pl, conn: true, edge: -1, from: ins.to, to: ins.to, node: ins.to, inLane: ins.id, outLane: lo.id, straight, speed: straight ? Math.min(ins.speed, lo.speed) : 5.5, outs: [] });
@@ -236,8 +237,20 @@ export function buildLanes(net: RoadNet): Lane[] {
   return lanes;
 }
 
+/** R12.8: every car (and every police car in the lanes, and the stand-ins for the ones out of them) made in ONE shape,
+ *  all its fields from the start in the same order: the tick reads them for every pair of cars, and objects of several
+ *  shapes made V8 read them the slow way (a new heap number for each decimal it read). */
+export function carSim(id: string, lane: number, s: number, v: number, x: number, z: number, yaw: number, color: number, cop: boolean): CarSim {
+  return { id, lane, s, v, x, z, yaw, honkCd: 0, color, next: -1, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0,
+    why: "", by: "", waitT: 0, cop, siren: false, goal: null, hold: false, costs: undefined, costFor: undefined };
+}
+
 /** Position + heading at distance s along a lane. */
 export function laneAt(l: Lane, s: number): { x: number; z: number; yaw: number } {
+  return laneAtInto(l, s, { x: 0, z: 0, yaw: 0 });
+}
+/** (R12.8) laneAt into an object you already have (the traffic tick asks thousands of times a tick) */
+export function laneAtInto<T extends { x: number; z: number; yaw: number }>(l: Lane, s: number, out: T): T {
   s = Math.max(0, Math.min(l.len, s));
   let i = 0, hi = l.pts.length - 2;
   // (binary search: lanes are long)
@@ -245,8 +258,12 @@ export function laneAt(l: Lane, s: number): { x: number; z: number; yaw: number 
   const a = l.pts[i], b = l.pts[Math.min(l.pts.length - 1, i + 1)];
   const seg = l.cum[i + 1] - l.cum[i] || 1;
   const k = (s - l.cum[i]) / seg;
-  return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, yaw: Math.atan2(b.x - a.x, b.z - a.z) };
+  out.x = a.x + (b.x - a.x) * k; out.z = a.z + (b.z - a.z) * k; out.yaw = Math.atan2(b.x - a.x, b.z - a.z);
+  return out;
 }
+/** (R12.8: scratch for the tick: one each, reused) */
+const LP = { x: 0, z: 0, yaw: 0 };
+const WAY_N = 256, WAY_X = new Float64Array(WAY_N), WAY_Z = new Float64Array(WAY_N), WAY_D = new Float64Array(WAY_N);
 
 export class TrafficSystem {
   readonly cars: CarSim[] = [];
@@ -258,6 +275,8 @@ export class TrafficSystem {
   private all: CarSim[] = [];
   /** ...plus the cop cars outside them (for "is something in my way") */
   private obst: CarSim[] = [];
+  /** (R12.8) this tick's people, in the order the NPC map holds them */
+  private peds: { id: string; move: { x: number; z: number } }[] = [];
   readonly lanes: Lane[];
   private net: RoadNet | undefined;
   private seed = 12345;
@@ -279,7 +298,7 @@ export class TrafficSystem {
       const l = sorted[i % sorted.length];
       const s = l.len * (0.25 + 0.5 * ((i / sorted.length) % 1)) ;
       const p = laneAt(l, s);
-      const car: CarSim = { id: "c" + (i + 1), lane: l.id, s, v: l.speed * 0.5, x: p.x, z: p.z, yaw: p.yaw, honkCd: 0, color: (i + 1) % 8, next: -1, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0 };
+      const car = carSim("c" + (i + 1), l.id, s, l.speed * 0.5, p.x, p.z, p.yaw, (i + 1) % 8, false);
       car.next = this.pickNext(l, -1);
       this.cars.push(car);
     }
@@ -308,7 +327,7 @@ export class TrafficSystem {
     const inR = (x: number, z: number, m = 0) => x > R.minX - m && x < R.maxX + m && z > R.minZ - m && z < R.maxZ + m;
     const road = this.lanes.filter((l) => !l.conn && l.len > 14);
     // (R12.5: clear of the police cars too: a tow used to drop a car right on top of a passing cruiser)
-    const free = (x: number, z: number) => this.cars.every((o) => Math.hypot(o.x - x, o.z - z) > 14) && (this.w.police?.cars ?? []).every((o) => Math.hypot(o.x - x, o.z - z) > 20);
+    const free = (x: number, z: number) => this.cars.every((o) => hyp(o.x - x, o.z - z) > 14) && (this.w.police?.cars ?? []).every((o) => hyp(o.x - x, o.z - z) > 20);
     for (const car of this.cars) {
       if (!inR(car.x, car.z)) continue;
       const pick = road.find((l, i) => {
@@ -431,15 +450,15 @@ export class TrafficSystem {
     this.all = this.riders.length ? [...this.cars, ...this.riders] : this.cars;
     // (cop cars outside the lanes, sirens on, are something solid in the road: nobody drives into one)
     const free = w.police.cars.filter((c) => !c.ride);
-    this.obst = free.length ? [...this.all, ...free.map((c) => ({ id: c.id, x: c.x, z: c.z, yaw: c.yaw, lane: -1, s: 0 } as CarSim))] : this.all;
+    this.obst = free.length ? [...this.all, ...free.map((c) => carSim(c.id, -1, 0, 0, c.x, c.z, c.yaw, 0, true))] : this.all;
+    const peds = this.peds; peds.length = 0;
+    for (const n of w.npc.npcs.values()) peds.push(n);
     for (const car of this.all) {
       let why = "", by = "", qBy = "";
       let lane = this.lanes[car.lane];
       const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
-      const rel = (x: number, z: number) => {
-        const dx = x - car.x, dz = z - car.z;
-        return { along: dx * fx + dz * fz, side: dx * fz - dz * fx };
-      };
+      // (where a point is relative to the car: along its heading, and to the side. R12.8: no object per question)
+      const cx0 = car.x, cz0 = car.z;
       let target = car.siren ? lane.speed * 1.25 : lane.speed;
       if (car.hold) { target = 0; why = "dropping off"; by = car.id; }
       // ---- the way ahead: this lane, then the next ones ----
@@ -474,6 +493,9 @@ export class TrafficSystem {
         const path: Lane[] = [lane];
         if (nextConn) { path.push(nextConn); path.push(this.lanes[nextConn.outLane]); }
         else if (lane.conn) path.push(this.lanes[lane.outLane]);
+        // (R12.8: the points along our way, every 1.5 m up to LOOK, worked out once for this car, the first time an
+        //  obstacle needs them, instead of again for every obstacle. The same points in the same order: same answers.)
+        let ns = -1;
         for (const o of this.obst) {
           if (o === car) continue;
           const dx0 = o.x - car.x, dz0 = o.z - car.z;
@@ -481,31 +503,41 @@ export class TrafficSystem {
           // same lane: simple
           if (o.lane === car.lane) { if (o.s > car.s && o.s - car.s < gap) { gap = o.s - car.s; qBy = o.id; } continue; }
           // otherwise: does it sit on our way ahead?
-          let acc = -car.s;
-          search: for (const pl of path) {
-            for (let s = pl === lane ? car.s + 1 : 0; s <= pl.len; s += 1.5) {
-              const d = acc + s;
-              if (d > LOOK) break search;
-              const p = laneAt(pl, s);
-              // (a car in a lane sits on its lane's line: 1.7 m; a cop car out of the lanes can be anywhere: its own half
-              //  width and ours, so its body never meets ours)
-              let inWay: boolean;
-              if (o.lane === -1) { const ux = Math.sin(o.yaw), uz = Math.cos(o.yaw), qx = p.x - o.x, qz = p.z - o.z; inWay = Math.abs(qx * ux + qz * uz) < 2.2 + CAR_HALF_WIDTH + 0.2 && Math.abs(qx * uz - qz * ux) < 1.0 + CAR_HALF_WIDTH + 0.2; }
-              else inWay = Math.abs(p.x - o.x) < 1.7 && Math.abs(p.z - o.z) < 1.7 && Math.hypot(p.x - o.x, p.z - o.z) < 1.7;
-              // (the gap's measured to the cop car's near end, not its middle)
-              if (inWay) { const dd = o.lane === -1 ? d + CAR_HALF_LEN - 0.2 : d; if (dd < gap) { gap = dd; qBy = o.id; } break search; }
+          if (ns < 0) {
+            ns = 0;
+            let acc = -car.s;
+            fill: for (const pl of path) {
+              for (let s = pl === lane ? car.s + 1 : 0; s <= pl.len; s += 1.5) {
+                const d = acc + s;
+                if (d > LOOK || ns >= WAY_N) break fill;
+                laneAtInto(pl, s, LP);
+                WAY_X[ns] = LP.x; WAY_Z[ns] = LP.z; WAY_D[ns] = d; ns++;
+              }
+              acc += pl.len;
             }
-            acc += pl.len;
+          }
+          const cop = o.lane === -1, ux = cop ? Math.sin(o.yaw) : 0, uz = cop ? Math.cos(o.yaw) : 0;
+          for (let k = 0; k < ns; k++) {
+            const qx = WAY_X[k] - o.x, qz = WAY_Z[k] - o.z;
+            // (a car in a lane sits on its lane's line: 1.7 m; a cop car out of the lanes can be anywhere: its own half
+            //  width and ours, so its body never meets ours)
+            const inWay = cop ? Math.abs(qx * ux + qz * uz) < 2.2 + CAR_HALF_WIDTH + 0.2 && Math.abs(qx * uz - qz * ux) < 1.0 + CAR_HALF_WIDTH + 0.2
+              : Math.abs(qx) < 1.7 && Math.abs(qz) < 1.7 && hyp(qx, qz) < 1.7;
+            // (the gap's measured to the cop car's near end, not its middle)
+            if (inWay) { const dd = cop ? WAY_D[k] + CAR_HALF_LEN - 0.2 : WAY_D[k]; if (dd < gap) { gap = dd; qBy = o.id; } break; }
           }
         }
       }
       if (gap < Infinity) { target = Math.min(target, gap < GAP ? 0 : Math.sqrt(2 * 5 * (gap - GAP))); if (gap < GAP + 1 && !why) { why = "queue"; by = qBy; } }
       const brakeDist = CAR_HALF_LEN + 2.5 + car.v * 0.7;
-      const blocked = (x: number, z: number, width: number) => { const r = rel(x, z); return r.along > 0 && r.along < brakeDist && Math.abs(r.side) < width; };
+      const blocked = (x: number, z: number, width: number) => { const dx = x - cx0, dz = z - cz0, along = dx * fx + dz * fz; return along > 0 && along < brakeDist && Math.abs(dx * fz - dz * fx) < width; };
       // pedestrians IN the road (people waiting on the curb don't stop traffic)
       let blocker = "";
-      for (const n of w.npc.npcs.values()) {
-        if (!blocked(n.move.x, n.move.z, 1.6) || !w.npc.onRoad(n.move.x, n.move.z, 0.2)) continue;
+      // (R12.8: the people from one list made once a tick, and the "in front of me?" sum done right here: it was a Map
+      //  walk and a closure call per person per car per tick, a big share of the game's garbage. Same order, same answer.)
+      for (let k = 0; k < peds.length; k++) {
+        const n = peds[k], dx = n.move.x - cx0, dz = n.move.z - cz0, along = dx * fx + dz * fz;
+        if (!(along > 0 && along < brakeDist && Math.abs(dx * fz - dz * fx) < 1.6) || !w.npc.onRoad(n.move.x, n.move.z, 0.2)) continue;
         blocker = n.id;
         // (someone who just won't move: after a while the car creeps on and nudges them aside)
         target = car.blockT > CAR_CREEP_AFTER ? Math.min(target, 1.2) : 0;
@@ -530,8 +562,8 @@ export class TrafficSystem {
       car.honkCd = Math.max(0, car.honkCd - dt);
       for (const p of w.players.values()) {
         if (!p.connected || p.respawnT > 0) continue;
-        const r = rel(p.move.x, p.move.z);
-        if (car.honkCd <= 0 && car.v > 3 && r.along > 0 && r.along < 16 && Math.abs(r.side) < 1.8) {
+        const dx = p.move.x - cx0, dz = p.move.z - cz0, along = dx * fx + dz * fz;
+        if (car.honkCd <= 0 && car.v > 3 && along > 0 && along < 16 && Math.abs(dx * fz - dz * fx) < 1.8) {
           car.honkCd = 3;
           w.emit({ t: "honk", car: car.id, x: car.x, z: car.z });
         }
@@ -555,8 +587,7 @@ export class TrafficSystem {
           car.next = car.goal ? this.toward(car, lane) : this.pickNext(lane, -1);
         }
       }
-      const p = laneAt(lane, car.s);
-      car.x = p.x; car.z = p.z; car.yaw = p.yaw;
+      laneAtInto(lane, car.s, car);
       if (!car.cop) this.collide(car); // (a cruiser's own bumper is the police's: busts, not splats)
     }
   }
@@ -576,7 +607,7 @@ export class TrafficSystem {
       for (let i = 0; i < l.pts.length - 1; i++) {
         const p = l.pts[i], q = l.pts[i + 1], ex = q.x - p.x, ez = q.z - p.z, L2 = ex * ex + ez * ez || 1;
         const k = Math.max(0, Math.min(1, ((x - p.x) * ex + (z - p.z) * ez) / L2));
-        const d = Math.hypot(p.x + ex * k - x, p.z + ez * k - z);
+        const d = hyp(p.x + ex * k - x, p.z + ez * k - z);
         if (d > maxD || (best && d >= best.d)) continue;
         if ((ex * fx + ez * fz) / Math.sqrt(L2) < 0.5) continue; // (going our way)
         best = { lane: l, s: l.cum[i] + k * Math.sqrt(L2), d };
@@ -587,7 +618,7 @@ export class TrafficSystem {
   /** how far (x, z) is from the nearest road lane (any direction) */
   laneDist(x: number, z: number): number {
     let best = Infinity;
-    for (const l of this.lanes) { if (l.conn) continue; for (let i = 0; i < l.pts.length; i += 2) { const d = Math.hypot(l.pts[i].x - x, l.pts[i].z - z); if (d < best) best = d; } }
+    for (const l of this.lanes) { if (l.conn) continue; for (let i = 0; i < l.pts.length; i += 2) { const d = hyp(l.pts[i].x - x, l.pts[i].z - z); if (d < best) best = d; } }
     return best;
   }
   /** a police car pulls into the traffic (null: no lane near enough / no room there right now) */
@@ -597,7 +628,7 @@ export class TrafficSystem {
     // (room: nobody within a car's length either side in that lane)
     for (const o of [...this.cars, ...this.riders]) if (o.lane === nl.lane.id && Math.abs(o.s - nl.s) < GAP) return null;
     const p = laneAt(nl.lane, nl.s);
-    const car: CarSim = { id, lane: nl.lane.id, s: nl.s, v: Math.min(v, nl.lane.speed), x: p.x, z: p.z, yaw: p.yaw, honkCd: 0, color: 0, next: -1, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0, cop: true };
+    const car = carSim(id, nl.lane.id, nl.s, Math.min(v, nl.lane.speed), p.x, p.z, p.yaw, 0, true);
     car.next = this.pickNext(nl.lane, -1);
     this.riders.push(car);
     return car;
@@ -617,7 +648,7 @@ export class TrafficSystem {
       for (const l of this.lanes) {
         if (l.conn) continue;
         let best = Infinity, bd = Infinity;
-        for (let i = 0; i < l.pts.length; i += 2) { const d = Math.hypot(l.pts[i].x - g.x, l.pts[i].z - g.z); if (d < reach && d < bd) { bd = d; best = d + l.cum[i]; } }
+        for (let i = 0; i < l.pts.length; i += 2) { const d = hyp(l.pts[i].x - g.x, l.pts[i].z - g.z); if (d < reach && d < bd) { bd = d; best = d + l.cum[i]; } }
         if (best < Infinity) cost[l.id] = best;
       }
       // (Dijkstra, backwards; few hundred lanes)

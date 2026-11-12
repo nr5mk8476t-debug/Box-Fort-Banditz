@@ -6,6 +6,7 @@ import { PLAYER, SIM_DT } from "./constants.js";
 import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, MEAT_LOCKER, CHAMP, BOUNCERS, SHOP_OWNERS, BYSTANDER_SCREAMS, pickWeighted, pickLine, type NpcKind } from "./npc.js";
 import { buildNavGraph, type NavNode } from "./navgraph.js";
 import { nearBoxes, onRoadAt, inFoot, inRect, DEAL, SWARM, type ArenaLayout } from "./arena.js";
+import { hyp } from "./fmath.js";
 /** R12.2: THE SOGGY SHAMROCK's people (R12.2c: hit one and Seamus's lads swarm you) */
 const PUB_FOLK = new Set<string>(["barman", "regular", "trad_band", "patron", "barmaid", "leprechaun", "lep_buddy", "drunk_dancer"]);
 
@@ -201,13 +202,13 @@ export class NpcSystem {
   strongHit(id: string, fromX: number, fromZ: number) {
     const n = this.npcs.get(id);
     if (!n) return;
-    const ax = n.move.x - fromX, az = n.move.z - fromZ, l = Math.max(0.001, Math.hypot(ax, az));
+    const ax = n.move.x - fromX, az = n.move.z - fromZ, l = Math.max(0.001, hyp(ax, az));
     n.move.vx += (ax / l) * 3.5; n.move.vz += (az / l) * 3.5;
     if (n.state === "stunned" || n.state === "ko" || n.state === "cower" || n.state === "flee") n.stateT *= 1.8;
   }
   /** R11.4: is STEVE open for business (at his spot, not hiding)? */
   steveOpen(): NpcSimData | null {
-    for (const n of this.npcs.values()) if (n.kind === "sketchy_steve") return !((n.awayT ?? 0) > 0) && n.post && Math.hypot(n.post.x - n.move.x, n.post.z - n.move.z) < 1.2 ? n : null;
+    for (const n of this.npcs.values()) if (n.kind === "sketchy_steve") return !((n.awayT ?? 0) > 0) && n.post && hyp(n.post.x - n.move.x, n.post.z - n.move.z) < 1.2 ? n : null;
     return null;
   }
   /** R12.2c: SEAMUS O'SHORTLY says something (a line of his own) */
@@ -221,7 +222,7 @@ export class NpcSystem {
       n.target = pid; n.chaseT = 0;
       if (n.state !== "windup") n.state = "chase";
       if (n.sayCd <= 0 || pop) this.say(n, NPC_DEFS.lep_buddy.lines.fight, pop && k < 2);
-      const far = Math.abs(n.move.y - y) > 1.5 || Math.hypot(n.move.x - x, n.move.z - z) > 12;
+      const far = Math.abs(n.move.y - y) > 1.5 || hyp(n.move.x - x, n.move.z - z) > 12;
       if (pop && far) {
         for (let q = 0; q < 16; q++) {
           const a = k * 1.05 + q * 0.79, r = SWARM.pop * (0.7 + 0.15 * (q % 3)), px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
@@ -236,7 +237,7 @@ export class NpcSystem {
     for (const n of this.npcs.values()) {
       if (n.kind !== "lep_buddy" || n.target !== pid) continue;
       n.target = ""; if (n.state !== "ko") n.state = "work";
-      const post = n.post; if (post && (Math.abs(n.move.y - (post.y ?? 0)) > 1.5 || Math.hypot(n.move.x - post.x, n.move.z - post.z) > 10)) this.popTo(n, post.x, post.y ?? 0, post.z);
+      const post = n.post; if (post && (Math.abs(n.move.y - (post.y ?? 0)) > 1.5 || hyp(n.move.x - post.x, n.move.z - post.z) > 10)) this.popTo(n, post.x, post.y ?? 0, post.z);
     }
   }
   private popTo(n: NpcSimData, x: number, y: number, z: number) {
@@ -249,7 +250,7 @@ export class NpcSystem {
   }
   /** R12.6: WEE MICKEY, if he's at his spot by the cellar hatch (standing, not knocked about) */
   mickeyAt(): NpcSimData | null {
-    for (const n of this.npcs.values()) if (n.kind === "wee_mickey") return n.state !== "ko" && n.post && Math.hypot(n.post.x - n.move.x, n.post.z - n.move.z) < 1.5 ? n : null;
+    for (const n of this.npcs.values()) if (n.kind === "wee_mickey") return n.state !== "ko" && n.post && hyp(n.post.x - n.move.x, n.post.z - n.move.z) < 1.5 ? n : null;
     return null;
   }
   mickeySay(what: "sold" | "idle" | "day" | "gear" | "no" | "broke" | "yell" | "hit") { for (const n of this.npcs.values()) if (n.kind === "wee_mickey") { const l = NPC_DEFS.wee_mickey.lines[what]; if (l) this.say(n, l, true); } }
@@ -268,7 +269,7 @@ export class NpcSystem {
   spawnCritter(x: number, z: number, fromX: number, fromZ: number) {
     const n = this.spawn("raccoon");
     if (!n) return;
-    const dx = x - fromX, dz = z - fromZ, l = Math.max(0.01, Math.hypot(dx, dz));
+    const dx = x - fromX, dz = z - fromZ, l = Math.max(0.01, hyp(dx, dz));
     n.move = makeMoveState(x + (dx / l) * 1.2, z + (dz / l) * 1.2, Math.atan2(dx, dz));
     n.state = "scram"; n.robbed = true; n.fortSlot = -1;
     n.lifeT = 52; // escape/scram give up at 60 s: this one is gone after ~8 s
@@ -288,7 +289,7 @@ export class NpcSystem {
       const n = this.graph[node];
       const plaza = Math.abs(n.x) <= 15 && Math.abs(n.z) <= 15;
       if (!plaza && this.rng() < 0.35) continue; // bias toward the plaza
-      if (farFromPlayers && players.some((p) => Math.hypot(p.x - n.x, p.z - n.z) < 28)) continue;
+      if (farFromPlayers && players.some((p) => hyp(p.x - n.x, p.z - n.z) < 28)) continue;
       break;
     }
     const n = this.graph[node];
@@ -344,7 +345,7 @@ export class NpcSystem {
   /** Test/debug helper: remove pedestrians near a spot (the crowd refills elsewhere later). */
   removeNear(x: number, z: number, r: number): number {
     let n = 0;
-    for (const [id, p] of this.npcs) if (p.kind !== "cashier" && Math.hypot(p.move.x - x, p.move.z - z) < r) { this.npcs.delete(id); n++; }
+    for (const [id, p] of this.npcs) if (p.kind !== "cashier" && hyp(p.move.x - x, p.move.z - z) < r) { this.npcs.delete(id); n++; }
     return n;
   }
 
@@ -439,7 +440,7 @@ export class NpcSystem {
       n.hp -= 1;
       this.host.addNotoriety(byPlayer, def.notoriety);
       this.panicBystanders(n, byPlayer);
-      const awayX = n.move.x - fromX, awayZ = n.move.z - fromZ, l = Math.max(0.001, Math.hypot(awayX, awayZ));
+      const awayX = n.move.x - fromX, awayZ = n.move.z - fromZ, l = Math.max(0.001, hyp(awayX, awayZ));
       n.move.vx += (awayX / l) * 3; n.move.vz += (awayZ / l) * 3;
       n.target = byPlayer; n.path = [];
       if (n.hp <= 0) {
@@ -486,7 +487,7 @@ export class NpcSystem {
     }
     this.entourageReacts(n, byPlayer);
     // little knock-back
-    const l = Math.max(0.001, Math.hypot(awayX, awayZ));
+    const l = Math.max(0.001, hyp(awayX, awayZ));
     n.move.vx += (awayX / l) * 3; n.move.vz += (awayZ / l) * 3;
 
     if (def.fighter && n.hp <= 0) {
@@ -500,7 +501,7 @@ export class NpcSystem {
       // R7: punches 1 and 2 just nudge him back (he turns on you); the 3rd inside a few seconds: dizzy, he spins
       if (n.hitT0 === undefined || this.time - n.hitT0 > CHAMP.stunWindow) { n.hitN = 0; n.hitT0 = this.time; }
       n.hitN = (n.hitN ?? 0) + 1;
-      const l2 = Math.max(0.001, Math.hypot(awayX, awayZ));
+      const l2 = Math.max(0.001, hyp(awayX, awayZ));
       n.move.vx += (awayX / l2) * (CHAMP.nudge - 3); n.move.vz += (awayZ / l2) * (CHAMP.nudge - 3); // (instead of the usual shove)
       n.target = byPlayer; n.fromX = fromX; n.fromZ = fromZ;
       if (n.hitN >= CHAMP.stunHits) {
@@ -535,7 +536,7 @@ export class NpcSystem {
     const a = inside(n.move.x, n.move.z), b = inside(tx, tz);
     if (a === b) return { x: tx, z: tz };
     const first = a ? hs.doorIn : hs.out, second = a ? hs.out : hs.doorIn;
-    return Math.hypot(first.x - n.move.x, first.z - n.move.z) > 0.6 && !(a ? !inside(n.move.x, n.move.z) : inside(n.move.x, n.move.z)) ? first : second;
+    return hyp(first.x - n.move.x, first.z - n.move.z) > 0.6 && !(a ? !inside(n.move.x, n.move.z) : inside(n.move.x, n.move.z)) ? first : second;
   }
 
 
@@ -546,7 +547,7 @@ export class NpcSystem {
     let best = n.node, bestD = -1;
     for (const l of [n.node, ...links]) {
       const g = this.graph[l];
-      const d = Math.hypot(g.x - fromX, g.z - fromZ);
+      const d = hyp(g.x - fromX, g.z - fromZ);
       if (d > bestD) { bestD = d; best = l; }
     }
     n.prevNode = n.node; n.node = best;
@@ -593,7 +594,7 @@ export class NpcSystem {
     const kinds = BIG_SHOTS;
     const k = kind ?? pickWeighted(kinds.map((x) => [x, NPC_DEFS[x].bigShot!.weight] as [NpcKind, number]), () => this.rng());
     const players = this.host.playersForNpcs().filter((p) => p.connected);
-    const nodes = this.graph.filter((g) => players.every((p) => Math.hypot(p.x - g.x, p.z - g.z) >= 30) && Math.abs(g.x) < 78 && Math.abs(g.z) < 78); // downtown (inside ring B)
+    const nodes = this.graph.filter((g) => players.every((p) => hyp(p.x - g.x, p.z - g.z) >= 30) && Math.abs(g.x) < 78 && Math.abs(g.z) < 78); // downtown (inside ring B)
     const pool = nodes.length ? nodes : this.graph;
     if (!pool.length) return null;
     const g = pool[Math.floor(this.rng() * pool.length)];
@@ -627,20 +628,20 @@ export class NpcSystem {
     b.lifeT += dt;
     if (b.robbedT >= 0) b.robbedT += dt;
     const done = b.robbedT > 20 || b.lifeT > BIG_SHOT_STAY;
-    const nobodyNear = players.every((p) => Math.hypot(p.x - b.move.x, p.z - b.move.z) > 35);
+    const nobodyNear = players.every((p) => hyp(p.x - b.move.x, p.z - b.move.z) > 35);
     if (done && (nobodyNear || b.lifeT > BIG_SHOT_STAY + 40)) {
       this.npcs.delete(b.id);
       for (const o of [...this.npcs.values()]) if (o.leader === b.id) {
         o.leader = "";
         // the entourage wanders off with the crowd rules (they vanish once nobody's near)
         if (o.state === "follow") o.state = "walk";
-        if (players.every((p) => Math.hypot(p.x - o.move.x, p.z - o.move.z) > 30)) this.npcs.delete(o.id);
+        if (players.every((p) => hyp(p.x - o.move.x, p.z - o.move.z) > 30)) this.npcs.delete(o.id);
       }
       if (b.robbedT < 0) this.host.npcEvent({ t: "bigShot", npc: b.id, kind: b.kind, stage: "gone", x: b.move.x, z: b.move.z, by: "" });
     }
     // leftover entourage from earlier big shots: gone once nobody's around
     for (const o of [...this.npcs.values()]) {
-      if ((o.kind === "bodyguard" || o.kind === "fan") && !o.leader && o.state !== "chase" && o.state !== "windup" && players.every((p) => Math.hypot(p.x - o.move.x, p.z - o.move.z) > 30)) this.npcs.delete(o.id);
+      if ((o.kind === "bodyguard" || o.kind === "fan") && !o.leader && o.state !== "chase" && o.state !== "windup" && players.every((p) => hyp(p.x - o.move.x, p.z - o.move.z) > 30)) this.npcs.delete(o.id);
     }
   }
 
@@ -661,7 +662,7 @@ export class NpcSystem {
   wakeOldLady(byPlayer: string, x: number, z: number, r: number): string {
     for (const n of this.npcs.values()) {
       if (n.kind !== "old_lady" || n.state !== "sleep" || !n.post) continue;
-      if (Math.hypot(n.post.x - x, n.post.z - z) > r + OLD_LADY.hearing) continue;
+      if (hyp(n.post.x - x, n.post.z - z) > r + OLD_LADY.hearing) continue;
       n.state = "yell"; n.stateT = OLD_LADY.yellTime; n.target = byPlayer;
       this.say(n, NPC_DEFS.old_lady.lines.yell, true);
       this.host.addNotoriety(byPlayer, OLD_LADY.heat);
@@ -675,7 +676,7 @@ export class NpcSystem {
   startle(x: number, z: number, r: number) {
     for (const o of this.npcs.values()) {
       if (SPECIAL_KINDS.has(o.kind) || o.state !== "walk") continue;
-      if (Math.hypot(o.move.x - x, o.move.z - z) > r) continue;
+      if (hyp(o.move.x - x, o.move.z - z) > r) continue;
       o.state = "idle"; o.stateT = 1.2 + this.rng();
       o.move.yaw = Math.atan2(x - o.move.x, z - o.move.z);
       if (this.rng() < 0.3) this.say(o, STARTLED);
@@ -685,7 +686,7 @@ export class NpcSystem {
   private panicBystanders(victim: NpcSimData, byPlayer: string) {
     for (const o of this.npcs.values()) {
       if (o === victim || SPECIAL_KINDS.has(o.kind) || o.state === "ko" || o.state === "chase" || o.state === "windup") continue;
-      const d = Math.hypot(o.move.x - victim.move.x, o.move.z - victim.move.z);
+      const d = hyp(o.move.x - victim.move.x, o.move.z - victim.move.z);
       if (d > 12) continue;
       if (o.kind === "influencer" && o.state !== "flee") {
         o.state = "film"; o.stateT = 4; o.target = byPlayer;
@@ -747,7 +748,7 @@ export class NpcSystem {
           const g = this.graph[n.node], pg = this.graph[n.prevNode];
           // walk slightly to one side of the route line (like a real sidewalk), and start turning
           // toward the next corner a little early so paths curve instead of snapping 90 degrees
-          const sx = g.x - pg.x, sz = g.z - pg.z, sl = Math.hypot(sx, sz);
+          const sx = g.x - pg.x, sz = g.z - pg.z, sl = hyp(sx, sz);
           let ox = sl > 0.01 ? (sz / sl) * n.lane : 0, oz = sl > 0.01 ? (-sx / sl) * n.lane : 0;
           // (a route running close to a wall: walk the middle, not into the wall)
           if ((ox || oz) && (this.solidAt(g.x + ox, g.z + oz, n.move.y, PLAYER.radius + 0.15) || this.solidAt(pg.x + ox, pg.z + oz, n.move.y, PLAYER.radius + 0.15))) { ox = 0; oz = 0; }
@@ -760,7 +761,7 @@ export class NpcSystem {
             break;
           }
           n.waitT = 0;
-          if (Math.hypot(tx - n.move.x, tz - n.move.z) < 1.3) {
+          if (hyp(tx - n.move.x, tz - n.move.z) < 1.3) {
             n.prevNode = n.node;
             n.node = this.pickNext(n);
             if (this.rng() < 0.12) { n.state = "idle"; n.stateT = 1 + this.rng() * 2.5; }
@@ -774,7 +775,7 @@ export class NpcSystem {
           // a step behind the boss, one to each side
           const fx = Math.sin(L.move.yaw), fz = Math.cos(L.move.yaw);
           tx = L.move.x - fx * 1.3 + fz * n.lane; tz = L.move.z - fz * 1.3 - fx * n.lane;
-          const d = Math.hypot(tx - n.move.x, tz - n.move.z);
+          const d = hyp(tx - n.move.x, tz - n.move.z);
           speed = d < 0.4 ? 0 : Math.min(def.flee, Math.max(L.curSpeed, d * 1.6));
           if (L.state === "flee") speed = def.flee;
           if (n.sayCd <= 0 && this.rng() < 0.004) this.say(n, def.lines.idle);
@@ -805,11 +806,11 @@ export class NpcSystem {
         case "flee": {
           const g = this.graph[n.node];
           tx = g.x; tz = g.z; speed = def.flee;
-          if (Math.hypot(g.x - n.move.x, g.z - n.move.z) < 0.8) {
+          if (hyp(g.x - n.move.x, g.z - n.move.z) < 0.8) {
             // keep going away from where the trouble was
             const links = g.links.filter((l) => l !== n.prevNode);
             let best = links[0] ?? n.prevNode, bestD = -1;
-            for (const l of links) { const q = this.graph[l]; const d = Math.hypot(q.x - n.fromX, q.z - n.fromZ); if (d > bestD) { bestD = d; best = l; } }
+            for (const l of links) { const q = this.graph[l]; const d = hyp(q.x - n.fromX, q.z - n.fromZ); if (d > bestD) { bestD = d; best = l; } }
             n.prevNode = n.node; n.node = best;
           }
           if (n.stateT <= 0) n.state = "walk";
@@ -818,13 +819,13 @@ export class NpcSystem {
         case "chase": {
           const p = pById.get(n.target);
           n.chaseT += dt;
-          if (!p || !(p.connected || (n.kind === "champ" && p.inCell)) || p.knocked || n.chaseT > CHASE_GIVE_UP || Math.hypot(p.x - n.move.x, p.z - n.move.z) > 20) {
+          if (!p || !(p.connected || (n.kind === "champ" && p.inCell)) || p.knocked || n.chaseT > CHASE_GIVE_UP || hyp(p.x - n.move.x, p.z - n.move.z) > 20) {
             n.state = "huff"; n.stateT = 1.5; n.target = "";
             break;
           }
           tx = p.x; tz = p.z; speed = def.chase ?? 6.5; // (D1: a touch faster than you walk, slower than you sprint)
           if (BOUNCERS.has(n.kind)) { const wp = this.hotWay(n, tx, tz); tx = wp.x; tz = wp.z; } // (R5/R7: out through the door, not through the wall)
-          const d = Math.hypot(p.x - n.move.x, p.z - n.move.z);
+          const d = hyp(p.x - n.move.x, p.z - n.move.z);
           if (d < ATTACK_RANGE && n.attackCd <= 0 && !p.immune) { n.state = "windup"; n.stateT = BOUNCERS.has(n.kind) ? MEAT_LOCKER.windup : n.kind === "champ" ? CHAMP.windup : WINDUP; } // (R6: the big two swing fast)
           else if (d < 1.1) speed = 0;
           break;
@@ -836,7 +837,7 @@ export class NpcSystem {
             n.attackCd = BOUNCERS.has(n.kind) ? MEAT_LOCKER.cooldown : n.kind === "champ" ? CHAMP.cooldown : 0.9;
             let hit = false;
             if (p && !p.knocked && !p.immune) {
-              const d = Math.hypot(p.x - n.move.x, p.z - n.move.z);
+              const d = hyp(p.x - n.move.x, p.z - n.move.z);
               const ang = Math.abs(angleDiff(Math.atan2(p.x - n.move.x, p.z - n.move.z), n.move.yaw));
               hit = d < STRIKE_RANGE && ang < 1.2 && Math.abs(p.y - n.move.y) < 1.2;
             }
@@ -852,7 +853,7 @@ export class NpcSystem {
           const t = this.host.raccoonTarget(n.fortSlot);
           if (!t || n.lifeT > 25) { n.state = "scram"; break; } // nothing to steal / took too long
           tx = t.x; tz = t.z; speed = def.walk;
-          if (Math.hypot(t.x - n.move.x, t.z - n.move.z) < 0.9 && this.host.raccoonGrab(n.id, t.id)) {
+          if (hyp(t.x - n.move.x, t.z - n.move.z) < 0.9 && this.host.raccoonGrab(n.id, t.id)) {
             n.carry = t.id; n.state = "escape";
             this.say(n, def.lines.win, true);
           }
@@ -863,7 +864,7 @@ export class NpcSystem {
           const wp = n.path[0];
           if (!wp) { gone.push(n); break; }
           tx = wp.x; tz = wp.z; speed = n.state === "escape" ? def.flee : def.flee * 1.2;
-          if (Math.hypot(wp.x - n.move.x, wp.z - n.move.z) < 1.2) { n.path.shift(); if (!n.path.length) gone.push(n); }
+          if (hyp(wp.x - n.move.x, wp.z - n.move.z) < 1.2) { n.path.shift(); if (!n.path.length) gone.push(n); }
           if (n.lifeT > 60) gone.push(n);
           break;
         }
@@ -880,7 +881,7 @@ export class NpcSystem {
           // C4b: leaning out of her window shouting; then she comes down after whoever made the noise
           if (n.stateT > 0) break;
           const p = pById.get(n.target);
-          if (p && !p.knocked && Math.hypot(p.x - n.move.x, p.z - n.move.z) < OLD_LADY.chaseFrom) { n.state = "chase"; n.chaseT = 0; this.say(n, def.lines.fight, true); }
+          if (p && !p.knocked && hyp(p.x - n.move.x, p.z - n.move.z) < OLD_LADY.chaseFrom) { n.state = "chase"; n.chaseT = 0; this.say(n, def.lines.fight, true); }
           else { n.state = "sleep"; n.target = ""; }
           break;
         }
@@ -890,17 +891,17 @@ export class NpcSystem {
           if (n.kind === "sketchy_steve" && (n.awayT ?? 0) > 0 && n.hide) {
             // R11.4: hiding up the alley till the coast is clear
             n.awayT = Math.max(0, (n.awayT ?? 0) - dt);
-            if (Math.hypot(n.hide.x - n.move.x, n.hide.z - n.move.z) > 0.4) { tx = n.hide.x; tz = n.hide.z; speed = def.flee; }
+            if (hyp(n.hide.x - n.move.x, n.hide.z - n.move.z) > 0.4) { tx = n.hide.x; tz = n.hide.z; speed = def.flee; }
             break;
           }
           if (n.state === "cower" && n.stateT <= 0) n.state = "work";
           if (n.kind === "lep_buddy" && (Math.abs(n.move.y - (post.y ?? 0)) > 1.5 || n.stuckT > 1.5)) { this.popTo(n, post.x, post.y ?? 0, post.z); break; } // (R12.2c: a wee fella stuck on his way home just pops back)
-          const d = Math.hypot(post.x - n.move.x, post.z - n.move.z);
+          const d = hyp(post.x - n.move.x, post.z - n.move.z);
           if (d <= 0.3 && n.kind === "old_lady") { n.state = "sleep"; break; } // (back upstairs to bed)
           if (d > 0.3) { tx = post.x; tz = post.z; speed = def.walk; if (BOUNCERS.has(n.kind)) { const wp = this.hotWay(n, tx, tz); tx = wp.x; tz = wp.z; speed = 2.4; } } else face = post.yaw;
           if (n.kind === "uncle_dumpster") {
             // C5a: his tips, in order, whenever somebody's close enough to hear
-            if (n.sayCd <= 0 && players.some((p) => Math.hypot(p.x - n.move.x, p.z - n.move.z) < 7 && Math.abs(p.y - n.move.y) < 3)) {
+            if (n.sayCd <= 0 && players.some((p) => hyp(p.x - n.move.x, p.z - n.move.z) < 7 && Math.abs(p.y - n.move.y) < 3)) {
               const tips = def.lines.idle;
               n.tip = ((n.tip ?? -1) + 1) % tips.length;
               this.host.npcEvent({ t: "npcSay", npc: n.id, line: tips[n.tip] });
@@ -908,7 +909,7 @@ export class NpcSystem {
             }
           } else if (n.state === "work" && n.sayCd <= 0 && this.rng() < 0.002) {
             // greet customers who come near
-            if (players.some((p) => Math.hypot(p.x - n.move.x, p.z - n.move.z) < 5)) this.say(n, def.lines.idle);
+            if (players.some((p) => hyp(p.x - n.move.x, p.z - n.move.z) < 5)) this.say(n, def.lines.idle);
           }
           break;
         }
@@ -924,10 +925,10 @@ export class NpcSystem {
       if (n.detour) {
         n.detour.t -= dt;
         const d = n.detour;
-        if (d.t <= 0 || Math.hypot(d.x - n.move.x, d.z - n.move.z) < 0.5) n.detour = null;
+        if (d.t <= 0 || hyp(d.x - n.move.x, d.z - n.move.z) < 0.5) n.detour = null;
         else if (n.state === "ko" || n.state === "stunned") {
           // lying in the road: slid gently to the curb (never into a wall)
-          const dx = d.x - n.move.x, dz = d.z - n.move.z, l = Math.hypot(dx, dz), step = Math.min(l, 1.5 * dt);
+          const dx = d.x - n.move.x, dz = d.z - n.move.z, l = hyp(dx, dz), step = Math.min(l, 1.5 * dt);
           this.nudge(n.move, (dx / l) * step, (dz / l) * step);
         } else if (n.kind !== "cop" || n.state === "leave" || n.state === "patrol" || n.state === "beat") {
           tx = d.x; tz = d.z; speed = Math.max(speed, NPC_DEFS[n.kind].walk * 1.4); face = null;
@@ -937,7 +938,7 @@ export class NpcSystem {
       // steer toward (tx, tz) using the same movement rules as players
       const m = n.move;
       const dx = tx - m.x, dz = tz - m.z;
-      const dist = Math.hypot(dx, dz);
+      const dist = hyp(dx, dz);
       let wantYaw = face ?? (dist > 0.05 ? Math.atan2(dx, dz) : m.yaw);
       // walk around parked cars, benches, bins... instead of pushing into them (chasers and
       // fleeing people head straight for their target, so the route map alone doesn't cover them)
@@ -957,7 +958,7 @@ export class NpcSystem {
       // watchdog: a walker that hasn't got 2 m anywhere in 12 s (e.g. dithering at a corner) re-routes
       if (n.state === "walk" && speed > 0) {
         n.progT += dt;
-        if (Math.hypot(m.x - n.progX, m.z - n.progZ) > 2) { n.progX = m.x; n.progZ = m.z; n.progT = 0; }
+        if (hyp(m.x - n.progX, m.z - n.progZ) > 2) { n.progX = m.x; n.progZ = m.z; n.progT = 0; }
         else if (n.progT > 12) {
           n.progT = 0; n.lane = 0;
           n.node = this.nearestClearNode(m.x, m.z, n.node);
@@ -1024,7 +1025,7 @@ export class NpcSystem {
   private mustWait(n: NpcSimData, tx: number, tz: number): boolean {
     const m = n.move;
     if (this.onRoad(m.x, m.z)) return false; // already crossing: keep going (cars stop for you)
-    const dx = tx - m.x, dz = tz - m.z, l = Math.hypot(dx, dz);
+    const dx = tx - m.x, dz = tz - m.z, l = hyp(dx, dz);
     if (l < 0.01) return false;
     const ax = m.x + (dx / l) * 1.2, az = m.z + (dz / l) * 1.2;
     if (!this.onRoad(ax, az)) return false;
@@ -1082,7 +1083,7 @@ export class NpcSystem {
 
   /** Straight walk from a to b doesn't hit anything? */
   lineClear(ax: number, az: number, bx: number, bz: number, y: number): boolean {
-    const len = Math.hypot(bx - ax, bz - az), steps = Math.max(1, Math.ceil(len / 0.5));
+    const len = hyp(bx - ax, bz - az), steps = Math.max(1, Math.ceil(len / 0.5));
     for (let i = 1; i <= steps; i++) if (this.solidAt(ax + ((bx - ax) * i) / steps, az + ((bz - az) * i) / steps, y, PLAYER.radius)) return false;
     return true;
   }
@@ -1112,7 +1113,7 @@ export class NpcSystem {
   /** Nearest route point we can actually walk to in a straight line (falls back to nearest). */
   nearestClearNode(x: number, z: number, avoid: number): number {
     const y = 0;
-    const order = this.graph.filter((g) => g.id !== avoid).map((g) => ({ g, d: Math.hypot(g.x - x, g.z - z) })).sort((a, b) => a.d - b.d);
+    const order = this.graph.filter((g) => g.id !== avoid).map((g) => ({ g, d: hyp(g.x - x, g.z - z) })).sort((a, b) => a.d - b.d);
     for (const { g, d } of order.slice(0, 8)) if (d < 30 && this.lineClear(x, z, g.x, g.z, y)) return g.id;
     return order[0]?.g.id ?? 0;
   }
@@ -1169,7 +1170,7 @@ export class NpcSystem {
     const players = this.host.playersForNpcs();
     for (const n of [...this.npcs.values()]) {
       if (SPECIAL_KINDS.has(n.kind) || !n.robbed || n.state === "chase" || n.state === "windup") continue;
-      if (players.every((p) => Math.hypot(p.x - n.move.x, p.z - n.move.z) > 30)) this.npcs.delete(n.id);
+      if (players.every((p) => hyp(p.x - n.move.x, p.z - n.move.z) > 30)) this.npcs.delete(n.id);
     }
     const walkers = () => { let c = 0; for (const n of this.npcs.values()) if (!SPECIAL_KINDS.has(n.kind)) c++; return c; };
     while (walkers() < this.target) if (!this.spawn(undefined, true)) break;

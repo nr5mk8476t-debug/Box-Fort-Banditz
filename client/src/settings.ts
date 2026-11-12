@@ -20,6 +20,9 @@ export interface Settings {
   sharpHiDpi: boolean;
   /** R12.5: drop the resolution a step when frames run slow, and bring it back when there's room (60% at least) */
   adaptiveRes: boolean;
+  /** R12.8: the most frames a second the game draws (0 = no cap). 240 by default: past the screen's refresh nothing shows,
+   *  and a cap keeps the FPS counter steady instead of swinging with where you look */
+  fpsCap: number;
   playerName: string;
 }
 
@@ -42,6 +45,7 @@ function defaults(): Settings {
     renderScale: 1,
     sharpHiDpi: false,
     adaptiveRes: false,
+    fpsCap: 240,
     playerName: "",
   };
 }

@@ -546,6 +546,22 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R12.8: one-draw outlines, the simulation's garbage, the frame-rate cap (2026-11-12)
+
+| Area | Check | How | Before (R12.7) | Result |
+|---|---|---|---|---|
+| Draw calls | fixed views, real counts, old outline (`?ink=old`) vs new, same build | A/B script | balcony 996, window 887, bar 447, darts 191, street 700, Little Italy 1,000, façade close 394 | 775, 711, 337, 171, 585, 765, 312 (−20 to −25%) |
+| Draw budget | 10 views | `tests/draw-budget.mjs` | (the R12.7 version didn't run: fixed) | all within; budgets tightened (balcony 1,143 → 931, window 1,063 → 846, bar 489 → 390, uptown 1,321 → 1,054...) |
+| Looks | 7 views, old vs new outline | screenshots + pixel diff (`screenshots/r12_8/ink-*`) | - | edges move ~1 px; Little Italy's arch now shows its stripes (fixed); nothing missing or doubled |
+| Flicker | 7 views, R12.7 build vs this one | `tests/flicker-find.mjs` + `.py` | 525 / 12,588 / 2,641 / 975 / 2,862 / 395 / 351 | 191 / 21,749 (a customer moving in front of the camera, in both) / 2,330 / 300 / 1,606 / 182 / 152 |
+| Garbage | 60 game s of the city sim (57 people, 22 cars), compiled with `tsc` like the browser build | `node --trace-gc` | 87 MB/s, 333 collections, 0.94 ms/tick | 9.7 MB/s, 37 collections, 0.31 ms/tick |
+| Garbage | the browser on the test box, balcony view, 40 s | Chrome `--trace-gc` | 6.7 MB/s | 5.1 MB/s (the test box draws ~2 frames a second, so it runs far fewer sim ticks than a real PC: the Node figure is the one that applies to Blake's) |
+| Sim results | determinism, replays, traffic, NPCs | `npm test` | | 312 + 31, pass |
+| Frame cap | the setting exists, defaults to 240, the BENCHMARK lifts it | settings + code | - | by inspection; the real effect needs Blake's PC (the test box can't reach 60) |
+| Smokes | | signal + server smoke | | pass |
+| Browser e2e | normal / 110 ms | e2e | | PENDING / PENDING |
+| Real PC | Blake's BENCHMARK, upstairs views | Blake | balcony front 6.1 ms (1% low 83-98 FPS), window 5.9 ms | to do |
+
 ## R12.7: draw calls (2026-11-12)
 
 | Area | Check | How | Before | Result |

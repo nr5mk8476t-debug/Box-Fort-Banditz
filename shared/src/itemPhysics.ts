@@ -2,6 +2,7 @@
 // Items are spheres for collision (cheap and stable); they look like TVs and chickens.
 // Shared by the server and solo mode, and by the client to predict your own throws.
 import { nearBoxes, inLobby, footSd, type ArenaLayout, type Box } from "./arena.js";
+import { hyp, hyp3 } from "./fmath.js";
 
 export interface ItemBody {
   x: number; y: number; z: number; // centre of the collision sphere
@@ -69,7 +70,7 @@ function collideSpherePoly(b: ItemBody, r: number, box: Box, bounce: number, out
   let nx: number, ny: number, nz: number, pen: number;
   if (f.d > 0) {
     // outside the footprint: nearest point is on a side (or its top / bottom edge)
-    const dy = b.y - cy, d = Math.hypot(f.d, dy);
+    const dy = b.y - cy, d = hyp(f.d, dy);
     if (d >= r) return null;
     nx = (f.nx * f.d) / (d || 1); nz = (f.nz * f.d) / (d || 1); ny = dy / (d || 1);
     pen = r - d;
@@ -107,7 +108,7 @@ export function stepItem(b: ItemBody, radius: number, bounce: number, arena: Are
   if (b.resting) return res;
   b.vy -= ITEM_GRAVITY * dt;
   // Sub-step fast items so they can't tunnel through thin walls
-  const speed = Math.hypot(b.vx, b.vy, b.vz);
+  const speed = hyp3(b.vx, b.vy, b.vz);
   const n = Math.min(8, Math.max(1, Math.ceil((speed * dt) / (radius * 0.5))));
   const h = dt / n;
   let supported = false;
@@ -134,7 +135,7 @@ export function stepItem(b: ItemBody, radius: number, bounce: number, arena: Are
     // ground friction
     const f = Math.max(0, 1 - 6 * dt);
     b.vx *= f; b.vz *= f;
-    if (Math.abs(b.vy) < 0.8 && Math.hypot(b.vx, b.vz) < 0.15) {
+    if (Math.abs(b.vy) < 0.8 && hyp(b.vx, b.vz) < 0.15) {
       b.vx = 0; b.vy = 0; b.vz = 0; b.spin = 0;
       b.resting = true;
     }

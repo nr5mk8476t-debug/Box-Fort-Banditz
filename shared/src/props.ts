@@ -8,6 +8,7 @@
 import { inRect, setBoxOff, inLobby, type PropDef, type PropKind, type LobbyDef } from "./arena.js";
 import { pickWeighted } from "./npc.js";
 import type { World, PlayerSim, ItemSim } from "./world.js";
+import { hyp, hyp3 } from "./fmath.js";
 
 export interface PropSim {
   def: PropDef; ready: boolean; t: number; alarmT: number; register: string;
@@ -61,8 +62,8 @@ export const HYDRANT_SPRAY = { time: 20, r: 1.3, push: 7, lift: 5 };
 
 /** Distance from a point to a prop's surface (0 inside it). */
 export function propSurfaceDist(d: PropDef, x: number, z: number): number {
-  if (d.hw !== undefined && d.hd !== undefined) return Math.hypot(Math.max(0, Math.abs(x - d.x) - d.hw), Math.max(0, Math.abs(z - d.z) - d.hd));
-  return Math.max(0, Math.hypot(x - d.x, z - d.z) - PROP_RADIUS[d.kind]);
+  if (d.hw !== undefined && d.hd !== undefined) return hyp(Math.max(0, Math.abs(x - d.x) - d.hw), Math.max(0, Math.abs(z - d.z) - d.hd));
+  return Math.max(0, hyp(x - d.x, z - d.z) - PROP_RADIUS[d.kind]);
 }
 /** The point on a prop nearest to (x, z) (breakables are long: benches, shop windows). */
 export function propNearest(d: PropDef, x: number, z: number): { x: number; z: number } {
@@ -216,7 +217,7 @@ export class PropSystem {
       // C4a: a burst hydrant's jet knocks back anyone standing in it
       if (ps.def.kind === "hydrant" && !ps.ready && this.w.time - ps.brokeAt < HYDRANT_SPRAY.time) {
         for (const p of this.w.players.values()) {
-          const m = p.move, dx = m.x - ps.def.x, dz = m.z - ps.def.z, d = Math.hypot(dx, dz);
+          const m = p.move, dx = m.x - ps.def.x, dz = m.z - ps.def.z, d = hyp(dx, dz);
           if (d > HYDRANT_SPRAY.r || m.y > 2.5 || m.knockT > 0) continue;
           const l = Math.max(0.2, d);
           m.vx = (dx / l) * HYDRANT_SPRAY.push; m.vz = (dz / l) * HYDRANT_SPRAY.push;
@@ -232,7 +233,7 @@ export class PropSystem {
       const ps = this.props.get(r.prop);
       if (ps && HOLD_TIME[ps.def.kind] !== undefined) {
         // C5c: a long hold (drilling the vault, prising the nose, hacking the screen)
-        const moved = Math.hypot(p.move.x - r.x, p.move.z - r.z) > 1.2;
+        const moved = hyp(p.move.x - r.x, p.move.z - r.z) > 1.2;
         if (!ps.ready || moved || !p.connected || p.move.knockT > 0) { this.cancelRob(p); continue; }
         const before = r.t;
         r.t += dt;
@@ -245,14 +246,14 @@ export class PropSystem {
       }
       if (ps && MACHINES.has(ps.def.kind)) {
         // C4b: opening a machine quietly
-        const moved = Math.hypot(p.move.x - r.x, p.move.z - r.z) > 1.0;
+        const moved = hyp(p.move.x - r.x, p.move.z - r.z) > 1.0;
         if (!ps.ready || moved || !p.connected || p.move.knockT > 0) { this.cancelRob(p); continue; }
         r.t += dt;
         if (r.t >= OPEN_TIME) { p.rob = null; this.openMachine(p, ps, false); }
         continue;
       }
       const reg = ps ? this.registerOnCounter(ps) : null;
-      const moved = Math.hypot(p.move.x - r.x, p.move.z - r.z) > 1.2;
+      const moved = hyp(p.move.x - r.x, p.move.z - r.z) > 1.2;
       if (!ps || !ps.ready || !reg || moved || !p.connected || p.move.knockT > 0) { this.cancelRob(p); continue; }
       const cashier = this.w.npc.cashierOf(ps.def.shop ?? -1);
       if (cashier) this.w.npc.cower(cashier.id, 1);
@@ -274,7 +275,7 @@ export class PropSystem {
   private registerOnCounter(ps: PropSim): ItemSim | null {
     const it = ps.register ? this.w.items.get(ps.register) : undefined;
     if (!it || it.mode !== "free") return null;
-    return Math.hypot(it.body.x - ps.def.x, it.body.z - ps.def.z) < 1.2 ? it : null;
+    return hyp(it.body.x - ps.def.x, it.body.z - ps.def.z) < 1.2 ? it : null;
   }
 
   /** Can this player reach the prop (close enough and roughly facing it)? */
@@ -282,7 +283,7 @@ export class PropSystem {
     const d = ps.def, m = p.move;
     const near = propNearest(d, m.x, m.z);
     const dx = near.x - m.x, dz = near.z - m.z;
-    const dist = Math.hypot(dx, dz);
+    const dist = hyp(dx, dz);
     if (propSurfaceDist(d, m.x, m.z) > USE_RANGE + extra) return false;
     if (Math.abs(d.y - m.y) > 2.2) return false;
     const facing = (dx * Math.sin(m.yaw) + dz * Math.cos(m.yaw)) / Math.max(0.001, dist);
@@ -653,7 +654,7 @@ export class LobbySystem {
     if (this.refillT <= 0 && (this.w.match.phase === "lobby" || this.w.match.phase === "over")) {
       this.refillT = 6;
       const near = (x: number, z: number, r: number, f: (it: ItemSim) => boolean) =>
-        [...this.w.items.values()].filter((it) => it.mode === "free" && f(it) && Math.hypot(it.body.x - x, it.body.z - z) < r && Math.abs(it.body.y - L.y) < 3).length;
+        [...this.w.items.values()].filter((it) => it.mode === "free" && f(it) && hyp(it.body.x - x, it.body.z - z) < r && Math.abs(it.body.y - L.y) < 3).length;
       const pile = L.pile;
       if (near(pile.x, pile.z, 2.5, () => true) < 5) this.place(PILE_TYPES[Math.floor(this.w.random() * PILE_TYPES.length)], pile.x + (this.w.random() - 0.5) * 1.6, pile.z + (this.w.random() - 0.5) * 1.2);
       const rack = L.lids;
@@ -675,7 +676,7 @@ export class LobbySystem {
         const hand = p.hand ? this.w.items.get(p.hand) : undefined;
         if (!hand || hand.type !== "shopping_trolley") continue; // (checkpoints only count while you drag a trolley)
         const cp = L.race[g.cp % L.race.length];
-        if (Math.hypot(p.move.x - cp.x, p.move.z - cp.z) < cp.r) {
+        if (hyp(p.move.x - cp.x, p.move.z - cp.z) < cp.r) {
           if (g.cp >= L.race.length) { g.score = Math.round(g.t * 100) / 100; this.end(p, "done"); continue; }
           g.cp++;
           this.w.emit({ t: "lobbyGame", p: p.id, game: "race", stage: "cp", score: g.t, best: p.raceBest, cp: g.cp });
@@ -712,7 +713,7 @@ export class LobbySystem {
     const L = this.def;
     if (!L) return false;
     for (const tg of L.targets) {
-      const d = Math.hypot(it.body.x - tg.x, it.body.y - tg.y, it.body.z - tg.z);
+      const d = hyp3(it.body.x - tg.x, it.body.y - tg.y, it.body.z - tg.z);
       if (d > tg.r + 0.35) continue;
       const pts = d < tg.r * 0.4 ? 3 : d < tg.r * 0.75 ? 2 : 1;
       const g = thrower.lobbyGame;

@@ -14,6 +14,7 @@
 // 5A ending (temporary, until the Mayor race): after 3 cycles the richest bandit wins.
 import { fortAt } from "./arena.js";
 import type { World, ItemSim, PlayerSim } from "./world.js";
+import { hyp } from "./fmath.js";
 
 export type MatchPhase = "lobby" | "intro" | "scavenge" | "dusk" | "night" | "dawn" | "shop" | "upgrades" | "over";
 export type CityEventKind = "airdrop" | "truck" | "happyhour" | "raccoons" | "parade" | "festa";
@@ -458,7 +459,7 @@ export class MatchSystem {
     const rt = rt0 ?? this.w.arena.chinatown?.route ?? [{ x: 0, z: 0 }, { x: 0, z: 1 }];
     let left = Math.max(0, d);
     for (let i = 0; i < rt.length - 1; i++) {
-      const a = rt[i], b = rt[i + 1], len = Math.hypot(b.x - a.x, b.z - a.z);
+      const a = rt[i], b = rt[i + 1], len = hyp(b.x - a.x, b.z - a.z);
       if (left <= len || i === rt.length - 2) { const k = Math.min(1, left / len); return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, yaw: Math.atan2(b.x - a.x, b.z - a.z) }; }
       left -= len;
     }
@@ -466,7 +467,7 @@ export class MatchSystem {
   }
   private routeLength(rt0?: { x: number; z: number }[]) {
     const rt = rt0 ?? this.w.arena.chinatown?.route ?? [];
-    let n = 0; for (let i = 0; i < rt.length - 1; i++) n += Math.hypot(rt[i + 1].x - rt[i].x, rt[i + 1].z - rt[i].z);
+    let n = 0; for (let i = 0; i < rt.length - 1; i++) n += hyp(rt[i + 1].x - rt[i].x, rt[i + 1].z - rt[i].z);
     return n;
   }
 
@@ -507,7 +508,7 @@ export class MatchSystem {
       if (!p.connected || p.move.y > 2.5) continue;
       for (let s = 0; s <= PARADE.segments; s++) {
         const q = this.paradeAt(d - s * PARADE.gap);
-        const dx = p.move.x - q.x, dz = p.move.z - q.z, dist = Math.hypot(dx, dz);
+        const dx = p.move.x - q.x, dz = p.move.z - q.z, dist = hyp(dx, dz);
         if (dist > PARADE.r + 0.4 || d - s * PARADE.gap < 0) continue;
         const fx = Math.sin(q.yaw), fz = Math.cos(q.yaw), side = dx * fz - dz * fx >= 0 ? 1 : -1;
         p.move.vx = fz * side * PARADE.push; p.move.vz = -fx * side * PARADE.push;
@@ -533,11 +534,11 @@ export class MatchSystem {
     for (const p of this.w.players.values()) {
       if (!p.connected || p.move.y > 2.5 || p.respawnT > 0) continue;
       // the band: dance! (stamina comes back fast near it)
-      if (v === 1 && d <= L && Math.hypot(p.move.x - head.x, p.move.z - head.z) < FESTA.danceR) p.move.stamina = Math.min(1, p.move.stamina + FESTA.danceRate * dt);
+      if (v === 1 && d <= L && hyp(p.move.x - head.x, p.move.z - head.z) < FESTA.danceR) p.move.stamina = Math.min(1, p.move.stamina + FESTA.danceRate * dt);
       for (let s = 0; s <= FESTA.segments[v]; s++) {
         if (d - s * FESTA.gap[v] < 0) continue;
         const q = this.paradeAt(d - s * FESTA.gap[v], rt);
-        const dx = p.move.x - q.x, dz = p.move.z - q.z, dist = Math.hypot(dx, dz);
+        const dx = p.move.x - q.x, dz = p.move.z - q.z, dist = hyp(dx, dz);
         if (dist > FESTA.r[v] + 0.4) continue;
         const fx = Math.sin(q.yaw), fz = Math.cos(q.yaw), side = dx * fz - dz * fx >= 0 ? 1 : -1;
         p.move.vx = fz * side * FESTA.push; p.move.vz = -fx * side * FESTA.push;
@@ -549,7 +550,7 @@ export class MatchSystem {
     // the gondola: a bucket of canal water now and then (anyone close slips)
     if (v === 2 && d <= L && (this.splashT -= dt) <= 0) {
       this.splashT = FESTA.splashEvery;
-      for (const p of this.w.players.values()) if (p.connected && p.move.y < 2.5 && Math.hypot(p.move.x - head.x, p.move.z - head.z) < FESTA.splashR) { p.move.stumbleT = Math.max(p.move.stumbleT, 0.6); p.move.vx *= 0.3; p.move.vz *= 0.3; }
+      for (const p of this.w.players.values()) if (p.connected && p.move.y < 2.5 && hyp(p.move.x - head.x, p.move.z - head.z) < FESTA.splashR) { p.move.stumbleT = Math.max(p.move.stumbleT, 0.6); p.move.vx *= 0.3; p.move.vz *= 0.3; }
       this.w.emit({ t: "festaSplash", x: head.x, z: head.z });
     }
     if (d >= this.nextDrop && d <= L) {
@@ -561,7 +562,7 @@ export class MatchSystem {
   }
 
   private truckTick(e: ActiveEvent, dt: number) {
-    const total = Math.hypot(e.bx! - e.ax!, e.bz! - e.az!);
+    const total = hyp(e.bx! - e.ax!, e.bz! - e.az!);
     e.dist! += TRUCK_SPEED * dt;
     const k = Math.min(1, e.dist! / total);
     const tr = this.truck;
@@ -628,7 +629,7 @@ export class MatchSystem {
 }
 
 function inZone(it: ItemSim, e: { x: number; z: number; r: number }) {
-  return Math.hypot(it.body.x - e.x, it.body.z - e.z) <= e.r;
+  return hyp(it.body.x - e.x, it.body.z - e.z) <= e.r;
 }
 
 /** What an item is worth when cashed in (happy-hour bonus included). */

@@ -1,3 +1,4 @@
+import { hyp } from "./fmath.js";
 // PLACEHOLDER grey-box arena used in Phase 0/1 to test movement and multiplayer.
 // The real Trashington city block replaces this in Phase 2.
 // Both client (for rendering + prediction) and server (for authority) read this list,
@@ -321,6 +322,8 @@ export interface ArenaLayout {
   halfSize: number; // playable area is [-halfSize, halfSize] on x and z
   /** C4a: how many boxes are switched off (smashed) right now; 0 = nearBoxes skips the filter */
   offCount?: number;
+  /** R12.8: bumped whenever a box is switched off or on (the cached "what still blocks" lists know they're stale) */
+  offGen?: number;
   boxes: Box[];
   spawns: { x: number; z: number; yaw: number }[];
   /** loot spawn points (Phase 2+) */
@@ -455,7 +458,7 @@ export function onRoadAt(arena: ArenaLayout, x: number, z: number, pad = 0): boo
   const roads = arena.roads;
   if (roads) for (let i = 0; i < roads.length; i++) { const r = roads[i]; if (x >= r.minX - pad && x <= r.maxX + pad && z >= r.minZ - pad && z <= r.maxZ + pad) return true; }
   const rings = arena.roadRings;
-  if (rings) for (const g of rings) { const d = Math.hypot(x - g.x, z - g.z); if (d >= g.r0 - pad && d <= g.r1 + pad) return true; }
+  if (rings) for (const g of rings) { const d = hyp(x - g.x, z - g.z); if (d >= g.r0 - pad && d <= g.r1 + pad) return true; }
   const segs = arena.roadSegs;
   if (segs) for (const s of segs) if (segDist(x, z, s.ax, s.az, s.bx, s.bz) <= s.hw + pad) return true;
   return false;
@@ -465,7 +468,7 @@ export function onRoadAt(arena: ArenaLayout, x: number, z: number, pad = 0): boo
 export function segDist(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
   const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
   const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / l2)) : 0;
-  return Math.hypot(x - (ax + vx * t), z - (az + vz * t));
+  return hyp(x - (ax + vx * t), z - (az + vz * t));
 }
 
 /** C1.1: in the deep water (the canal)? (feet at the water level: standing on a dock or a bridge doesn't count) */
@@ -487,6 +490,19 @@ export function inWater(arena: ArenaLayout, x: number, z: number): boolean {
   if (!arena.water) return false;
   for (const r of arena.water) if (inRect(r, x, z)) return true;
   return false;
+}
+
+/** R12.8: every box rebuilt in ONE shape (every field, the same order). The city's ~3,900 boxes came in 25 shapes
+ *  (each builder adds its own optional fields), which made every collision check's reads "megamorphic": V8 falls back to a
+ *  generic lookup that hands back a NEW heap number for each decimal field it reads. That was most of the game's garbage
+ *  (~1.6 KB per ground check, thousands a tick). Done once, at the end of the build; nothing holds the old objects (props
+ *  and the club floor keep indices). Absent fields stay undefined, as before. */
+export function canonBoxes(boxes: Box[]): Box[] {
+  return boxes.map((b) => ({
+    x: b.x, y: b.y, z: b.z, w: b.w, h: b.h, d: b.d, kind: b.kind, poly: b.poly, off: b.off, belt: b.belt, pump: b.pump, unit: b.unit,
+    hide: b.hide, color: b.color, sign: b.sign, windows: b.windows, face: b.face, art: b.art, chain: b.chain, mayor: b.mayor,
+    china: b.china, front: b.front, deco: b.deco, italy: b.italy,
+  }));
 }
 
 export function box(x: number, z: number, w: number, d: number, h: number, kind: Box["kind"], baseY = 0): Box {
@@ -518,24 +534,28 @@ export function rotBox(cx: number, cz: number, w: number, d: number, yaw: number
  * Signed distance from (x, z) to a box's footprint (negative inside), and the direction out of it
  * (the outward normal of the nearest face when inside; toward the point when outside).
  */
-export function footSd(b: Box, x: number, z: number): { d: number; nx: number; nz: number } {
+/** (R12.8: footSd's answer. One object, reused: read it before the next call. It ran thousands of times a tick, and a
+ *  new object each time was a big part of the game's garbage.) */
+const SD = { d: 0, nx: 0, nz: 0 };
+const sd = (d: number, nx: number, nz: number) => { SD.d = d; SD.nx = nx; SD.nz = nz; return SD; };
+export function footSd(b: Box, x: number, z: number): { readonly d: number; readonly nx: number; readonly nz: number } {
   if (!b.poly) {
     const minX = b.x - b.w / 2, maxX = b.x + b.w / 2, minZ = b.z - b.d / 2, maxZ = b.z + b.d / 2;
     const cx = x < minX ? minX : x > maxX ? maxX : x, cz = z < minZ ? minZ : z > maxZ ? maxZ : z;
     const dx = x - cx, dz = z - cz, d2 = dx * dx + dz * dz;
-    if (d2 > 1e-20) { const d = Math.sqrt(d2); return { d, nx: dx / d, nz: dz / d }; }
+    if (d2 > 1e-20) { const d = Math.sqrt(d2); return sd(d, dx / d, dz / d); }
     const left = x - minX, right = maxX - x, back = z - minZ, front = maxZ - z, m = Math.min(left, right, back, front);
-    if (m === left) return { d: -left, nx: -1, nz: 0 };
-    if (m === right) return { d: -right, nx: 1, nz: 0 };
-    if (m === back) return { d: -back, nx: 0, nz: -1 };
-    return { d: -front, nx: 0, nz: 1 };
+    if (m === left) return sd(-left, -1, 0);
+    if (m === right) return sd(-right, 1, 0);
+    if (m === back) return sd(-back, 0, -1);
+    return sd(-front, 0, 1);
   }
   const P = b.poly, n = P.length;
   let inside = true, maxDot = -Infinity, mnx = 0, mnz = 0;
   let best = Infinity, bx = 0, bz = 0;
   for (let i = 0; i < n; i++) {
-    const [ax, az] = P[i], [cx, cz] = P[(i + 1) % n];
-    const ex = cx - ax, ez = cz - az, len = Math.hypot(ex, ez) || 1;
+    const A = P[i], C = P[i + 1 === n ? 0 : i + 1], ax = A[0], az = A[1], cx = C[0], cz = C[1];
+    const ex = cx - ax, ez = cz - az, len = hyp(ex, ez) || 1;
     const onx = ez / len, onz = -ex / len; // outward (counter-clockwise winding)
     const dot = (x - ax) * onx + (z - az) * onz;
     if (dot > 0) inside = false;
@@ -544,9 +564,9 @@ export function footSd(b: Box, x: number, z: number): { d: number; nx: number; n
     const px = ax + ex * t, pz = az + ez * t, d2 = (x - px) * (x - px) + (z - pz) * (z - pz);
     if (d2 < best) { best = d2; bx = px; bz = pz; }
   }
-  if (inside) return { d: maxDot, nx: mnx, nz: mnz };
+  if (inside) return sd(maxDot, mnx, mnz);
   const d = Math.sqrt(best) || 1e-9;
-  return { d, nx: (x - bx) / d, nz: (z - bz) / d };
+  return sd(d, (x - bx) / d, (z - bz) / d);
 }
 
 /** Is (x, z) within `pad` of the footprint? (Plain boxes: the old square test, so nothing changes for them.) */
@@ -559,7 +579,7 @@ export function inFoot(b: Box, x: number, z: number, pad = 0): boolean {
 export function footFaces(b: Box): { ax: number; az: number; bx: number; bz: number; nx: number; nz: number; len: number; mx: number; mz: number }[] {
   const P: [number, number][] = b.poly ?? [[b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z + b.d / 2], [b.x - b.w / 2, b.z + b.d / 2]];
   return P.map(([ax, az], i) => {
-    const [bx, bz] = P[(i + 1) % P.length], len = Math.hypot(bx - ax, bz - az) || 1;
+    const [bx, bz] = P[(i + 1) % P.length], len = hyp(bx - ax, bz - az) || 1;
     return { ax, az, bx, bz, nx: (bz - az) / len, nz: -(bx - ax) / len, len, mx: (ax + bx) / 2, mz: (az + bz) / 2 };
   });
 }
@@ -621,7 +641,8 @@ export function buildTestArena(): ArenaLayout {
 // just the boxes near a point. Boxes come back in their ORIGINAL order, so results are
 // identical to checking the full list (client prediction and server stay in lock-step).
 const CELL = 8;
-interface Grid { cells: Map<number, number[]>; cellBoxes: Map<number, Box[]>; boxes: Box[]; stamp: Uint32Array; gen: number; }
+interface Grid { cells: Map<number, number[]>; cellBoxes: Map<number, Box[]>; boxes: Box[]; stamp: Uint32Array; gen: number;
+  /** R12.8: the lists for spans of cells, kept (callers never change a list they're given) */ spans: Map<number, Box[]> }
 const grids = new WeakMap<ArenaLayout, Grid>();
 const key = (cx: number, cz: number) => (cx + 1000) * 4096 + (cz + 1000);
 
@@ -640,7 +661,7 @@ function gridOf(arena: ArenaLayout): Grid {
     });
     const cellBoxes = new Map<number, Box[]>();
     for (const [k, list] of cells) cellBoxes.set(k, list.map((i) => arena.boxes[i]));
-    g = { cells, cellBoxes, boxes: arena.boxes, stamp: new Uint32Array(arena.boxes.length), gen: 0 };
+    g = { cells, cellBoxes, boxes: arena.boxes, stamp: new Uint32Array(arena.boxes.length), gen: 0, spans: new Map() };
     grids.set(arena, g);
   }
   return g;
@@ -650,8 +671,15 @@ const NONE: Box[] = [];
 /** Boxes whose footprint could touch the square (x +- r, z +- r), in original order. */
 export function nearBoxes(arena: ArenaLayout, x: number, z: number, r: number): Box[] {
   const all = nearBoxesAll(arena, x, z, r);
-  return arena.offCount ? all.filter((b) => !b.off) : all; // (C4a: smashed things don't block)
+  if (!arena.offCount) return all;
+  // (C4a: smashed things don't block. R12.8: the filtered list kept until something's smashed or put back)
+  const gen = arena.offGen ?? 0, hit = offLists.get(all);
+  if (hit && hit.gen === gen && hit.arena === arena) return hit.out;
+  const out = all.filter((b) => !b.off);
+  offLists.set(all, { gen, arena, out });
+  return out;
 }
+const offLists = new WeakMap<Box[], { gen: number; arena: ArenaLayout; out: Box[] }>();
 
 /** C4a: switch a box off (smashed) or back on, keeping the arena's count right. */
 export function setBoxOff(arena: ArenaLayout, i: number, off: boolean) {
@@ -659,6 +687,7 @@ export function setBoxOff(arena: ArenaLayout, i: number, off: boolean) {
   if (!b || !!b.off === off) return;
   b.off = off;
   arena.offCount = Math.max(0, (arena.offCount ?? 0) + (off ? 1 : -1));
+  arena.offGen = (arena.offGen ?? 0) + 1;
 }
 
 function nearBoxesAll(arena: ArenaLayout, x: number, z: number, r: number): Box[] {
@@ -668,6 +697,10 @@ function nearBoxesAll(arena: ArenaLayout, x: number, z: number, r: number): Box[
   const z0 = Math.floor((z - r) / CELL), z1 = Math.floor((z + r) / CELL);
   // (Slice 2A: many more boxes; one cell = a ready-made list, no set/sort)
   if (x0 === x1 && z0 === z1) return g.cellBoxes.get(key(x0, z0)) ?? NONE;
+  // (R12.8: the boxes never move, so a span of cells always gives the same list: worked out once, then reused. It was
+  //  a new array (and a sort) every collision step of everyone, every tick)
+  const sx = x1 - x0, sz = z1 - z0, ck = sx < 8 && sz < 8 ? key(x0, z0) * 64 + sx * 8 + sz : -1;
+  if (ck >= 0) { const hit = g.spans.get(ck); if (hit) return hit; }
   if (++g.gen === 0xffffffff) { g.stamp.fill(0); g.gen = 1; }
   const gen = g.gen, stamp = g.stamp;
   const idx: number[] = [];
@@ -679,14 +712,21 @@ function nearBoxesAll(arena: ArenaLayout, x: number, z: number, r: number): Box[
   idx.sort((a, b) => a - b);
   const out = new Array<Box>(idx.length);
   for (let j = 0; j < idx.length; j++) out[j] = g.boxes[idx[j]];
+  if (ck >= 0) { if (g.spans.size > 50000) g.spans.clear(); g.spans.set(ck, out); }
   return out;
 }
 
 /** A view of the arena holding only the boxes near a point (for one collision step). */
 export function localArena(arena: ArenaLayout, x: number, z: number, r: number): ArenaLayout {
   if (arena.boxes.length < 64 && !arena.offCount) return arena;
-  return { ...arena, boxes: nearBoxes(arena, x, z, r) };
+  // (R12.8: one view per arena, reused: everything else read through to the arena itself. It was a copy of the whole
+  //  city layout object, every step of everyone. Only the step that asked for it uses it, before asking again.)
+  let v = views.get(arena);
+  if (!v) { v = Object.create(arena) as ArenaLayout; views.set(arena, v); }
+  v.boxes = nearBoxes(arena, x, z, r);
+  return v;
 }
+const views = new WeakMap<ArenaLayout, ArenaLayout>();
 
 // ---- C5c.3: THE COMPACTOR's crusher-bed dance floor ----------------------------------------------------------
 /** The beat bob, and THE DROP: the floor builds up slowly, holds, then slams down and launches everyone on it. */

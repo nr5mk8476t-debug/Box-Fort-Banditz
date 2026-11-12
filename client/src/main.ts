@@ -664,7 +664,15 @@ onSettingsChange((s) => {
   syncSettingsUI(s);
   arena?.applyFov();
   show("debug", s.showFps);
+  applyFpsCap();
 });
+/** R12.8: the frame rate cap (Babylon's own: it counts time across skipped frames, so the game's clock and animations
+ *  run at the right speed). 1% over the cap, so a screen at exactly that refresh never drops a frame to timing jitter.
+ *  The BENCHMARK lifts it while it runs (it measures how fast frames *could* go). */
+function applyFpsCap() {
+  const cap = benchRunning() ? 0 : settings.fpsCap;
+  engine.maxFPS = cap > 0 ? cap * 1.01 : undefined;
+}
 
 function openSettings(from: "title" | "pause") {
   sfx.uiClick();
@@ -730,6 +738,7 @@ async function startBench() {
   show("pause", false); show("bench-status", true); document.body.classList.add("benching");
   // (R12.5: every run starts from the same place: adaptive resolution back to full and held there while it runs)
   dynScale = 1; adapt.slow = adapt.easy = 0; applyScaling();
+  engine.maxFPS = undefined; // (R12.8: uncapped while it measures; put back afterwards)
   // (R12.6: and afterwards you're put back where you were, looking the way you were (it used to drop you at the spawn))
   const was = a.position ? { x: a.position.x, y: a.position.y, z: a.position.z, yaw: input.yaw, pitch: input.pitch } : null;
   const res = await runBench({
@@ -741,11 +750,12 @@ async function startBench() {
     teleport: local ? (x, y, z, yaw) => { local!.teleport(x, z, yaw, y); a.debugTeleport(x, z, yaw, y); } : undefined,
     startGames: local ? () => { a.onAction?.({ a: "pg", op: "open", st: "pooltable2", vs: "npc", stake: 0 } as any); a.onAction?.({ a: "pg", op: "open", st: "dartsoche1", vs: "npc", stake: 0 } as any); } : undefined,
     gamesActive: () => { const i = a.pg.info() as any; return ["pooltable2", "dartsoche1"].map((k) => `${k}: ${i?.[k]?.ph ?? "-"}${i?.[k]?.rolling ? " (rolling)" : ""}`).join(", "); },
-    settings: { lowGraphics: settings.lowGraphics, fov: settings.fov, showFps: settings.showFps, renderScale: settings.renderScale, adaptiveRes: settings.adaptiveRes, sharpHiDpi: settings.sharpHiDpi, startScale: Math.round(100 / engine.getHardwareScalingLevel()) + "%" },
+    settings: { lowGraphics: settings.lowGraphics, fov: settings.fov, showFps: settings.showFps, renderScale: settings.renderScale, adaptiveRes: settings.adaptiveRes, sharpHiDpi: settings.sharpHiDpi, fpsCap: settings.fpsCap + " (lifted while it runs)", startScale: Math.round(100 / engine.getHardwareScalingLevel()) + "%" },
     build: __BFB_BUILD__ + (STRESS ? ` SYNTHETIC STRESS: ${STRESS}` : ""), pubSeen: () => a.city.pubSeen, softwareRendering: SOFTWARE_GPU,
     status: (s) => { $("bench-status").textContent = s; },
   });
   show("bench-status", false); document.body.classList.remove("benching");
+  applyFpsCap();
   if (local) { const sp = was ?? { x: CITY.spawns[0].x, y: 0, z: CITY.spawns[0].z, yaw: 0, pitch: 0 }; local.teleport(sp.x, sp.z, sp.yaw, sp.y); a.debugTeleport(sp.x, sp.z, sp.yaw, sp.y); input.yaw = sp.yaw; input.pitch = sp.pitch; }
   if (!res) { showPause(true); return; }
   $<HTMLTextAreaElement>("bench-text").value = res.text + "\n\n---- data ----\n" + res.json;
@@ -1195,6 +1205,7 @@ if (!settings.playerName) updateSettings({ playerName: randomBanditName() });
 $<HTMLInputElement>("name-input").value = settings.playerName;
 syncSettingsUI(settings);
 show("debug", settings.showFps);
+applyFpsCap();
 enterTitle();
 
 // Read-only hooks for automated tests (and curious devs). Movement override only in ?test mode.

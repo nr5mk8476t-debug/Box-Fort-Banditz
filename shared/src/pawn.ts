@@ -4,6 +4,7 @@
 import { lootDef, LOOT } from "./loot.js";
 
 import type { World, PlayerSim } from "./world.js";
+import { hyp } from "./fmath.js";
 
 /**
  * C5c.3: PAWN-O-RAMA, Sal's real shop in the Yards (any time of day):
@@ -146,7 +147,7 @@ export class PawnSystem {
       for (const p of this.w.players.values()) {
         if (!p.connected || p.jailT > 0 || h.told.has(p.id) || !boss || boss.state !== "work") continue;
         // the owner mutters today's list to whoever walks up to the till (just them)
-        if (Math.hypot(p.move.x - hs.stand.x, p.move.z - hs.stand.z) < HOT_STUFF.hintR && p.move.y < 1.5) {
+        if (hyp(p.move.x - hs.stand.x, p.move.z - hs.stand.z) < HOT_STUFF.hintR && p.move.y < 1.5) {
           h.told.add(p.id);
           this.w.emit({ t: "louList", p: p.id, types: this.wanted(i), shop: i });
         }
@@ -154,7 +155,7 @@ export class PawnSystem {
       // stuff thrown at the owner
       for (const it of this.w.items.values()) {
         if (!it.lastThrower || it.thrownT > 1.0 || this.seenThrown.has(it.id)) continue;
-        if (Math.hypot(it.body.x - hs.boss.x, it.body.z - hs.boss.z) > HOT_STUFF.throwR || it.body.y < 0.6 || it.body.y > 2.6) continue;
+        if (hyp(it.body.x - hs.boss.x, it.body.z - hs.boss.z) > HOT_STUFF.throwR || it.body.y < 0.6 || it.body.y > 2.6) continue;
         this.seenThrown.add(it.id);
         const p = this.w.players.get(it.lastThrower);
         if (p) this.trouble(p, "throw", i);

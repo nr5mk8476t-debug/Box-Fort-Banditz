@@ -9,6 +9,7 @@
 
 import { PLAYER, SIM_DT } from "./constants.js";
 import { localArena, inWater, inDeepWater, inLobby, footSd, type ArenaLayout, type Box } from "./arena.js";
+import { hyp } from "./fmath.js";
 
 /** Slice 2A: speed while wading through the pond */
 export const WADE_SPEED = 0.45;
@@ -161,7 +162,7 @@ export function sanitizeInput(raw: Partial<MoveInput> | null | undefined): MoveI
   if (seq < 0 || !Number.isInteger(seq)) return null;
   let mx = clamp(num(raw.mx), -1, 1);
   let mz = clamp(num(raw.mz), -1, 1);
-  const len = Math.hypot(mx, mz);
+  const len = hyp(mx, mz);
   if (len > 1) {
     mx /= len;
     mz /= len;
@@ -386,7 +387,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   const cos = Math.cos(input.yaw);
   let mx = input.mx;
   let mz = input.mz;
-  const len = Math.hypot(mx, mz);
+  const len = hyp(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
   const hasInput = len > 0.01;
   // forward = (sin, cos), right = (cos, -sin)
@@ -411,7 +412,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
     }
   }
 
-  const horiz = Math.hypot(s.vx, s.vz);
+  const horiz = hyp(s.vx, s.vz);
 
   // ---- 4. stance: slide / crouch ------------------------------------------------
   if (s.slideT > 0) {
@@ -441,7 +442,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
     if (s.dodgeT === 0) s.dodgeCd = PLAYER.dodgeCooldown;
   } else if (dodgePressed && s.grounded && !sliding && (!s.carryHeavy || s.strongT > 0) && s.stumbleT <= 0 && s.dodgeCd <= 0 && s.stamina >= PLAYER.dodgeStamina) {
     let ddx = dirX, ddz = dirZ;
-    const dl = Math.hypot(ddx, ddz);
+    const dl = hyp(ddx, ddz);
     if (dl < 0.01) { ddx = sin; ddz = cos; } else { ddx /= dl; ddz /= dl; }
     s.dodgeT = PLAYER.dodgeTime;
     s.vx = ddx * PLAYER.dodgeSpeed;
@@ -476,7 +477,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
 
   if (sliding) {
     // Friction along the slide, a little steering
-    const sp = Math.hypot(s.vx, s.vz);
+    const sp = hyp(s.vx, s.vz);
     const ns = Math.max(0, sp - PLAYER.slideFriction * dt);
     if (sp > 1e-6) { s.vx *= ns / sp; s.vz *= ns / sp; }
     if (hasInput) {
@@ -492,7 +493,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
     if (s.grounded || hasInput) {
       const dvx = wishX - s.vx;
       const dvz = wishZ - s.vz;
-      const dvLen = Math.hypot(dvx, dvz);
+      const dvLen = hyp(dvx, dvz);
       const maxDv = accel * dt;
       if (dvLen <= maxDv) { s.vx = wishX; s.vz = wishZ; }
       else { s.vx += (dvx / dvLen) * maxDv; s.vz += (dvz / dvLen) * maxDv; }
@@ -500,7 +501,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   }
 
   // ---- 7. stamina -----------------------------------------------------------------
-  const actuallySprinting = canSprint && s.grounded && !sliding && Math.hypot(s.vx, s.vz) > PLAYER.walkSpeed + 0.3;
+  const actuallySprinting = canSprint && s.grounded && !sliding && hyp(s.vx, s.vz) > PLAYER.walkSpeed + 0.3;
   regenStamina(s, dt, actuallySprinting);
 
   // ---- 8. jump (also cancels a slide, keeping its momentum) ------------------------
@@ -609,7 +610,7 @@ function regenStamina(s: MoveState, dt: number, sprinting: boolean) {
 
 /** Horizontal speed, handy for animation + tests. */
 export function horizontalSpeed(s: MoveState): number {
-  return Math.hypot(s.vx, s.vz);
+  return hyp(s.vx, s.vz);
 }
 
 /** High-level pose, used by animation (hands, other players) and sounds. */

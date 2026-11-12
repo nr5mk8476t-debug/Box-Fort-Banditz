@@ -209,6 +209,7 @@
         <label class="check"><input type="checkbox" data-setting="lowGraphics" /> Performance mode (no shadows, lower resolution; for older laptops)</label>
         <label>Render scale <span class="val" data-val="renderScale"></span> <input type="range" min="0.5" max="1" step="0.05" data-setting="renderScale" title="How sharp the 3D view is drawn. Lower is faster on weaker graphics cards; the HUD and text stay sharp." /></label>
         <label class="check"><input type="checkbox" data-setting="adaptiveRes" /> Adaptive resolution (softens the view a little when frames run slow; never below 60%)</label>
+        <label>Frame rate cap <select data-setting="fpsCap" title="The most frames a second the game draws. Set it to your screen's refresh rate: frames past it never show."><option value="0">Off</option><option value="240">240</option><option value="165">165</option><option value="144">144</option><option value="120">120</option><option value="60">60</option></select></label>
         <label class="check"><input type="checkbox" data-setting="sharpHiDpi" /> Sharp on high-DPI screens (every device pixel; much slower)</label>
       </div>
       <button id="btn-settings-close" class="btn btn-go">DONE</button>

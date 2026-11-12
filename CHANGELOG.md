@@ -2,6 +2,27 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R12.8: a steadier frame rate: one draw per outline, a fifth of the garbage, and a 240 FPS cap (2026-11-12)
+
+Blake's BENCHMARK on R12.7: the slowest views were upstairs in the pub looking out (~160 FPS, dips to 83-98), and the
+counter jumped about a lot. Two causes, both fixed at the source, with no visible downgrade:
+- **Every ink outline is one draw call instead of two.** Babylon drew each outline twice (once in colour, once more
+  only to write depth), so an outlined thing cost three draws. Now it's drawn once (the outline's back faces, depth
+  on): two draws. **−20 to −25% draw calls in every view**: balcony 996 → 775, out of the pub window 887 → 711, the bar
+  447 → 337, Little Italy 1,000 → 765, street 700 → 585. It also **flickers less** (5 of 7 test views roughly halved) and
+  fixes Little Italy's arch, which looked solid green from the pub balcony (the old outline covered its stripes).
+  Outline edges move by about a pixel in places; nothing goes missing or doubles up.
+- **Five times less garbage**: the game's simulation made 87 MB of short-lived data a second (Blake's benchmark
+  measured 80-100 MB/s); the browser has to stop and clean that up, which caused the frame-time spikes. Now about
+  10 MB/s (−89%), with 6× fewer clean-ups, and the simulation runs 2.6× faster (0.94 → 0.36 ms a tick). The main
+  cause: the city's 3,900 collision boxes came in 25 different object shapes, and the browser handed back a new number
+  object every time collision code read one of them. They're now all built in one shape, and so are the cars;
+  `Math.hypot` became a plain square root; the traffic's per-car checks reuse their scratch space.
+- **Frame rate cap** (Settings): Off / 240 / 165 / 144 / 120 / 60, **240 by default**. Frames past your screen's
+  refresh never show; the BENCHMARK lifts the cap while it measures.
+- **Fixed**: `tests/draw-budget.mjs` didn't run at all after a last-minute edit in R12.7 (a comment swallowed the end of
+  a line). The budgets are tightened to the new counts.
+
 ## R12.7: a third fewer draw calls outdoors, and a draw-call budget test (2026-11-12)
 
 **Faster** (no visual change: before/after screenshots match pixel for pixel, apart from people and cars moving):

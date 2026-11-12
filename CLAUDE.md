@@ -50,11 +50,19 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R12.7)
+## Next up (as of R12.8)
+- R12.8: ink outlines are one draw, not two (`client/src/game/inkOutline.ts`; `?ink=old` for the old way): −20 to −25%
+  draws everywhere. The simulation's garbage 87 → ~10 MB/s (`canonBoxes`, `carSim`, `hyp()`): keep shared objects that
+  hot code reads (boxes, cars, move states) in ONE shape, and use `hyp()` not `Math.hypot` in per-tick code. A 240 FPS
+  cap (Settings) by default; the BENCHMARK lifts it.
+- Measuring garbage: `node --trace-gc` on the shared code compiled with `tsc` (not `tsx`: it wraps every function to keep
+  its name, which defeats V8's optimisations) gives the real figure; the sampling profiler only ranks.
+- Waiting on Blake: a BENCHMARK on R12.8 (the upstairs views). Then back to features unless it shows a problem.
+
+## Earlier: Next up (as of R12.7)
 - R12.7: the city's outline widths share one mesh per tile, props' fixed parts merged, graffiti one mesh, traffic lights
   one draw: outdoor views −26% to −40% draw calls. `tests/draw-budget.mjs` guards it.
 - Next performance work: the people (4-6 outlined pieces each), the club crowd seen from the crossroads, memory churn.
-- Waiting on Blake: a BENCHMARK on R12.7.
 
 ## Earlier: Next up (as of R12.6)
 - R12.6 shipped: the cantilever balcony and the oxblood/mahogany/gold façade (hanging baskets, the corner sign and

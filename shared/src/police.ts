@@ -27,6 +27,7 @@ import { newLockRun, lockPress, type LockResult } from "./lockpick.js";
 import type { NpcSimData } from "./npcSim.js";
 import type { World, PlayerSim } from "./world.js";
 import { CAR_HALF_LEN, CAR_HALF_WIDTH, type CarSim } from "./traffic.js";
+import { hyp } from "./fmath.js";
 
 export const STAR_HEAT = [30, 60, 90];
 export function starsOf(heat: number): number { return heat >= STAR_HEAT[2] ? 3 : heat >= STAR_HEAT[1] ? 2 : heat >= STAR_HEAT[0] ? 1 : 0; }
@@ -113,7 +114,7 @@ export class PoliceSystem {
       const d = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 0 : Infinity)));
       const nx = Array.from({ length: n }, (_, i) => Array.from({ length: n }, () => i));
       for (const [a, b] of g.edges) {
-        const l = Math.hypot(g.nodes[a].x - g.nodes[b].x, g.nodes[a].z - g.nodes[b].z);
+        const l = hyp(g.nodes[a].x - g.nodes[b].x, g.nodes[a].z - g.nodes[b].z);
         d[a][b] = d[b][a] = l; nx[a][b] = b; nx[b][a] = a;
       }
       for (let k = 0; k < n; k++) for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
@@ -203,7 +204,7 @@ export class PoliceSystem {
       // around where they THINK you are, but never popping up right in front of you
       const g = w.npc.graph;
       const near = g.filter((n) => {
-        const d = Math.hypot(n.x - p.knownX, n.z - p.knownZ), dp = Math.hypot(n.x - p.move.x, n.z - p.move.z);
+        const d = hyp(n.x - p.knownX, n.z - p.knownZ), dp = hyp(n.x - p.move.x, n.z - p.move.z);
         return d >= 22 && d <= 42 && dp >= 18;
       });
       const hidden = near.filter((n) => !this.los(n.x, 1.6, n.z, p.move.x, p.move.y + 1.6, p.move.z));
@@ -225,7 +226,7 @@ export class PoliceSystem {
   // ------------------------------------------------------------------ seeing
   /** Clear straight line between two points (eye height)? Bars and trees don't hide you. */
   los(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
-    const d = Math.hypot(bx - ax, bz - az);
+    const d = hyp(bx - ax, bz - az);
     const steps = Math.max(1, Math.ceil(d / 0.7));
     for (let i = 1; i < steps; i++) {
       const k = i / steps;
@@ -247,7 +248,7 @@ export class PoliceSystem {
     this.smoke.set(p.id, w.time + secs);
     p.seenT = -99;
     for (const n of this.cops()) {
-      if (n.state === "ko" || Math.hypot(n.move.x - p.move.x, n.move.z - p.move.z) > 30) continue;
+      if (n.state === "ko" || hyp(n.move.x - p.move.x, n.move.z - p.move.z) > 30) continue;
       if (n.state === "windup" || n.state === "aim" || n.state === "chase") { n.state = "search"; n.lostT = 0; n.path = []; }
       n.attackCd = Math.max(n.attackCd ?? 0, secs); n.taserCd = Math.max(n.taserCd ?? 0, secs);
       n.lastX = p.move.x; n.lastZ = p.move.z; n.sees = false;
@@ -257,7 +258,7 @@ export class PoliceSystem {
   canSee(n: NpcSimData, p: PlayerSim): boolean {
     const m = p.move;
     if ((this.smoke.get(p.id) ?? -1) > this.w.time) return false; // (R12.6: in the smoke)
-    const d = Math.hypot(m.x - n.move.x, m.z - n.move.z);
+    const d = hyp(m.x - n.move.x, m.z - n.move.z);
     if (d > (this.night ? COP_SIGHT_NIGHT : COP_SIGHT) || Math.abs(m.y - n.move.y) > 8) return false;
     if (d < COP_HEAR) return true;
     // C3: crouched in a bush, you're invisible (unless they're close enough to hear you)
@@ -274,7 +275,7 @@ export class PoliceSystem {
     if (p.jailT > 0) return;
     for (const c of this.cops()) {
       if (c.state === "ko" || c.state === "stunned" || c.state === "windup" || c.state === "chase") continue;
-      if (Math.hypot(c.move.x - x, c.move.z - z) > r) continue;
+      if (hyp(c.move.x - x, c.move.z - z) > r) continue;
       c.state = "chase"; c.target = p.id; c.sees = false; c.lostT = 0; c.path = [];
       c.lastX = x; c.lastZ = z;
       this.say(c, NPC_DEFS.cop.lines.spot);
@@ -288,7 +289,7 @@ export class PoliceSystem {
     for (const c of this.cops()) {
       if (c.state === "ko" || c.state === "stunned" || c.state === "windup") continue;
       if (c.target && c.target !== p.id && c.state === "chase") continue;
-      if (Math.hypot(c.move.x - p.move.x, c.move.z - p.move.z) > 25 || !this.canSee(c, p)) continue;
+      if (hyp(c.move.x - p.move.x, c.move.z - p.move.z) > 25 || !this.canSee(c, p)) continue;
       witnessed = true;
       if (c.state !== "chase") this.say(c, NPC_DEFS.cop.lines.spot);
       c.state = "chase"; c.target = p.id; c.sees = true; c.lostT = 0; c.path = [];
@@ -329,7 +330,7 @@ export class PoliceSystem {
       if (n.sees) { pl.seenT = w.time; n.lastX = pl.move.x; n.lastZ = pl.move.z; pl.knownX = pl.move.x; pl.knownZ = pl.move.z; }
     }
     const m = pl.move;
-    const d = Math.hypot(m.x - n.move.x, m.z - n.move.z);
+    const d = hyp(m.x - n.move.x, m.z - n.move.z);
     switch (n.state) {
       case "patrol": case "search": {
         if (n.sees) {
@@ -339,11 +340,11 @@ export class PoliceSystem {
           return { tx: m.x, tz: m.z, speed: COP_RUN, face: null };
         }
         // the radio: while another cop has eyes on you, everyone knows where you are
-        if (w.time - pl.seenT < 0.5 && Math.hypot(n.lastX - pl.knownX, n.lastZ - pl.knownZ) > 6) { n.lastX = pl.knownX; n.lastZ = pl.knownZ; n.path = []; }
-        if (!n.path.length && Math.hypot(n.lastX - n.move.x, n.lastZ - n.move.z) > 1.5) this.planTo(n, n.lastX, n.lastZ);
+        if (w.time - pl.seenT < 0.5 && hyp(n.lastX - pl.knownX, n.lastZ - pl.knownZ) > 6) { n.lastX = pl.knownX; n.lastZ = pl.knownZ; n.path = []; }
+        if (!n.path.length && hyp(n.lastX - n.move.x, n.lastZ - n.move.z) > 1.5) this.planTo(n, n.lastX, n.lastZ);
         const wp = n.path[0];
         if (wp) {
-          if (Math.hypot(wp.x - n.move.x, wp.z - n.move.z) < 1.1) n.path.shift();
+          if (hyp(wp.x - n.move.x, wp.z - n.move.z) < 1.1) n.path.shift();
           return { tx: wp.x, tz: wp.z, speed: n.state === "patrol" ? COP_JOG : COP_JOG * 0.85, face: null };
         }
         // at the last known spot: look around for a while, then give up
@@ -359,7 +360,7 @@ export class PoliceSystem {
         if (n.sees) { n.lostT = 0; tx = m.x; tz = m.z; }
         else {
           n.lostT += dt;
-          if (n.lostT > LOSE_SIGHT || Math.hypot(n.lastX - n.move.x, n.lastZ - n.move.z) < 1) { n.state = "search"; n.lostT = 0; n.path = []; }
+          if (n.lostT > LOSE_SIGHT || hyp(n.lastX - n.move.x, n.lastZ - n.move.z) < 1) { n.state = "search"; n.lostT = 0; n.path = []; }
         }
         if (n.sees && d < GRAB_RANGE && n.attackCd <= 0 && Math.abs(m.y - n.move.y) < 1.2) {
           n.state = "windup"; n.stateT = m.knockT > 0 || m.stunT > 0 ? 0.25 : GRAB_WINDUP;
@@ -421,7 +422,7 @@ export class PoliceSystem {
     const ids = findPath(npc.graph, a, b);
     n.path = ids.map((i) => ({ x: npc.graph[i].x, z: npc.graph[i].z }));
     // skip the first point if we're already past it
-    if (n.path.length > 1 && Math.hypot(n.path[1].x - n.move.x, n.path[1].z - n.move.z) < Math.hypot(n.path[1].x - n.path[0].x, n.path[1].z - n.path[0].z)) n.path.shift();
+    if (n.path.length > 1 && hyp(n.path[1].x - n.move.x, n.path[1].z - n.move.z) < hyp(n.path[1].x - n.path[0].x, n.path[1].z - n.path[0].z)) n.path.shift();
     n.path.push({ x, z });
   }
 
@@ -442,7 +443,7 @@ export class PoliceSystem {
     if (n.patrol) { n.node = this.w.npc.nearestClearNode(n.move.x, n.move.z, -1); n.prevNode = n.node; }
     else {
       const b = this.w.arena.station?.grand?.beats[n.beat!];
-      if (b) { let best = 0, bd = Infinity; b.pts.forEach((q, i) => { const d = Math.hypot(q.x - n.move.x, q.z - n.move.z); if (d < bd) { bd = d; best = i; } }); n.beatI = best; }
+      if (b) { let best = 0, bd = Infinity; b.pts.forEach((q, i) => { const d = hyp(q.x - n.move.x, q.z - n.move.z); if (d < bd) { bd = d; best = i; } }); n.beatI = best; }
     }
   }
 
@@ -461,13 +462,13 @@ export class PoliceSystem {
         return { tx: p.move.x, tz: p.move.z, speed: COP_RUN, face: null };
       }
     }
-    if (n.sayCd <= 0 && w.random() < 0.003 && [...w.players.values()].some((p) => p.connected && Math.hypot(p.move.x - n.move.x, p.move.z - n.move.z) < 6)) this.say(n, NPC_DEFS.cop.lines.idle);
+    if (n.sayCd <= 0 && w.random() < 0.003 && [...w.players.values()].some((p) => p.connected && hyp(p.move.x - n.move.x, p.move.z - n.move.z) < 6)) this.say(n, NPC_DEFS.cop.lines.idle);
     if (n.patrol) {
       // wander the route network, one junction to the next
       const g = w.npc.graph;
       const at = g[n.node];
       if (!at) { n.node = w.npc.nearestClearNode(n.move.x, n.move.z, -1); return { tx: n.move.x, tz: n.move.z, speed: 0, face: null }; }
-      if (Math.hypot(at.x - n.move.x, at.z - n.move.z) < 1.1) {
+      if (hyp(at.x - n.move.x, at.z - n.move.z) < 1.1) {
         const links = at.links.filter((l) => l !== n.prevNode);
         const pool = links.length ? links : at.links;
         n.prevNode = n.node; n.node = pool.length ? pool[Math.floor(w.random() * pool.length)] : n.node;
@@ -479,12 +480,12 @@ export class PoliceSystem {
     if (!b) return { tx: n.move.x, tz: n.move.z, speed: 0, face: null };
     const q = b.pts[(n.beatI ?? 0) % b.pts.length];
     // (R9: a long way from the beat (back from a chase): along the routes, then straight)
-    if (b.y < 2 && Math.hypot(q.x - n.move.x, q.z - n.move.z) > 4) {
+    if (b.y < 2 && hyp(q.x - n.move.x, q.z - n.move.z) > 4) {
       if (!n.path.length) this.planTo(n, q.x, q.z);
       const wp = n.path[0];
-      if (wp) { if (Math.hypot(wp.x - n.move.x, wp.z - n.move.z) < 1.1) n.path.shift(); return { tx: wp.x, tz: wp.z, speed: PATROL.walk * 1.4, face: null }; }
+      if (wp) { if (hyp(wp.x - n.move.x, wp.z - n.move.z) < 1.1) n.path.shift(); return { tx: wp.x, tz: wp.z, speed: PATROL.walk * 1.4, face: null }; }
     } else n.path = [];
-    if (Math.hypot(q.x - n.move.x, q.z - n.move.z) < 0.6) {
+    if (hyp(q.x - n.move.x, q.z - n.move.z) < 0.6) {
       if (b.pts.length === 1) return { tx: n.move.x, tz: n.move.z, speed: 0, face: Math.PI / 2 };
       n.beatI = ((n.beatI ?? 0) + 1) % b.pts.length;
     }
@@ -497,7 +498,7 @@ export class PoliceSystem {
     if (!w.match || w.match.phase === "over") return; // (R10: the lobby too: free roam before the match starts had no cops at all)
     const cops = this.cops();
     const players = [...w.players.values()].filter((p) => p.connected && p.jailT <= 0);
-    const unseen = (x: number, z: number, y = 0) => players.every((p) => Math.hypot(p.move.x - x, p.move.z - z) > PATROL.hidden || !this.los(x, y + 1.6, z, p.move.x, p.move.y + 1.6, p.move.z));
+    const unseen = (x: number, z: number, y = 0) => players.every((p) => hyp(p.move.x - x, p.move.z - z) > PATROL.hidden || !this.los(x, y + 1.6, z, p.move.x, p.move.y + 1.6, p.move.z));
     // the town beats
     const want = this.night ? PATROL.footNight : PATROL.foot;
     if (cops.filter((c) => c.patrol).length < want && (this.nextCop.get("patrol") ?? 0) <= w.time) {
@@ -518,7 +519,7 @@ export class PoliceSystem {
     });
     // the cruisers
     if (this.cars.filter((c) => c.patrol).length < PATROL.cars) {
-      const pts = this.roadPoints().filter((r) => unseen(r.x, r.z) && players.every((p) => Math.hypot(p.move.x - r.x, p.move.z - r.z) > 45) && this.roadClear(r.x, r.z));
+      const pts = this.roadPoints().filter((r) => unseen(r.x, r.z) && players.every((p) => hyp(p.move.x - r.x, p.move.z - r.z) > 45) && this.roadClear(r.x, r.z));
       if (pts.length) {
         const r = pts[Math.floor(w.random() * pts.length)];
         const car: CopCarSim = { id: "cop" + this.nextCar, x: r.x, z: r.z, yaw: w.random() * Math.PI * 2, v: 0, target: "", mode: "cruise", route: [], replanT: 0, calmT: 0, lifeT: 0, deployed: false, patrol: true };
@@ -541,22 +542,22 @@ export class PoliceSystem {
   private walkOff(n: NpcSimData) {
     const w = this.w;
     const players = [...w.players.values()].filter((p) => p.connected);
-    const far = players.every((p) => Math.hypot(p.move.x - n.move.x, p.move.z - n.move.z) > 35);
+    const far = players.every((p) => hyp(p.move.x - n.move.x, p.move.z - n.move.z) > 35);
     if ((far && n.lifeT > 2) || n.lifeT > 30) { w.npc.npcs.delete(n.id); return { tx: n.move.x, tz: n.move.z, speed: 0, face: null }; }
     if (!n.path.length) {
       // the route point furthest from every player, within reason
       let best = n.node, bestD = -1;
       for (const g of w.npc.graph) {
-        const dm = Math.hypot(g.x - n.move.x, g.z - n.move.z);
+        const dm = hyp(g.x - n.move.x, g.z - n.move.z);
         if (dm > 45) continue;
-        const dp = Math.min(...players.map((p) => Math.hypot(p.move.x - g.x, p.move.z - g.z)), 999);
+        const dp = Math.min(...players.map((p) => hyp(p.move.x - g.x, p.move.z - g.z)), 999);
         if (dp > bestD) { bestD = dp; best = g.id; }
       }
       this.planTo(n, w.npc.graph[best].x, w.npc.graph[best].z);
     }
     const wp = n.path[0];
     if (!wp) return { tx: n.move.x, tz: n.move.z, speed: 0, face: null };
-    if (Math.hypot(wp.x - n.move.x, wp.z - n.move.z) < 1.1) n.path.shift();
+    if (hyp(wp.x - n.move.x, wp.z - n.move.z) < 1.1) n.path.shift();
     return { tx: wp.x, tz: wp.z, speed: 1.8, face: null };
   }
 
@@ -648,7 +649,7 @@ export class PoliceSystem {
     const out: RoadPt[] = [];
     if (!g) return out;
     g.edges.forEach(([a, b], ei) => {
-      const A = g.nodes[a], B = g.nodes[b], l = Math.hypot(B.x - A.x, B.z - A.z);
+      const A = g.nodes[a], B = g.nodes[b], l = hyp(B.x - A.x, B.z - A.z);
       for (let s = 0; s <= l; s += 8) out.push({ x: A.x + ((B.x - A.x) * s) / l, z: A.z + ((B.z - A.z) * s) / l, edge: ei });
     });
     return out;
@@ -663,7 +664,7 @@ export class PoliceSystem {
       const A = g.nodes[a], B = g.nodes[b];
       const ex = B.x - A.x, ez = B.z - A.z, l2 = ex * ex + ez * ez;
       const k = l2 > 0 ? Math.max(0, Math.min(1, ((x - A.x) * ex + (z - A.z) * ez) / l2)) : 0;
-      const px = A.x + ex * k, pz = A.z + ez * k, d = Math.hypot(x - px, z - pz);
+      const px = A.x + ex * k, pz = A.z + ez * k, d = hyp(x - px, z - pz);
       if (d < bestD) { bestD = d; best = { x: px, z: pz, edge: ei }; }
     });
     return best;
@@ -671,7 +672,7 @@ export class PoliceSystem {
 
   private spawnCar(p: PlayerSim): CopCarSim | null {
     const w = this.w;
-    const pts = this.roadPoints().filter((r) => { const d = Math.hypot(r.x - p.move.x, r.z - p.move.z); return d > 45 && d < 85; });
+    const pts = this.roadPoints().filter((r) => { const d = hyp(r.x - p.move.x, r.z - p.move.z); return d > 45 && d < 85; });
     if (!pts.length) return null;
     // (R12.3b: never right on top of a car)
     const clear = pts.filter((r) => this.roadClear(r.x, r.z));
@@ -702,7 +703,7 @@ export class PoliceSystem {
     for (const a of g.edges[here.edge]) for (const b of g.edges[to.edge]) {
       const A = g.nodes[a], B = g.nodes[b];
       const behind = (A.x - car.x) * fx + (A.z - car.z) * fz < 0 ? 12 : 0; // U-turns cost a bit
-      const cost = Math.hypot(A.x - car.x, A.z - car.z) + behind + this.roadDist[a][b] + Math.hypot(B.x - to.x, B.z - to.z);
+      const cost = hyp(A.x - car.x, A.z - car.z) + behind + this.roadDist[a][b] + hyp(B.x - to.x, B.z - to.z);
       if (cost < bestCost) {
         bestCost = cost;
         const ids = [a];
@@ -737,7 +738,7 @@ export class PoliceSystem {
       if (car.replanT <= 0) {
         car.replanT = 0.5;
         for (const o of w.players.values()) {
-          if (!this.wanted(o) || starsOf(o.notoriety) === 0 || Math.hypot(o.move.x - car.x, o.move.z - car.z) > PATROL.carSight) continue;
+          if (!this.wanted(o) || starsOf(o.notoriety) === 0 || hyp(o.move.x - car.x, o.move.z - car.z) > PATROL.carSight) continue;
           if (!this.los(car.x, 1.4, car.z, o.move.x, o.move.y + 1.4, o.move.z)) continue;
           car.mode = "drive"; car.target = o.id; car.calmT = 0; car.replanT = 0; car.deployed = false; car.orbit = false; car.route = [];
           o.seenT = w.time; o.knownX = o.move.x; o.knownZ = o.move.z;
@@ -748,7 +749,7 @@ export class PoliceSystem {
     }
     if (car.mode === "leave") {
       const players = [...w.players.values()].filter((o) => o.connected);
-      if (car.lifeT > 25 || (car.lifeT > 3 && players.every((o) => Math.hypot(o.move.x - car.x, o.move.z - car.z) > 60))) {
+      if (car.lifeT > 25 || (car.lifeT > 3 && players.every((o) => hyp(o.move.x - car.x, o.move.z - car.z) > 60))) {
         if (car.ride) w.traffic.leave(car.ride);
         this.cars.splice(this.cars.indexOf(car), 1);
         return;
@@ -774,18 +775,18 @@ export class PoliceSystem {
         if (car.orbit) {
           // (its officer's out: it circles the area, siren on, somewhere 25-60 m from them, never stopping again)
           car.replanT -= dt;
-          if (!car.orbitAt || car.replanT <= 0 || Math.hypot(car.orbitAt.x - car.x, car.orbitAt.z - car.z) < 12) {
+          if (!car.orbitAt || car.replanT <= 0 || hyp(car.orbitAt.x - car.x, car.orbitAt.z - car.z) < 12) {
             car.replanT = 10;
-            const g = w.arena.roadGraph!, ring = g.nodes.filter((nd) => { const d = Math.hypot(nd.x - p!.move.x, nd.z - p!.move.z); return d > 25 && d < 60 && Math.hypot(nd.x - car.x, nd.z - car.z) > 15; });
+            const g = w.arena.roadGraph!, ring = g.nodes.filter((nd) => { const d = hyp(nd.x - p!.move.x, nd.z - p!.move.z); return d > 25 && d < 60 && hyp(nd.x - car.x, nd.z - car.z) > 15; });
             const nd = ring.length ? ring[Math.floor(w.random() * ring.length)] : g.nodes[Math.floor(w.random() * g.nodes.length)];
             car.orbitAt = { x: nd.x, z: nd.z };
           }
           goal = car.orbitAt;
         }
-        if (!r.goal || Math.hypot(goal.x - r.goal.x, goal.z - r.goal.z) > 6) r.goal = { ...goal };
+        if (!r.goal || hyp(goal.x - r.goal.x, goal.z - r.goal.z) > 6) r.goal = { ...goal };
         // close to them: it stops in its own lane (on a road, never in a junction) and sends an officer in
         // (or, if they're off the road, as near as the road gets to them)
-        const dp = Math.hypot(p!.move.x - car.x, p!.move.z - car.z);
+        const dp = hyp(p!.move.x - car.x, p!.move.z - car.z);
         if ((car.reachT = (car.reachT ?? 0) - dt) <= 0) { car.reachT = 1; car.reachD = w.traffic.laneDist(p!.move.x, p!.move.z); }
         const close = dp < COPCAR.deployDist || (dp < 30 && dp <= (car.reachD ?? 0) + 6);
         if (!car.deployed && !car.orbit && close && !ln.conn && ln.len - r.s > 1.5) { car.mode = "parked"; car.parkT = 0; }
@@ -803,7 +804,7 @@ export class PoliceSystem {
           w.emit({ t: "copCar", car: car.id, p: car.target, stage: "deploy" });
         }
         if (car.deployed) car.parkT = (car.parkT ?? 0) + dt;
-        if (valid && ((car.deployed && (car.parkT ?? 0) > COPCAR.parkFor) || Math.hypot(p!.move.x - car.x, p!.move.z - car.z) > 40)) { car.mode = "drive"; car.replanT = 0; car.orbit = car.deployed; car.orbitAt = undefined; }
+        if (valid && ((car.deployed && (car.parkT ?? 0) > COPCAR.parkFor) || hyp(p!.move.x - car.x, p!.move.z - car.z) > 40)) { car.mode = "drive"; car.replanT = 0; car.orbit = car.deployed; car.orbitAt = undefined; }
         else if (!valid && (car.parkT ?? 0) > COPCAR.parkFor) this.carLeave(car);
       }
       // (it eases over into the lane rather than jumping; stopped, it tucks in toward the kerb)
@@ -816,7 +817,7 @@ export class PoliceSystem {
       return;
     }
     // ---- not in a lane yet (just arrived somewhere awkward): head along the nearest road until it can pull in ----
-    if (car.route.length <= 1 && (!car.route[0] || Math.hypot(car.route[0].x - car.x, car.route[0].z - car.z) < 4)) {
+    if (car.route.length <= 1 && (!car.route[0] || hyp(car.route[0].x - car.x, car.route[0].z - car.z) < 4)) {
       const r = this.nearestRoad(car.x + Math.sin(car.yaw) * 12, car.z + Math.cos(car.yaw) * 12);
       if (r) this.planCar(car, r);
     }
@@ -830,7 +831,7 @@ export class PoliceSystem {
     if ((car.revT ?? 0) > 0) { car.revT! -= dt; car.why = "backing up"; car.v = Math.max(-2, car.v - 8 * dt); car.x += Math.sin(car.yaw) * car.v * dt; car.z += Math.cos(car.yaw) * car.v * dt; this.carCollide(car); return; }
     const wp = this.aimPoint(car);
     if (wp) {
-      const dx = wp.x - car.x, dz = wp.z - car.z, dist = Math.hypot(dx, dz);
+      const dx = wp.x - car.x, dz = wp.z - car.z, dist = hyp(dx, dz);
       if (dist < 2.5 && car.route.length > 1) car.route.shift();
       let err = Math.atan2(dx, dz) - car.yaw;
       while (err > Math.PI) err -= Math.PI * 2;
@@ -852,7 +853,7 @@ export class PoliceSystem {
     if (r) { car.ride = r; car.x = r.x; car.z = r.z; car.yaw = r.yaw; car.jx = car.jz = car.jyaw = 0; }
   }
   /** no car (or cop car) within 12 m: room for a new cop car to start */
-  private roadClear(x: number, z: number) { const tr = this.w.traffic; return !(tr?.cars.concat(tr.riders) ?? []).some((c) => Math.hypot(c.x - x, c.z - z) < 12) && !this.cars.some((c) => Math.hypot(c.x - x, c.z - z) < 12); }
+  private roadClear(x: number, z: number) { const tr = this.w.traffic; return !(tr?.cars.concat(tr.riders) ?? []).some((c) => hyp(c.x - x, c.z - z) < 12) && !this.cars.some((c) => hyp(c.x - x, c.z - z) < 12); }
   /** R12.3b: a new cop car starts in a lane of the road it's on (the way that heads toward (tx, tz) if it can) */
   private intoLane(car: CopCarSim, edge: number, tx: number, tz: number): boolean {
     const g = this.w.arena.roadGraph!, [a, b] = g.edges[edge], A = g.nodes[a], B = g.nodes[b];
@@ -876,13 +877,13 @@ export class PoliceSystem {
     for (let k = 0; k <= 3 && d <= look; k++) { pts.push({ x: car.x + hx * (COPCAR.halfLen + k), z: car.z + hz * (COPCAR.halfLen + k), d: k }); }
     px = car.x + hx * (COPCAR.halfLen + 3); pz = car.z + hz * (COPCAR.halfLen + 3); d = 3;
     for (const q of way) {
-      const L = Math.hypot(q.x - px, q.z - pz); if (L < 0.01) continue;
+      const L = hyp(q.x - px, q.z - pz); if (L < 0.01) continue;
       for (let s = 1; s <= L && d + s <= look; s += 1) pts.push({ x: px + ((q.x - px) * s) / L, z: pz + ((q.z - pz) * s) / L, d: d + s });
       d += L; px = q.x; pz = q.z; if (d > look) break;
     }
     let best: { car: CarSim; d: number } | null = null;
     for (const t of tr.cars.concat(tr.riders)) {
-      if (Math.hypot(t.x - car.x, t.z - car.z) > look + 8) continue;
+      if (hyp(t.x - car.x, t.z - car.z) > look + 8) continue;
       const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw);
       for (const q of pts) {
         if (best && q.d >= best.d) break;
@@ -897,7 +898,7 @@ export class PoliceSystem {
   private aimPoint(car: CopCarSim): { x: number; z: number } | null {
     if (car.mode === "parked") return car.parkAt ?? null;
     const wp0 = car.route[0]; if (!wp0) return null;
-    const c0 = this.nearestRoad(car.x, car.z) ?? { x: car.x, z: car.z }, sx = wp0.x - c0.x, sz = wp0.z - c0.z, sl = Math.hypot(sx, sz);
+    const c0 = this.nearestRoad(car.x, car.z) ?? { x: car.x, z: car.z }, sx = wp0.x - c0.x, sz = wp0.z - c0.z, sl = hyp(sx, sz);
     if (sl <= 3) return wp0;
     const k = Math.min(sl, 5 + Math.abs(car.v) * 0.3);
     return { x: c0.x + (sx / sl) * k + (sz / sl) * COPCAR.keepRight, z: c0.z + (sz / sl) * k - (sx / sl) * COPCAR.keepRight };
@@ -906,7 +907,7 @@ export class PoliceSystem {
   private farNode() {
     const g = this.w.arena.roadGraph!, players = [...this.w.players.values()].filter((o) => o.connected);
     let best = g.nodes[0], bestD = -1;
-    for (const nd of g.nodes) { const dp = Math.min(...players.map((o) => Math.hypot(o.move.x - nd.x, o.move.z - nd.z)), 999); if (dp > bestD) { bestD = dp; best = nd; } }
+    for (const nd of g.nodes) { const dp = Math.min(...players.map((o) => hyp(o.move.x - nd.x, o.move.z - nd.z)), 999); if (dp > bestD) { bestD = dp; best = nd; } }
     return best;
   }
 
