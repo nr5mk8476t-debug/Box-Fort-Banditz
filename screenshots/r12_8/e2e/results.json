@@ -109,7 +109,7 @@
   },
   {
     "ok": true,
-    "msg": "can't stand up under the tunnel roof (x=100.09, crouching=true)"
+    "msg": "can't stand up under the tunnel roof (x=100.23, crouching=true)"
   },
   {
     "ok": true,
@@ -117,11 +117,11 @@
   },
   {
     "ok": true,
-    "msg": "the city spawned 180 loot items"
+    "msg": "the city spawned 178 loot items"
   },
   {
     "ok": true,
-    "msg": "variety: 46 different item types"
+    "msg": "variety: 50 different item types"
   },
   {
     "ok": true,
@@ -129,7 +129,7 @@
   },
   {
     "ok": true,
-    "msg": "prompt text: \"E Grab Old CRT TV  $33UNCOMMON  /  HEAVY  -  Weighs as much ...\""
+    "msg": "prompt text: \"E Grab Old CRT TV  $57UNCOMMON  /  HEAVY  -  Weighs as much ...\""
   },
   {
     "ok": true,
@@ -233,7 +233,7 @@
   },
   {
     "ok": true,
-    "msg": "mix of types: tourist, pigeon_lady, mall_cop, influencer, businessman, gym_bro, jogger, mime"
+    "msg": "mix of types: tourist, businessman, jogger, gym_bro, mall_cop, influencer, pigeon_lady"
   },
   {
     "ok": true,
@@ -241,7 +241,7 @@
   },
   {
     "ok": true,
-    "msg": "45 people exist; ones beyond 60 m are culled (4 drawn from here)"
+    "msg": "45 people exist; ones beyond 60 m are culled (1 drawn from here)"
   },
   {
     "ok": true,
@@ -265,7 +265,7 @@
   },
   {
     "ok": true,
-    "msg": "the tourist dropped loot: disposable_camera"
+    "msg": "the tourist dropped loot: wrong_map"
   },
   {
     "ok": true,
@@ -341,7 +341,7 @@
   },
   {
     "ok": true,
-    "msg": "till prompt: \"E Grab Cash Register  $252EPIC  /  HEAVY  -  The whole till. Very subtle.  |  or HOLD R fo\""
+    "msg": "till prompt: \"E Grab Cash Register  $224EPIC  /  HEAVY  -  The whole till. Very subtle.  |  or HOLD R fo\""
   },
   {
     "ok": true,
@@ -597,7 +597,7 @@
   },
   {
     "ok": true,
-    "msg": "at Sal's counter with the chain out: \"Sell to Sal\" (E Sell to Sal: Gold Chain  $41cash right now, no questions asked (less than the end-of-day shop pays))"
+    "msg": "at Sal's counter with the chain out: \"Sell to Sal\" (E Sell to Sal: Gold Chain  $45cash right now, no questions asked (less than the end-of-day shop pays))"
   },
   {
     "ok": true,
@@ -757,11 +757,11 @@
   },
   {
     "ok": true,
-    "msg": "scoreboard shows the fort loot value (+57)"
+    "msg": "scoreboard shows the fort loot value (+31)"
   },
   {
     "ok": true,
-    "msg": "happyhour: event bar says \"HAPPY HOUR IN THE PLAZA...\""
+    "msg": "happyhour: event bar says \"HAPPY HOUR IN THE SOUTH-WEST BLOCK...\""
   },
   {
     "ok": true,
@@ -857,7 +857,7 @@
   },
   {
     "ok": true,
-    "msg": "results: fort loot 1 ($57), lost 1"
+    "msg": "results: fort loot 1 ($31), lost 1"
   },
   {
     "ok": true,
@@ -869,15 +869,15 @@
   },
   {
     "ok": true,
-    "msg": "Sal lowballs the TV: $35 for a $57 TV (eager)"
+    "msg": "Sal lowballs the TV: $19 for a $31 TV (eager)"
   },
   {
     "ok": true,
-    "msg": "haggled: $35 -> $42 (eager: \"My cousin would LOVE this. Uh, I mean, meh.\")"
+    "msg": "haggled: $19 -> $23 (thinking: \"*strokes chin* Maybe. Maybe not.\")"
   },
   {
     "ok": true,
-    "msg": "SELL: +$42 cash"
+    "msg": "SELL: +$23 cash"
   },
   {
     "ok": true,
@@ -905,7 +905,7 @@
   },
   {
     "ok": true,
-    "msg": "final card: \"RICHEST BANDIT: WobblyCrate\""
+    "msg": "final card: \"RICHEST BANDIT: GreasyRaccoon\""
   },
   {
     "ok": true,
@@ -921,7 +921,7 @@
   },
   {
     "ok": true,
-    "msg": "room created with code UVV5F"
+    "msg": "room created with code VBPKZ"
   },
   {
     "ok": true,
@@ -944,7 +944,815 @@
     "msg": "invite card shows right code"
   },
   {
-    "ok": false,
-    "msg": "test crashed: page.waitForFunction: Target page, context or browser has been closed\n    at /home/user/Box-Fort-Banditz/tests/e2e-phase0.mjs:997:11"
+    "ok": true,
+    "msg": "A: sees 3 players (2 others drawn)"
+  },
+  {
+    "ok": true,
+    "msg": "B: sees 3 players (2 others drawn)"
+  },
+  {
+    "ok": true,
+    "msg": "C: sees 3 players (2 others drawn)"
+  },
+  {
+    "ok": true,
+    "msg": "non-host does not see START MATCH"
+  },
+  {
+    "ok": true,
+    "msg": "A is hosting in the browser with 2 players connected directly ({\"upBytes\":6354,\"upRate\":32905,\"rateT\":632922.5,\"peers\":2})"
+  },
+  {
+    "ok": true,
+    "msg": "host's badge says HOSTING"
+  },
+  {
+    "ok": true,
+    "msg": "host upload is modest: 32.8 KB/s for 2 players"
+  },
+  {
+    "ok": true,
+    "msg": "invited player could set their name (Bob)"
+  },
+  {
+    "ok": true,
+    "msg": "A walked 3.82m over 45 sim steps (expected ~4.00m)"
+  },
+  {
+    "ok": true,
+    "msg": "B's view of A matches A (diff 0.000m)"
+  },
+  {
+    "ok": true,
+    "msg": "A's prediction never needed a hard snap (corrections: 1)"
+  },
+  {
+    "ok": true,
+    "msg": "B sees A crouching"
+  },
+  {
+    "ok": true,
+    "msg": "A smashes a bench: B's screen gets it too"
+  },
+  {
+    "ok": true,
+    "msg": "on B's screen it's gone and doesn't block either (same collision both sides)"
+  },
+  {
+    "ok": true,
+    "msg": "online: A has a spray can out, aimed at THE PIT's wall"
+  },
+  {
+    "ok": true,
+    "msg": "online: A tags THE PIT's wall ({\"look\":null,\"inv\":{\"hand\":\"\",\"pockets\":[\"i185\",\"\",\"\"],\"sel\":0,\"carryMul\":1},\"uses\":4,\"aim\":true,\"tags\":1,\"aura\":1})"
+  },
+  {
+    "ok": true,
+    "msg": "B sees A's tag"
+  },
+  {
+    "ok": true,
+    "msg": "A's aura went up"
+  },
+  {
+    "ok": true,
+    "msg": "A looks at a TV spawned in the online room"
+  },
+  {
+    "ok": true,
+    "msg": "B sees the TV in A's hands"
+  },
+  {
+    "ok": true,
+    "msg": "A drops the TV (hands empty before the race)"
+  },
+  {
+    "ok": true,
+    "msg": "A and C are both looking at the suitcase"
+  },
+  {
+    "ok": true,
+    "msg": "grab race: exactly one winner (A: got it, C: whiffed)"
+  },
+  {
+    "ok": true,
+    "msg": "the loser's hands are empty again (instant guess undone)"
+  },
+  {
+    "ok": true,
+    "msg": "a giant duck lands between A and C"
+  },
+  {
+    "ok": true,
+    "msg": "A drags the duck (alone)"
+  },
+  {
+    "ok": true,
+    "msg": "C grabs the other end: TUG OF WAR (mash meter)"
+  },
+  {
+    "ok": true,
+    "msg": "A sees the tug of war too"
+  },
+  {
+    "ok": true,
+    "msg": "C mashed harder and won the duck"
+  },
+  {
+    "ok": true,
+    "msg": "A lost their grip"
+  },
+  {
+    "ok": true,
+    "msg": "pedestrians + cashiers are synced to online players"
+  },
+  {
+    "ok": true,
+    "msg": "5A.1: one punch = 34 damage (C's health bar shows 66)"
+  },
+  {
+    "ok": true,
+    "msg": "C's HUD shows 66"
+  },
+  {
+    "ok": true,
+    "msg": "5A.1: every landed punch takes 34, the one that empties the bar knocks C down (100->66, 66->32, 32->0)"
+  },
+  {
+    "ok": true,
+    "msg": "C gets the knocked-down screen effect"
+  },
+  {
+    "ok": true,
+    "msg": "B sees C lying on the ground"
+  },
+  {
+    "ok": true,
+    "msg": "C is briefly immune after a knockdown (no spam-knocking)"
+  },
+  {
+    "ok": true,
+    "msg": "A can see C's heat (1 star) and that C is down"
+  },
+  {
+    "ok": true,
+    "msg": "standing over C: E for a citizen's arrest (bounty shown)"
+  },
+  {
+    "ok": true,
+    "msg": "the prompt names the bounty (\"E Citizen's arrest: SoggyGoblinhold them down for the cops: bounty $225 (taken o\")"
+  },
+  {
+    "ok": true,
+    "msg": "C is pinned down by A (C's screen knows)"
+  },
+  {
+    "ok": true,
+    "msg": "B sees C being held (the red and blue light)"
+  },
+  {
+    "ok": true,
+    "msg": "C mashed SPACE and wriggled free"
+  },
+  {
+    "ok": true,
+    "msg": "A lost their grip"
+  },
+  {
+    "ok": true,
+    "msg": "online: the host starts THE DROP, B's crusher bed rises too"
+  },
+  {
+    "ok": true,
+    "msg": "online: busted -> jail screen"
+  },
+  {
+    "ok": true,
+    "msg": "others see you in the cell"
+  },
+  {
+    "ok": true,
+    "msg": "online: the server accepted the lock-picking and let you out"
+  },
+  {
+    "ok": true,
+    "msg": "online: out in the back alley (at 73.0, -29.2; history [\"set\",\"set\",\"set\",\"set\",\"set\",\"solved\"])"
+  },
+  {
+    "ok": true,
+    "msg": "others see C as 'reconnecting' (seat held, not deleted)"
+  },
+  {
+    "ok": true,
+    "msg": "C reconnected automatically to the same seat"
+  },
+  {
+    "ok": true,
+    "msg": "C kept same identity after reconnect"
+  },
+  {
+    "ok": true,
+    "msg": "refreshed player got their old seat back"
+  },
+  {
+    "ok": true,
+    "msg": "still 3 players after refresh (no ghost duplicate)"
+  },
+  {
+    "ok": true,
+    "msg": "5th player gets friendly message: \"That room is full (4 bandits max).\""
+  },
+  {
+    "ok": true,
+    "msg": "bad code message: \"That room doesn't exist any more (the host may have closed their game). Check the code, or create a new room.\""
+  },
+  {
+    "ok": true,
+    "msg": "host START reaches everyone (round 1 intro)"
+  },
+  {
+    "ok": true,
+    "msg": "everyone sees the same round timer (329.7 vs 329.7)"
+  },
+  {
+    "ok": true,
+    "msg": "A banks a TV in their fort"
+  },
+  {
+    "ok": true,
+    "msg": "night falls for everyone"
+  },
+  {
+    "ok": true,
+    "msg": "B's city goes dark too"
+  },
+  {
+    "ok": true,
+    "msg": "B raids A's fort at night and takes the TV"
+  },
+  {
+    "ok": true,
+    "msg": "A's raid alarm goes off, naming the raider (\"BOB STOLE YOUR OLD CRT TV!\")"
+  },
+  {
+    "ok": true,
+    "msg": "A gets the red screen edge + the arrow home"
+  },
+  {
+    "ok": true,
+    "msg": "host returned to title"
+  },
+  {
+    "ok": true,
+    "msg": "players get a clear message when the host leaves: \"The host ended the game (the game runs in their browser). Create a room to host your own!\""
+  },
+  {
+    "ok": true,
+    "msg": "the closed room's code no longer works"
+  },
+  {
+    "ok": true,
+    "msg": "A: no JS errors"
+  },
+  {
+    "ok": true,
+    "msg": "B: no JS errors"
+  },
+  {
+    "ok": true,
+    "msg": "C: no JS errors"
+  },
+  {
+    "ok": true,
+    "msg": "D: no JS errors"
+  },
+  {
+    "ok": true,
+    "msg": "the new city loads (badge says NEW CITY)"
+  },
+  {
+    "ok": true,
+    "msg": "R10: cops and both cruisers out before the match starts (8 cops, 2 cars)"
+  },
+  {
+    "ok": true,
+    "msg": "the match starts in a fort down in the bowl"
+  },
+  {
+    "ok": true,
+    "msg": "run north out of the fort, up to Gahookz Ghetto Lane"
+  },
+  {
+    "ok": true,
+    "msg": "Little Italy and Chinatown are drawn (gates, lights, shopfronts)"
+  },
+  {
+    "ok": true,
+    "msg": "festa: event bar says \"FESTA IN LITTLE ITALY IN 10s\""
+  },
+  {
+    "ok": true,
+    "msg": "the festa rolls up Leftovers Avenue"
+  },
+  {
+    "ok": true,
+    "msg": "the festa float is drawn in the street"
+  },
+  {
+    "ok": true,
+    "msg": "the pawn shops' people are in (cold_cuts,fran,lou,meat_locker)"
+  },
+  {
+    "ok": true,
+    "msg": "two pawn shops in the new city"
+  },
+  {
+    "ok": true,
+    "msg": "HOT STUFF PAWN & LOAN: the owner mutters today's list (\"\"Psst. Today I want: Rubber Chicken, Cardboard Cutout of a Stranger, Old CRT TV.\")"
+  },
+  {
+    "ok": true,
+    "msg": "the till prompt: \"E Twitchy Lou wants today (x3): Rubber Chicken, Cardboard Cu\""
+  },
+  {
+    "ok": true,
+    "msg": "FINDERS KEEPERS PAWN: the owner mutters today's list (\"\"Hon, today I'm after: Cursed Sneakers, Golden Spork, Suspicious Snow Globe. Bri\")"
+  },
+  {
+    "ok": true,
+    "msg": "the till prompt: \"E Sticky Fran wants today (x3): Cursed Sneakers, Golden Spor\""
+  },
+  {
+    "ok": true,
+    "msg": "the station's front doors are there, shut"
+  },
+  {
+    "ok": true,
+    "msg": "door prompt: \"E Open the door\""
+  },
+  {
+    "ok": true,
+    "msg": "E opens it"
+  },
+  {
+    "ok": true,
+    "msg": "R9: open, it offers to close: \"E Close the door\""
+  },
+  {
+    "ok": true,
+    "msg": "R9: E shuts it again"
+  },
+  {
+    "ok": true,
+    "msg": "the grand station"
+  },
+  {
+    "ok": true,
+    "msg": "up the stairs to the first floor (y 4.80)"
+  },
+  {
+    "ok": true,
+    "msg": "the new station has a holding cell"
+  },
+  {
+    "ok": true,
+    "msg": "busted: in the holding cell"
+  },
+  {
+    "ok": true,
+    "msg": "the lockpick doesn't open straight away"
+  },
+  {
+    "ok": true,
+    "msg": "cell prompt: \" THE HOLDING CELL out in 29 s - or E at the cell door to pic\""
+  },
+  {
+    "ok": true,
+    "msg": "toilet prompt: \"E Flush the toileteveryone in the cell gets soaked and knock\""
+  },
+  {
+    "ok": true,
+    "msg": "flushing splashes dirty water over the screen"
+  },
+  {
+    "ok": true,
+    "msg": "released from the holding cell"
+  },
+  {
+    "ok": true,
+    "msg": "NEON FEVER DREAM is on Market Row"
+  },
+  {
+    "ok": true,
+    "msg": "the bouncer turns you back without the cover (74.4,7.1)"
+  },
+  {
+    "ok": true,
+    "msg": "the rope's prompt: \"E Pay the cover: $20a stamp on your hand\""
+  },
+  {
+    "ok": true,
+    "msg": "paid the $20 cover"
+  },
+  {
+    "ok": true,
+    "msg": "then you're in (78.3,11.0)"
+  },
+  {
+    "ok": true,
+    "msg": "inside: the B prompt says Dance"
+  },
+  {
+    "ok": true,
+    "msg": "up the stairs to floor 2 (y 6.11)"
+  },
+  {
+    "ok": true,
+    "msg": "into the east bay over the alley (103.0,6.30,17.5)"
+  },
+  {
+    "ok": true,
+    "msg": "DON BINNIE's boys keep you out at 7 aura (83.4,12.8)"
+  },
+  {
+    "ok": true,
+    "msg": "at 8 aura you walk into his lounge (83.4,10.0)"
+  },
+  {
+    "ok": true,
+    "msg": "up to the roof (y 13.50)"
+  },
+  {
+    "ok": true,
+    "msg": "B: dancing"
+  },
+  {
+    "ok": true,
+    "msg": "moving stops the dance"
+  },
+  {
+    "ok": true,
+    "msg": "the bar's prompt: \"E Order a mocktail: $8glowing, silly, to\""
+  },
+  {
+    "ok": true,
+    "msg": "a mocktail: dance energy"
+  },
+  {
+    "ok": true,
+    "msg": "the wing's door: \"E Open the door\""
+  },
+  {
+    "ok": true,
+    "msg": "E opens the restroom wing's door"
+  },
+  {
+    "ok": true,
+    "msg": "under the stairs: \"E Push the EXITout to the back alley (no\""
+  },
+  {
+    "ok": true,
+    "msg": "E pushes the EXIT open"
+  },
+  {
+    "ok": true,
+    "msg": "out into the back alley"
+  },
+  {
+    "ok": true,
+    "msg": "from the alley: \"EXIT ONLYit's open... but you can't get \""
+  },
+  {
+    "ok": true,
+    "msg": "SKETCHY STEVE's three goods on his crate"
+  },
+  {
+    "ok": true,
+    "msg": "Steve's prompt: \"E Buy ZOOMIES: $15glowing gummies: 20 s \""
+  },
+  {
+    "ok": true,
+    "msg": "bought ZOOMIES: it kicks in"
+  },
+  {
+    "ok": true,
+    "msg": "Steve's prompt: \"E Buy FLOATY FIZZ: $15fizzy and floaty: \""
+  },
+  {
+    "ok": true,
+    "msg": "bought FLOATY: it kicks in"
+  },
+  {
+    "ok": true,
+    "msg": "THE SOGGY SHAMROCK is in the new city"
+  },
+  {
+    "ok": true,
+    "msg": "walked in the front door (in the cut corner)"
+  },
+  {
+    "ok": true,
+    "msg": "outside the side door"
+  },
+  {
+    "ok": true,
+    "msg": "walked in the side door"
+  },
+  {
+    "ok": true,
+    "msg": "the tap's prompt: \"E A pint of GUZZLE'S: $6then split the G\""
+  },
+  {
+    "ok": true,
+    "msg": "a pint: the close-up's up (SPLIT THE G)"
+  },
+  {
+    "ok": true,
+    "msg": "a full pint, its own gulp rate (0.115, line at 0.86)"
+  },
+  {
+    "ok": true,
+    "msg": "gulping: the line's dropping (0.66)"
+  },
+  {
+    "ok": true,
+    "msg": "R12.4: the G faces you while you drink"
+  },
+  {
+    "ok": true,
+    "msg": "the verdict comes back"
+  },
+  {
+    "ok": true,
+    "msg": "R12.4: the head settles and the result's marked on the glass"
+  },
+  {
+    "ok": true,
+    "msg": "one pint in you (the sober-up timer's running)"
+  },
+  {
+    "ok": true,
+    "msg": "the session's loud in here (gain 0.48; audio running: true)"
+  },
+  {
+    "ok": true,
+    "msg": "Fergal, the two regulars, the four-piece band ({\"b\":1,\"r\":2,\"t\":4})"
+  },
+  {
+    "ok": true,
+    "msg": "walked up the stairs (y 4.60, the floor's at 4.8)"
+  },
+  {
+    "ok": true,
+    "msg": "upstairs (level 2)"
+  },
+  {
+    "ok": true,
+    "msg": "Róisín, Seamus O'Shortly and his 6 lads, Big Dessie, 12 drinkers, no Mammy, no céilí folk ({\"r\":1,\"s\":1,\"b\":6,\"d\":1,\"m\":0,\"p\":12})"
+  },
+  {
+    "ok": true,
+    "msg": "the island bar's tap: \"E A pint of GUZZLE'S: $6then split the G\""
+  },
+  {
+    "ok": true,
+    "msg": "a pint upstairs: the close-up's up"
+  },
+  {
+    "ok": true,
+    "msg": "split the G upstairs: the verdict comes back"
+  },
+  {
+    "ok": true,
+    "msg": "the jukebox's prompt: \"E Next tune on the Jukeboxnow playing \"Soggy Sunda\""
+  },
+  {
+    "ok": true,
+    "msg": "E: the next tune (0 -> 1; dance*,jukebox*)"
+  },
+  {
+    "ok": true,
+    "msg": "upstairs the jukebox is loud (0.67), the jig's through the floor (0.30; audio running: true)"
+  },
+  {
+    "ok": true,
+    "msg": "standing on oche 1 (-99.6, 4.80, 11.3)"
+  },
+  {
+    "ok": true,
+    "msg": "standing on oche 2 (-99.6, 4.80, 18.3)"
+  },
+  {
+    "ok": true,
+    "msg": "beside pool table 1 (-82.9, 27.9)"
+  },
+  {
+    "ok": true,
+    "msg": "beside pool table 2 (-77.9, 27.9)"
+  },
+  {
+    "ok": true,
+    "msg": "Seamus's prompt: \"E Have a word with Seamus O'Shortlyhe ru\""
+  },
+  {
+    "ok": true,
+    "msg": "a word with Seamus (he's after something, for a pot of gold)"
+  },
+  {
+    "ok": true,
+    "msg": "walked into a round booth, up to its table (x -76.8, the table at -76.0)"
+  },
+  {
+    "ok": true,
+    "msg": "standing on the balcony (y 4.80)"
+  },
+  {
+    "ok": true,
+    "msg": "no céilí prompt anywhere upstairs"
+  },
+  {
+    "ok": true,
+    "msg": "facing Big Dessie (punch target)"
+  },
+  {
+    "ok": true,
+    "msg": "the swarm's on (dance*,jukebox*,seamus*,lepSwarm*)"
+  },
+  {
+    "ok": true,
+    "msg": "the lads are round you (downstairs)"
+  },
+  {
+    "ok": true,
+    "msg": "the swarm ends (8 s)"
+  },
+  {
+    "ok": true,
+    "msg": "the oche is 2.37 m from the board's face, the bull 1.73 m up"
+  },
+  {
+    "ok": true,
+    "msg": "room for two shooters between the tables (3.76 m)"
+  },
+  {
+    "ok": true,
+    "msg": "the table's prompt: \"E Play Pool table 2pub 8-ball v HUGHIE or a mate · stakes $0\""
+  },
+  {
+    "ok": true,
+    "msg": "E: the table's menu (play HUGHIE / wait for a mate, a stake)"
+  },
+  {
+    "ok": true,
+    "msg": "1: a game of pool v HUGHIE (no stake unless you pick one)  [scavenge]"
+  },
+  {
+    "ok": true,
+    "msg": "the menu's closed"
+  },
+  {
+    "ok": true,
+    "msg": "crouched over the cue ball, behind it (camera 5.96 m up)"
+  },
+  {
+    "ok": true,
+    "msg": "took 3 shots through the controls"
+  },
+  {
+    "ok": true,
+    "msg": "the balls roll for everyone (a replay of the host's shot)"
+  },
+  {
+    "ok": true,
+    "msg": "the balls sit on the cloth (y 5.295)"
+  },
+  {
+    "ok": true,
+    "msg": "the table says what happened: \"ShiftyGremlin to play.\""
+  },
+  {
+    "ok": true,
+    "msg": "conceded: HUGHIE wins"
+  },
+  {
+    "ok": true,
+    "msg": "the table frees up after the result's been up a moment"
+  },
+  {
+    "ok": true,
+    "msg": "a game of 301 v BIG DINNY"
+  },
+  {
+    "ok": true,
+    "msg": "the ring sways gently (14.1 mm in 0.7 s)"
+  },
+  {
+    "ok": true,
+    "msg": "dart 1 lands"
+  },
+  {
+    "ok": true,
+    "msg": "dart 2 lands"
+  },
+  {
+    "ok": true,
+    "msg": "dart 3 lands"
+  },
+  {
+    "ok": true,
+    "msg": "aimed at the treble 20, scored T20 = 60 (the ring is where it lands)"
+  },
+  {
+    "ok": true,
+    "msg": "E / step back: normal controls again"
+  },
+  {
+    "ok": true,
+    "msg": "BIG DINNY's turn"
+  },
+  {
+    "ok": true,
+    "msg": "new city: no JS errors"
+  },
+  {
+    "ok": true,
+    "msg": "R12.5: losing focus mid-drink lets go of the drink"
+  },
+  {
+    "ok": true,
+    "msg": "R12.5: left mid-pint: no glass, panels or body classes left behind ({\"pintUp\":true,\"pint\":0,\"pg\":0,\"cls\":\"\",\"buffs\":0})"
+  },
+  {
+    "ok": true,
+    "msg": "both upstairs (Hana at table 1, Gus at oche 1)"
+  },
+  {
+    "ok": true,
+    "msg": "both games open (ok / ok)"
+  },
+  {
+    "ok": true,
+    "msg": "two games at once, and each window sees both"
+  },
+  {
+    "ok": true,
+    "msg": "Hana's window sees Gus at the oche (a spectator gets the real game)"
+  },
+  {
+    "ok": true,
+    "msg": "one game at a time (Hana can't open table 2 too)"
+  },
+  {
+    "ok": true,
+    "msg": "Gus's dart shows up in Hana's window"
+  },
+  {
+    "ok": true,
+    "msg": "a spectator's dart is refused"
+  },
+  {
+    "ok": true,
+    "msg": "Hana opens oche 2 for $10 (ok)"
+  },
+  {
+    "ok": true,
+    "msg": "Hana's waiting for a mate at oche 2 (Gus sees it)"
+  },
+  {
+    "ok": true,
+    "msg": "Gus joins: $10 each held"
+  },
+  {
+    "ok": true,
+    "msg": "both stakes taken once ([40,40])"
+  },
+  {
+    "ok": true,
+    "msg": "out of turn: refused"
+  },
+  {
+    "ok": true,
+    "msg": "after a reload Gus sees the game as it stands (the dart already thrown)"
+  },
+  {
+    "ok": true,
+    "msg": "his seat was held while he was gone"
+  },
+  {
+    "ok": true,
+    "msg": "a new cycle (the match starts): the game's called off"
+  },
+  {
+    "ok": true,
+    "msg": "stakes back before the match resets cash ([0,0])"
+  },
+  {
+    "ok": true,
+    "msg": "R12.3 A: no JS errors"
+  },
+  {
+    "ok": true,
+    "msg": "R12.3 B: no JS errors"
   }
 ]
