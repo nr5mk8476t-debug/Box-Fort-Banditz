@@ -9,6 +9,26 @@ pub outside, downstairs, upstairs pool and darts, the balcony, back out, then th
 On the test box: `CLIENT_URL=... OUT_DIR=... LABEL=... node tests/perf-route.mjs`; compare two runs with
 `node tests/perf-compare.mjs before.json after.json`.
 
+## The reference PC after R12.7 (build 01ce133, Blake's BENCHMARK, 2026-11-12)
+
+Same PC, browser, window (2560×1277) and settings as the runs below. Compared with R12.6 (005a42f): **the median frame
+went from 5.5 to 4.0 ms (−27%), the 99th from 11.5 to 8.4 ms, the 1% low from 78 to 104 FPS, and the worst frame from 36 to 22 ms.**
+Every stretch got faster. None had a frame over 50 ms.
+
+| Stretch | Median 005a42f → 01ce133 | Draws |
+|---|---|---|
+| Balcony, along the front (busiest) | 8.3 → 6.1 ms (164 FPS) | 1,595 → 1,105 |
+| Out of the pub window | 7.9 → 5.9 ms | 1,520 → 1,106 |
+| City street | 7.6 → 5.1 ms | 1,352 → 929 |
+| Pub from across the road | 6.7 → 5.4 ms | 1,272 → 1,101 |
+| Downstairs bar | 4.7 → 3.2 ms | 608 → 500 |
+| First approach (walk) | 5.9 → 3.8 ms | 1,004 → 708 |
+
+The render call is still almost the whole frame: about 4.4 µs a draw (1,105 draws ≈ 4.9 ms). The low 1% lows (83–98 FPS on
+the balcony front, the window and the walks; one-off 14–22 ms frames) are not draw counts. They line up with garbage
+collection: **about 80–100 MB a second of heap churn** (the first walk: 103 collections, 2.9 GB in 30 s). That is now the
+next target, ahead of the people's draws.
+
 ## The reference PC: Blake's, measured (R12.5b, build 04d267f)
 
 Brave on Windows, 2560×1277 (pixel ratio 1), full detail, solo, the BENCHMARK route. (The first run came out at
