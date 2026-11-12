@@ -560,7 +560,7 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 | Draw budget | 10 views | `tests/draw-budget.mjs` | | within (first run: darts 192 over 179, all of it people in the booth; re-run 175) |
 | Unit | | `npm test` | | 313 + 31, pass |
 | Smokes | signal, server | | | pass (the server smoke failed once on "pedestrians are walking around": one walker paused 1.5 s; passed twice after) |
-| Browser e2e | normal / 110 ms | e2e | | PENDING / PENDING |
+| Browser e2e | normal / 110 ms | e2e | | 438/438 / 439/439 (first pass: 3 checks still expected the old speeds (sprint, paddle, wade): updated; one 110 ms run lost 2 checks to the test servers restarting mid-run: re-run clean) |
 
 ## R12.8: one-draw outlines, the simulation's garbage, the frame-rate cap (2026-11-12)
 

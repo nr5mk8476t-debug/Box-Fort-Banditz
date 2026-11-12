@@ -12,7 +12,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const results = [];
 const ok = (cond, msg) => { results.push({ ok: !!cond, msg }); console.log(cond ? "  ok  " : " FAIL ", msg); };
 // Distance covered from standstill with the Phase 1 acceleration (20 m/s^2) up to top speed vmax
-const rampDist = (t, vmax, a = 48) => { const tr = vmax / a; return t < tr ? 0.5 * a * t * t : 0.5 * a * tr * tr + vmax * (t - tr); }; // (D1: groundAccel 48)
+const rampDist = (t, vmax, a = 55.2) => { const tr = vmax / a; return t < tr ? 0.5 * a * t * t : 0.5 * a * tr * tr + vmax * (t - tr); }; // (D1: groundAccel 48; R12.9: 55.2, the +15% speeds)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // (R12.2b: on a box whose preinstalled Chromium is newer than this Playwright's own, use that one)
@@ -126,7 +126,7 @@ try {
   await A.waitForFunction((n) => window.__bfb.info().stats.moveSteps >= n, st0 + 40, { timeout: 90000, polling: 250 }).catch(() => {});
   i = await info(A);
   await A.evaluate(() => window.__bfb.setAxes(null));
-  const soloSteps = i.stats.moveSteps - st0, soloMoved = i.pos.z - start.z, soloExp = rampDist(soloSteps / 60, 9.4);
+  const soloSteps = i.stats.moveSteps - st0, soloMoved = i.pos.z - start.z, soloExp = rampDist(soloSteps / 60, 10.81); // (R12.9: sprint +15%)
   console.log(`   [diag] solo fps ${i.fps}, lost to stalls ${i.stats.droppedMs.toFixed(0)}ms total`);
   ok(soloMoved > 0.3 && Math.abs(soloMoved - soloExp) < 0.6, `solo: sprinted ${soloMoved.toFixed(2)}m over ${soloSteps} sim steps (expected ~${soloExp.toFixed(2)}m)`);
   // ---- Phase 1 moves (solo) ----
@@ -470,7 +470,7 @@ try {
   await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
   const swim = await A.waitForFunction(() => { const m = window.__bfb.move(); const v = Math.hypot(m.vx, m.vz); return v > 0.5 ? v : false; }, null, { timeout: 20000 }).then((h) => h.jsonValue(), () => 0);
   await A.evaluate(() => window.__bfb.setAxes(null));
-  ok(swim > 0.5 && swim < 2.5, `paddling speed ${Number(swim).toFixed(1)} m/s (walking is 5)`);
+  ok(swim > 0.5 && swim < 2.9, `paddling speed ${Number(swim).toFixed(1)} m/s (walking is 6.7)`); // (R12.9: +15% with the walk)
   await hide();
   await shot(A, "53-in-the-canal.png");
   ok(await A.evaluate(() => window.__bfb.npcs().some((n) => n.kind === "doorman")), "the doorman is at the apartment tower");
@@ -737,7 +737,7 @@ try {
   // (measured a couple of metres in, once you've slowed down from walking)
   const wade = await A.waitForFunction(() => { const m = window.__bfb.move(); const wz = window.__bfb.landmarks().pondEdge.waterZ; return m.z > wz + 2.8 && m.z < wz + 5.5 && Math.hypot(m.vx, m.vz) > 0.5 ? Math.hypot(m.vx, m.vz) : false; }, null, { timeout: 60000 }).then((h) => h.jsonValue(), () => 0);
   await A.evaluate(() => window.__bfb.setAxes(null));
-  ok(wade > 0.5 && wade < 3, `wading through the pond: ${Number(wade).toFixed(1)} m/s (walking is 5)`);
+  ok(wade > 0.5 && wade < 3.5, `wading through the pond: ${Number(wade).toFixed(1)} m/s (walking is 6.7)`); // (R12.9: +15% with the walk)
 
   // ---- Phase 4: police + jail (solo) ----
   console.log("\n# Phase 4 police (solo)");
@@ -1035,7 +1035,7 @@ try {
   const bView = (await info(B)).players[aSid];
   // Wall-clock distance depends on this machine's CPU rendering speed, so instead check that
   // the distance matches the number of simulation steps actually run (5.2 m/s walking, minus ~0.1 s ramp-up).
-  const steps = s1.moveSteps - s0.moveSteps, moved = aNow.z - aStart.z, expected = rampDist(steps / 60, 5.8);
+  const steps = s1.moveSteps - s0.moveSteps, moved = aNow.z - aStart.z, expected = rampDist(steps / 60, 6.67); // (R12.9: walk +15%)
   ok(moved > 0.3 && Math.abs(moved - expected) < 0.8, `A walked ${moved.toFixed(2)}m over ${steps} sim steps (expected ~${expected.toFixed(2)}m)`);
   ok(Math.abs(bView.z - aNow.z) < 0.05, `B's view of A matches A (diff ${Math.abs(bView.z - aNow.z).toFixed(3)}m)`);
   const aStats = (await info(A)).stats;
