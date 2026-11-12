@@ -9,6 +9,27 @@ pub outside, downstairs, upstairs pool and darts, the balcony, back out, then th
 On the test box: `CLIENT_URL=... OUT_DIR=... LABEL=... node tests/perf-route.mjs`; compare two runs with
 `node tests/perf-compare.mjs before.json after.json`.
 
+## R13: the six stores' budget (measured on the test box, software rendering: relative numbers only)
+
+Baseline: the R12.9 build (7e18e2e) at 15 fixed cameras made from `shared/src/stores.ts` (`tests/store-views.json`:
+each store from across the street and from just inside its door, and each district from above), plus the 10 old views.
+`screenshots/r13_shops/draws-before.json` / `draws-after.json` hold both runs.
+
+| Budget | Limit | Measured (blockouts + NEEDLE DROP in full) |
+|---|---|---|
+| Any store view (draws) | the R12.9 count +15% (`tests/draw-budgets.json`: before x 1.15) | +3% to +8% (people excluded: they come and go by ±30 draws) |
+| District from above | +15% | low +5.5%, mid +7.6%, high +13.7% (high was only 197 draws: +27) |
+| Old views | within their budgets | crossroads +11% (four store doors in view), the rest under +10% |
+| Meshes added in any one view | 70 (about 0.5 ms on Blake's PC at ~7 µs each) | at most +69 (Maison Pong outside), mostly +20 to +50 |
+| Lights | 2 per store (one floor; LIGHT_BUDGET allows 4), each lighting only its store's inside; none in Performance mode | 2 each |
+| Pictures | one shared 2048 x 2048 sheet for every store: two materials (lit, glowing) | 2 draws outside for all six signs |
+| Interiors | each store's inside is an interior area: drawn within 34 m, hidden past 40 m | as set |
+| NPCs | +6 (the keepers: cashiers, standing still) | 6 |
+
+Where the meshes come from: each store's door (a glass door is ~7 small meshes: pane, frame, push bars), its till's
+alarm light, the display case's glass, and the inside's merged batches. The doors are the biggest single part: merging
+a door's static pieces (like R12.7 did for props) is the next saving if a view needs it.
+
 ## The reference PC after R12.8 (build 0248648, Blake's BENCHMARK, 2026-11-12): it's the MESHES, not the draws
 
 Same PC and settings. **Overall about the same as R12.7**: median 4.0 → 4.1 ms, 99th 8.4 → 8.2, 1% low 104 → 108 FPS,

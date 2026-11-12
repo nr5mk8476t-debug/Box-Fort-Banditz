@@ -2,6 +2,22 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R13 (in progress): six new stores, two per district (2026-11-12)
+
+- **Six stores on the new map**, each replacing one painted-on building, in mirrored pairs (nothing else in the city
+  moves): RUST BUCKET SALVAGE and PLUG & PRAY REPAIRS in The Yards, NEEDLE DROP RECORDS and PEAK FOMO OUTFITTERS in the
+  middle, MAISON PONG and BONBON VIVANT on Snob Row.
+- **What they do** (using the systems the game already has): a keeper behind the counter, a till you can hold up, real
+  stock on the shelves (taking it is shoplifting), the counter (E: sell the specialist what you're holding, or buy the
+  store's one thing: trail mix, a spritz that takes heat off, a sugar-rush truffle), a rummage spot once a day, a display
+  case you can smash. Snob Row's heat is double.
+- **NEEDLE DROP RECORDS is built in full** (record bins, the $1 bin, a sleeve wall, the decks on the counter, the golden
+  record in the case, the neon, the A-board). The other five are blockouts with their signs, lamps and one feature each,
+  waiting on Blake's review of NEEDLE DROP.
+- Each keeper has their own look. Pictures for all six come off one shared sheet; each store is an interior area with
+  two lamps.
+- Performance: every store view within the R12.9 count +15% (+3% to +8%); see `docs/perf-budget.md` (R13).
+
 ## R12.9: faster on your feet, and Blake's pub playtest list (2026-11-12)
 
 - **Movement +15%**: walk 5.8 → 6.67 m/s, sprint 9.4 → 10.8, crouch, slide and dodge with them, and getting going and

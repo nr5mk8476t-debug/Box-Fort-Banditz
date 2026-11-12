@@ -21,6 +21,15 @@ interface Look {
 
 /** C5c.3: "Honest" Sal at PAWN-O-RAMA (he's that shop's cashier) */
 const SAL_LOOK: Look = { body: "#8b5a2b", legs: "#3a3444", skin: "#f0c8a0", hat: "#5a4a3a", hatShape: "none", prop: "none", bulk: 1.3 };
+/** R13: the six store keepers (each store's cashier): colours, hair/hat and build only (no chest pieces) */
+const KEEPER_LOOKS: Record<string, Look> = {
+  rustbucket: { body: "#c8642a", legs: "#3a4a5a", skin: "#d9a07a", hat: "#3a3a3a", hatShape: "cap", prop: "none", bulk: 1.35 }, // RUSTY PETE: rust overalls
+  plugpray: { body: "#2fa4a0", legs: "#2b2433", skin: "#8a5a3a", hat: "#ffd54a", hatShape: "band", prop: "none", bulk: 0.95 }, // VOLTS VALENTINA
+  needledrop: { body: "#1b1420", legs: "#3a3444", skin: "#f0c8a0", hat: "#ff5fa8", hatShape: "beret", prop: "none", bulk: 0.9 }, // DEZ: all black, a pink beret
+  peakfomo: { body: "#e8902a", legs: "#5a6a3a", skin: "#f0b98a", hat: "#3a6a4a", hatShape: "sunhat", prop: "none", bulk: 1.1 }, // SUMMIT STEPH
+  maisonpong: { body: "#f4f1ea", legs: "#1b1420", skin: "#e8b48a", hat: "#1b1420", hatShape: "beret", prop: "none", bulk: 1.0 }, // MONSIEUR NEZ
+  bonbon: { body: "#ff8fb5", legs: "#7a1840", skin: "#f5c29a", hat: "#c2185b", hatShape: "scarf", prop: "none", bulk: 1.2 }, // MADAME GANACHE
+};
 const LOOKS: Record<string, Look> = {
   tourist: { body: "#ff9a3c", legs: "#e8d7a8", skin: "#f0b98a", hat: "#f3e2b8", hatShape: "sunhat", prop: "camera" },
   businessman: { body: "#5b6170", legs: "#3e4350", skin: "#e8a878", hat: "#2b2433", hatShape: "none", prop: "briefcase" },
@@ -176,6 +185,8 @@ export class NpcRenderer {
 
   /** C5c.3: where Sal stands behind PAWN-O-RAMA's counter (the cashier there is "Honest" Sal) */
   salAt: { x: number; z: number } | null = null;
+  /** R13: where each store's keeper stands (their cashier wears the store's look) */
+  keeperPosts: { id: string; x: number; z: number }[] = [];
   /** R12.1: the pub's posted people (which regular / musician is which; who sits) */
   pubPosts: { kind: string; x: number; z: number; v?: number; sit?: number }[] = [];
 
@@ -188,7 +199,8 @@ export class NpcRenderer {
       for (const q of this.pubPosts) { const d = Math.hypot(q.x - v.x, q.z - v.z); if (q.kind === v.kind && d < bd) { bd = d; best = q; } }
       pubV = { v: best?.v ?? 0, seat: best?.sit ?? 0 };
     }
-    const L = sal ? SAL_LOOK : (pubV && PUB_LOOKS[v.kind]?.[pubV.v]) || LOOKS[v.kind] || LOOKS.tourist;
+    const keeper = v.kind === "cashier" ? this.keeperPosts.find((q) => Math.hypot(v.x - q.x, v.z - q.z) < 3) : undefined;
+    const L = sal ? SAL_LOOK : keeper ? KEEPER_LOOKS[keeper.id] ?? LOOKS.cashier : (pubV && PUB_LOOKS[v.kind]?.[pubV.v]) || LOOKS[v.kind] || LOOKS.tourist;
     const bulk = L.bulk ?? 1;
     const root = new TransformNode("npc-" + id, sc);
     const pivot = new TransformNode("npcPivot", sc);
@@ -392,7 +404,7 @@ export class NpcRenderer {
       const tooth = part(MeshBuilder.CreateBox("goldtooth", { width: 0.04, height: 0.03, depth: 0.02 }, sc), "#ffd54a", head, 0); tooth.position.set(0.04, -0.08, 0.19);
       const loupe = part(MeshBuilder.CreateCylinder("loupe", { diameter: 0.06, height: 0.05, tessellation: 8 }, sc), "#3a3444", pivot, 0); loupe.rotation.x = Math.PI / 2; loupe.position.set(0.1, 1.05, 0.29 * bulk);
     }
-    if (v.kind === "cashier" && !sal) { const apron = part(MeshBuilder.CreateBox("apron", { width: 0.4, height: 0.5, depth: 0.04 }, sc), "#f4f1ea", pivot, 0); apron.position.set(0, 1.0, 0.27); const tag = part(MeshBuilder.CreateBox("nametag", { width: 0.1, height: 0.06, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); tag.position.set(0.1, 1.3, 0.28); }
+    if (v.kind === "cashier" && !sal && !keeper) { const apron = part(MeshBuilder.CreateBox("apron", { width: 0.4, height: 0.5, depth: 0.04 }, sc), "#f4f1ea", pivot, 0); apron.position.set(0, 1.0, 0.27); const tag = part(MeshBuilder.CreateBox("nametag", { width: 0.1, height: 0.06, depth: 0.03 }, sc), "#ffcf3a", pivot, 0); tag.position.set(0.1, 1.3, 0.28); }
     if (v.kind === "businessman") { const tie = part(MeshBuilder.CreateBox("tie", { width: 0.07, height: 0.32, depth: 0.03 }, sc), "#d62c2c", pivot, 0); tie.position.set(0, 1.18, 0.27); }
     if (v.kind === "mime") for (let i = 0; i < 3; i++) { const st = part(MeshBuilder.CreateTorus("stripe", { diameter: 0.56, thickness: 0.05, tessellation: 12 }, sc), "#1b1420", pivot, 0); st.position.y = 0.88 + i * 0.16; }
     if (v.kind === "barman") {

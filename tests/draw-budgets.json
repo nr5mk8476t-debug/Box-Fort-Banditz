@@ -8,5 +8,20 @@
  "darts": 179,
  "littleItaly": 955,
  "crossroads": 955,
- "uptown": 1054
+ "uptown": 1054,
+ "rustbucketOut": 501,
+ "rustbucketIn": 439,
+ "plugprayOut": 498,
+ "plugprayIn": 405,
+ "needledropOut": 740,
+ "needledropIn": 428,
+ "peakfomoOut": 762,
+ "peakfomoIn": 496,
+ "maisonpongOut": 1054,
+ "maisonpongIn": 1002,
+ "bonbonOut": 1321,
+ "bonbonIn": 1154,
+ "lowDistrict": 1188,
+ "medDistrict": 423,
+ "highDistrict": 227
 }

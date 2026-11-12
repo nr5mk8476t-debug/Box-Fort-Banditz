@@ -400,6 +400,7 @@ export class ArenaScene {
     this.npcs = new NpcRenderer(scene);
     this.npcs.hiddenFrom = (kind) => kind === "wee_mickey" && this.camInPub; // (R12.6b)
     { const ps = arena.pawnShop, sh = ps ? arena.shops?.find((x) => x.id === ps.shop) : undefined; if (sh) this.npcs.salAt = { x: sh.cashier.x, z: sh.cashier.z }; } // (C5c.3)
+    this.npcs.keeperPosts = (arena.stores ?? []).map((s) => ({ id: s.id, x: s.keeper.x, z: s.keeper.z })); // (R13)
     this.events = new EventRenderer(scene);
     if (this.arena.chinatown) this.dragon = new DragonRenderer(scene, this.arena.chinatown.route, { n: PARADE.segments, gap: PARADE.gap });
     if (this.arena.littleItaly) this.festa = new FestaRenderer(scene, this.arena.littleItaly.route, { gap: FESTA.gap, segments: FESTA.segments });

@@ -7,11 +7,12 @@ import {
   type ShadowGenerator, type CellMaterial,
 } from "./babylon.ts";
 import { toon, ink, bakeGroup, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
-import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, type ArenaLayout, type Box, type Rect } from "@bfb/shared";
+import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, storeById, storeFrame, STORE_SHELLS, type ArenaLayout, type Box, type Rect, type StoreDef } from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
 import { areaZone, areaGroupId, floorVisible, checkAreaLights, LIGHT_BUDGET, type InteriorArea } from "./areas.ts";
 import { drawDartboard, drawChalkDoor, drawCloth, drawHouseRules, drawLeaguePhoto, notice, wornFloor } from "./pubGames.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
+import { dressStore, drawStoreSheet, STORE_OWN_FIXTURES, sheetUV, storeArea, storeGroup, STORE_SHEET_SIZE, type StoreKit } from "./storeDressing.ts";
 
 
 const KIND_COLOR: Partial<Record<Box["kind"], string>> = {
@@ -473,9 +474,15 @@ export class CityRenderer {
    *  floor over the cut corner has its middle inside the pub's footprint: it was put in an upstairs room and vanished
    *  from the others) */
   private outsideOnly = false;
+  /** R13: the stores' interior areas (storeDressing.ts) */
+  private storeAreas: { def: StoreDef; area: InteriorArea; base: number }[] = [];
+  /** R13: is this shelf or counter in a store whose own dressing does its shelves and counter? */
+  private storeDressed(b: Box) { return this.storeAreas.some((st) => STORE_OWN_FIXTURES.has(st.def.id) && inRectXZ(st.area.rect, b.x, b.z)); }
   private intoGroup(m: Mesh, g: number) { (this.unitMeshes.get(g) ?? this.unitMeshes.set(g, []).get(g)!).push(m); m.setEnabled(false); this.unitOn.set(g, false); }
   private groupOfBox(b: Box): number {
     if (b.unit !== undefined) return b.unit;
+    // (R13: a store's floor, counter and shelves: with its inside; its walls, frontage and roof stay with the street)
+    if (this.storeAreas.length && (b.kind === "shopfloor" || b.kind === "counter" || b.kind === "shelf")) for (const st of this.storeAreas) if (inRectXZ(st.area.rect, b.x, b.z)) return areaGroupId(st.base, 0);
     for (const g of this.extraGroups) {
       if (g.noBoxes) continue;
       const r = g.rect;
@@ -530,6 +537,13 @@ export class CityRenderer {
       }
       if (arena.fever) { const f = arena.fever, r = ins(f.rect, 0.6), cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2; this.extraGroups.push({ id: 9201, x: cx, z: cz, rect: r, y0: -1, y1: f.y2 - 0.2, dist: 100 }, { id: 9202, x: cx, z: cz, rect: r, y0: f.y2 - 0.2, y1: f.roofY - 0.2, dist: 100 }); } // (R11: NEON FEVER DREAM's floors)
       for (const h of arena.hotShops ?? []) this.extraGroups.push({ id: 9101 + h.idx, x: (h.rect.minX + h.rect.maxX) / 2, z: (h.rect.minZ + h.rect.maxZ) / 2, rect: ins(h.rect, 0.35), y0: 0, y1: 4.3, dist: 60 });
+      // (R13: the six stores: each an interior area (storeDressing.storeArea); the shell's floor, counter and shelves go in it)
+      (arena.stores ?? []).forEach((s, i) => {
+        const def = storeById(s.id); if (!def) return;
+        const a = storeArea(def), cx = (a.rect.minX + a.rect.maxX) / 2, cz = (a.rect.minZ + a.rect.maxZ) / 2;
+        this.storeAreas.push({ def, area: a, base: storeGroup(i) });
+        this.extraGroups.push({ id: areaGroupId(storeGroup(i), 0), x: cx, z: cz, rect: a.rect, y0: -1, y1: a.floors[0].y1, noBoxes: true, vis: (x, y, z, was) => floorVisible(a, 0, x, y, z, was) });
+      });
     }
     for (let bi = 0; bi < arena.boxes.length; bi++) {
       const b = arena.boxes[bi];
@@ -610,6 +624,7 @@ export class CityRenderer {
     this.buildFever();
     this.buildPawnShop();
     if (arena.hotShops?.length) { this.buildPawnShops(); this.buildStationUpper(); } // (R7: the new city's two pawn shops, the grand station)
+    this.buildStores(); // (R13)
     this.planes.windows.push(...windowPlanes);
     const planeMat = (name: string, tex: Texture, zo: number) => {
       const m = new StandardMaterial(name, scene);
@@ -760,7 +775,7 @@ export class CityRenderer {
   setBroken(propId: string, broken: boolean) {
     if (this.brkBroken.has(propId) === broken) return;
     if (broken) this.brkBroken.add(propId); else this.brkBroken.delete(propId);
-    this.glassOf.get(propId)?.setEnabled(!broken);
+    { const g = this.glassOf.get(propId); if (g) g.isVisible = !broken; } // (R13: not setEnabled: a store's case glass is also switched with its store's inside)
     const touched = new Set<Mesh>();
     for (const r of this.brkRanges.get(propId) ?? []) {
       const st = this.brkPos.get(r.mesh);
@@ -1406,7 +1421,7 @@ export class CityRenderer {
       const band = MeshBuilder.CreateBox("lobby", { width: b.w + 0.1, height: 4, depth: b.d + 0.1 }, sc);
       band.position.set(b.x, 2.15, b.z);
       this.add(band, tierAt(b.z) === 2 ? "#d8d0c4" : "#3a3444", 0.05); // (C2: polished stone base Uptown)
-    } else if (b.kind === "shelf" && !b.deco) { // (C5c.3: dressed-up shelves (guitars, trophies, the back bar, lockers) get their own things)
+    } else if (b.kind === "shelf" && !b.deco && !this.storeDressed(b)) { // (C5c.3: dressed-up shelves (guitars, trophies, the back bar, lockers) get their own things)
       // products on three shelf levels
       const long = b.d > b.w;
       const len = long ? b.d : b.w;
@@ -1430,7 +1445,7 @@ export class CityRenderer {
       const glass = MeshBuilder.CreateBox("fridgeglass", { width: b.w > b.d ? b.w - 0.3 : b.w + 0.04, height: b.h - 0.5, depth: b.w > b.d ? b.d + 0.04 : b.d - 0.3 }, sc);
       glass.position.set(b.x, b.y + 0.1, b.z);
       this.add(glass, "#9fe3ff", 0.01);
-    } else if (b.kind === "counter") {
+    } else if (b.kind === "counter" && !this.storeDressed(b)) {
       const topSlab = MeshBuilder.CreateBox("countertop", { width: b.w + 0.2, height: 0.06, depth: b.d + 0.2 }, sc);
       topSlab.position.set(b.x, top + 0.03, b.z);
       this.add(topSlab, "#e8e2d4", 0.02);
@@ -5990,6 +6005,54 @@ export class CityRenderer {
   // =================================================================================================
   private neon: { mats: StandardMaterial[]; base: Color3[]; seed: number }[] = [];
   private stationLights: { red: StandardMaterial; blue: StandardMaterial } | null = null;
+  /** R13: the six stores' dressing (storeDressing.ts), through a kit in each store's own frame. Plain pieces merge with
+   *  the city (inside: into the store's group); pictures come off one shared sheet (two materials); the lamps light only
+   *  the store's inside */
+  private buildStores() {
+    if (!this.storeAreas.length) return;
+    const sc = this.scene, MB = MeshBuilder;
+    const tex = new DynamicTexture("storeSheet", { width: STORE_SHEET_SIZE, height: STORE_SHEET_SIZE }, sc, true);
+    drawStoreSheet(tex.getContext() as unknown as CanvasRenderingContext2D); tex.hasAlpha = true; tex.update();
+    const litMat = new StandardMaterial("storeSheetLit", sc); litMat.diffuseTexture = tex; litMat.emissiveColor = new Color3(0.42, 0.42, 0.42); litMat.specularColor = new Color3(0.06, 0.06, 0.06); litMat.backFaceCulling = false; litMat.zOffset = -2; litMat.zOffsetUnits = -4;
+    const glowMat = new StandardMaterial("storeSheetGlow", sc); glowMat.diffuseTexture = tex; glowMat.emissiveTexture = tex; glowMat.disableLighting = true; glowMat.backFaceCulling = false; glowMat.zOffset = -2; glowMat.zOffsetUnits = -4;
+    const bulbMat = new Map<string, StandardMaterial>();
+    const pics = new Map<string, { mat: StandardMaterial; grp: number; list: Mesh[] }>();
+    const keep = (m: Mesh, mat: StandardMaterial) => { m.isPickable = false; const grp = this.zoneOf(m), key = mat.uniqueId + "|" + grp; (pics.get(key) ?? pics.set(key, { mat, grp, list: [] }).get(key)!).list.push(m); };
+    const gm = this.counterGlassMat ?? (() => { const m = new StandardMaterial("counterGlass", sc); m.diffuseColor = Color3.FromHexString("#bfe8ff"); m.emissiveColor = Color3.FromHexString("#2a5a70"); m.specularColor = Color3.FromHexString("#ffffff"); m.alpha = 0.25; m.backFaceCulling = false; return (this.counterGlassMat = m); })();
+    for (const { def, area, base } of this.storeAreas) {
+      const f = storeFrame(def), o = f.at(0, 0), a1 = f.at(1, 0), rx = a1.x - o.x, rz = a1.z - o.z, TH = Math.atan2(-rz, rx);
+      const W = (u: number, v: number) => f.at(u, v);
+      let seed = 7 + def.id.length * 131;
+      this.group = -1; this.brk = "";
+      this.pubZone = (m) => { m.computeWorldMatrix(true); const c = m.getBoundingInfo().boundingBox.centerWorld; return areaZone(area, base, c.x, c.y, c.z); };
+      const place = (m: Mesh, u: number, v: number, y: number) => { const p = W(u, v); m.position.set(p.x, y, p.z); };
+      const kit: StoreKit = {
+        s: def, W: f.W, D: f.D, H: STORE_SHELLS[def.id].H, T: 0.3,
+        box: (u0, u1, v0, v1, y0, y1, col, oo = 0.012) => { const r = f.rect(u0, u1, v0, v1); const m = MB.CreateBox("stb", { width: r.maxX - r.minX, height: y1 - y0, depth: r.maxZ - r.minZ }, sc); m.position.set((r.minX + r.maxX) / 2, (y0 + y1) / 2, (r.minZ + r.maxZ) / 2); this.add(m, col, oo, false); },
+        B: (u, v, y, wu, h, wv, col, oo = 0.012, yaw = 0, pitch = 0, roll = 0) => { const m = MB.CreateBox("stB", { width: wu, height: h, depth: wv }, sc); place(m, u, v, y); m.rotation.set(pitch, TH + yaw, roll); this.add(m, col, oo, false); },
+        cyl: (u, v, y, d, h, col, oo = 0.01, t = 12, axis = "y", top) => { const m = MB.CreateCylinder("stc", { diameter: d, diameterTop: top ?? d, height: h, tessellation: t }, sc); place(m, u, v, y); m.rotation.set(axis === "v" ? Math.PI / 2 : 0, TH, axis === "u" ? Math.PI / 2 : 0); this.add(m, col, oo, false); },
+        ball: (u, v, y, d, col, oo = 0.006, seg = 4) => { const m = MB.CreateSphere("sts", { diameter: d, segments: sphereSegs(d, seg) }, sc); place(m, u, v, y); this.add(m, col, oo, false); },
+        skin: (u0, u1, v0, v1, y0, y1, skin, col, oo = 0) => { const r = f.rect(u0, u1, v0, v1); const m = MB.CreateBox("stk", { width: r.maxX - r.minX, height: y1 - y0, depth: r.maxZ - r.minZ }, sc); m.position.set((r.minX + r.maxX) / 2, (y0 + y1) / 2, (r.minZ + r.maxZ) / 2); this.skinPush(m, skin, col, oo); },
+        bulb: (u, v, y, d, col) => { let mt = bulbMat.get(col); if (!mt) { mt = new StandardMaterial("storeBulb" + col, sc); mt.disableLighting = true; mt.emissiveColor = Color3.FromHexString(col); bulbMat.set(col, mt); } const m = MB.CreateSphere("stl", { diameter: d, segments: 3 }, sc); place(m, u, v, y); keep(m, mt); },
+        pic: (cell, u, v, y, w, h, n, glow = false, sub) => {
+          const p = MB.CreatePlane("stp", { width: w, height: h }, sc); place(p, u, v, y);
+          const nx = rx * n[0] - rz * n[1], nz = rz * n[0] + rx * n[1]; // (the frame's v axis is (-rz, rx))
+          p.rotation.y = Math.atan2(-nx, -nz);
+          const [u0, v0, u1, v1] = sheetUV(cell, sub), uv = p.getVerticesData(VertexBuffer.UVKind);
+          if (uv) { for (let q = 0; q < uv.length; q += 2) { uv[q] = u0 + uv[q] * (u1 - u0); uv[q + 1] = v0 + uv[q + 1] * (v1 - v0); } p.setVerticesData(VertexBuffer.UVKind, uv); }
+          keep(p, glow ? glowMat : litMat);
+        },
+        outside: (fn) => { const was = this.outsideOnly; this.outsideOnly = true; try { fn(); } finally { this.outsideOnly = was; } },
+        breakable: (id, fn) => { const was = this.brk; this.brk = id; try { fn(); } finally { this.brk = was; } },
+        glassBox: (u0, u1, v0, v1, y0, y1) => { const r = f.rect(u0, u1, v0, v1); const g = MB.CreateBox("storeCaseGlass", { width: r.maxX - r.minX, height: y1 - y0, depth: r.maxZ - r.minZ }, sc); g.position.set((r.minX + r.maxX) / 2, (y0 + y1) / 2, (r.minZ + r.maxZ) / 2); g.material = gm; g.parent = this.root; g.isPickable = false; g.alphaIndex = 2; if (this.brk) this.glassOf.set(this.brk, g); this.intoGroup(g, areaGroupId(base, 0)); },
+        rnd: () => ((seed = (seed * 16807) % 2147483647) / 2147483647),
+      };
+      try { dressStore(kit); } finally { this.pubZone = null; this.brk = ""; }
+    }
+    for (const { mat, grp, list } of pics.values()) for (let i = 0; i < list.length; i += 500) { const m = Mesh.MergeMeshes(list.slice(i, i + 500), true, true); if (m) { m.material = mat; m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix(); if (grp >= 0) this.intoGroup(m, grp); } }
+    this.flushSkins(); this.flush();
+    for (const { area, base } of this.storeAreas) this.areaLights(area, base);
+  }
   private buildPawnShops() {
     const sc = this.scene, MB = MeshBuilder, L = HOT_PLOT, H = 4.4;
     for (const hs of this.arena.hotShops ?? []) {

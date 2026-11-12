@@ -35,6 +35,8 @@ export const STORES: StoreDef[] = [
   { id: "bonbon", name: "BONBON VIVANT", tier: 2, plot: { minX: 32.24, maxX: 42.39, minZ: 53.5, maxZ: 65.5 }, face: [0, 1], replaces: ["CAVIAR EXPRESS"] },
 ];
 
+/** the stores' floor level (the pavement under them is 0.15 m up) */
+export const STORE_FLOOR = 0.18;
 export const storeById = (id: string): StoreDef | undefined => STORES.find((s) => s.id === id);
 
 /** A store's frame: frontage width W, depth D, and local -> world. */
@@ -137,7 +139,7 @@ export function storeShell(s: StoreDef): StoreShellOut {
   const { W, D } = f, H = sp.H, gTop = sp.glassTop ?? 2.9, DH = 2.6;
   const wall = (u0: number, u1: number, v0: number, v1: number, h: number, y0 = 0) => { if (u1 - u0 > 0.01 && v1 - v0 > 0.01 && h > 0.01) out.push(f.box(u0, u1, v0, v1, h, "wall", y0, { color: sp.wall })); };
   // the floor, the roof, the back and the sides
-  out.push(f.box(T, W - T, T, D - T, 0.03, "shopfloor", 0, { color: sp.floor }));
+  out.push(f.box(T, W - T, T, D - T, STORE_FLOOR, "shopfloor", 0, { color: sp.floor })); // (its top just above the pavement it stands on)
   out.push(f.box(-0.15, W + 0.15, -0.15, D + 0.15, 0.3, "roof", H, { color: sp.roof }));
   wall(0, W, D - T, D, H); wall(0, T, T, D - T, H); wall(W - T, W, T, D - T, H);
   // the frontage
