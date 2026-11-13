@@ -21,7 +21,7 @@ export function storeArea(s: StoreDef): InteriorArea {
   const L = (name: string, u: number, v: number, y: number, color: string, range: number, intensity: number): AreaLight => { const p = f.at(u, v); return { name: "store-" + s.id + "-" + name, x: p.x, y, z: p.z, color, range, intensity, floor: 0 }; };
   const lamp = Math.min(H - 0.8, 3.6);
   const lights: Record<StoreId, AreaLight[]> = {
-    rustbucket: [L("bulb", W * 0.3, D * 0.55, lamp, "#ffd8a0", 10, 0.8), L("bay", W * 0.78, D * 0.5, lamp, "#ffe8c0", 10, 0.72)],
+    rustbucket: [L("bulb", W * 0.3, D * 0.6, lamp, "#ffcf90", 9, 0.85), L("bay", W * 0.78, D * 0.45, lamp, "#e4eeff", 11, 0.9)], // (R13b: a warm bulb over the counter, a cold strip light in the workshop)
     plugpray: [L("tube", W * 0.5, D * 0.45, lamp, "#e8f4ff", 12, 0.87), L("bench", W * 0.5, D * 0.8, lamp, "#ffe0b0", 8, 0.65)],
     needledrop: [L("bins", W * 0.5, D * 0.42, lamp, "#ffcc88", 11, 0.87), L("counter", W * 0.5, D * 0.8, lamp, "#ff9ad0", 8, 0.58)],
     peakfomo: [L("lodge", W * 0.35, D * 0.5, lamp, "#ffd8a0", 11, 0.87), L("till", W * 0.8, D * 0.6, lamp, "#ffe8c0", 8, 0.65)],
@@ -161,6 +161,14 @@ const CELLS: Record<string, Cell> = {
     c.save(); c.translate(w / 2, h / 2); c.rotate(-Math.PI / 2); centered(c, "TRASH BLASTER", 0, 0, h * 0.85, 56, CHUNK, "#f4f1ea", "#1b1420", 8); c.restore(); } },
   summit: { w: 256, h: 128, draw: (c, w, h) => { c.fillStyle = "#e8463a"; c.beginPath(); c.moveTo(0, 0); c.lineTo(w, h / 2); c.lineTo(0, h); c.fill(); centered(c, "SUMMIT", w * 0.38, h / 2, w * 0.6, 40, CHUNK, "#f4f1ea"); } },
   stripes: { w: 256, h: 256, draw: (c, w, h) => { for (let x = 0; x < w; x += 32) { c.fillStyle = (x / 32) % 2 ? "#ffd6e2" : "#fff4f8"; c.fillRect(x, 0, 32, h); } c.fillStyle = "#e85a8a"; for (let x = 0; x < w; x += 64) for (let y = 16; y < h; y += 64) { c.beginPath(); c.arc(x + 16, y, 4, 0, 6.3); c.fill(); } } },
+  rustBand: { w: 1024, h: 128, draw: (c, w, h) => { c.fillStyle = "#e8dcc0"; c.globalAlpha = 0.85; centered(c, "SCRAP · SALVAGE · SURPRISES", w / 2, h / 2, w * 0.94, 70, CHUNK, "#f0e4c8"); c.globalAlpha = 1; } },
+  rustSide: { w: 1024, h: 256, draw: (c, w, h) => { centered(c, "RUST BUCKET", w / 2, h * 0.4, w * 0.94, 150, CHUNK, "#f4e8d0", "#3a2010", 10); centered(c, "WE BUY · WE SELL · WE WELD", w / 2, h * 0.85, w * 0.8, 44, CHUNK, "#ffd54a"); } },
+  rustBins: { w: 512, h: 64, draw: (c, w, h) => { ["BOLTS", "TAPS", "KNOBS", "MYSTERY"].forEach((t, i) => { c.fillStyle = "#f4ecd8"; c.fillRect(i * 128 + 6, 6, 116, h - 12); centered(c, t, i * 128 + 64, h / 2, 104, 30, ROUND, "#2a1a10"); }); } },
+  rustTag: { w: 256, h: 192, draw: (c, w, h) => { c.fillStyle = "#ffd54a"; c.fillRect(0, 0, w, h); c.fillStyle = "#1b1420"; c.font = `bold 30px ${ROUND}`; c.textAlign = "left"; c.textBaseline = "top"; ["JOB #0001", "WAITING ON PARTS", "SINCE 2019", "- PETE"].forEach((t, i) => c.fillText(t, 14, 12 + i * 44)); } },
+  rustChicken: { w: 512, h: 256, draw: (c, w, h) => { c.fillStyle = "#e8dcc0"; c.fillRect(0, 0, w, h); c.strokeStyle = "#5a3a20"; c.lineWidth = 8; c.strokeRect(4, 4, w - 8, h - 8); c.fillStyle = "#2a1a10"; c.font = `bold 40px ${ROUND}`; c.textAlign = "center"; c.textBaseline = "middle"; ["CLUCKZILLA", "FROM THE OLD DRIVE-IN", "NOT FOR SALE", "(MAKE AN OFFER)"].forEach((t, i) => c.fillText(t, w / 2, 40 + i * 58)); } },
+  rustOpen: { w: 256, h: 128, draw: (c, w, h) => { c.clearRect(0, 0, w, h); c.font = `bold 64px ${ROUND}`; c.textAlign = "center"; c.textBaseline = "middle"; for (const [lw, a] of [[16, 0.3], [5, 1]] as const) { c.globalAlpha = a; c.lineWidth = lw; c.strokeStyle = "#ff7a1a"; c.strokeText("OPEN-ISH", w / 2, h / 2); } c.globalAlpha = 1; } },
+  rustSkip: { w: 512, h: 128, draw: (c, w, h) => { c.fillStyle = "#1b1420"; c.fillRect(0, 0, w, h); centered(c, "RUMMAGE SKIP", w / 2, h * 0.36, w * 0.9, 52, CHUNK, "#ffd54a"); centered(c, "DIG (E) · ONCE A DAY · NO REFUNDS", w / 2, h * 0.78, w * 0.9, 26, CHUNK, "#f4f1ea"); } },
+  rustFind: { w: 256, h: 128, draw: (c, w, h) => { c.fillStyle = "#f4ecd8"; c.fillRect(0, 0, w, h); c.fillStyle = "#c83a2a"; c.font = `bold 34px ${ROUND}`; c.textAlign = "center"; c.fillText("FIND OF THE", w / 2, 44); c.fillText("WEEK!", w / 2, 92); } },
   // ---- the others' hero pictures (the blockout: one each)
   screens: { w: 512, h: 128, draw: (c, w, h) => {
     const r = seeded(9), s = h;
@@ -259,12 +267,12 @@ export function dressStore(k: StoreKit) {
 function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
   const sp = STORE_SHELLS[k.s.id], W = k.W, gTop = sp.glassTop ?? 2.9;
   const sign: Record<StoreId, SheetCell> = { rustbucket: "signRust", plugpray: "signPlug", needledrop: "signNeedle", peakfomo: "signPeak", maisonpong: "signMaison", bonbon: "signBonbon" };
-  const sw = Math.min(W - 1.0, 8.4), sh = sw * 176 / 1024;
+  const span = FASCIA_SPAN[k.s.id] ?? [0.5, W - 0.5], sw = Math.min(span[1] - span[0], 8.4), sh = sw * 176 / 1024, sc = (span[0] + span[1]) / 2;
   const fasciaY = Math.min(sp.H - 0.2 - sh / 2, gTop + 0.3 + sh / 2 + (k.s.id === "bonbon" ? 0.55 : 0));
   k.outside(() => {
     // the fascia board and its sign (2 cm proud of the board, the board 12 cm proud of the wall)
-    k.box(W / 2 - sw / 2 - 0.12, W / 2 + sw / 2 + 0.12, -0.14, 0, fasciaY - sh / 2 - 0.1, fasciaY + sh / 2 + 0.1, "#1b1420", 0.012);
-    k.pic(sign[k.s.id], W / 2, -0.165, fasciaY, sw, sh, [0, -1]);
+    k.box(sc - sw / 2 - 0.12, sc + sw / 2 + 0.12, -0.14, 0, fasciaY - sh / 2 - 0.1, fasciaY + sh / 2 + 0.1, "#1b1420", 0.012);
+    k.pic(sign[k.s.id], sc, -0.165, fasciaY, sw, sh, [0, -1]);
   });
   roofs(k);
   // the display case: a base, a glass top, the goods inside (the goods are the store's own: see each store)
@@ -284,6 +292,8 @@ function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
     k.bulb(p.u, p.v, L.y - 0.02, 0.14, L.color);
   }
 }
+/** R13b: where a store's fascia sits along its frontage (default: across it) */
+const FASCIA_SPAN: Partial<Record<StoreId, [number, number]>> = { rustbucket: [0.3, 5.4] };
 /** world (x, z) back to the store's (u, v) */
 function local(k: StoreKit, x: number, z: number) {
   const f = storeFrame(k.s), o = f.at(0, 0), a = f.at(1, 0), b = f.at(0, 1);
@@ -305,44 +315,109 @@ function goods(k: StoreKit, u0: number, u1: number, v: number, y: number, n: num
 }
 
 function rustbucket(k: StoreKit) {
-  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, RUST = "#a85a2a", STEEL = "#8a8e98", DARK = "#2a2830";
-  k.skin(T, W - T, T, D - T, F, F + 0.012, "concrete", "#5a564e", 0); // (oil-stained concrete)
-  for (let q = 0; q < 6; q++) k.cyl(1 + k.rnd() * (W - 2), 1.2 + k.rnd() * (D - 2.4), F + 0.016, 0.6 + k.rnd() * 0.8, 0.004, "#3a3632", 0, 12); // (oil stains)
-  // THE CAR ON BLOCKS (the centrepiece, in the yard bay): a rusty hatchback, no wheels, the bonnet up, one door a different colour
-  { const cu = 7.55, cv = 2.2, y0 = F + 0.5;
-    for (const [du, dv] of [[-0.95, -0.7], [0.95, -0.7], [-0.95, 0.7], [0.95, 0.7]]) k.box(cu + du - 0.2, cu + du + 0.2, cv + dv - 0.2, cv + dv + 0.2, F, y0, "#9a9a9a", 0.01); // (breeze blocks)
-    k.B(cu, cv, y0 + 0.35, 2.6, 0.7, 1.9, RUST, 0.02); k.B(cu + 0.15, cv, y0 + 0.95, 1.4, 0.55, 1.75, "#c8743a", 0.02);
-    k.B(cu + 0.15, cv - 0.88, y0 + 0.95, 1.2, 0.4, 0.03, "#7fb4c8", 0.004); k.B(cu + 0.15, cv + 0.88, y0 + 0.95, 1.2, 0.4, 0.03, "#7fb4c8", 0.004);
-    k.B(cu + 0.4, cv - 0.96, y0 + 0.35, 1.0, 0.62, 0.04, "#3a6a9a", 0.008); // (the odd door)
-    k.B(cu - 1.15, cv, y0 + 0.95, 0.9, 0.05, 1.7, RUST, 0.01, 0, 0, -1.1); // (the bonnet, up)
-    k.B(cu - 0.95, cv, y0 + 0.55, 0.6, 0.35, 0.9, "#3a3a3a", 0.01); // (the engine)
-    for (const dv of [-0.65, 0.65]) k.cyl(cu - 1.31, cv + dv, y0 + 0.45, 0.22, 0.04, "#f4e2b8", 0, 10, "u");
-    for (let i = 0; i < 4; i++) k.cyl(W - T - 0.25, 1.4 + i * 0.75, F + 0.38, 0.75, 0.24, "#1b1a1e", 0.012, 14, "u"); // (its wheels, leaning on the wall)
-  }
-  // the yard: tyre stacks and an oil drum along the right wall; the scrap heap (the rummage spot)
-  for (let i = 0; i < 4; i++) k.cyl(8.8, 4.6, F + 0.13 + i * 0.26, 0.8, 0.26, "#1b1a1e", 0.012, 14);
-  for (let i = 0; i < 3; i++) k.cyl(8.8, 7.1, F + 0.13 + i * 0.26, 0.8, 0.26, "#1b1a1e", 0.012, 14);
-  k.cyl(8.85, 8.1, F + 0.45, 0.6, 0.9, "#2f6a8a", 0.012, 14); k.cyl(8.85, 8.1, F + 0.91, 0.62, 0.03, "#c8ccd4", 0, 14);
-  const dg = STORE_FIXTURES.rustbucket.dig!;
-  for (let q = 0; q < 34; q++) { const a = k.rnd() * 6.3, r = k.rnd() * 0.85, y = F + 0.1 + (0.85 - r) * 0.55 * k.rnd();
-    k.B(dg[0] + Math.cos(a) * r, dg[1] + Math.sin(a) * r, y, 0.18 + k.rnd() * 0.4, 0.08 + k.rnd() * 0.2, 0.18 + k.rnd() * 0.4, ["#7a4a2a", STEEL, "#5a5a60", RUST, "#3a6a8a", "#c8ccd4"][q % 6], 0.008, k.rnd() * 3, (k.rnd() - 0.5) * 0.6, (k.rnd() - 0.5) * 0.6); }
-  // the shelf of sorted junk at the back, the counter (a steel top on oil drums), a bell
-  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.rustbucket.shelves[0];
-    k.box(u0, u1, v0, v1, h - 0.05, h, STEEL, 0.008); k.box(u0, u1, v0, v1, 0.45, 0.5, STEEL, 0.008); for (const u of [u0 + 0.05, u1 - 0.05]) k.box(u - 0.04, u + 0.04, v0, v1, F, h, DARK, 0.006);
-    goods(k, u0 + 0.2, u1 - 0.2, (v0 + v1) / 2, 0.5, 9, ["#c8ccd4", RUST, "#3a6a8a", "#5a5a60"], "can"); }
-  { const [c0, c1, cv0, cv1] = STORE_SHELLS.rustbucket.counter;
-    k.box(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.05, STEEL, 0.01); k.box(c0, c1, cv0 - 0.02, cv0, 0.1, 0.98, "#5a5248", 0.004);
-    k.cyl(c0 + 0.5, (cv0 + cv1) / 2, 1.1, 0.14, 0.08, "#d9b45a", 0.004, 10, "y", 0.04); k.B(c0 + 2.4, (cv0 + cv1) / 2, 1.09, 0.5, 0.06, 0.3, "#c8a878", 0.004, 0.2); } // (a bell, a ledger)
-  // the walls: hubcaps, a pegboard of spanners, the house rules, an engine on a pallet by the counter
-  for (let i = 0; i < 6; i++) k.cyl(T + 0.04, 2.0 + (i % 3) * 1.2, 1.4 + Math.floor(i / 3) * 0.8, 0.5, 0.03, "#c8ccd4", 0.006, 14, "u");
+  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, RUST = "#a85a2a", STEEL = "#8a8e98", DARK = "#2a2830", BRICK = "#a8543a", YEL = "#e8b830";
+  const top = storeTop(k.s), dg = STORE_FIXTURES.rustbucket.dig!;
+  // ================================ OUTSIDE: a patched brick shop and office, a corrugated workshop, a chicken on the roof
+  k.outside(() => {
+    // patched brickwork on the shop half of the frontage (round the window and the door), a corrugated header over the bay
+    for (const [u0, u1, y0, y1] of [[0, 0.5, 0, H], [0.5, 3.3, 0, 0.6], [0.5, 3.3, 2.9, H], [3.3, 4.9, 2.6, H], [4.9, 5.6, 0, H]] as const) k.skin(u0, u1, -0.04, 0, y0, y1, "brick", BRICK, 0);
+    for (const [u, y, w2, h2, col] of [[0.25, 1.2, 0.4, 0.5, "#7a3a2a"], [4.1, 3.9, 0.9, 0.4, "#c87a5a"], [5.2, 0.9, 0.5, 0.7, "#6a6a70"]] as const) k.skin(u - w2 / 2, u + w2 / 2, -0.06, -0.04, y - h2 / 2, y + h2 / 2, "brick", col, 0.004);
+    k.skin(5.6, W, -0.05, 0, 3.4, H + 0.3, "corrugated", "#8a8e98", 0);
+    // the corner: corrugated cladding down the open side, the name painted big
+    k.skin(W, W + 0.04, 0, D, 0, H + 0.3, "corrugated", "#7a8088", 0);
+    k.pic("rustSide", W + 0.06, D / 2, 2.6, 7.2, 1.8, [1, 0]);
+    // the roller door, rolled up: its drum, its guides, the bottom bar
+    k.box(5.6, W, -0.42, 0, 3.4, 3.88, STEEL, 0.012); k.box(5.62, W - 0.02, -0.12, 0, 3.32, 3.4, DARK, 0.006);
+    for (const u of [5.66, W - 0.06]) k.box(u - 0.05, u + 0.05, -0.12, 0, 0, 3.4, DARK, 0.006);
+    k.pic("rustBand", 2.8, -0.2, top - 0.45, 5.0, 0.62, [0, -1]); // (painted on the office's parapet)
+    k.box(0, 5.6, -0.16, D, top, top + 0.55, BRICK, 0.012); k.box(-0.05, 5.65, -0.2, D, top + 0.55, top + 0.65, "#c8bca8", 0.008);
+    // the shop door's steel canopy and an OPEN-ISH neon in the window
+    k.box(3.15, 5.05, -0.95, 0, 2.72, 2.8, DARK, 0.01); for (const u of [3.25, 4.95]) k.B(u, -0.5, 3.05, 0.04, 0.04, 1.0, DARK, 0.004, 0, -0.55);
+    k.pic("rustOpen", 1.9, 0.42, 2.45, 1.0, 0.5, [0, -1], true);
+    // CLUCKZILLA: a giant fibreglass chicken from the old drive-in, bolted to the workshop roof (a silhouette from the corner)
+    const cu = 7.6, cv = 1.2, cy = H + 0.3;
+    for (const du of [-0.6, 0.6]) k.box(cu + du - 0.05, cu + du + 0.05, cv - 0.05, cv + 0.05, cy, cy + 0.9, DARK, 0.004);
+    k.box(cu - 0.9, cu + 0.9, cv - 0.4, cv + 0.4, cy + 0.9, cy + 1.0, DARK, 0.006);
+    for (const du of [-0.25, 0.25]) k.cyl(cu + du, cv, cy + 1.35, 0.1, 0.7, "#e8a020", 0.004, 6);
+    k.ball(cu, cv, cy + 2.3, 1.7, "#f4f1ea", 0.012, 6); k.ball(cu + 0.75, cv + 0.1, cy + 2.6, 0.9, "#f4f1ea", 0.01, 5); // (the body, the tail)
+    k.ball(cu - 0.75, cv - 0.1, cy + 3.15, 0.8, "#f4f1ea", 0.01, 5); // (the head)
+    for (let i = 0; i < 3; i++) k.B(cu - 0.75 + (i - 1) * 0.16, cv - 0.1, cy + 3.62 - Math.abs(i - 1) * 0.06, 0.14, 0.24, 0.1, "#e8302a", 0.004);
+    k.cyl(cu - 1.18, cv - 0.1, cy + 3.12, 0.18, 0.3, "#f0b020", 0.004, 8, "u", 0.02); k.ball(cu - 1.05, cv - 0.1, cy + 2.85, 0.2, "#e8302a", 0, 3);
+    for (const dv of [-0.33, 0.13]) k.ball(cu - 1.08, cv + dv, cy + 3.25, 0.12, "#1b1420", 0, 2);
+    k.B(cu, cv - 0.75, cy + 0.6, 1.2, 0.6, 0.04, "#5a3a20", 0.006, 0, 0.25); k.pic("rustChicken", cu, cv - 0.8, cy + 0.6, 1.1, 0.55, [0, -1], false); // (its handwritten board)
+  });
+  // ================================ THE SHOP (left): concrete, sorted salvage on racks, the counter
+  k.skin(T, W - T, T, D - T, F + 0.004, F + 0.016, "concrete", "#3e3a34", 0); // (clear of the slab under it)
+  for (let q = 0; q < 6; q++) k.cyl(6 + k.rnd() * 3, 1.2 + k.rnd() * 7, F + 0.016, 0.6 + k.rnd() * 0.8, 0.004, "#2a2622", 0, 12); // (oil, on the workshop side)
+  // the window display: a stage of crates, a diver's helmet, a gramophone, a street sign, a rocking horse
+  k.skin(0.6, 3.2, 0.32, 1.1, F, 0.62, "crate", "#c8a070", 0.01);
+  k.ball(1.0, 0.7, 0.92, 0.55, "#c8902a", 0.008, 5); k.cyl(1.0, 0.43, 0.94, 0.26, 0.04, "#7fb4c8", 0.004, 12, "v"); k.cyl(1.0, 0.7, 0.66, 0.42, 0.1, "#a87020", 0.006, 12);
+  k.B(1.85, 0.75, 0.75, 0.36, 0.26, 0.3, "#5a3a20", 0.006); k.cyl(1.95, 0.7, 1.1, 0.5, 0.45, "#d9b45a", 0.006, 12, "y", 0.06);
+  k.B(2.75, 0.85, 1.25, 0.06, 1.25, 0.06, STEEL, 0.004); k.B(2.75, 0.83, 1.75, 0.7, 0.18, 0.03, "#2f8a4a", 0.004);
+  k.B(2.5, 0.55, 0.85, 0.6, 0.12, 0.18, "#c83a2a", 0.006); k.ball(2.25, 0.55, 1.0, 0.22, "#c83a2a", 0.004, 3);
+  // the racks of sorted salvage on the left wall: labelled bins on three shelves, hubcaps above
+  { const u0 = T, u1 = T + 0.65, v0 = 1.4, v1 = 5.4;
+    for (const y of [0.55, 1.15, 1.75]) k.box(u0, u1, v0, v1, y - 0.04, y, STEEL, 0.006);
+    for (const v of [v0 + 0.03, (v0 + v1) / 2, v1 - 0.03]) k.box(u0 + 0.02, u1, v - 0.03, v + 0.03, F, 1.8, DARK, 0.004);
+    for (const [y, r] of [[0.55, 0], [1.15, 1], [1.75, 2]] as const) for (let i = 0; i < 4; i++) { const v = v0 + 0.5 + i * 0.95;
+      k.B(u0 + 0.33, v, y + 0.16, 0.55, 0.3, 0.8, ["#3a6a8a", "#c83a2a", "#5a6a3a"][r], 0.006); k.pic("rustBins", u1 + 0.005, v, y + 0.16, 0.6, 0.12, [1, 0], false, [((i + r) % 4) / 4, 0, ((i + r) % 4 + 1) / 4, 1]); }
+    for (let i = 0; i < 5; i++) k.cyl(T + 0.04, v0 + 0.4 + i * 0.8, 2.3, 0.45, 0.03, "#c8ccd4", 0.006, 14, "u"); }
+  // the counter: a steel top on two oil drums, a cash tin, the ledger, a bell
+  { const [c0, c1, cv0, cv1] = STORE_SHELLS.rustbucket.counter, cm = (cv0 + cv1) / 2;
+    k.box(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.05, STEEL, 0.01);
+    for (const u of [c0 + 0.45, c1 - 0.45]) { k.cyl(u, cm, F + 0.4, 0.6, 0.8, u < 2 ? "#2f6a8a" : "#c83a2a", 0.01, 14); k.cyl(u, cm, F + 0.81, 0.62, 0.03, "#c8ccd4", 0, 14); }
+    k.box(c0 + 0.9, c1 - 0.9, cv0, cv0 + 0.03, F, 0.98, "#5a5248", 0.004);
+    k.cyl(c0 + 0.5, cm, 1.1, 0.14, 0.08, "#d9b45a", 0.004, 10, "y", 0.04); k.B(c0 + 2.4, cm, 1.09, 0.5, 0.06, 0.3, "#c8a878", 0.004, 0.2); k.B(c0 + 1.5, cm, 1.11, 0.3, 0.1, 0.2, "#2f6a3a", 0.004); }
+  // behind the counter: the pegboard of spanners, the house rules, the find of the week (a ship's wheel)
   k.box(1.0, 4.2, D - T - 0.04, D - T, 1.4, 2.8, "#c8a878", 0.004);
   for (let i = 0; i < 10; i++) k.B(1.25 + i * 0.32, D - T - 0.07, 2.0 + (i % 2) * 0.35, 0.05, 0.4 + (i % 3) * 0.1, 0.02, STEEL, 0.003);
-  k.pic("rustNotes", 4.9, D - T - 0.03, 2.2, 0.9, 0.9, [0, -1]);
-  k.box(4.8, 5.6, 7.3, 8.1, F, F + 0.12, "#a8865a", 0.006); k.B(5.2, 7.7, F + 0.42, 0.6, 0.5, 0.55, "#3a3a3a", 0.01); k.cyl(5.2, 7.7, F + 0.75, 0.25, 0.16, DARK, 0.006, 10);
-  // the ceiling: chains hanging in the bay, a hook, a tyre swing
-  for (const u of [6.6, 8.4]) { k.cyl(u, 5.0, H - 0.8, 0.05, 1.5, "#5a5a60", 0, 4); k.B(u, 5.0, H - 1.6, 0.12, 0.16, 0.04, "#5a5a60", 0.004); }
-  k.cyl(3.0, 3.0, H - 1.1, 0.02, 2.2, "#c8a878", 0, 3); k.cyl(3.0, 3.0, 2.3, 0.8, 0.24, "#1b1a1e", 0.012, 14, "u");
-  k.outside(() => { k.box(0.6, 3.2, -0.5, -0.05, 2.95, 3.05, "#8a4a22", 0.012); }); // (a rusty canopy rail over the window)
+  k.pic("rustNotes", 4.85, D - T - 0.03, 2.2, 0.75, 0.75, [0, -1]);
+  k.cyl(2.6, D - T - 0.08, 3.4, 0.9, 0.06, "#7a4a2a", 0.008, 16, "v"); k.cyl(2.6, D - T - 0.1, 3.4, 0.2, 0.1, "#5a3a20", 0.004, 10, "v");
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.283; k.B(2.6 + Math.cos(a) * 0.55, D - T - 0.09, 3.4 + Math.sin(a) * 0.55, 0.06, 0.06, 0.05, "#7a4a2a", 0.003); }
+  k.pic("rustFind", 2.6, D - T - 0.05, 2.75, 0.5, 0.25, [0, -1]);
+  // THE PARTITION between the shop and the workshop (solid: see STORE_FIXTURES): corrugated below, mesh above
+  k.skin(5.5, 5.65, 5.0, 9.7, F, 1.2, "corrugated", "#7a8088", 0.008); k.skin(5.52, 5.63, 5.0, 9.7, 1.2, 2.4, "grille", "#9a9ea8", 0.006);
+  for (const v of [5.0, 7.35, 9.7]) k.box(5.48, 5.67, v - 0.04, v + 0.04, F, 2.45, DARK, 0.006);
+  // ================================ THE WORKSHOP (right): the car in its bay, the hoist, the bench, the skip, the racking
+  { const cx = 7.55, cv = 2.2, y0 = F + 0.32;
+    for (const [du, dv] of [[-0.95, -0.7], [0.95, -0.7], [-0.95, 0.7], [0.95, 0.7]]) k.box(cx + du - 0.2, cx + du + 0.2, cv + dv - 0.2, cv + dv + 0.2, F, y0, "#9a9a9a", 0.01); // (breeze blocks)
+    k.B(cx, cv, y0 + 0.35, 2.6, 0.7, 1.9, RUST, 0.02); k.B(cx + 0.15, cv, y0 + 0.95, 1.4, 0.55, 1.75, "#c8743a", 0.02);
+    k.B(cx + 0.15, cv - 0.88, y0 + 0.95, 1.2, 0.4, 0.03, "#7fb4c8", 0.004); k.B(cx + 0.15, cv + 0.88, y0 + 0.95, 1.2, 0.4, 0.03, "#7fb4c8", 0.004);
+    k.B(cx + 0.4, cv - 0.96, y0 + 0.35, 1.0, 0.62, 0.04, "#3a6a9a", 0.008); // (the odd door)
+    k.B(cx - 1.15, cv, y0 + 0.95, 0.9, 0.05, 1.7, RUST, 0.01, 0, 0, -1.1); // (the bonnet, up)
+    k.B(cx - 0.95, cv, y0 + 0.55, 0.6, 0.35, 0.9, "#3a3a3a", 0.01); // (the engine)
+    for (const dv of [-0.65, 0.65]) k.cyl(cx - 1.31, cv + dv, y0 + 0.45, 0.22, 0.04, "#f4e2b8", 0, 10, "u");
+    k.pic("rustTag", cx - 0.5, cv, y0 + 1.12, 0.36, 0.27, [-1, 0]); // (the job ticket on the windscreen)
+    // the engine hoist: an A-frame over the open bonnet, its chain down to the engine
+    for (const dv of [-0.8, 0.8]) k.B(cx - 1.85, cv + dv * 0.6, F + 1.1, 0.08, 2.2, 0.08, YEL, 0.006, 0, dv * 0.3);
+    k.B(cx - 1.4, cv, F + 2.15, 1.1, 0.09, 0.09, YEL, 0.006); k.cyl(cx - 0.95, cv, F + 1.65, 0.04, 0.9, "#5a5a60", 0, 4);
+    for (const dv of [-0.5, 0.5]) k.B(cx - 1.85, cv + dv, F + 0.06, 0.08, 0.08, 0.9, YEL, 0.004, 0, 0, 0);
+    // its wheels, leaning on the side wall
+    for (let i = 0; i < 4; i++) k.cyl(W - T - 0.18, 0.9 + i * 0.6, F + 0.36, 0.72, 0.22, "#1b1a1e", 0.012, 14, "u"); }
+  // the workbench (solid) along the side wall: a vice, a toolbox, the pegboard of tools above, a lamp
+  k.skin(8.6, 9.14, 4.2, 7.6, 0.9, 0.96, "wood", "#a8865a", 0.008); k.box(8.62, 9.12, 4.25, 7.55, F, 0.9, "#4a4a50", 0.01);
+  k.B(8.85, 4.7, 1.07, 0.2, 0.18, 0.3, "#3a6a9a", 0.006); k.B(8.85, 6.3, 1.06, 0.3, 0.16, 0.5, "#c83a2a", 0.006);
+  k.box(W - T - 0.04, W - T, 4.3, 7.5, 1.3, 2.5, "#c8a878", 0.004);
+  for (let i = 0; i < 9; i++) k.B(W - T - 0.07, 4.55 + i * 0.33, 1.7 + (i % 3) * 0.25, 0.02, 0.36, 0.05, ["#c8ccd4", "#c83a2a", "#3a3a40"][i % 3], 0.003);
+  k.B(8.4, 7.85, F + 0.45, 0.5, 0.9, 0.45, "#c83a2a", 0.01); for (let i = 0; i < 4; i++) k.box(8.16, 8.64, 7.62, 7.63, F + 0.15 + i * 0.2, F + 0.17 + i * 0.2, "#c8ccd4", 0); // (the tool chest)
+  // the rummage skip (the dig spot, solid): yellow steel, scrap piled up out of it, its sign
+  { const [u, v] = dg;
+    k.box(7.0, 8.4, 5.0, 6.2, F, 0.95, YEL, 0.012); k.box(6.98, 8.42, 4.98, 6.22, 0.9, 0.97, "#c89820", 0.006);
+    for (let q = 0; q < 26; q++) { const a = k.rnd() * 6.3, r = k.rnd() * 0.55;
+      k.B(u + Math.cos(a) * r, v + Math.sin(a) * r * 0.7, 0.95 + k.rnd() * 0.3, 0.15 + k.rnd() * 0.35, 0.08 + k.rnd() * 0.18, 0.15 + k.rnd() * 0.3, ["#7a4a2a", STEEL, "#5a5a60", RUST, "#3a6a8a", "#c8ccd4"][q % 6], 0.006, k.rnd() * 3, (k.rnd() - 0.5) * 0.7, (k.rnd() - 0.5) * 0.7); }
+    k.pic("rustSkip", u, 4.97, 0.6, 1.5, 0.375, [0, -1]); }
+  // the racking at the back of the bay (the shelf): tyres, gearboxes, a radiator
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.rustbucket.shelves[0];
+    k.box(u0, u1, v0, v1, h - 0.05, h, STEEL, 0.008); k.box(u0, u1, v0, v1, 0.45, 0.5, STEEL, 0.008); for (const u of [u0 + 0.05, u1 - 0.05]) k.box(u - 0.04, u + 0.04, v0, v1, F, 2.0, "#e8902a", 0.006);
+    k.box(u0, u1, v0, v1, 1.95, 2.0, STEEL, 0.008);
+    goods(k, u0 + 0.2, u1 - 0.2, (v0 + v1) / 2, 0.5, 7, ["#c8ccd4", RUST, "#3a6a8a", "#5a5a60"], "can");
+    for (let i = 0; i < 3; i++) k.cyl(u0 + 0.6 + i * 1.0, (v0 + v1) / 2, 1.0 + 0.36, 0.7, 0.22, "#1b1a1e", 0.01, 14, "v"); }
+  for (let i = 0; i < 3; i++) k.cyl(6.1, 7.4, F + 0.13 + i * 0.26, 0.8, 0.26, "#1b1a1e", 0.012, 14);
+  k.cyl(6.15, 8.4, F + 0.45, 0.6, 0.9, "#2f6a8a", 0.012, 14); k.cyl(6.15, 8.4, F + 0.91, 0.62, 0.03, "#c8ccd4", 0, 14);
+  // the workshop's roof steel: three beams across, a chain hoist on the middle one
+  for (const v of [2.5, 5.0, 7.5]) { k.box(5.6, W - T, v - 0.08, v + 0.08, H - 0.32, H - 0.02, "#4a4a50", 0.008); k.box(5.6, W - T, v - 0.02, v + 0.02, H - 0.5, H - 0.3, "#4a4a50", 0.004); }
+  k.cyl(7.3, 2.5, H - 1.0, 0.05, 1.0, "#5a5a60", 0, 4); k.B(7.3, 2.5, H - 1.55, 0.14, 0.18, 0.05, "#5a5a60", 0.004);
+  void dg;
 }
 
 function plugpray(k: StoreKit) {

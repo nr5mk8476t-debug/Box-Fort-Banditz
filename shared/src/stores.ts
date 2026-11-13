@@ -220,8 +220,10 @@ export interface StoreFixtures { till: [number, number]; dig?: [number, number];
   /** R13b: the centrepiece's solid parts (u0, u1, v0, v1, height): you bump into them (drawn by the store's dressing) */
   solids?: [number, number, number, number, number][] }
 export const STORE_FIXTURES: Record<StoreId, StoreFixtures> = {
-  rustbucket: { till: [1.5, 6.6], dig: [7.4, 5.6], shelves: [[5.9, 9.0, 8.9, 9.6, 1.0]], stock: [[6.7, 9.25, 0], [8.2, 9.25, 0]],
-    solids: [[6.2, 8.9, 1.1, 3.3, 1.25]] }, // (the car on blocks in the yard bay)
+  rustbucket: { till: [1.5, 6.6], dig: [7.7, 5.6], shelves: [[5.9, 9.0, 8.9, 9.6, 1.0]], stock: [[6.7, 9.25, 0], [8.2, 9.25, 0]],
+    // R13b: the car on blocks in the repair bay; the partition between the shop and the workshop (a doorway at its
+    // front end, by the street); the rummage skip; the workbench along the bay's side wall
+    solids: [[6.2, 8.9, 1.1, 3.3, 1.25], [5.5, 5.65, 5.0, 9.7, 2.4], [7.0, 8.4, 5.0, 6.2, 0.95], [8.6, 9.14, 4.2, 7.6, 0.95]] },
   plugpray: { till: [6.2, 6.0], shelves: [[0.35, 1.0, 3.2, 9.6, 1.2]], stock: [[0.68, 4.4, 0], [0.68, 6.4, 0], [0.68, 8.4, 0]],
     solids: [[7.6, 8.6, 7.7, 8.5, 1.9]] }, // (the gutted arcade cabinet)
   needledrop: { till: [7.7, 8.8], dig: [5.87, 5.4], case: [0.32, 1.0, 7.4, 10.4, 1.4], shelves: [[1.2, 3.4, 3.4, 6.4, 0.9], [8.34, 10.54, 3.4, 6.4, 0.9]], stock: [[2.3, 4.2, 0], [2.3, 5.7, 0], [9.44, 4.2, 1], [9.44, 5.7, 1]],
