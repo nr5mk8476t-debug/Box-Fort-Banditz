@@ -53,6 +53,9 @@ export interface CarSim {
   go: boolean;
   /** seconds standing still (anything but a queue or a stop line) */
   stillT: number;
+  /** R13: how long the car's blocker has been out of its path (a walker on the edge of it flickers in and out: the wait
+   *  kept starting again, so the car never asked them to move, and a cruiser and a walker waited on each other for a minute) */
+  blockGap: number;
   /** R12.3b (diagnostics): why it's held up right now ("" = it isn't) and by what (a car, a cop car, a junction, a
    *  person), and how long it's been stopped for any reason */
   why?: string; by?: string; waitT?: number;
@@ -241,7 +244,7 @@ export function buildLanes(net: RoadNet): Lane[] {
  *  all its fields from the start in the same order: the tick reads them for every pair of cars, and objects of several
  *  shapes made V8 read them the slow way (a new heap number for each decimal it read). */
 export function carSim(id: string, lane: number, s: number, v: number, x: number, z: number, yaw: number, color: number, cop: boolean): CarSim {
-  return { id, lane, s, v, x, z, yaw, honkCd: 0, color, next: -1, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0,
+  return { id, lane, s, v, x, z, yaw, honkCd: 0, color, next: -1, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0, blockGap: 0,
     why: "", by: "", waitT: 0, cop, siren: false, goal: null, hold: false, costs: undefined, costFor: undefined };
 }
 
@@ -336,7 +339,7 @@ export class TrafficSystem {
       }) ?? road.find((l) => { const p = laneAt(l, l.len * 0.5); return !inR(p.x, p.z, 10) && free(p.x, p.z); });
       if (!pick) continue;
       const p = laneAt(pick, pick.len * 0.5);
-      Object.assign(car, { lane: pick.id, s: pick.len * 0.5, v: 0, x: p.x, z: p.z, yaw: p.yaw, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0 });
+      Object.assign(car, { lane: pick.id, s: pick.len * 0.5, v: 0, x: p.x, z: p.z, yaw: p.yaw, blockT: 0, blocker: "", stuckT: 0, waitSince: -1, go: false, stillT: 0, blockGap: 0 });
       car.next = this.pickNext(pick, -1);
     }
   }
@@ -549,7 +552,9 @@ export class TrafficSystem {
         car.blocker = blocker;
         if (car.blockT > CAR_HONK_AFTER && car.honkCd <= 0) { car.honkCd = 3; w.emit({ t: "honk", car: car.id, x: car.x, z: car.z }); }
         if (car.blockT > CAR_CLEAR_AFTER) w.npc.clearRoad(blocker, car.yaw, car.x, car.z);
-      } else { car.blockT = 0; car.blocker = ""; }
+        car.blockGap = 0;
+      } else if (car.blocker && car.v < 0.3 && (car.blockGap += dt) < 1) { /* (R13: the walker's flickering in and out of the car's path: keep counting) */ }
+      else { car.blockT = 0; car.blocker = ""; car.blockGap = 0; }
       // (held up by pedestrians for ages, whoever they are: creep on and nudge through)
       if (blocker && car.stillT > CAR_CREEP_AFTER + 3) target = Math.max(target, Math.min(1.2, gap < Infinity ? (gap > GAP ? 1.2 : 0) : 1.2, lane.speed));
       if (blocker) { why = "pedestrian"; by = blocker; }

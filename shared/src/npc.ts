@@ -39,7 +39,9 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   | "barmaid"
   // R12.2c: SEAMUS O'SHORTLY (a wee leprechaun of a man) runs the place now, with six wee buddies who swarm troublemakers;
   // BIG DESSIE dancing (badly) in front of the band
-  | "leprechaun" | "lep_buddy" | "drunk_dancer";
+  | "leprechaun" | "lep_buddy" | "drunk_dancer"
+  // R13: customers browsing the six stores (they wander between a store's spots)
+  | "shopper";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -209,6 +211,14 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       perfect: ["Ah, beautiful!", "Did you SEE that?!", "Slainte! Lovely!"],
       close: ["Not bad, not bad.", "Nearly had it!"],
       miss: ["Ah, unlucky.", "Back of the queue, you."],
+    },
+  },
+  shopper: {
+    kind: "shopper", name: "A Customer", walk: 0.8, flee: 3.6, fighter: false, hp: 1, dodge: 0, notoriety: 6, spawnWeight: 0,
+    loot: [["coin_pile", 2], ["mystery_wallet", 1]],
+    lines: {
+      idle: ["Just browsing.", "Ooh. No. Hm.", "Is this on sale? Nothing's ever on sale.", "I'm only looking.", "*picks something up, puts it back*", "Do they do this in a medium?", "My partner's going to kill me."],
+      hit: ["I'm a CUSTOMER!", "Help! Shop assistant!", "I'm calling your manager!", "Ow! I was BROWSING!"],
     },
   },
   patron: {

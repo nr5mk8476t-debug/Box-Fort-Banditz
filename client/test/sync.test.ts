@@ -144,7 +144,7 @@ async function playOut(rig: any, o: { sec: number; fps: number; lat: number; sta
         // (each shot by its name where the window has one, else by the replay itself)
         const key = (s as any).key ? id + "/" + (s as any).key : s.sim;
         const r = shown.get(key) ?? { mid: 0, dur: 0, st: id, why: (s as any).why, gid: s.note?.gid, key }; shown.set(key, r);
-        r.dur = Math.max(r.dur, (s as any).dur ?? 0);
+        r.dur = Math.max(r.dur, ((s as any).dur ?? 0) - ((s as any).from ?? 0)); // (R13: what was left of it to show: a live shot heard late joins part way through)
         if (!s.sim.done && s.simT > 0) r.mid++;
       }
     }
@@ -180,7 +180,7 @@ for (const net of [{ fps: 60, lat: 0.05, name: "60 fps, 50 ms" }, { fps: 12, lat
     //  for a shot the window missed in a stall and caught up on, playing fast. Nothing's ever silently gone)
     const onScreen = (q: any) => q.mid >= 2 || (q.mid >= 1 && (q.dur < 2 / net.fps || q.why === "missed"));
     const visible = r.shown.filter(onScreen).length, skipped = r.shown.length - visible;
-    for (const q of r.shown as any[]) if (!(q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / net.fps))) console.log(`  skipped: ${q.key} shown in ${q.mid} frames, ${q.dur.toFixed(2)} s long`);
+    for (const q of r.shown as any[]) if (!(q.mid >= 2 || (q.mid >= 1 && q.dur < 2 / net.fps))) console.log(`  skipped: ${q.key} shown in ${q.mid} frames, ${q.dur.toFixed(2)} s left to show`);
     const why: Record<string, number> = {}; for (const q of r.shown as any[]) why[q.why] = (why[q.why] ?? 0) + 1;
     const games = new Set((r.shown as any[]).map((q) => q.st + "#" + q.gid));
     if (process.env.PGLOG) console.log(rig.view.st.get(process.env.PGT ?? "pooltable1").feed.log.join("\n"));
@@ -299,7 +299,8 @@ test("pool (R12.3b): your turn waits for the window to finish showing the last s
   w.addPlayer("me", "ME"); const T = pb.pools[1]; w.debugTeleport("me", T.x, T.z - T.d / 2 - 0.8, 0, pb.y2);
   w.pubGames.act("me", { op: "open", st: "pooltable2", vs: "npc", stake: 0 });
   let stepped = 0, early = 0;
-  await playOut(rig, { sec: 60, fps: 10, lat: 0.3, me: "me", each: () => {
+  // (R13: 100 s: a foul hands HUGHIE two visits and he takes his time; 60 s could hold only one turn of mine)
+  await playOut(rig, { sec: 100, fps: 10, lat: 0.3, me: "me", each: () => {
     const st = view.st.get("pooltable2")!;
     if (view.mode === "aim" || view.mode === "place") { if (st.sim) early++; if (!(rig as any).inAim) { stepped++; (rig as any).inAim = true; } const P = w.pubGames.st.get("pooltable2")!.pool; if (P) { const cue = P.balls.find((b) => b.id === 0)!, t = P.balls.find((b) => !b.down && b.id !== 0 && b.id !== 8) ?? P.balls.find((b) => b.id === 8)!; if (view.mode === "place") view.input.button(0, true); (view as any).aimA = Math.atan2(t.x - cue.x, t.z - cue.z); view.input.button(0, true); view.input.mouse(0, 120); view.input.button(0, false); } }
     else (rig as any).inAim = false;

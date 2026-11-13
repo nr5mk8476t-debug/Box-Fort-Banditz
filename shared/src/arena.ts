@@ -379,7 +379,9 @@ export interface ArenaLayout {
   navChains?: { x: number; z: number }[][];
   units?: UnitDef[];
   /** C1.1: people who stand at a spot (the apartment tower's doorman) */
-  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "barmaid" | "leprechaun" | "lep_buddy" | "drunk_dancer" | "wee_mickey"; x: number; z: number; yaw: number;
+  posts?: { kind: "doorman" | "fisherman" | "old_lady" | "uncle_dumpster" | "bank_guard" | "maitre_d" | "bouncer" | "vinnie" | "lou" | "meat_locker" | "champ" | "fran" | "cold_cuts" | "receptionist" | "don" | "velvet_guard" | "sketchy_steve" | "barman" | "regular" | "trad_band" | "patron" | "barmaid" | "leprechaun" | "lep_buddy" | "drunk_dancer" | "wee_mickey" | "shopper"; x: number; z: number; yaw: number;
+    /** R13: a shopper's browsing spots (it wanders between them; the first is where it starts) */
+    browse?: { x: number; z: number; yaw: number }[];
     /** R12.1: which one (the regulars, the band's four), and sitting down (stool, bench) */
     v?: number; sit?: number;
     /** C5a: standing height (Uncle Dumpster lives on a rooftop) */

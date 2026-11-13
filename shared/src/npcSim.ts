@@ -73,6 +73,8 @@ export interface NpcSimData {
   lifeT: number;
   // cashiers only
   post: { x: number; z: number; yaw: number; y?: number } | null;
+  /** R13: a shopper's spots in its store (it moves on every few seconds) */
+  browse?: { x: number; z: number; yaw: number }[];
   /** C5a: which tip Uncle Dumpster is on */
   tip?: number;
   /** R7: the Champ counts the punches: the 3rd inside a few seconds makes him dizzy */
@@ -168,6 +170,7 @@ export class NpcSystem {
       n.post = { x: po.x, z: po.z, yaw: po.yaw, y: po.y };
       n.move = makeMoveState(po.x, po.z, po.yaw);
       if (po.y) n.move.y = po.y; // (C5a: Uncle Dumpster lives on the squat's roof)
+      if (po.browse?.length) { n.browse = po.browse; n.stateT = 3 + this.rng() * 6; }
       if (po.kind === "uncle_dumpster") n.sayCd = 1; // (he starts talking as soon as you arrive)
       if (po.kind === "sketchy_steve" && host.arena.fever) n.hide = { ...host.arena.fever.dealerHide }; // (R11.4)
       n.state = po.kind === "old_lady" ? "sleep" : "work";
@@ -898,6 +901,9 @@ export class NpcSystem {
           if (n.kind === "lep_buddy" && (Math.abs(n.move.y - (post.y ?? 0)) > 1.5 || n.stuckT > 1.5)) { this.popTo(n, post.x, post.y ?? 0, post.z); break; } // (R12.2c: a wee fella stuck on his way home just pops back)
           const d = hyp(post.x - n.move.x, post.z - n.move.z);
           if (d <= 0.3 && n.kind === "old_lady") { n.state = "sleep"; break; } // (back upstairs to bed)
+          if (n.browse && n.state === "work" && d <= 0.3 && n.stateT <= 0) { // (R13: on to the next shelf)
+            const q = n.browse[Math.floor(this.rng() * n.browse.length)]; n.post = { ...q }; n.stateT = 5 + this.rng() * 8; break;
+          }
           if (d > 0.3) { tx = post.x; tz = post.z; speed = def.walk; if (BOUNCERS.has(n.kind)) { const wp = this.hotWay(n, tx, tz); tx = wp.x; tz = wp.z; speed = 2.4; } } else face = post.yaw;
           if (n.kind === "uncle_dumpster") {
             // C5a: his tips, in order, whenever somebody's close enough to hear

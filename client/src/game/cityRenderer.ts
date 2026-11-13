@@ -476,6 +476,11 @@ export class CityRenderer {
   private outsideOnly = false;
   /** R13: the stores' interior areas (storeDressing.ts) */
   private storeAreas: { def: StoreDef; area: InteriorArea; base: number }[] = [];
+  /** R13: is (x, z) inside a store whose inside isn't being drawn right now? (its people are hidden too) */
+  storeHidden(x: number, z: number): boolean {
+    for (const st of this.storeAreas) if (inRectXZ(st.area.rect, x, z)) return !(this.unitOn.get(areaGroupId(st.base, 0)) ?? false);
+    return false;
+  }
   /** R13: is this shelf or counter in a store whose own dressing does its shelves and counter? */
   private storeDressed(b: Box) { return this.storeAreas.some((st) => STORE_OWN_FIXTURES.has(st.def.id) && inRectXZ(st.area.rect, b.x, b.z)); }
   private intoGroup(m: Mesh, g: number) { (this.unitMeshes.get(g) ?? this.unitMeshes.set(g, []).get(g)!).push(m); m.setEnabled(false); this.unitOn.set(g, false); }
@@ -3891,7 +3896,7 @@ export class CityRenderer {
     for (const w of checkAreaLights(a)) console.warn("[light budget]", w);
   }
   /** R12.5: an area's lamps: each lights only its own floor's pieces (Performance mode: none) */
-  private areaLights(a: InteriorArea, base: number) {
+  private areaLights(a: InteriorArea, base: number, list = this.pubLights) {
     if (!this.detail) return;
     for (const L of a.lights ?? []) {
       const meshes = this.unitMeshes.get(areaGroupId(base, L.floor)) ?? [];
@@ -3899,7 +3904,7 @@ export class CityRenderer {
       l.diffuse = Color3.FromHexString(L.color); l.specular = Color3.Black(); l.range = L.range; l.intensity = 0;
       l.includedOnlyMeshes = meshes.slice(); // (only this floor's pieces: the rest of the city's shaders don't change. R12.6: its own copy: the people inside get added to it)
       for (const m of meshes) { const mt = m.material as { maxSimultaneousLights?: number } | null; if (mt && (mt.maxSimultaneousLights ?? 4) < LIGHT_BUDGET.perMesh) mt.maxSimultaneousLights = LIGHT_BUDGET.perMesh; }
-      this.pubLights.push({ l, base: L.intensity, flick: L.flicker ? 1 : 0, floor: L.floor, nStatic: meshes.length });
+      list.push({ l, base: L.intensity, flick: L.flicker ? 1 : 0, floor: L.floor, nStatic: meshes.length });
     }
   }
   private buildPub() {
@@ -5397,6 +5402,7 @@ export class CityRenderer {
 
   /** C5b: how dark it is (0 day .. 1 night): the lanterns glow, and sway gently */
   setNight(n: number, dt: number) {
+    this.storeNight(n); // (R13)
     if (this.heliBeam) this.heliBeam.setEnabled(n > 0.5); // (R6: the helicopter's searchlight sweeps at night)
     if (!this.lanternMat) return;
     this.lanternT += dt;
@@ -6051,7 +6057,36 @@ export class CityRenderer {
     }
     for (const { mat, grp, list } of pics.values()) for (let i = 0; i < list.length; i += 500) { const m = Mesh.MergeMeshes(list.slice(i, i + 500), true, true); if (m) { m.material = mat; m.parent = this.root; m.isPickable = false; m.freezeWorldMatrix(); if (grp >= 0) this.intoGroup(m, grp); } }
     this.flushSkins(); this.flush();
-    for (const { area, base } of this.storeAreas) this.areaLights(area, base);
+    for (const { area, base } of this.storeAreas) this.areaLights(area, base, this.storeLights);
+    // the night: a warm glow in each window and a pool of light on the pavement in front (faded in by storeNight)
+    {
+      const t = new DynamicTexture("storeSpill", { width: 128, height: 128 }, sc, false), c = t.getContext() as unknown as CanvasRenderingContext2D;
+      const g = c.createRadialGradient(64, 64, 2, 64, 64, 64); g.addColorStop(0, "rgba(255,210,140,0.8)"); g.addColorStop(0.5, "rgba(255,190,120,0.3)"); g.addColorStop(1, "rgba(255,180,110,0)");
+      c.fillStyle = g; c.fillRect(0, 0, 128, 128); t.update(); t.hasAlpha = true;
+      const spill = new StandardMaterial("storeSpillMat", sc); spill.disableLighting = true; spill.emissiveTexture = t; spill.opacityTexture = t; spill.alpha = 0; spill.zOffset = -2; spill.backFaceCulling = false;
+      const glow = new StandardMaterial("storeGlowMat", sc); glow.disableLighting = true; glow.emissiveColor = Color3.FromHexString("#ffd8a0"); glow.alpha = 0; glow.backFaceCulling = false;
+      const sp: Mesh[] = [], gl: Mesh[] = [];
+      for (const { def } of this.storeAreas) {
+        const f = storeFrame(def), shell = STORE_SHELLS[def.id], gTop = shell.glassTop ?? 2.9, o = f.at(0, 0), a1 = f.at(1, 0), rx = a1.x - o.x, rz = a1.z - o.z;
+        for (const q of shell.front) {
+          if (q.t !== "window" && q.t !== "door") continue;
+          const um = (q.u0 + q.u1) / 2, wdt = q.u1 - q.u0;
+          if (q.t === "window") { const p = MB.CreatePlane("storeGlow", { width: wdt - 0.1, height: gTop - 0.7 }, sc), c0 = f.at(um, 0.26); p.position.set(c0.x, (0.6 + gTop) / 2 + 0.05, c0.z); p.rotation.y = Math.atan2(-rz, rx); gl.push(p); } // (parallel to the frontage)
+          const g0 = MB.CreateGround("storeSpillP", { width: wdt + 2.5, height: 4 }, sc), c1 = f.at(um, -1.9); g0.position.set(c1.x, 0.166, c1.z); g0.rotation.y = Math.atan2(-rz, rx); sp.push(g0); // (its width along the frontage)
+        }
+      }
+      const ms = Mesh.MergeMeshes(sp, true, true), mg = Mesh.MergeMeshes(gl, true, true);
+      if (ms) { ms.material = spill; ms.parent = this.root; ms.isPickable = false; }
+      if (mg) { mg.material = glow; mg.parent = this.root; mg.isPickable = false; mg.alphaIndex = 1.8; }
+      this.storeNightMats = { spill, glow };
+    }
+  }
+  /** R13: the stores' lamps (on all day, warmer at night: only near enough to see) and their night glow */
+  private storeLights: { l: PointLight; base: number; flick: number; floor: number; nStatic: number }[] = [];
+  private storeNightMats: { spill: StandardMaterial; glow: StandardMaterial } | null = null;
+  private storeNight(n: number) {
+    for (const L of this.storeLights) L.l.intensity = L.base * (0.75 + 0.6 * n);
+    if (this.storeNightMats) { this.storeNightMats.spill.alpha = 0.9 * n; this.storeNightMats.glow.alpha = 0.22 * n; }
   }
   private buildPawnShops() {
     const sc = this.scene, MB = MeshBuilder, L = HOT_PLOT, H = 4.4;

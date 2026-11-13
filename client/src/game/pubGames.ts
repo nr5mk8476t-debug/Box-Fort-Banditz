@@ -145,7 +145,7 @@ class Station {
   feed = new StationFeed();
   // pool: the replay (the shot it's showing, how far in, why it started where it did)
   balls: Mesh[] = []; ballQ: Quaternion[] = []; ballPos: { x: number; z: number; down: boolean }[] = [];
-  sim: PoolSim | null = null; simT = 0; key = ""; dur = 0; why = ""; drop: Map<number, number> = new Map();
+  sim: PoolSim | null = null; simT = 0; key = ""; dur = 0; why = ""; from = 0; drop: Map<number, number> = new Map();
   cue: TransformNode | null = null; cueT = -1; cueDir = { x: 0, z: 1 }; cueFrom = { x: 0, z: 0 };
   /** (R12.4: when you struck it here yourself: the stroke and its sound are shown at once, not again when the host's
    *  copy of the shot comes back) */
@@ -310,7 +310,7 @@ export class PubGamesView {
   private startReplay(s: Station, plan: ReplayPlan) {
     const sh = plan.shot, start: Ball[] = sh.b.map(([id, x, z, d]) => ({ id, x, z, vx: 0, vz: 0, down: !!d }));
     s.sim = new PoolSim(start, sh.dx, sh.dz, sh.v); s.key = sh.k; s.dur = sh.dur; s.why = plan.why;
-    s.simT = plan.at; s.sim.runTo(plan.at);
+    s.simT = plan.at; s.from = plan.at; s.sim.runTo(plan.at); // (from: where this window joined it: a live shot heard late starts part way through)
     s.sim.onHit = (k, sp) => { if (!this.near(s, 14)) return; this.sound(s, () => { if (k === "ball") sfx.ballClick(sp); else if (k === "cushion") sfx.cushion(sp); else sfx.pocketDrop(); }); };
     for (const b of start) s.ballPos[b.id] = { x: b.x, z: b.z, down: b.down };
     s.drop.clear();

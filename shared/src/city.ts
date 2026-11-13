@@ -23,7 +23,7 @@
 // Every block is lined with buildings wall to wall (a gap for the alley into the courtyard behind);
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
-import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS } from "./stores.js";
+import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS, STORE_BROWSE, STORE_FLOOR } from "./stores.js";
 import { canonBoxes,
   box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind, type GearKind,
   CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
@@ -1440,6 +1440,9 @@ export function buildTrashington(): ArenaLayout {
         boxes.push(fr.box(u0, u1, v0, v1, h, "case", 0, { color: "#c9d6dc", deco: "storecase:" + st.id, hide: true }));
         props.push({ id: "storecase_" + st.id, kind: "storecase", x: (r.minX + r.maxX) / 2, y: h, z: (r.minZ + r.maxZ) / 2, yaw: 0, hw: (r.maxX - r.minX) / 2, hd: (r.maxZ - r.minZ) / 2, box: boxes.length - 1, store: st.id, shop: sid });
       }
+      { const br = STORE_BROWSE[st.id], spots = br.spots.map(([u, v, du, dv]) => { const p = fr.at(u, v), a = fr.at(u + du, v + dv); return { x: p.x, z: p.z, yaw: Math.atan2(a.x - p.x, a.z - p.z) }; });
+        for (let k = 0; k < br.n; k++) posts.push({ kind: "shopper", ...spots[(k * 2) % spots.length], v: st.tier, browse: spots }); }
+      for (const [u0, u1, v0, v1, h] of fx.solids ?? []) boxes.push(fr.box(u0, u1, v0, v1, h, "wall", STORE_FLOOR, { hide: true })); // (R13b: drawn by the dressing)
       for (const [u0, u1, v0, v1, h] of fx.shelves) boxes.push(fr.box(u0, u1, v0, v1, h, "shelf", 0, { color: "#6a5040" }));
       for (const [u, v, k] of fx.stock) { const q = fr.at(u, v); loot.push({ x: q.x, z: q.z, y: fx.shelves[k][4] + 0.05, zone: "shop", pool: SHOP_POOLS[tr.type], shop: sid }); }
     }

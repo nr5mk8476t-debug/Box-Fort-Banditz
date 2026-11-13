@@ -30,6 +30,13 @@ const KEEPER_LOOKS: Record<string, Look> = {
   maisonpong: { body: "#f4f1ea", legs: "#1b1420", skin: "#e8b48a", hat: "#1b1420", hatShape: "beret", prop: "none", bulk: 1.0 }, // MONSIEUR NEZ
   bonbon: { body: "#ff8fb5", legs: "#7a1840", skin: "#f5c29a", hat: "#c2185b", hatShape: "scarf", prop: "none", bulk: 1.2 }, // MADAME GANACHE
 };
+/** R13: the stores' customers, dressed for their street (The Yards, the middle, Snob Row) */
+const SHOPPER_LOOKS: Look[][] = [
+  [{ body: "#5a6a3a", legs: "#3a4a5a", skin: "#d9a07a", hat: "#2b2433", hatShape: "cap", prop: "none", bulk: 1.15 }, { body: "#8a8a96", legs: "#2b2433", skin: "#f0c8a0", hatShape: "none", prop: "none", bulk: 1.05 }],
+  [{ body: "#43c7a6", legs: "#2b2433", skin: "#c98a5c", hat: "#ff5fa8", hatShape: "beret", prop: "none" }, { body: "#ffcf3a", legs: "#3d6fb5", skin: "#f0b98a", hat: "#1b1420", hatShape: "cap", prop: "phone" }, { body: "#7a3fa0", legs: "#1b1420", skin: "#e8b48a", hatShape: "none", prop: "none" }],
+  [{ body: "#f4f1ea", legs: "#c8b88a", skin: "#f0c8a0", hat: "#d9b45a", hatShape: "sunhat", prop: "none" }, { body: "#2b2433", legs: "#1b1420", skin: "#e0a878", hatShape: "none", prop: "briefcase", bulk: 1.1 }, { body: "#ff8fb5", legs: "#f4f1ea", skin: "#f5c29a", hat: "#ffffff", hatShape: "scarf", prop: "phone" }],
+];
+const STORE_TIER: Record<string, number> = { rustbucket: 0, plugpray: 0, needledrop: 1, peakfomo: 1, maisonpong: 2, bonbon: 2 };
 const LOOKS: Record<string, Look> = {
   tourist: { body: "#ff9a3c", legs: "#e8d7a8", skin: "#f0b98a", hat: "#f3e2b8", hatShape: "sunhat", prop: "camera" },
   businessman: { body: "#5b6170", legs: "#3e4350", skin: "#e8a878", hat: "#2b2433", hatShape: "none", prop: "briefcase" },
@@ -158,6 +165,9 @@ export class NpcRenderer {
   /** R12.6: the people being drawn (for lighting them with the room they're in) */
   /** R12.6b: kinds the camera can't see from where it is (behind a wall it's inside) */
   hiddenFrom: ((kind: string) => boolean) | null = null;
+  /** R13: is this spot inside a building whose inside isn't being drawn (a store seen from down the street)? Its people
+   *  aren't drawn either: behind solid walls they still cost their draws */
+  hiddenAt: ((x: number, z: number) => boolean) | null = null;
   *roots(): Iterable<TransformNode> { for (const v of this.map.values()) if (v.enabled) yield v.root; }
   private bubbleTex = new Map<string, ReturnType<typeof unlitTextured>>();
   private time = 0;
@@ -200,7 +210,10 @@ export class NpcRenderer {
       pubV = { v: best?.v ?? 0, seat: best?.sit ?? 0 };
     }
     const keeper = v.kind === "cashier" ? this.keeperPosts.find((q) => Math.hypot(v.x - q.x, v.z - q.z) < 3) : undefined;
-    const L = sal ? SAL_LOOK : keeper ? KEEPER_LOOKS[keeper.id] ?? LOOKS.cashier : (pubV && PUB_LOOKS[v.kind]?.[pubV.v]) || LOOKS[v.kind] || LOOKS.tourist;
+    let shopper: Look | null = null;
+    if (v.kind === "shopper") { let best = this.keeperPosts[0], bd = 1e9; for (const q of this.keeperPosts) { const d = Math.hypot(v.x - q.x, v.z - q.z); if (d < bd) { bd = d; best = q; } }
+      const list = SHOPPER_LOOKS[best ? STORE_TIER[best.id] ?? 1 : 1]; let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; shopper = list[Math.abs(h) % list.length]; }
+    const L = shopper ? shopper : sal ? SAL_LOOK : keeper ? KEEPER_LOOKS[keeper.id] ?? LOOKS.cashier : (pubV && PUB_LOOKS[v.kind]?.[pubV.v]) || LOOKS[v.kind] || LOOKS.tourist;
     const bulk = L.bulk ?? 1;
     const root = new TransformNode("npc-" + id, sc);
     const pivot = new TransformNode("npcPivot", sc);
@@ -684,7 +697,8 @@ export class NpcRenderer {
       // distance culling (keeps the crowd affordable)
       const far = Math.hypot(x - cam.x, z - cam.z) > (n.big ? BIGSHOT_DRAW_DISTANCE : n.view.kind === "cop" && n.view.state !== "beat" ? COP_DRAW_DISTANCE : DRAW_DISTANCE)
         || n.view.state === "sleep" // (C4b: the old lady asleep upstairs isn't drawn)
-        || (this.hiddenFrom?.(n.view.kind) ?? false); // (R12.6b: e.g. Wee Mickey from inside the pub: he's behind its back wall)
+        || (this.hiddenFrom?.(n.view.kind) ?? false) // (R12.6b: e.g. Wee Mickey from inside the pub: he's behind its back wall)
+        || (this.hiddenAt?.(x, z) ?? false); // (R13: the stores' keepers and customers, when the store's inside isn't drawn)
       if (far === n.enabled) { n.enabled = !far; n.root.setEnabled(!far); }
       const speed = dt > 0 ? Math.hypot(x - n.lastX, z - n.lastZ) / dt : 0;
       n.lastX = x; n.lastZ = z;

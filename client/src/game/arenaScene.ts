@@ -399,6 +399,7 @@ export class ArenaScene {
     this.items = new ItemRenderer(scene, this.arena);
     this.npcs = new NpcRenderer(scene);
     this.npcs.hiddenFrom = (kind) => kind === "wee_mickey" && this.camInPub; // (R12.6b)
+    this.npcs.hiddenAt = (x, z) => this.city.storeHidden(x, z); // (R13)
     { const ps = arena.pawnShop, sh = ps ? arena.shops?.find((x) => x.id === ps.shop) : undefined; if (sh) this.npcs.salAt = { x: sh.cashier.x, z: sh.cashier.z }; } // (C5c.3)
     this.npcs.keeperPosts = (arena.stores ?? []).map((s) => ({ id: s.id, x: s.keeper.x, z: s.keeper.z })); // (R13)
     this.events = new EventRenderer(scene);

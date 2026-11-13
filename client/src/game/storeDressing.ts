@@ -21,17 +21,17 @@ export function storeArea(s: StoreDef): InteriorArea {
   const L = (name: string, u: number, v: number, y: number, color: string, range: number, intensity: number): AreaLight => { const p = f.at(u, v); return { name: "store-" + s.id + "-" + name, x: p.x, y, z: p.z, color, range, intensity, floor: 0 }; };
   const lamp = Math.min(H - 0.8, 3.6);
   const lights: Record<StoreId, AreaLight[]> = {
-    rustbucket: [L("bulb", W * 0.3, D * 0.55, lamp, "#ffd8a0", 10, 0.55), L("bay", W * 0.78, D * 0.5, lamp, "#ffe8c0", 10, 0.5)],
-    plugpray: [L("tube", W * 0.5, D * 0.45, lamp, "#e8f4ff", 12, 0.6), L("bench", W * 0.5, D * 0.8, lamp, "#ffe0b0", 8, 0.45)],
-    needledrop: [L("bins", W * 0.5, D * 0.42, lamp, "#ffcc88", 11, 0.6), L("counter", W * 0.5, D * 0.8, lamp, "#ff9ad0", 8, 0.4)],
-    peakfomo: [L("lodge", W * 0.35, D * 0.5, lamp, "#ffd8a0", 11, 0.6), L("till", W * 0.8, D * 0.6, lamp, "#ffe8c0", 8, 0.45)],
-    maisonpong: [L("chandelier", W * 0.5, D * 0.45, Math.min(H - 1.4, 5.2), "#fff0d8", 12, 0.65), L("altar", W * 0.5, D * 0.88, 3.2, "#ffe0a0", 7, 0.5)],
-    bonbon: [L("front", W * 0.5, D * 0.35, lamp, "#ffe0e8", 11, 0.6), L("counter", W * 0.5, D * 0.75, lamp, "#ffd8b0", 8, 0.45)],
+    rustbucket: [L("bulb", W * 0.3, D * 0.55, lamp, "#ffd8a0", 10, 0.8), L("bay", W * 0.78, D * 0.5, lamp, "#ffe8c0", 10, 0.72)],
+    plugpray: [L("tube", W * 0.5, D * 0.45, lamp, "#e8f4ff", 12, 0.87), L("bench", W * 0.5, D * 0.8, lamp, "#ffe0b0", 8, 0.65)],
+    needledrop: [L("bins", W * 0.5, D * 0.42, lamp, "#ffcc88", 11, 0.87), L("counter", W * 0.5, D * 0.8, lamp, "#ff9ad0", 8, 0.58)],
+    peakfomo: [L("lodge", W * 0.35, D * 0.5, lamp, "#ffd8a0", 11, 0.87), L("till", W * 0.8, D * 0.6, lamp, "#ffe8c0", 8, 0.65)],
+    maisonpong: [L("chandelier", W * 0.5, D * 0.45, Math.min(H - 1.4, 5.2), "#fff0d8", 12, 0.65), L("altar", W * 0.5, D * 0.88, 3.2, "#ffe0a0", 7, 0.72)],
+    bonbon: [L("front", W * 0.5, D * 0.35, lamp, "#ffe0e8", 11, 0.87), L("counter", W * 0.5, D * 0.75, lamp, "#ffd8b0", 8, 0.65)],
   };
   return { id: "store-" + s.id, rect: s.plot, floors: [{ y0: 0, y1: H }], outside: { on: 34, off: 40 }, lights: lights[s.id] };
 }
 /** the stores whose shelves and counter this file dresses in full (the city leaves off its generic goods and worktop) */
-export const STORE_OWN_FIXTURES = new Set<StoreId>(["needledrop"]);
+export const STORE_OWN_FIXTURES = new Set<StoreId>(["rustbucket", "plugpray", "needledrop", "peakfomo", "maisonpong", "bonbon"]);
 /** the visibility group of a store's inside */
 export const storeGroup = (i: number) => 9410 + i;
 
@@ -150,6 +150,17 @@ const CELLS: Record<string, Cell> = {
     c.font = `bold 92px ${ROUND}`; c.textAlign = "left"; c.textBaseline = "middle"; c.lineWidth = 7;
     for (const [t, y, col] of [["OPEN", 92, "#43e0c6"], ["LATE", 182, "#ff5fa8"]] as const) { c.strokeStyle = col; c.globalAlpha = 0.3; c.lineWidth = 18; c.strokeText(t, 250, y); c.globalAlpha = 1; c.lineWidth = 6; c.strokeText(t, 250, y); }
   } },
+  boothSign: { w: 512, h: 128, draw: (c, w, h) => { c.clearRect(0, 0, w, h); c.font = `bold 64px ${ROUND}`; c.textAlign = "center"; c.textBaseline = "middle"; for (const [lw, a] of [[18, 0.3], [6, 1]] as const) { c.globalAlpha = a; c.lineWidth = lw; c.strokeStyle = "#43e0c6"; c.strokeText("LISTENING BOOTH", w / 2, h / 2); } c.globalAlpha = 1; } },
+  rustNotes: { w: 256, h: 256, draw: (c, w, h) => { c.fillStyle = "#e8dcc0"; c.fillRect(0, 0, w, h); c.strokeStyle = "#5a3a20"; c.lineWidth = 8; c.strokeRect(4, 4, w - 8, h - 8);
+    [["NO REFUNDS", "#c83a2a"], ["NO RETURNS", "#1b1420"], ["NO IDEA", "#2f6a8a"], ["ASK PETE", "#c83a2a"]].forEach(([t, col], i) => centered(c, t, w / 2, 40 + i * 58, w * 0.85, 40, ROUND, col)); } },
+  arcade: { w: 256, h: 256, draw: (c, w, h) => { c.fillStyle = "#08081a"; c.fillRect(0, 0, w, h); const r = seeded(3); for (let k = 0; k < 40; k++) { c.fillStyle = "#f4f1ea"; c.fillRect(r() * w, r() * h * 0.6, 2, 2); }
+    c.fillStyle = "#ff5fa8"; for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) c.fillRect(30 + i * 34, 30 + j * 26, 20, 14);
+    c.fillStyle = "#43e0c6"; c.fillRect(110, 200, 36, 14); c.fillRect(124, 190, 8, 10); centered(c, "INSERT COIN", w / 2, 150, w * 0.8, 26, CHUNK, "#ffd54a"); } },
+  arcadeSide: { w: 256, h: 512, draw: (c, w, h) => { const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "#7a3fa0"); g.addColorStop(1, "#1f3a8a"); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    for (let k = 0; k < 6; k++) { c.strokeStyle = ["#ff5fa8", "#43e0c6", "#ffd54a"][k % 3]; c.lineWidth = 10; c.beginPath(); c.moveTo(0, 120 + k * 60); c.lineTo(w, 60 + k * 60); c.stroke(); }
+    c.save(); c.translate(w / 2, h / 2); c.rotate(-Math.PI / 2); centered(c, "TRASH BLASTER", 0, 0, h * 0.85, 56, CHUNK, "#f4f1ea", "#1b1420", 8); c.restore(); } },
+  summit: { w: 256, h: 128, draw: (c, w, h) => { c.fillStyle = "#e8463a"; c.beginPath(); c.moveTo(0, 0); c.lineTo(w, h / 2); c.lineTo(0, h); c.fill(); centered(c, "SUMMIT", w * 0.38, h / 2, w * 0.6, 40, CHUNK, "#f4f1ea"); } },
+  stripes: { w: 256, h: 256, draw: (c, w, h) => { for (let x = 0; x < w; x += 32) { c.fillStyle = (x / 32) % 2 ? "#ffd6e2" : "#fff4f8"; c.fillRect(x, 0, 32, h); } c.fillStyle = "#e85a8a"; for (let x = 0; x < w; x += 64) for (let y = 16; y < h; y += 64) { c.beginPath(); c.arc(x + 16, y, 4, 0, 6.3); c.fill(); } } },
   // ---- the others' hero pictures (the blockout: one each)
   screens: { w: 512, h: 128, draw: (c, w, h) => {
     const r = seeded(9), s = h;
@@ -184,7 +195,7 @@ const SHEET = 2048;
 const PACK = (() => {
   const out: Record<string, { x: number; y: number; w: number; h: number }> = {};
   let x = 0, y = 0, rowH = 0;
-  for (const [k, cl] of Object.entries(CELLS)) {
+  for (const [k, cl] of Object.entries(CELLS).sort((p, q) => q[1].h - p[1].h || q[1].w - p[1].w)) { // (tallest first: rows waste less)
     if (x + cl.w > SHEET) { x = 0; y += rowH; rowH = 0; }
     out[k] = { x, y, w: cl.w, h: cl.h }; x += cl.w; rowH = Math.max(rowH, cl.h);
   }
@@ -278,35 +289,96 @@ function local(k: StoreKit, x: number, z: number) {
 
 // ---- LOW END: THE YARDS ---------------------------------------------------------------------------------------------
 
+/** stock on a shelf: n little things in a row (cols picked in turn); `kind` shapes them */
+function goods(k: StoreKit, u0: number, u1: number, v: number, y: number, n: number, cols: string[], kind: "box" | "can" | "jar" | "bottle", alongV = false, v1 = v) {
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n, u = alongV ? u0 : u0 + (u1 - u0) * t, vv = alongV ? v + (v1 - v) * t : v, col = cols[i % cols.length], h = 0.14 + k.rnd() * 0.12;
+    if (kind === "box") k.B(u, vv, y + h / 2, 0.16 + k.rnd() * 0.08, h, 0.14, col, 0.004, (k.rnd() - 0.5) * 0.3);
+    else if (kind === "can") k.cyl(u, vv, y + 0.08, 0.1, 0.16, col, 0.004, 10);
+    else if (kind === "jar") { k.cyl(u, vv, y + 0.1, 0.13, 0.2, col, 0.004, 10); k.cyl(u, vv, y + 0.21, 0.11, 0.03, "#c8ccd4", 0, 10); }
+    else { k.cyl(u, vv, y + 0.1, 0.08, 0.2, col, 0.004, 10, "y", 0.07); k.cyl(u, vv, y + 0.24, 0.03, 0.08, col, 0, 6); k.cyl(u, vv, y + 0.29, 0.04, 0.03, "#d9b45a", 0, 6); }
+  }
+}
+
 function rustbucket(k: StoreKit) {
-  const W = k.W, T = k.T;
-  // the yard bay (open to the street): a tyre stack, a heap of scrap, an oil drum, a hand-painted price board
-  for (let i = 0; i < 4; i++) k.cyl(6.4, 2.0, 0.14 + i * 0.27, 0.8, 0.26, "#1b1a1e", 0.012, 14);
-  for (let i = 0; i < 3; i++) k.cyl(7.4, 1.6, 0.14 + i * 0.27, 0.8, 0.26, "#1b1a1e", 0.012, 14);
-  k.cyl(8.6, 2.6, 0.45, 0.6, 0.9, "#2f6a8a", 0.012, 14); k.cyl(8.6, 2.6, 0.91, 0.62, 0.03, "#c8ccd4", 0, 14);
-  // the rummage heap (the dig spot): scrap in a pile
+  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, RUST = "#a85a2a", STEEL = "#8a8e98", DARK = "#2a2830";
+  k.skin(T, W - T, T, D - T, F, F + 0.012, "concrete", "#5a564e", 0); // (oil-stained concrete)
+  for (let q = 0; q < 6; q++) k.cyl(1 + k.rnd() * (W - 2), 1.2 + k.rnd() * (D - 2.4), F + 0.016, 0.6 + k.rnd() * 0.8, 0.004, "#3a3632", 0, 12); // (oil stains)
+  // THE CAR ON BLOCKS (the centrepiece, in the yard bay): a rusty hatchback, no wheels, the bonnet up, one door a different colour
+  { const cu = 7.55, cv = 2.2, y0 = F + 0.5;
+    for (const [du, dv] of [[-0.95, -0.7], [0.95, -0.7], [-0.95, 0.7], [0.95, 0.7]]) k.box(cu + du - 0.2, cu + du + 0.2, cv + dv - 0.2, cv + dv + 0.2, F, y0, "#9a9a9a", 0.01); // (breeze blocks)
+    k.B(cu, cv, y0 + 0.35, 2.6, 0.7, 1.9, RUST, 0.02); k.B(cu + 0.15, cv, y0 + 0.95, 1.4, 0.55, 1.75, "#c8743a", 0.02);
+    k.B(cu + 0.15, cv - 0.88, y0 + 0.95, 1.2, 0.4, 0.03, "#7fb4c8", 0.004); k.B(cu + 0.15, cv + 0.88, y0 + 0.95, 1.2, 0.4, 0.03, "#7fb4c8", 0.004);
+    k.B(cu + 0.4, cv - 0.96, y0 + 0.35, 1.0, 0.62, 0.04, "#3a6a9a", 0.008); // (the odd door)
+    k.B(cu - 1.15, cv, y0 + 0.95, 0.9, 0.05, 1.7, RUST, 0.01, 0, 0, -1.1); // (the bonnet, up)
+    k.B(cu - 0.95, cv, y0 + 0.55, 0.6, 0.35, 0.9, "#3a3a3a", 0.01); // (the engine)
+    for (const dv of [-0.65, 0.65]) k.cyl(cu - 1.31, cv + dv, y0 + 0.45, 0.22, 0.04, "#f4e2b8", 0, 10, "u");
+    for (let i = 0; i < 4; i++) k.cyl(W - T - 0.25, 1.4 + i * 0.75, F + 0.38, 0.75, 0.24, "#1b1a1e", 0.012, 14, "u"); // (its wheels, leaning on the wall)
+  }
+  // the yard: tyre stacks and an oil drum along the right wall; the scrap heap (the rummage spot)
+  for (let i = 0; i < 4; i++) k.cyl(8.8, 4.6, F + 0.13 + i * 0.26, 0.8, 0.26, "#1b1a1e", 0.012, 14);
+  for (let i = 0; i < 3; i++) k.cyl(8.8, 7.1, F + 0.13 + i * 0.26, 0.8, 0.26, "#1b1a1e", 0.012, 14);
+  k.cyl(8.85, 8.1, F + 0.45, 0.6, 0.9, "#2f6a8a", 0.012, 14); k.cyl(8.85, 8.1, F + 0.91, 0.62, 0.03, "#c8ccd4", 0, 14);
   const dg = STORE_FIXTURES.rustbucket.dig!;
-  for (let q = 0; q < 26; q++) { const a = k.rnd() * 6.3, r = k.rnd() * 0.9, y = 0.12 + (0.9 - r) * 0.5 * k.rnd();
-    k.B(dg[0] + Math.cos(a) * r, dg[1] + Math.sin(a) * r, y, 0.2 + k.rnd() * 0.4, 0.1 + k.rnd() * 0.2, 0.2 + k.rnd() * 0.4, ["#7a4a2a", "#8a8a90", "#5a5a60", "#a86a3a", "#3a6a8a", "#c8ccd4"][q % 6], 0.008, k.rnd() * 3, (k.rnd() - 0.5) * 0.6, (k.rnd() - 0.5) * 0.6); }
-  // inside: hubcaps on the left wall, a crowbar rack
+  for (let q = 0; q < 34; q++) { const a = k.rnd() * 6.3, r = k.rnd() * 0.85, y = F + 0.1 + (0.85 - r) * 0.55 * k.rnd();
+    k.B(dg[0] + Math.cos(a) * r, dg[1] + Math.sin(a) * r, y, 0.18 + k.rnd() * 0.4, 0.08 + k.rnd() * 0.2, 0.18 + k.rnd() * 0.4, ["#7a4a2a", STEEL, "#5a5a60", RUST, "#3a6a8a", "#c8ccd4"][q % 6], 0.008, k.rnd() * 3, (k.rnd() - 0.5) * 0.6, (k.rnd() - 0.5) * 0.6); }
+  // the shelf of sorted junk at the back, the counter (a steel top on oil drums), a bell
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.rustbucket.shelves[0];
+    k.box(u0, u1, v0, v1, h - 0.05, h, STEEL, 0.008); k.box(u0, u1, v0, v1, 0.45, 0.5, STEEL, 0.008); for (const u of [u0 + 0.05, u1 - 0.05]) k.box(u - 0.04, u + 0.04, v0, v1, F, h, DARK, 0.006);
+    goods(k, u0 + 0.2, u1 - 0.2, (v0 + v1) / 2, 0.5, 9, ["#c8ccd4", RUST, "#3a6a8a", "#5a5a60"], "can"); }
+  { const [c0, c1, cv0, cv1] = STORE_SHELLS.rustbucket.counter;
+    k.box(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.05, STEEL, 0.01); k.box(c0, c1, cv0 - 0.02, cv0, 0.1, 0.98, "#5a5248", 0.004);
+    k.cyl(c0 + 0.5, (cv0 + cv1) / 2, 1.1, 0.14, 0.08, "#d9b45a", 0.004, 10, "y", 0.04); k.B(c0 + 2.4, (cv0 + cv1) / 2, 1.09, 0.5, 0.06, 0.3, "#c8a878", 0.004, 0.2); } // (a bell, a ledger)
+  // the walls: hubcaps, a pegboard of spanners, the house rules, an engine on a pallet by the counter
   for (let i = 0; i < 6; i++) k.cyl(T + 0.04, 2.0 + (i % 3) * 1.2, 1.4 + Math.floor(i / 3) * 0.8, 0.5, 0.03, "#c8ccd4", 0.006, 14, "u");
+  k.box(1.0, 4.2, D - T - 0.04, D - T, 1.4, 2.8, "#c8a878", 0.004);
+  for (let i = 0; i < 10; i++) k.B(1.25 + i * 0.32, D - T - 0.07, 2.0 + (i % 2) * 0.35, 0.05, 0.4 + (i % 3) * 0.1, 0.02, STEEL, 0.003);
+  k.pic("rustNotes", 4.9, D - T - 0.03, 2.2, 0.9, 0.9, [0, -1]);
+  k.box(4.8, 5.6, 7.3, 8.1, F, F + 0.12, "#a8865a", 0.006); k.B(5.2, 7.7, F + 0.42, 0.6, 0.5, 0.55, "#3a3a3a", 0.01); k.cyl(5.2, 7.7, F + 0.75, 0.25, 0.16, DARK, 0.006, 10);
+  // the ceiling: chains hanging in the bay, a hook, a tyre swing
+  for (const u of [6.6, 8.4]) { k.cyl(u, 5.0, H - 0.8, 0.05, 1.5, "#5a5a60", 0, 4); k.B(u, 5.0, H - 1.6, 0.12, 0.16, 0.04, "#5a5a60", 0.004); }
+  k.cyl(3.0, 3.0, H - 1.1, 0.02, 2.2, "#c8a878", 0, 3); k.cyl(3.0, 3.0, 2.3, 0.8, 0.24, "#1b1a1e", 0.012, 14, "u");
   k.outside(() => { k.box(0.6, 3.2, -0.5, -0.05, 2.95, 3.05, "#8a4a22", 0.012); }); // (a rusty canopy rail over the window)
-  void W;
 }
 
 function plugpray(k: StoreKit) {
+  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, GREY = "#5a5248";
+  k.skin(T, W - T, T, D - T, F, F + 0.012, "panel", "#5e6a66", 0); // (worn lino)
   // the window: a wall of stacked tellies, all on (static, test cards, NO SIGNAL), facing the street
-  const v = 0.55;
   for (let row = 0; row < 3; row++) for (let i = 0; i < 6; i++) {
     const u = 2.75 + i * 1.02, y = 0.85 + row * 0.62;
-    k.B(u, v, y, 0.9, 0.56, 0.5, row % 2 ? "#3a3640" : "#5a5248", 0.012);
-    k.pic("screens", u, v - 0.255, y + 0.02, 0.7, 0.44, [0, -1], true, [((i + row) % 4) / 4, 0, ((i + row) % 4 + 1) / 4, 1]);
+    k.B(u, 0.55, y, 0.9, 0.56, 0.5, row % 2 ? "#3a3640" : GREY, 0.012);
+    k.pic("screens", u, 0.295, y + 0.02, 0.7, 0.44, [0, -1], true, [((i + row) % 4) / 4, 0, ((i + row) % 4 + 1) / 4, 1]);
   }
+  // THE GUTTED ARCADE CABINET (the centrepiece): side art, a glowing screen, the control panel, its back off and its
+  // wires spilling out, a sign taped on: "OUT OF ORDER (IN ORDER)"
+  { const cu = 8.1, cv = 8.1, y0 = F;
+    k.B(cu, cv, y0 + 0.95, 0.95, 1.9, 0.8, "#1b1420", 0.012);
+    for (const s2 of [-1, 1]) k.pic("arcadeSide", cu + s2 * 0.49, cv, y0 + 1.05, 0.7, 1.4, [s2, 0]);
+    k.pic("arcade", cu, cv - 0.41, y0 + 1.45, 0.62, 0.55, [0, -1], true);
+    k.B(cu, cv - 0.5, y0 + 1.0, 0.85, 0.08, 0.35, "#3a3444", 0.006, 0, 0.35); k.cyl(cu - 0.2, cv - 0.55, y0 + 1.1, 0.06, 0.12, "#e8463a", 0, 8); for (const du of [0.1, 0.22]) k.cyl(cu + du, cv - 0.55, y0 + 1.06, 0.06, 0.03, "#ffd54a", 0, 8);
+    k.bulb(cu - 0.3, cv - 0.42, y0 + 1.84, 0.07, "#ff5fa8"); k.bulb(cu + 0.3, cv - 0.42, y0 + 1.84, 0.07, "#43e0c6"); k.box(cu - 0.25, cu + 0.25, cv - 0.44, cv - 0.4, y0 + 1.78, y0 + 1.9, "#ffd54a", 0); // (the marquee)
+    for (let i = 0; i < 6; i++) k.B(cu - 0.35 + i * 0.14, cv + 0.48, y0 + 0.2 + k.rnd() * 0.4, 0.02, 0.5, 0.02, ["#e8463a", "#ffd54a", "#2fa4a0", "#f4f1ea"][i % 4], 0, 0, 0.5 + k.rnd() * 0.5); }
+  // the shelf (left wall): toasters, radios, phones on three levels, a tower of tellies on top
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.plugpray.shelves[0];
+    for (const y of [0.45, 0.85, h]) k.box(u0, u1, v0, v1, y - 0.04, y, "#7a6a5a", 0.008);
+    for (const vv of [v0 + 0.05, v1 - 0.05]) k.box(u0, u1, vv - 0.04, vv + 0.04, F, h, "#4a3a2a", 0.006);
+    goods(k, (u0 + u1) / 2, 0, v0 + 0.3, 0.45, 9, ["#c8ccd4", "#e8463a", "#ffd54a", "#2b2433"], "box", true, v1 - 0.3);
+    goods(k, (u0 + u1) / 2, 0, v0 + 0.3, 0.85, 9, ["#3a3640", "#f4f1ea", "#2fa4a0"], "box", true, v1 - 0.3);
+    for (let i = 0; i < 4; i++) { const vv = v0 + 0.8 + i * 1.5; k.B((u0 + u1) / 2, vv, h + 0.3, 0.55, 0.5, 0.65, GREY, 0.01); k.pic("screens", u1 + 0.005, vv, h + 0.32, 0.4, 0.32, [1, 0], true, [(i % 4) / 4, 0, (i % 4 + 1) / 4, 1]); } }
+  // the counter: grey laminate, a soldering station, a radio with its insides out
+  { const [c0, c1, cv0, cv1] = STORE_SHELLS.plugpray.counter;
+    k.box(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.05, "#b8b4a8", 0.01); k.box(c0, c1, cv0 - 0.02, cv0, 0.1, 0.98, "#3a6a8a", 0.004);
+    k.B(c0 + 0.6, (cv0 + cv1) / 2, 1.12, 0.35, 0.14, 0.25, "#e8463a", 0.006); k.cyl(c0 + 0.85, (cv0 + cv1) / 2, 1.2, 0.02, 0.3, "#c8ccd4", 0, 4, "y");
+    k.B(c0 + 1.6, (cv0 + cv1) / 2, 1.14, 0.5, 0.18, 0.2, "#c8a878", 0.006); k.B(c0 + 1.6, (cv0 + cv1) / 2 - 0.3, 1.07, 0.3, 0.04, 0.2, "#2f8a3a", 0.003); }
   // the workbench at the back: a pegboard of tools, a lamp, a half-gutted toaster
-  k.box(1.2, 4.0, 8.6, 9.3, 0, 0.9, "#6a5a4a", 0.012); k.skin(1.2, 4.0, 8.6, 9.3, 0.9, 0.96, "wood", "#a8865a", 0.008);
+  k.box(1.2, 4.0, 8.6, 9.3, F, 0.9, "#6a5a4a", 0.012); k.skin(1.2, 4.0, 8.6, 9.3, 0.9, 0.96, "wood", "#a8865a", 0.008);
   k.box(1.2, 4.0, 9.35, 9.4, 1.3, 2.6, "#c8a878", 0.004);
   for (let i = 0; i < 8; i++) k.B(1.45 + i * 0.33, 9.32, 1.6 + (i % 3) * 0.35, 0.05, 0.3, 0.03, ["#e8463a", "#ffd54a", "#3a3640", "#2fa4a0"][i % 4], 0.004);
   k.B(2.6, 8.95, 1.08, 0.5, 0.3, 0.35, "#c8ccd4", 0.008);
+  // the ceiling: extension leads hanging in loops, a dangling bare bulb or two, a huge wall clock
+  for (let i = 0; i < 5; i++) { const u = 1.5 + i * 1.6, v = 3 + (i % 2) * 2; k.cyl(u, v, H - 0.9, 0.03, 1.8, ["#f4f1ea", "#ff7a1a", "#1b1420"][i % 3], 0, 4); k.B(u, v, H - 1.85, 0.1, 0.12, 0.06, "#f4f1ea", 0.004); }
+  k.cyl(W - T - 0.03, 5.5, 3.4, 0.9, 0.04, "#f4f1ea", 0.008, 24, "u"); k.B(W - T - 0.06, 5.5, 3.5, 0.02, 0.32, 0.04, "#1b1420", 0); k.B(W - T - 0.06, 5.62, 3.4, 0.02, 0.04, 0.26, "#1b1420", 0);
 }
 
 // ---- THE MIDDLE ------------------------------------------------------------------------------------------------------
@@ -347,7 +419,7 @@ function needledrop(k: StoreKit) {
   // ================================ INSIDE
   // the floor: oak boards (just above the shell's floor), a dark skirting, the walls' lower half in black
   const F = STORE_FLOOR;
-  k.skin(T, W - T, T + 0.02, D - T, F, F + 0.015, "boards", "#6a4428", 0);
+  k.skin(T, W - T, T + 0.02, D - T, F, F + 0.015, "boards", "#4a2c16", 0); // (R13b: Blake: "floor too bright")
   for (const [u0, u1, v0, v1] of [[T, T + 0.03, T, D - T], [W - T - 0.03, W - T, T, D - T], [T, W - T, D - T - 0.03, D - T]] as const) k.box(u0, u1, v0, v1, 0.05, 1.1, INK, 0);
   // the ceiling's black ductwork and a strip of pink neon along the back wall
   k.cyl(W / 2, D * 0.5, H - 0.45, 0.45, D - 1.2, "#2a2830", 0.008, 12, "v");
@@ -372,11 +444,11 @@ function needledrop(k: StoreKit) {
     k.pic("dollarBin", u, v - 0.43, 0.42, 0.6, 0.3, [0, -1]); }
   // THE SLEEVE WALL (right side wall, above the black dado): framed sleeves in a grid, and a shelf of new arrivals
   { const u = W - T - 0.025;
-    for (let row = 0; row < 3; row++) for (let i = 0; i < 6; i++) { const v = 2.6 + i * 1.12, y = 1.8 + row * 0.62;
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 4; i++) { const v = 2.6 + i * 1.12, y = 1.8 + row * 0.62;
       k.B(u - 0.005, v, y, 0.02, 0.56, 0.56, INK, 0.004);
       k.pic("sleeves", u - 0.03, v, y, 0.5, 0.5, [-1, 0], false, [((i + row) % 4) / 4, ((row * 2 + i) % 4) / 4, ((i + row) % 4 + 1) / 4, ((row * 2 + i) % 4 + 1) / 4]); }
-    k.box(W - T - 0.35, W - T, 2.2, 9.2, 1.18, 1.22, OAK, 0.008); // (a ledge of new arrivals, leaning on the wall)
-    for (let i = 0; i < 12; i++) k.B(W - T - 0.16, 2.45 + i * 0.58, 1.38, 0.02, 0.32, 0.32, sleeveCol(), 0.004, 0, 0, 0.18); }
+    k.box(W - T - 0.35, W - T, 2.2, 6.9, 1.18, 1.22, OAK, 0.008); // (a ledge of new arrivals, leaning on the wall)
+    for (let i = 0; i < 8; i++) k.B(W - T - 0.16, 2.45 + i * 0.58, 1.38, 0.02, 0.32, 0.32, sleeveCol(), 0.004, 0, 0, 0.18); }
   // the left wall: the two posters and a shelf of cassettes over the display case
   { const u = T + 0.025;
     k.pic("posterGig", u + 0.01, 3.4, 2.2, 0.8, 1.2, [1, 0]); k.pic("posterTour", u + 0.01, 4.5, 2.2, 0.8, 1.2, [1, 0]);
@@ -406,6 +478,35 @@ function needledrop(k: StoreKit) {
     // the speakers (either end of the back wall)
     for (const u of [0.85, W - 0.85]) { k.box(u - 0.35, u + 0.35, D - T - 0.55, D - T, 0, 1.3, "#1e1c22", 0.012); k.cyl(u, D - T - 0.56, 0.4, 0.42, 0.03, "#3a3842", 0.004, 16, "v"); k.cyl(u, D - T - 0.56, 0.95, 0.24, 0.03, "#3a3842", 0.004, 14, "v"); }
   }
+  // THE LISTENING BOOTH (the centrepiece): a little oak room in the back right corner, glass to the shop, a doorway; a
+  // stool, a deck on a shelf, headphones hanging on hooks, a lamp, a sign on top
+  { const u0 = 9.0, v0 = 7.4, u1 = W - T, v1 = D - T, top = 2.5, F2 = STORE_FLOOR;
+    k.skin(u0, u0 + 0.12, v0, v1 - 1.2, F2, F2 + top, "wood", OAK2, 0.012); // (its side to the shop: glass above the waist, the doorway at the back)
+    k.skin(u0, u0 + 0.12, v1 - 1.2, v1, F2 + 2.1, F2 + top, "wood", OAK2, 0.012); // (over the doorway)
+    k.skin(u0, u1, v0, v0 + 0.12, F2, F2 + top, "wood", OAK2, 0.012);
+    k.skin(u0 - 0.04, u1, v0 - 0.04, v1, F2 + top, F2 + top + 0.1, "wood", OAK, 0.012); // (its roof)
+    k.glassBox(u0 - 0.01, u0 + 0.13, v0 + 0.3, v1 - 1.2, F2 + 1.0, F2 + top - 0.15); // (the window into it: the browse spot looks in)
+    k.box(u0 - 0.03, u0 + 0.15, v0 + 0.25, v1 - 1.15, F2 + 0.95, F2 + 1.02, OAK, 0.006);
+    k.pic("boothSign", (u0 + u1) / 2, v0 - 0.03, F2 + top + 0.35, 1.9, 0.48, [0, -1], true);
+    k.box((u0 + u1) / 2 - 0.9, (u0 + u1) / 2 + 0.9, v0 - 0.02, v0 + 0.02, F2 + top + 0.08, F2 + top + 0.12, INK, 0);
+    // inside: a shelf with a deck, the headphones on hooks, a stool, a little lamp, a poster
+    k.box(u0 + 0.4, u1 - 0.1, v1 - 0.45, v1, F2 + 0.95, F2 + 1.0, OAK, 0.006);
+    k.B((u0 + u1) / 2, v1 - 0.25, F2 + 1.05, 0.45, 0.08, 0.36, "#c8ccd4", 0.006); k.cyl((u0 + u1) / 2 - 0.05, v1 - 0.25, F2 + 1.1, 0.3, 0.02, INK, 0.004, 18); k.cyl((u0 + u1) / 2 - 0.05, v1 - 0.25, F2 + 1.115, 0.1, 0.01, TEAL, 0, 10);
+    for (let i = 0; i < 3; i++) { const u = u0 + 0.5 + i * 0.55; k.cyl(u, v1 - 0.06, F2 + 1.75, 0.03, 0.12, "#c8ccd4", 0, 6, "v"); k.cyl(u, v1 - 0.16, F2 + 1.6, 0.22, 0.04, [PINK, TEAL, "#ffd54a"][i], 0.004, 14, "v", undefined); k.B(u, v1 - 0.16, F2 + 1.72, 0.04, 0.2, 0.04, INK, 0); }
+    k.cyl(u0 + 1.0, v0 + 1.2, F2 + 0.35, 0.36, 0.06, "#7a2f3a", 0.006, 14); k.cyl(u0 + 1.0, v0 + 1.2, F2 + 0.17, 0.06, 0.34, "#c8ccd4", 0, 6);
+    k.pic("posterTour", u1 - 0.03, (v0 + v1) / 2, F2 + 1.7, 0.55, 0.82, [-1, 0]);
+    k.bulb(u0 + 0.7, v1 - 0.4, F2 + 2.2, 0.12, "#ffcc88"); }
+  // HANGING THINGS: records on strings over the bins, a string of pennant bunting across the shop, a record clock
+  for (const [u0, u1] of [[1.2, 3.4], [8.34, 10.54]] as const) for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
+    const u = u0 + 0.4 + i * (u1 - u0 - 0.8) / 2, v = 3.9 + j * 2.0, y = 2.9 + ((i + j) % 2) * 0.3;
+    k.cyl(u, v, (y + H) / 2, 0.008, H - y, "#c8ccd4", 0, 3);
+    k.cyl(u, v, y, 0.42, 0.012, INK, 0.004, 18, "v"); k.cyl(u, v, y, 0.14, 0.016, [PINK, TEAL, "#ffd54a", "#e8463a"][(i + j * 3) % 4], 0, 10, "v"); }
+  for (let i = 0; i < 18; i++) { const t = i / 17, u = 1.0 + t * (W - 2.0), v = 2.2 + Math.sin(t * Math.PI) * 0.6, y = 3.6 - Math.sin(t * Math.PI) * 0.5;
+    k.B(u, v, y - 0.14, 0.26, 0.26, 0.01, [PINK, TEAL, "#ffd54a", "#f4f1ea"][i % 4], 0, 0, 0, Math.PI / 4); }
+  { const cu = W / 2 - 2.6, y = 3.0; k.cyl(cu, D - T - 0.03, y, 0.62, 0.025, INK, 0.006, 22, "v"); k.cyl(cu, D - T - 0.05, y, 0.2, 0.012, PINK, 0, 12, "v"); k.B(cu + 0.06, D - T - 0.07, y + 0.08, 0.025, 0.2, 0.01, "#f4f1ea", 0, 0, 0, -0.6); }
+  // GUITARS on the left wall (between the posters and the cassettes): bodies, necks, headstocks, on hooks
+  for (let i = 0; i < 3; i++) { const v = 5.5 + i * 0.6, u = T + 0.09, col = ["#c84a2a", "#1b1420", "#e8c050"][i];
+    k.B(u, v, 1.75, 0.08, 0.5, 0.38, col, 0.008); k.B(u, v, 1.95, 0.08, 0.28, 0.3, col, 0.008); k.B(u, v, 2.35, 0.05, 0.6, 0.06, "#5a3a20", 0.004); k.B(u, v, 2.72, 0.05, 0.16, 0.09, INK, 0.004); }
   // the listening chair by the window (a battered armchair) and a crate as a side table
   k.box(1.0, 1.9, 1.5, 2.3, F, 0.48, "#7a2f3a", 0.012); k.box(1.0, 1.9, 2.15, 2.4, 0.48, 1.1, "#7a2f3a", 0.012); for (const u of [1.0, 1.75]) k.box(u, u + 0.15, 1.5, 2.3, 0.48, 0.7, "#6a2832", 0.008);
   k.skin(2.1, 2.55, 1.6, 2.05, F, 0.5, "crate", "#c8a070", 0.008);
@@ -413,39 +514,111 @@ function needledrop(k: StoreKit) {
 }
 
 function peakfomo(k: StoreKit) {
-  const W = k.W, D = k.D, T = k.T;
-  // the porch: a shingle roof on log posts over the door, a mountain mural inside on the back wall
+  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, PINE = "#6a4a2a", MOSS = "#3a6a4a";
+  k.skin(T, W - T, T, D - T, F, F + 0.012, "boards", "#4a3018", 0);
+  // the porch: a shingle roof on log posts over the door
   k.outside(() => {
-    for (const u of [4.4, 7.34]) k.cyl(u, -1.5, 1.55, 0.22, 3.1, "#6a4a2a", 0.012, 10);
+    for (const u of [4.4, 7.34]) k.cyl(u, -1.5, 1.55, 0.22, 3.1, PINE, 0.012, 10);
     k.B(5.87, -0.8, 3.2, 3.6, 0.1, 1.9, "#3a4a3a", 0.012, 0, 0.18);
-    k.box(4.2, 7.54, -1.7, 0, 0, 0.12, "#7a5a3a", 0.008);
+    k.box(4.2, 7.54, -1.7, 0, 0.15, 0.27, "#7a5a3a", 0.008);
   });
-  k.pic("mural", W / 2, D - T - 0.03, 2.8, 5.0, 2.5, [0, -1]);
-  // a tent on the floor (a triangle prism of two tilted boxes), a canoe on the left wall
-  k.B(3.2, 7.6, 0.6, 2.0, 0.04, 1.3, "#e8902a", 0.012, 0, 0.75); k.B(3.2, 8.4, 0.6, 2.0, 0.04, 1.3, "#d87a1a", 0.012, 0, -0.75);
-  k.B(T + 0.25, 5.5, 2.6, 0.4, 0.35, 3.6, "#c84a2a", 0.012);
-  // trail-mix barrels by the counter
-  for (const [u, v] of [[8.6, 5.3], [9.3, 5.3]]) { k.cyl(u, v, 0.45, 0.6, 0.9, "#8a6a3a", 0.012, 12); k.ball(u, v, 0.95, 0.5, "#c89050", 0, 3); }
+  // THE CLIMBING WALL (the centrepiece): the right half of the back wall, up to the ceiling, holds in every colour, a
+  // rope from the top, a SUMMIT flag, a crash mat
+  { const u0 = 6.3, u1 = W - T - 0.1, v = D - T;
+    k.box(u0, u1, v - 0.12, v, F, H - 0.4, "#c8b89a", 0.012);
+    for (let q = 0; q < 46; q++) k.B(u0 + 0.2 + k.rnd() * (u1 - u0 - 0.4), v - 0.16, F + 0.4 + k.rnd() * (H - 1.3), 0.12 + k.rnd() * 0.1, 0.1 + k.rnd() * 0.08, 0.08, ["#e8463a", "#ffd54a", "#2fa4a0", "#7a3fa0", "#43c7a6", "#ff7a1a"][q % 6], 0.004, 0, 0, k.rnd() * 3);
+    k.cyl((u0 + u1) / 2, v - 0.4, (F + H - 0.5) / 2, 0.04, H - 0.6 - F, "#e8902a", 0, 4);
+    k.cyl(u1 - 0.3, v - 0.2, H - 0.9, 0.03, 0.8, "#3a3444", 0, 4); k.pic("summit", u1 - 0.65, v - 0.22, H - 0.95, 0.6, 0.3, [0, -1]);
+    k.box(u0, u1, v - 1.5, v - 0.12, F, F + 0.25, "#2f6a8a", 0.01); }
+  k.pic("mural", 3.2, D - T - 0.03, 2.8, 4.6, 2.3, [0, -1]);
+  // the tent display (the low platform): a tent on it, a camp stove, a lantern; the canoe and backpacks on the left wall
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.peakfomo.shelves[0];
+    k.box(u0, u1, v0, v1, F, h, "#7a5a3a", 0.01); k.skin(u0, u1, v0, v1, h - 0.02, h, "boards", "#5a3a20", 0);
+    const tu = (u0 + u1) / 2 - 0.4, tv = (v0 + v1) / 2; k.B(tu, tv - 0.42, h + 0.55, 1.8, 0.04, 1.2, "#e8902a", 0.012, 0, 0.78); k.B(tu, tv + 0.42, h + 0.55, 1.8, 0.04, 1.2, "#d87a1a", 0.012, 0, -0.78);
+    k.B(u1 - 0.5, tv - 0.6, h + 0.12, 0.3, 0.2, 0.3, "#5a5a60", 0.006); k.cyl(u1 - 0.5, tv + 0.7, h + 0.15, 0.16, 0.26, MOSS, 0.004, 8); k.bulb(u1 - 0.5, tv + 0.7, h + 0.2, 0.1, "#ffd8a0"); }
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.peakfomo.shelves[1];
+    for (const y of [0.6, 1.05, h]) k.box(u0, u1, v0, v1, y - 0.04, y, PINE, 0.008);
+    for (let i = 0; i < 5; i++) { const vv = v0 + 0.4 + i * 0.7, col = ["#e8463a", MOSS, "#2f6a8a", "#ffd54a", "#7a3fa0"][i]; k.B((u0 + u1) / 2, vv, h + 0.28, 0.4, 0.55, 0.45, col, 0.01); k.ball((u0 + u1) / 2, vv, h + 0.55, 0.4, col, 0.006, 4); }
+    goods(k, (u0 + u1) / 2, 0, v0 + 0.3, 0.6, 7, ["#5a3a20", "#3a3444"], "box", true, v1 - 0.3);
+    goods(k, (u0 + u1) / 2, 0, v0 + 0.3, 1.05, 8, ["#c89050", "#e8463a", MOSS], "jar", true, v1 - 0.3); }
+  // trail-mix barrels by the counter; the counter: a log slab on crates, a map under glass, a bell
+  for (const [u, v] of [[7.6, 5.4], [8.4, 5.4]]) { k.cyl(u, v, F + 0.45, 0.6, 0.9, "#8a6a3a", 0.012, 12); k.ball(u, v, F + 0.95, 0.5, "#c89050", 0, 3); }
+  { const [c0, c1, cv0, cv1] = STORE_SHELLS.peakfomo.counter;
+    k.skin(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.08, "timber", "#a8784a", 0.01); k.skin(c0, c1, cv0 - 0.02, cv0, F, 0.98, "crate", "#a8865a", 0.004);
+    k.box(c0 + 0.2, c0 + 1.2, cv0 + 0.1, cv1 - 0.1, 1.08, 1.09, "#e8dcb0", 0); k.cyl(c1 - 0.3, (cv0 + cv1) / 2, 1.12, 0.14, 0.08, "#d9b45a", 0.004, 10, "y", 0.04); }
+  // the ceiling: a kayak and a bike hanging, pennant flags, lanterns; a fake pine tree by the door
+  k.B(4.0, 4.5, H - 1.0, 3.4, 0.3, 0.6, "#e8463a", 0.012); k.B(4.0, 4.5, H - 0.88, 0.8, 0.08, 0.45, "#1b1420", 0.004);
+  for (const u of [2.6, 5.4]) k.cyl(u, 4.5, H - 0.45, 0.02, 0.8, "#3a3444", 0, 3);
+  { const bu = 8.6, bv = 3.6, by = H - 1.3; for (const du of [-0.5, 0.5]) k.cyl(bu + du, bv, by, 0.62, 0.04, "#1b1420", 0.006, 16, "v"); k.B(bu, bv, by + 0.15, 1.0, 0.04, 0.04, "#2fa4a0", 0.004, 0, 0, 0.3); k.B(bu - 0.1, bv, by + 0.2, 0.04, 0.4, 0.04, "#2fa4a0", 0.004); k.cyl(bu, bv, H - 0.6, 0.02, 0.9, "#3a3444", 0, 3); }
+  for (let i = 0; i < 14; i++) { const t = i / 13, u = 1.0 + t * (W - 2), y = H - 1.4 + Math.sin(t * Math.PI) * -0.4 + 0.4; k.B(u, 6.8, y - 0.15, 0.24, 0.24, 0.01, ["#e8463a", "#ffd54a", MOSS, "#f4f1ea"][i % 4], 0, 0, 0, Math.PI / 4); }
+  { const pu = 3.9, pv = 1.2; k.cyl(pu, pv, F + 0.15, 0.4, 0.3, "#7a4a2a", 0.008, 10); for (let i = 0; i < 4; i++) k.cyl(pu, pv, F + 0.55 + i * 0.4, 1.1 - i * 0.24, 0.6, MOSS, 0.01, 10, "y", 0.1); }
+  void D;
 }
 
 // ---- HIGH END: SNOB ROW ---------------------------------------------------------------------------------------------
 
 function maisonpong(k: StoreKit) {
-  const W = k.W, D = k.D, H = k.H;
-  // a chandelier (a gold ring of glowing drops), gold trim on the plinths, a poster in each window
+  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, GOLD = "#d9b45a", IVORY = "#efe8da", BLUSH = "#f2c8c8";
+  k.skin(T, W - T, T, D - T, F, F + 0.012, "marble", "#e8e4dc", 0);
+  // gold pilasters and a cornice round the walls; tall gilt mirrors on the side walls
+  for (const v of [2.4, 6.0, 9.6]) for (const u of [T + 0.06, W - T - 0.06]) k.box(u - 0.06, u + 0.06, v - 0.2, v + 0.2, F, H - 0.6, IVORY, 0.008);
+  for (const [u0, u1] of [[T, T + 0.12], [W - T - 0.12, W - T]]) k.box(u0, u1, T, D - T, H - 0.7, H - 0.55, GOLD, 0.006);
+  for (const [u, n] of [[T + 0.04, 1], [W - T - 0.04, -1]] as const) for (const v of [4.2, 7.8]) { k.box(u - 0.04, u + 0.04, v - 0.75, v + 0.75, 1.0, 3.8, GOLD, 0.008); k.B(u + n * 0.05, v, 2.4, 0.01, 2.6, 1.3, "#c8e0ec", 0); }
+  // THE PERFUME FOUNTAIN (the centrepiece): a marble basin of pink water, a column, a giant bottle on top
+  { const cu = 5.07, cv = 3.9;
+    k.cyl(cu, cv, F + 0.3, 1.6, 0.6, "#f4f0ea", 0.012, 24); k.cyl(cu, cv, F + 0.58, 1.4, 0.04, "#ff9ad0", 0, 24); k.bulb(cu, cv, F + 0.6, 0.2, "#ffd0e8");
+    k.cyl(cu, cv, F + 1.0, 0.3, 0.9, "#f4f0ea", 0.01, 14); k.cyl(cu, cv, F + 1.5, 0.5, 0.1, GOLD, 0.006, 16);
+    k.B(cu, cv, F + 2.0, 0.7, 0.9, 0.45, "#c8e4f0", 0.012); k.B(cu, cv, F + 2.0, 0.5, 0.6, 0.3, BLUSH, 0); k.cyl(cu, cv, F + 2.55, 0.18, 0.2, GOLD, 0.006, 10); k.ball(cu, cv, F + 2.75, 0.3, GOLD, 0.006, 4); }
+  // the pedestals (the two shelves): one big bottle on each, under a little glass bell
+  for (const [u0, u1, v0, v1, h] of STORE_FIXTURES.maisonpong.shelves) { const um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
+    k.skin(u0, u1, v0, v1, F, h, "marble", "#f4f0ea", 0.01); k.box(u0 - 0.03, u1 + 0.03, v0 - 0.03, v1 + 0.03, h - 0.04, h, GOLD, 0.004);
+    k.cyl(um, vm, h + 0.14, 0.16, 0.28, "#e8c8e8", 0.004, 10); k.cyl(um, vm, h + 0.32, 0.06, 0.08, GOLD, 0, 8); }
+  // the counter: marble with a gold edge, testers on a tray, the back case lit (done in common: its goods here)
+  { const [c0, c1, cv0, cv1] = STORE_SHELLS.maisonpong.counter;
+    k.skin(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.06, "marble", "#f4f0ea", 0.01); k.box(c0 - 0.06, c1 + 0.06, cv0 - 0.06, cv1 + 0.06, 0.98, 1.0, GOLD, 0.004); k.box(c0, c1, cv0 - 0.02, cv0, F, 0.98, "#2a2228", 0.004);
+    k.box(c0 + 0.3, c0 + 1.1, cv0 + 0.15, cv1 - 0.15, 1.06, 1.08, GOLD, 0.003); goods(k, c0 + 0.35, c0 + 1.05, (cv0 + cv1) / 2, 1.08, 4, ["#e8c8e8", "#c8e4f0", "#f4e2b8", BLUSH], "bottle"); }
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.maisonpong.case!;
+    k.breakable("storecase_maisonpong", () => { goods(k, u0 + 0.2, u1 - 0.2, (v0 + v1) / 2, h * 0.55, 9, ["#e8c8e8", "#c8e4f0", "#f4e2b8", BLUSH, "#d9b45a"], "bottle"); }); }
+  // the chandelier (a gold ring of glowing drops), drapes in the windows, a velvet rope by the door, the posters
   const cu = W / 2, cv = D * 0.45, cy = Math.min(H - 1.4, 5.2) + 0.1;
-  k.cyl(cu, cv, cy, 1.2, 0.06, "#d9b45a", 0.006, 24); k.cyl(cu, cv, cy + 0.5, 0.6, 0.05, "#d9b45a", 0.006, 18);
-  for (let i = 0; i < 10; i++) { const a = (i / 10) * 6.283; k.bulb(cu + Math.cos(a) * 0.6, cv + Math.sin(a) * 0.6, cy - 0.1, 0.1, "#fff4d8"); }
-  for (const u of [1.2, W - 1.2]) k.pic("posterMaison", u + 0.6 * (u < 5 ? 1 : -1), 0.55, 2.2, 1.0, 1.5, [0, -1]);
-  k.outside(() => { for (const u of [0.3, W - 0.3]) k.box(u - 0.3, u + 0.3, -0.1, 0, 0, 7.4, "#d8d0c0", 0.012); });
+  k.cyl(cu, cv, cy, 1.2, 0.06, GOLD, 0.006, 24); k.cyl(cu, cv, cy + 0.5, 0.6, 0.05, GOLD, 0.006, 18); k.cyl(cu, cv, (cy + H) / 2 + 0.25, 0.03, H - cy - 0.5, GOLD, 0, 4);
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * 6.283; k.bulb(cu + Math.cos(a) * 0.6, cv + Math.sin(a) * 0.6, cy - 0.1, 0.1, "#fff4d8"); k.cyl(cu + Math.cos(a) * 0.6, cv + Math.sin(a) * 0.6, cy - 0.3, 0.05, 0.25, "#e8f4ff", 0, 6); }
+  for (const [u0, u1] of [[0.6, 3.4], [6.75, 9.55]]) for (const u of [u0 + 0.2, u1 - 0.2]) k.box(u - 0.18, u + 0.18, 0.32, 0.45, F, 4.7, "#7a2040", 0.008);
+  for (const u of [1.2, W - 1.2]) k.pic("posterMaison", u + 0.6 * (u < 5 ? 1 : -1), 0.6, 2.2, 1.0, 1.5, [0, -1]);
+  for (const u of [3.4, 6.75]) { k.cyl(u, 2.0, F + 0.45, 0.06, 0.9, GOLD, 0.004, 8); k.ball(u, 2.0, F + 0.95, 0.12, GOLD, 0, 3); }
+  k.cyl(5.07, 2.0, F + 0.8, 0.07, 3.3, "#7a2040", 0, 6, "u");
+  k.outside(() => { for (const u of [0.3, W - 0.3]) k.box(u - 0.3, u + 0.3, -0.1, 0, F - 0.03, 7.4, "#d8d0c0", 0.012); });
+  void D;
 }
 
 function bonbon(k: StoreKit) {
-  const W = k.W;
-  // the striped awning over the long window, and jars of sweets along the window's ledge
-  k.outside(() => {
-    for (let i = 0; i < 12; i++) { const u0 = 2.5 + i * (W - 3.0) / 12, u1 = u0 + (W - 3.0) / 12; k.B((u0 + u1) / 2, -0.62, 3.25, u1 - u0, 0.06, 1.4, i % 2 ? "#ffffff" : "#e85a8a", 0.006, 0, 0.42); }
-  });
-  k.box(2.6, W - 0.6, 0.32, 1.0, 0, 0.8, "#f8e8ee", 0.012);
+  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, PINK = "#e85a8a", CHOC = "#5a2e1a", CHOC2 = "#3a1a0e", CREAM = "#fff4e8";
+  // a pink and white checked floor, striped walls
+  for (let i = 0; i < Math.floor((W - 2 * T) / 0.6); i++) for (let j = 0; j < Math.floor((D - 2 * T) / 0.6); j++) k.box(T + i * 0.6, T + (i + 1) * 0.6, T + j * 0.6, T + (j + 1) * 0.6, F, F + 0.012, (i + j) % 2 ? "#ffd6e2" : "#fff4f8", 0);
+  k.pic("stripes", T + 0.03, D / 2, 2.5, D - 1.2, 3.2, [1, 0]); k.pic("stripes", W - T - 0.03, D / 2 + 1.0, 2.5, D - 3.4, 3.2, [-1, 0]); k.pic("stripes", W / 2, D - T - 0.03, 2.5, W - 1.0, 3.2, [0, -1]);
+  // the striped awning, jars of sweets along the window's ledge
+  k.outside(() => { for (let i = 0; i < 12; i++) { const u0 = 2.5 + i * (W - 3.0) / 12, u1 = u0 + (W - 3.0) / 12; k.B((u0 + u1) / 2, -0.62, 3.25, u1 - u0, 0.06, 1.4, i % 2 ? "#ffffff" : PINK, 0.006, 0, 0.42); } });
+  k.box(2.6, W - 0.6, 0.32, 1.0, F, 0.8, "#f8e8ee", 0.012);
   k.pic("jarsBonbon", (2.6 + W - 0.6) / 2, 0.66, 1.18, W - 3.4, (W - 3.4) / 4, [0, -1]);
+  // THE CHOCOLATE TOWER (the centrepiece): three tiers, pink drips, a ring of truffles on each, a strawberry on top
+  { const cu = 9.0, cv = 10.5;
+    k.cyl(cu, cv, F + 0.2, 1.3, 0.4, "#f4f0ea", 0.012, 20);
+    [[1.15, 0.7], [0.85, 0.6], [0.55, 0.5]].reduce((y, [d, h]) => { k.cyl(cu, cv, y + h / 2, d, h, CHOC, 0.012, 20); k.cyl(cu, cv, y + h - 0.05, d + 0.04, 0.1, "#ff9ad0", 0.004, 20);
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.283; k.ball(cu + Math.cos(a) * d / 2, cv + Math.sin(a) * d / 2, y + h + 0.04, 0.1, i % 2 ? CHOC2 : "#d9b45a", 0, 2); } return y + h; }, F + 0.4);
+    k.ball(cu, cv, F + 2.3, 0.26, "#e8302a", 0.006, 4); k.B(cu, cv, F + 2.45, 0.1, 0.08, 0.1, "#3a8a3a", 0); }
+  // the truffle case's goods, the shelf of macaron towers and ribboned boxes
+  { const [u0, u1, v0, , h] = STORE_FIXTURES.bonbon.case!;
+    k.breakable("storecase_bonbon", () => { for (let i = 0; i < 12; i++) k.ball(u0 + 0.25 + (i % 6) * (u1 - u0 - 0.5) / 5, v0 + 0.25 + Math.floor(i / 6) * 0.3, h * 0.55 + 0.06, 0.11, [CHOC, CHOC2, "#d9b45a"][i % 3], 0.003, 2); }); }
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.bonbon.shelves[0];
+    k.box(u0, u1, v0, v1, F, h, "#fff4f8", 0.01); k.box(u0 - 0.03, u1 + 0.03, v0 - 0.03, v1 + 0.03, h - 0.04, h, PINK, 0.004);
+    for (let t = 0; t < 3; t++) { const u = u0 + 0.4 + t * 0.9; for (let q = 0; q < 6; q++) k.cyl(u, (v0 + v1) / 2, h + 0.04 + q * 0.07, 0.3 - q * 0.035, 0.06, ["#ff9ad0", "#9fe3ff", "#ffd54a", "#c8f0a0"][(q + t) % 4], 0.003, 12); } }
+  // the counter: pink, a glass front, a cake stand, a pink chandelier; candy-cane posts at each end
+  { const [c0, c1, cv0, cv1] = STORE_SHELLS.bonbon.counter;
+    k.box(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.05, CREAM, 0.01); k.box(c0, c1, cv0 - 0.02, cv0, F, 0.98, PINK, 0.004);
+    for (const u of [c0 - 0.2, c1 + 0.2]) { k.cyl(u, (cv0 + cv1) / 2, F + 0.65, 0.14, 1.3, "#ffffff", 0.006, 10); for (let i = 0; i < 5; i++) k.cyl(u, (cv0 + cv1) / 2, F + 0.15 + i * 0.25, 0.15, 0.08, "#e8302a", 0, 10); k.ball(u, (cv0 + cv1) / 2, F + 1.35, 0.2, "#e8302a", 0.004, 3); }
+    k.cyl(c0 + 0.8, (cv0 + cv1) / 2, 1.15, 0.05, 0.2, CREAM, 0, 6); k.cyl(c0 + 0.8, (cv0 + cv1) / 2, 1.26, 0.5, 0.03, CREAM, 0.004, 16); k.cyl(c0 + 0.8, (cv0 + cv1) / 2, 1.38, 0.35, 0.22, "#ff9ad0", 0.006, 16); }
+  // behind the counter: shelves of jars; hanging from the ceiling: giant lollipops
+  for (const y of [1.6, 2.3]) { k.box(2.0, W - 2.0, D - T - 0.3, D - T, y - 0.04, y, CREAM, 0.006); goods(k, 2.2, W - 2.2, D - T - 0.15, y, 12, ["#ff9ad0", "#ffd54a", "#9fe3ff", "#c8f0a0", "#ff7a1a"], "jar"); }
+  for (let i = 0; i < 5; i++) { const u = 1.8 + i * 1.6, v = 2.6 + (i % 2) * 2.2, y = H - 2.2 - (i % 2) * 0.4; k.cyl(u, v, (y + H) / 2, 0.02, H - y, "#c8ccd4", 0, 3); k.cyl(u, v, y - 0.3, 0.04, 0.6, "#f4f1ea", 0, 4); k.cyl(u, v, y - 0.75, 0.6, 0.06, ["#ff5fa8", "#43e0c6", "#ffd54a"][i % 3], 0.006, 18, "v"); k.cyl(u, v, y - 0.75, 0.34, 0.07, "#ffffff", 0, 14, "v"); }
+  void D;
 }

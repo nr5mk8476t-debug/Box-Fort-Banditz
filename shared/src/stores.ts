@@ -216,14 +216,22 @@ export const STORE_BUY_GAP = 1.0;
 
 /** where the fixtures go, in the store's frame (u, v): the till on the counter, the rummage spot, the display case, shelves
  *  (u0, u1, v0, v1, height) and the real stock spots on them (u, v, which shelf) */
-export interface StoreFixtures { till: [number, number]; dig?: [number, number]; case?: [number, number, number, number, number]; shelves: [number, number, number, number, number][]; stock: [number, number, number][] }
+export interface StoreFixtures { till: [number, number]; dig?: [number, number]; case?: [number, number, number, number, number]; shelves: [number, number, number, number, number][]; stock: [number, number, number][];
+  /** R13b: the centrepiece's solid parts (u0, u1, v0, v1, height): you bump into them (drawn by the store's dressing) */
+  solids?: [number, number, number, number, number][] }
 export const STORE_FIXTURES: Record<StoreId, StoreFixtures> = {
-  rustbucket: { till: [1.5, 6.6], dig: [7.4, 5.6], shelves: [[5.9, 9.0, 8.9, 9.6, 1.0]], stock: [[6.7, 9.25, 0], [8.2, 9.25, 0]] },
-  plugpray: { till: [6.2, 6.0], shelves: [[0.35, 1.0, 3.2, 9.6, 1.2]], stock: [[0.68, 4.4, 0], [0.68, 6.4, 0], [0.68, 8.4, 0]] },
-  needledrop: { till: [7.7, 8.8], dig: [5.87, 5.4], case: [0.32, 1.0, 7.4, 10.4, 1.4], shelves: [[1.2, 3.4, 3.4, 6.4, 0.9], [8.34, 10.54, 3.4, 6.4, 0.9]], stock: [[2.3, 4.2, 0], [2.3, 5.7, 1 - 1], [9.44, 4.2, 1], [9.44, 5.7, 1]] },
+  rustbucket: { till: [1.5, 6.6], dig: [7.4, 5.6], shelves: [[5.9, 9.0, 8.9, 9.6, 1.0]], stock: [[6.7, 9.25, 0], [8.2, 9.25, 0]],
+    solids: [[6.2, 8.9, 1.1, 3.3, 1.25]] }, // (the car on blocks in the yard bay)
+  plugpray: { till: [6.2, 6.0], shelves: [[0.35, 1.0, 3.2, 9.6, 1.2]], stock: [[0.68, 4.4, 0], [0.68, 6.4, 0], [0.68, 8.4, 0]],
+    solids: [[7.6, 8.6, 7.7, 8.5, 1.9]] }, // (the gutted arcade cabinet)
+  needledrop: { till: [7.7, 8.8], dig: [5.87, 5.4], case: [0.32, 1.0, 7.4, 10.4, 1.4], shelves: [[1.2, 3.4, 3.4, 6.4, 0.9], [8.34, 10.54, 3.4, 6.4, 0.9]], stock: [[2.3, 4.2, 0], [2.3, 5.7, 0], [9.44, 4.2, 1], [9.44, 5.7, 1]],
+    // (the listening booth in the back right corner: its two walls; glass in its side, a doorway at the side's back end)
+    solids: [[9.0, 9.12, 7.4, 9.5, 2.5], [9.0, 11.44, 7.4, 7.52, 2.5]] }, // (the doorway: the back 1.2 m of its side)
   peakfomo: { till: [10.6, 6.6], shelves: [[1.0, 4.4, 3.0, 6.0, 0.4], [0.32, 0.92, 6.6, 10.4, 1.5]], stock: [[2.7, 4.5, 0], [0.62, 7.6, 1], [0.62, 9.4, 1]] },
-  maisonpong: { till: [6.0, 7.0], case: [3.2, 6.95, 11.0, 11.7, 1.8], shelves: [[1.4, 2.2, 4.4, 5.2, 1.1], [7.95, 8.75, 4.4, 5.2, 1.1]], stock: [[1.8, 4.8, 0], [8.35, 4.8, 1]] },
-  bonbon: { till: [7.7, 7.6], case: [3.0, 5.3, 4.0, 4.8, 1.0], shelves: [[6.0, 8.6, 4.0, 4.8, 1.0]], stock: [[6.8, 4.4, 0], [7.9, 4.4, 0]] },
+  maisonpong: { till: [6.0, 7.0], case: [3.2, 6.95, 11.0, 11.7, 1.8], shelves: [[1.4, 2.2, 4.4, 5.2, 1.1], [7.95, 8.75, 4.4, 5.2, 1.1]], stock: [[1.8, 4.8, 0], [8.35, 4.8, 1]],
+    solids: [[4.27, 5.87, 3.1, 4.7, 0.6]] }, // (the perfume fountain's basin)
+  bonbon: { till: [7.7, 7.6], case: [3.0, 5.3, 4.0, 4.8, 1.0], shelves: [[6.0, 8.6, 4.0, 4.8, 1.0]], stock: [[6.8, 4.4, 0], [7.9, 4.4, 0]],
+    solids: [[8.4, 9.6, 9.9, 11.1, 2.4]] }, // (the chocolate tower)
 };
 
 /** R13: the keepers (each store's cashier, in their own clothes) and what they say at the counter */
@@ -235,4 +243,14 @@ export const STORE_VOICE: Record<StoreId, StoreVoice> = {
   peakfomo: { keeper: "SUMMIT STEPH", sold: "", bought: `"FUEL UP! The mountains await! (I wouldn't know.)"`, wrong: "", nobuy: `"We sell adventure, we don't buy it! TRAIL MIX though?"`, hands: "", broke: `"Ten dollars for the summit, friend!"`, shut: `"Not right now, there's a SITUATION!"`, black: "" },
   maisonpong: { keeper: "MONSIEUR NEZ", sold: "", bought: `"Top notes of innocence, a base of plausible deniability."`, wrong: "", nobuy: `"We do not purchase, monsieur. We anoint."`, hands: "", broke: `"Forty. The innocence is not cheap."`, shut: `"The boutique is closed. The air is... ruined."`, black: "" },
   bonbon: { keeper: "MADAME GANACHE", sold: `"Acceptable. Your money, darling."`, bought: `"Mind the crash, sweetie."`, wrong: `"We are a confectioner. Not a skip."`, nobuy: "", hands: "", broke: `"Twenty-five, darling. Come back richer."`, shut: `"We are closed. There has been an incident."`, black: `"Absolutely not."` },
+};
+
+/** R13: where the browsing customers stand (u, v, and the way they face: du, dv), and how many each store has */
+export const STORE_BROWSE: Record<StoreId, { n: number; spots: [number, number, number, number][] }> = {
+  rustbucket: { n: 1, spots: [[7.0, 4.4, 0, 1], [6.0, 8.0, 0, 1], [2.5, 5.0, 0, 1], [5.3, 2.4, 1, 0]] },
+  plugpray: { n: 1, spots: [[1.7, 5.5, -1, 0], [5.0, 3.6, 0, -1], [2.6, 7.9, 0, 1], [7.5, 4.6, 0, -1]] },
+  needledrop: { n: 2, spots: [[4.0, 5.0, -1, 0], [7.7, 4.6, 1, 0], [8.4, 8.6, 1, 0], [5.9, 7.3, 0, 1], [2.0, 8.6, -1, 0], [10.2, 6.9, 1, 0]] },
+  peakfomo: { n: 2, spots: [[2.7, 6.9, 0, -1], [1.7, 8.5, -1, 0], [6.0, 5.0, 0, 1], [8.2, 5.4, 0, 1]] },
+  maisonpong: { n: 2, spots: [[1.8, 6.0, 0, -1], [8.35, 6.0, 0, -1], [5.07, 9.6, 0, 1], [3.0, 9.0, -1, 0]] },
+  bonbon: { n: 2, spots: [[4.15, 5.6, 0, -1], [7.3, 5.6, 0, -1], [2.0, 6.5, -1, 0], [7.5, 10.4, 1, 0]] },
 };
