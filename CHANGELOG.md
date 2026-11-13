@@ -2,21 +2,30 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
-## R13 (in progress): six new stores, two per district (2026-11-12)
+## R13: six new stores, each a whole building in its street (2026-11-13)
 
-- **Six stores on the new map**, each replacing one painted-on building, in mirrored pairs (nothing else in the city
-  moves): RUST BUCKET SALVAGE and PLUG & PRAY REPAIRS in The Yards, NEEDLE DROP RECORDS and PEAK FOMO OUTFITTERS in the
-  middle, MAISON PONG and BONBON VIVANT on Snob Row.
-- **What they do** (using the systems the game already has): a keeper behind the counter, a till you can hold up, real
-  stock on the shelves (taking it is shoplifting), the counter (E: sell the specialist what you're holding, or buy the
-  store's one thing: trail mix, a spritz that takes heat off, a sugar-rush truffle), a rummage spot once a day, a display
-  case you can smash. Snob Row's heat is double.
-- **NEEDLE DROP RECORDS is built in full** (record bins, the $1 bin, a sleeve wall, the decks on the counter, the golden
-  record in the case, the neon, the A-board). The other five are blockouts with their signs, lamps and one feature each,
-  waiting on Blake's review of NEEDLE DROP.
-- Each keeper has their own look. Pictures for all six come off one shared sheet; each store is an interior area with
-  two lamps.
-- Performance: every store view within the R12.9 count +15% (+3% to +8%); see `docs/perf-budget.md` (R13).
+- **Six stores on the new map**, in mirrored pairs (nothing else in the city moved): RUST BUCKET SALVAGE and PLUG & PRAY
+  REPAIRS in The Yards, NEEDLE DROP RECORDS and PEAK FOMO OUTFITTERS in the middle, MAISON PONG and BONBON VIVANT on Snob
+  Row.
+- **Whole buildings** (Blake's brief): an old workshop with a sawtooth roof and CLUCKZILLA, a fibreglass chicken, on top;
+  a narrow tenement on the Chinatown corner with its painted ad; a brick block between the pub and the news tower; a
+  timber lodge with its name on the gable; a stone town house with a mansard and iron balconies; a pastel terrace with a
+  pointed awning. Upper floors are window-and-wall shells (no hidden rooms).
+- **Inside, each its own place:** RUST BUCKET's shop and workshop behind a partition, the car in its repair bay under an
+  engine hoist; PLUG & PRAY's intake counter, technician's bench and the gutted arcade cabinet; NEEDLE DROP's browsing
+  route, staff picks and listening booth; PEAK FOMO's hike / camp / climb zones, the expedition display and the climbing
+  wall; MAISON PONG's lit niches, eye-level perfume fountain and consultation counter; BONBON's chocolate tower at the
+  counter and the wrapping bench (the Mayor's order, half-wrapped). Their keepers have their own looks, and customers
+  browse (1-2 each).
+- **What they do:** sell the specialist what you're holding, buy the store's one thing (trail mix, a spritz that takes
+  heat off, a sugar-rush truffle), rummage once a day, smash the display case, hold up the till, lift the stock. Snob Row's
+  heat is double.
+- **People are cheaper:** each character is one skinned mesh now (it was about seven), so the six stores, their buildings
+  and 16 more people come out cheaper than before: across the 25 fixed views, draw calls -6.3% and meshes -1.6% against
+  R12.9 (the test box: relative numbers).
+- **Fixes found on the way:** the stores' lamps were stuck off away from the pub; a car waiting for a walker never asked
+  them to move if they hovered at the edge of its path; a police car could drive through a car stopped part-way round a
+  turn from the same road.
 
 ## R12.9: faster on your feet, and Blake's pub playtest list (2026-11-12)
 

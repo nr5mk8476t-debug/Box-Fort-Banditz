@@ -2172,3 +2172,41 @@ flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the 
   pub's cut-corner re-cut splices a box out after it's made). The neon: green tubes (a soft glow, the tube, a white core)
   on a dark board over the door, 2.5 cm clear of the board's outline.
 - **The upstairs bar's canopy**: its mid-height gold piping ring ran 1 cm in front of the name boards: removed.
+
+## R13 / R13b: six stores, built as whole buildings (Blake: "six memorable businesses integrated into a believable city", 2026-11-13)
+
+- **Where:** each store replaces one painted-on building, in mirrored west/east pairs, one pair per district; the generator
+  runs unchanged and the store's builder takes its box out afterwards, so nothing else moves (`shared/src/stores.ts`).
+  The landmark lots are untouched. Blake: the new map only, all six concepts, trail mix only (no rucksack), and at Snob
+  Row "bigger heat, same system" (theft heat x2, the middle x1.25).
+- **What they do** (existing systems only): a keeper behind the counter; a till you can hold up; real stock on the shelves
+  (taking it is shoplifting); the counter (E): sell the specialist what you're holding (60% of its worth, junk for $2-6 at
+  RUST BUCKET), or buy the store's one thing (TRAIL MIX $10: stamina; A SPRITZ $40: 30 less heat; SUGAR RUSH TRUFFLE
+  $25: speed); a rummage spot once a day; a display case you can smash (it spills, the alarm goes, heat). One purchase
+  per press, none within 1 s of the last (no double charges).
+- **R13b, the buildings (Blake's brief: "design each shop as part of a complete building and streetscape"):** the shop is
+  the ground floor; above it, façade shells (the city's own merged walls and windows, a chosen wall material and window
+  style: no rooms behind them), and the roof shape as one merged prism each. Heights against the neighbours:
+  RUST BUCKET an old workshop (brick office over the shop, a sawtooth over the yard bay, 7.9 m among 5-6.5 m
+  neighbours); PLUG & PRAY a narrow tenement on the Chinatown corner (11.2 m); NEEDLE DROP a brick block bridging the pub
+  and the 29.5 m news tower (14.5 m); PEAK FOMO a timber lodge with a gable to the street, low on purpose beside the
+  glass tower (~12 m); MAISON PONG a stone town house with a mansard stepping down from the 47 m tower to the hotel
+  (~19 m); BONBON VIVANT a pastel terrace house (14.5 m) by the 17.5 m block. Shop ceilings came down to 4.2-5.2 m
+  (the old 6-8 m rooms were the empty-wall problem).
+- **Interiors:** zones before props. Each store has its centrepiece housed in its layout (RUST BUCKET's car in a repair bay
+  behind a partition; the arcade cabinet on PLUG & PRAY's bench; NEEDLE DROP's listening booth with its door 1.2 m clear
+  of the counter; PEAK FOMO's climbing wall with its mat and rack; MAISON PONG's fountain rescaled to eye level;
+  BONBON's chocolate tower at the counter's end), one or two small stories (CLUCKZILLA's handwritten board, Mrs Binks's
+  repair, the staff picks, the expedition map, the ALIBI No.2 launch, the Mayor's half-wrapped order), and solid
+  fixtures where you'd bump into them (checked by the walkable-ground test: it caught a sealed pocket twice).
+- **Cost:** pictures off one shared 2048 px sheet (skyline-packed; big soft pictures stored at 60-75%), two materials;
+  everything plain merges with the city (inside: the store's interior area, drawn within 34 m); two lamps a store,
+  lighting only its inside, warmer at night, plus a baked window glow and a pool on the pavement. A store's people aren't
+  drawn while its inside isn't. **People became one skinned mesh each** (Blake: "make people cheaper"): ~7 meshes -> 1;
+  that paid for the stores' 16 people and their buildings: across the 25 fixed views, draws -6.3% and meshes -1.6%
+  against R12.9.
+- **Found on the way:** the stores' lamps had been put in the pub's light list (left at zero away from the pub); a car's
+  wait for a walker restarted whenever the walker flickered at the edge of its path (so it never asked them to move);
+  a cruiser on the sibling turn from the same road drove through a car stopped part-way round its turn (cars on turns
+  now count as in the way 2.3 m out, was 1.7); one police-traffic test limit 45 -> 50 s (one missed green at the
+  biggest junction; a lock-up is minutes).

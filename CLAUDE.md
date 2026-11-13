@@ -51,7 +51,15 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R12.9)
+## Next up (as of R13)
+- R13: six stores as whole buildings (`shared/src/stores.ts` for plots, shells, upper floors, trade; the look in
+  `client/src/game/storeDressing.ts` through a kit in each store's own frame; pictures on one shared sheet). People are one
+  skinned mesh each (`look.ts` skinBody; `?skin=0` for the old way). New buildings: upper floors are façade shells
+  (`wallKind`/`winKind` on the box), roofs as merged prisms.
+- Waiting on Blake: a BENCHMARK on R13 (the people change should show), a walk round the six stores.
+- Then: Blake's pick (the pub brawl, the quiz, the G-split champ, R13's alleys).
+
+## Earlier: Next up (as of R12.9)
 - R12.9: movement +15% (cops on foot too); Blake's pub list fixed (brackets, cornice + quoins, fireplace mirror flicker,
   side doorway, stair bunting, Seamus's snug door + neon, the canopy's gold line, the balcony floor from inside).
   Building outside pieces from inside the pub's build: wrap them in `outsideOnly` or they're filed into a room.

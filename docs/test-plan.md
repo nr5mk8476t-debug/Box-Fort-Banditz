@@ -546,6 +546,21 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R13 / R13b: six stores as whole buildings; people as one mesh (2026-11-13)
+
+| Area | Check | How | Before | Result |
+|---|---|---|---|---|
+| Trade | every counter reachable and answering; broke buys nothing; mashing E pays/charges once; selling once, wrong item refused and kept; two customers in one tick each served once; keeper knocked out = shut, back next round; rummage once a day with full pockets (finds land on the floor), refilled next round; a player leaving mid-visit | `shared/test/stores.test.ts` (new, 8 tests) | - | pass |
+| Layout | walkable ground joins up (no sealed pockets) | `shared/test/layout.test.ts` | - | pass (caught: the listening booth sealed; RUST BUCKET's first skip spot) |
+| Traffic | soaks, police, chases | `shared/test/traffic-flow.test.ts` | - | pass after two real fixes (blockGap; turning cars 2.3 m) and one limit (cruiser wait 45 -> 50 s, explained in the test) |
+| Pool sync | every shot on screen | `client/test/sync.test.ts` | - | pass; "on screen" now counts from where a window joined a live shot; the 'your turn waits' test runs 100 s (a foul gave the computer two visits) |
+| Draw budget | 25 views (10 old + 15 store views from `tests/store-views.json`) | `tests/draw-budget.mjs`; budgets for the store views = R12.9 x 1.15 | R12.9 build at the same cameras | all within; total draws -6.3%, meshes -1.6% (`screenshots/r13b/draws-final.json`) |
+| People | one skinned mesh each | mesh count per person; screenshots old vs new (`screenshots/r13b/people-skinned-vs-old.jpg`) | 7.2 meshes | 2.0 (1 + the hidden "dazed" stars); bar view people draws 156 -> 28 |
+| Looks | each store across the road, both diagonals, inside, the centrepiece, looking out, day and night | screenshots `screenshots/r13b/*` | - | reviewed |
+| Unit | | `npm test` | | 313 + 31 + 8, pass |
+| Smokes | signal, server (79 NPCs: +6 keepers, +10 customers) | | | pass |
+| Browser e2e | normal / 110 ms | e2e | | PENDING / PENDING |
+
 ## R12.9: speed +15% and the pub playtest list (2026-11-12)
 
 | Area | Check | How | Before | Result |
