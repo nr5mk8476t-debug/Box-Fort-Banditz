@@ -520,12 +520,15 @@ export class TrafficSystem {
             }
           }
           const cop = o.lane === -1, ux = cop ? Math.sin(o.yaw) : 0, uz = cop ? Math.cos(o.yaw) : 0;
+          // (R13b: a car part-way round a turn sits at an angle to its line, so its corners reach further: a cruiser on the
+          //  sibling turn from the same road drove through one stopped for a walker. 2.3 m for those, 1.7 for the rest)
+          const rr = !cop && this.lanes[o.lane]?.conn ? 2.3 : 1.7;
           for (let k = 0; k < ns; k++) {
             const qx = WAY_X[k] - o.x, qz = WAY_Z[k] - o.z;
             // (a car in a lane sits on its lane's line: 1.7 m; a cop car out of the lanes can be anywhere: its own half
             //  width and ours, so its body never meets ours)
             const inWay = cop ? Math.abs(qx * ux + qz * uz) < 2.2 + CAR_HALF_WIDTH + 0.2 && Math.abs(qx * uz - qz * ux) < 1.0 + CAR_HALF_WIDTH + 0.2
-              : Math.abs(qx) < 1.7 && Math.abs(qz) < 1.7 && hyp(qx, qz) < 1.7;
+              : Math.abs(qx) < rr && Math.abs(qz) < rr && hyp(qx, qz) < rr;
             // (the gap's measured to the cop car's near end, not its middle)
             if (inWay) { const dd = cop ? WAY_D[k] + CAR_HALF_LEN - 0.2 : WAY_D[k]; if (dd < gap) { gap = dd; qBy = o.id; } break; }
           }

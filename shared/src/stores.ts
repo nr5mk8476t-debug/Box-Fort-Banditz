@@ -101,15 +101,16 @@ export const STORE_SHELLS: Record<StoreId, StoreShellSpec> = {
     counter: [0.8, 4.4, 6.2, 7.0], keeper: [2.6, 7.8] },
   // the mirror plot on Write-Off Avenue: the door by the corner, one long window of stacked tellies
   plugpray: { H: 4.2, wall: "#5a6a72", floor: "#8a8478", roof: "#3a3c40",
-    front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 1.9, t: "door" }, { u0: 1.9, u1: 2.2, t: "wall" }, { u0: 2.2, u1: 8.9, t: "window" }, { u0: 8.9, u1: 9.44, t: "wall" }],
+    front: [{ u0: 0, u1: 0.4, t: "wall" }, { u0: 0.4, u1: 2.4, t: "door" }, { u0: 2.4, u1: 2.8, t: "wall" }, { u0: 2.8, u1: 8.9, t: "window" }, { u0: 8.9, u1: 9.44, t: "wall" }],
+    recess: { u0: 0.4, u1: 2.4, depth: 1.0 }, // (R13b: a recessed door)
     counter: [2.6, 6.8, 5.6, 6.4], keeper: [4.7, 7.2] },
   // north of the pub: a deep recessed entrance between two display windows
   needledrop: { H: 4.6, wall: "#2e3a5a", floor: "#7a5a3a", roof: "#262630",
     front: [{ u0: 0, u1: 0.4, t: "wall" }, { u0: 0.4, u1: 3.9, t: "window" }, { u0: 3.9, u1: 7.84, t: "door" }, { u0: 7.84, u1: 11.34, t: "window" }, { u0: 11.34, u1: 11.74, t: "wall" }],
     recess: { u0: 3.9, u1: 7.84, depth: 1.6 },
-    counter: [3.4, 8.3, 8.4, 9.2], keeper: [5.9, 10.0] },
+    counter: [3.4, 7.8, 8.4, 9.2], keeper: [5.6, 10.0] }, // (R13b: shorter: 1.2 m past its end to the listening booth's door)
   // north of the club: a timber front, the door in the middle (the porch comes with the dressing)
-  peakfomo: { H: 4.8, wall: "#6a5034", floor: "#8a7a5a", roof: "#2e3a2e",
+  peakfomo: { H: 4.8, wall: "#6a5034", floor: "#8a7a5a", roof: "#2e3a2e", glassTop: 3.4,
     front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 4.7, t: "window" }, { u0: 4.7, u1: 7.04, t: "door" }, { u0: 7.04, u1: 11.24, t: "window" }, { u0: 11.24, u1: 11.74, t: "wall" }],
     counter: [8.4, 11.2, 6.2, 7.0], keeper: [9.8, 7.8] },
   // Snob Row: pale stone, tall windows either side of a recessed door
@@ -118,7 +119,7 @@ export const STORE_SHELLS: Record<StoreId, StoreShellSpec> = {
     recess: { u0: 3.4, u1: 6.75, depth: 1.2 },
     counter: [3.6, 6.55, 6.6, 7.4], keeper: [5.07, 8.3] },
   // Snob Row's mirror: the door to one side, a long display window (bowed, with the dressing)
-  bonbon: { H: 4.4, wall: "#f2d6dc", floor: "#e8e0d4", roof: "#6a4a52", glassTop: 3.4,
+  bonbon: { H: 4.8, wall: "#f2d6dc", floor: "#e8e0d4", roof: "#6a4a52", glassTop: 3.1,
     front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 2.0, t: "door" }, { u0: 2.0, u1: 2.5, t: "wall" }, { u0: 2.5, u1: 9.65, t: "window" }, { u0: 9.65, u1: 10.15, t: "wall" }],
     counter: [3.2, 8.2, 7.2, 8.0], keeper: [5.7, 8.9] },
 };
@@ -225,15 +226,15 @@ export const STORE_FIXTURES: Record<StoreId, StoreFixtures> = {
     // front end, by the street); the rummage skip; the workbench along the bay's side wall
     solids: [[6.2, 8.9, 1.1, 3.3, 1.25], [5.5, 5.65, 5.0, 9.7, 2.4], [7.0, 8.4, 5.0, 6.2, 0.95], [8.6, 9.14, 4.2, 7.6, 0.95]] },
   plugpray: { till: [6.2, 6.0], shelves: [[0.35, 1.0, 3.2, 9.6, 1.2]], stock: [[0.68, 4.4, 0], [0.68, 6.4, 0], [0.68, 8.4, 0]],
-    solids: [[7.6, 8.6, 7.7, 8.5, 1.9]] }, // (the gutted arcade cabinet)
-  needledrop: { till: [7.7, 8.8], dig: [5.87, 5.4], case: [0.32, 1.0, 7.4, 10.4, 1.4], shelves: [[1.2, 3.4, 3.4, 6.4, 0.9], [8.34, 10.54, 3.4, 6.4, 0.9]], stock: [[2.3, 4.2, 0], [2.3, 5.7, 0], [9.44, 4.2, 1], [9.44, 5.7, 1]],
+    solids: [[7.6, 8.6, 8.2, 9.0, 1.9], [1.4, 7.4, 8.9, 9.6, 0.95]] }, // (the gutted arcade cabinet on the bench; the technician's bench along the back)
+  needledrop: { till: [7.3, 8.8], dig: [5.87, 5.4], case: [0.32, 1.0, 7.4, 10.4, 1.4], shelves: [[1.2, 3.4, 3.4, 6.4, 0.9], [8.34, 10.54, 3.4, 6.4, 0.9]], stock: [[2.3, 4.2, 0], [2.3, 5.7, 0], [9.44, 4.2, 1], [9.44, 5.7, 1]],
     // (the listening booth in the back right corner: its two walls; glass in its side, a doorway at the side's back end)
     solids: [[9.0, 9.12, 7.4, 9.5, 2.5], [9.0, 11.44, 7.4, 7.52, 2.5]] }, // (the doorway: the back 1.2 m of its side)
   peakfomo: { till: [10.6, 6.6], shelves: [[1.0, 4.4, 3.0, 6.0, 0.4], [0.32, 0.92, 6.6, 10.4, 1.5]], stock: [[2.7, 4.5, 0], [0.62, 7.6, 1], [0.62, 9.4, 1]] },
   maisonpong: { till: [6.0, 7.0], case: [3.2, 6.95, 11.0, 11.7, 1.8], shelves: [[1.4, 2.2, 4.4, 5.2, 1.1], [7.95, 8.75, 4.4, 5.2, 1.1]], stock: [[1.8, 4.8, 0], [8.35, 4.8, 1]],
-    solids: [[4.27, 5.87, 3.1, 4.7, 0.6]] }, // (the perfume fountain's basin)
+    solids: [[4.42, 5.72, 3.95, 5.25, 0.5]] }, // (the perfume fountain's basin: R13b, smaller, further in)
   bonbon: { till: [7.7, 7.6], case: [3.0, 5.3, 4.0, 4.8, 1.0], shelves: [[6.0, 8.6, 4.0, 4.8, 1.0]], stock: [[6.8, 4.4, 0], [7.9, 4.4, 0]],
-    solids: [[8.4, 9.6, 9.9, 11.1, 2.4]] }, // (the chocolate tower)
+    solids: [[8.35, 9.65, 6.95, 8.25, 2.4]] }, // (the chocolate tower: R13b, at the end of the counter, part of it)
 };
 
 /** R13: the keepers (each store's cashier, in their own clothes) and what they say at the counter */
@@ -250,11 +251,11 @@ export const STORE_VOICE: Record<StoreId, StoreVoice> = {
 /** R13: where the browsing customers stand (u, v, and the way they face: du, dv), and how many each store has */
 export const STORE_BROWSE: Record<StoreId, { n: number; spots: [number, number, number, number][] }> = {
   rustbucket: { n: 1, spots: [[7.0, 4.4, 0, 1], [6.0, 8.0, 0, 1], [2.5, 5.0, 0, 1], [5.3, 2.4, 1, 0]] },
-  plugpray: { n: 1, spots: [[1.7, 5.5, -1, 0], [5.0, 3.6, 0, -1], [2.6, 7.9, 0, 1], [7.5, 4.6, 0, -1]] },
+  plugpray: { n: 1, spots: [[1.7, 4.4, -1, 0], [5.4, 3.0, 0, -1], [4.6, 5.0, 0, 1], [8.2, 4.4, 1, 0]] },
   needledrop: { n: 2, spots: [[4.0, 5.0, -1, 0], [7.7, 4.6, 1, 0], [8.4, 8.6, 1, 0], [5.9, 7.3, 0, 1], [2.0, 8.6, -1, 0], [10.2, 6.9, 1, 0]] },
   peakfomo: { n: 2, spots: [[2.7, 6.9, 0, -1], [1.7, 8.5, -1, 0], [6.0, 5.0, 0, 1], [8.2, 5.4, 0, 1]] },
-  maisonpong: { n: 2, spots: [[1.8, 6.0, 0, -1], [8.35, 6.0, 0, -1], [5.07, 9.6, 0, 1], [3.0, 9.0, -1, 0]] },
-  bonbon: { n: 2, spots: [[4.15, 5.6, 0, -1], [7.3, 5.6, 0, -1], [2.0, 6.5, -1, 0], [7.5, 10.4, 1, 0]] },
+  maisonpong: { n: 2, spots: [[1.8, 6.0, 0, -1], [8.35, 6.0, 0, -1], [5.07, 9.6, 0, 1], [1.4, 8.6, -1, 0], [8.7, 8.6, 1, 0]] },
+  bonbon: { n: 2, spots: [[4.15, 5.6, 0, -1], [7.3, 5.6, 0, -1], [2.0, 6.5, -1, 0], [8.4, 6.0, 1, 0.5]] },
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
