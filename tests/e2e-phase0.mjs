@@ -1019,7 +1019,9 @@ try {
   await sleep(2000);
   const aStart = (await info(A)).pos;
   const s0 = (await info(A)).stats, t0 = Date.now();
-  await A.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1 }));
+  // (R13: sideways: straight ahead of A's lobby spawn there's a crate 3.8 m off, and since R12.9's +15% a 45-step walk
+  //  reached it (the check passed or failed on how many steps a stall let through); to the side there's 7 m clear)
+  await A.evaluate(() => window.__bfb.setAxes({ mx: 1, mz: 0 }));
   // walk for at least ~0.75 s of game time (the test machine may render very few frames per second)
   await A.waitForFunction((n) => window.__bfb.info().stats.moveSteps >= n, s0.moveSteps + 45, { timeout: 60000 }).catch(() => {});
   await A.evaluate(() => window.__bfb.setAxes(null));
@@ -1035,9 +1037,9 @@ try {
   const bView = (await info(B)).players[aSid];
   // Wall-clock distance depends on this machine's CPU rendering speed, so instead check that
   // the distance matches the number of simulation steps actually run (5.2 m/s walking, minus ~0.1 s ramp-up).
-  const steps = s1.moveSteps - s0.moveSteps, moved = aNow.z - aStart.z, expected = rampDist(steps / 60, 6.67); // (R12.9: walk +15%)
+  const steps = s1.moveSteps - s0.moveSteps, moved = Math.hypot(aNow.x - aStart.x, aNow.z - aStart.z), expected = rampDist(steps / 60, 6.67); // (R12.9: walk +15%)
   ok(moved > 0.3 && Math.abs(moved - expected) < 0.8, `A walked ${moved.toFixed(2)}m over ${steps} sim steps (expected ~${expected.toFixed(2)}m)`);
-  ok(Math.abs(bView.z - aNow.z) < 0.05, `B's view of A matches A (diff ${Math.abs(bView.z - aNow.z).toFixed(3)}m)`);
+  ok(Math.hypot(bView.x - aNow.x, bView.z - aNow.z) < 0.05, `B's view of A matches A (diff ${Math.hypot(bView.x - aNow.x, bView.z - aNow.z).toFixed(3)}m)`);
   const aStats = (await info(A)).stats;
   ok(aStats.snaps === 0, `A's prediction never needed a hard snap (corrections: ${aStats.corrections})`);
 
