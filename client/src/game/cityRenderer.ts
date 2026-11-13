@@ -971,8 +971,8 @@ export class CityRenderer {
       : ([[0, -1], [0, 1], [-1, 0], [1, 0]] as const).map(([nx, nz]) => ({ nx, nz, fw: nx ? b.d : b.w, wx: b.x + nx * (b.w / 2), wz: b.z + nz * (b.d / 2) }));
     const bf = b.face ? Math.hypot(b.face[0], b.face[1]) || 1 : 1, ffx = b.face ? b.face[0] / bf : 0, ffz = b.face ? b.face[1] / bf : 0;
     // R5: each building its own wall material and window style
-    const wk: WallKind = b.italy ? "render" : b.china ? (H(70) < 0.5 ? "brick" : "paint") : tower ? (tier === 2 ? (H(70) < 0.6 ? "concrete" : "stone") : H(70) < 0.5 ? "brick" : "concrete") : pickMix(TIER_WALL_MIX[tier], H(70));
-    const winKey = (glass ? "curtain" : b.italy ? "windows" : b.china ? "winCurtain" : pickMix(TIER_WIN_MIX[tier], H(71))) as keyof CityRenderer["planes"];
+    const wk: WallKind = b.wallKind ? b.wallKind : b.italy ? "render" : b.china ? (H(70) < 0.5 ? "brick" : "paint") : tower ? (tier === 2 ? (H(70) < 0.6 ? "concrete" : "stone") : H(70) < 0.5 ? "brick" : "concrete") : pickMix(TIER_WALL_MIX[tier], H(70));
+    const winKey = (b.winKind ? b.winKind : glass ? "curtain" : b.italy ? "windows" : b.china ? "winCurtain" : pickMix(TIER_WIN_MIX[tier], H(71))) as keyof CityRenderer["planes"];
     let faceN = 0;
     for (const { nx, nz, fw, wx, wz } of faces) {
       if (fw < 1.5) continue;
@@ -6039,6 +6039,22 @@ export class CityRenderer {
         cyl: (u, v, y, d, h, col, oo = 0.01, t = 12, axis = "y", top) => { const m = MB.CreateCylinder("stc", { diameter: d, diameterTop: top ?? d, height: h, tessellation: t }, sc); place(m, u, v, y); m.rotation.set(axis === "v" ? Math.PI / 2 : 0, TH, axis === "u" ? Math.PI / 2 : 0); this.add(m, col, oo, false); },
         ball: (u, v, y, d, col, oo = 0.006, seg = 4) => { const m = MB.CreateSphere("sts", { diameter: d, segments: sphereSegs(d, seg) }, sc); place(m, u, v, y); this.add(m, col, oo, false); },
         skin: (u0, u1, v0, v1, y0, y1, skin, col, oo = 0) => { const r = f.rect(u0, u1, v0, v1); const m = MB.CreateBox("stk", { width: r.maxX - r.minX, height: y1 - y0, depth: r.maxZ - r.minZ }, sc); m.position.set((r.minX + r.maxX) / 2, (y0 + y1) / 2, (r.minZ + r.maxZ) / 2); this.skinPush(m, skin, col, oo); },
+        prism: (axis, a0, a1, t0, t1, b0, b1, y0, y1, col, oo = 0.012) => {
+          // (the profile's corners in (a, y), then each at b0 and b1; a along u (axis "u") or v)
+          const prof: [number, number][] = [[a0, y0], [a1, y0], [t1, y1], [t0, y1]], tri = Math.abs(t1 - t0) < 1e-4;
+          const P = (a: number, bb: number, y: number) => { const q = axis === "u" ? W(a, bb) : W(bb, a); return [q.x, y, q.z]; };
+          const ring = tri ? prof.slice(0, 3) : prof, n = ring.length, pos: number[] = [], ind: number[] = [];
+          for (const bb of [b0, b1]) for (const [a, y] of ring) pos.push(...P(a, bb, y));
+          for (let i = 0; i < n; i++) { const j = (i + 1) % n; ind.push(i, j, n + j, i, n + j, n + i); } // (the sides)
+          for (let i = 1; i < n - 1; i++) { ind.push(0, i + 1, i); ind.push(n, n + i, n + i + 1); } // (the two ends)
+          const m = new Mesh("stP", sc), vd = new VertexData(); vd.positions = pos; vd.indices = ind; const nr: number[] = []; VertexData.ComputeNormals(pos, ind, nr); vd.normals = nr; vd.uvs = new Array((pos.length / 3) * 2).fill(0); vd.applyToMesh(m); // (uvs: merged with boxes, which have them)
+          m.convertToFlatShadedMesh();
+          // (which way round the faces wind depends on the frame's handedness: make them face out from the middle)
+          { const pp = m.getVerticesData(VertexBuffer.PositionKind)!, nn = m.getVerticesData(VertexBuffer.NormalKind)!; let cx = 0, cy = 0, cz = 0; const nv = pp.length / 3; for (let i = 0; i < nv; i++) { cx += pp[i * 3]; cy += pp[i * 3 + 1]; cz += pp[i * 3 + 2]; } cx /= nv; cy /= nv; cz /= nv;
+            let out = 0; for (let i = 0; i < nv; i++) out += (pp[i * 3] - cx) * nn[i * 3] + (pp[i * 3 + 1] - cy) * nn[i * 3 + 1] + (pp[i * 3 + 2] - cz) * nn[i * 3 + 2];
+            if (out < 0) m.flipFaces(true); }
+          this.add(m, col, oo, false);
+        },
         bulb: (u, v, y, d, col) => { let mt = bulbMat.get(col); if (!mt) { mt = new StandardMaterial("storeBulb" + col, sc); mt.disableLighting = true; mt.emissiveColor = Color3.FromHexString(col); bulbMat.set(col, mt); } const m = MB.CreateSphere("stl", { diameter: d, segments: 3 }, sc); place(m, u, v, y); keep(m, mt); },
         pic: (cell, u, v, y, w, h, n, glow = false, sub) => {
           const p = MB.CreatePlane("stp", { width: w, height: h }, sc); place(p, u, v, y);

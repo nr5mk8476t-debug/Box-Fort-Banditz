@@ -12,7 +12,7 @@
 // - each store is an interior area (areas.ts): its inside is drawn only near it; two lamps each, lighting only its inside
 // - outside pieces are wrapped in `kit.outside(...)` so they're never filed into the store's (hidden) inside
 import type { StoreDef, StoreId } from "@bfb/shared";
-import { storeFrame, STORE_SHELLS, STORE_FIXTURES, STORE_FLOOR } from "@bfb/shared";
+import { storeFrame, STORE_SHELLS, STORE_FIXTURES, STORE_FLOOR, STORE_BUILDINGS, storeTop } from "@bfb/shared";
 import type { AreaLight, InteriorArea } from "./areas.ts";
 
 /** the interior area of a store: its plot, one floor, drawn from outside within 34 m (hidden past 40) */
@@ -231,6 +231,9 @@ export interface StoreKit {
   ball(u: number, v: number, y: number, d: number, col: string, o?: number, seg?: number): void;
   /** a textured (skinned) box: wood, boards, marble, stone, crate, panel... */
   skin(u0: number, u1: number, v0: number, v1: number, y0: number, y1: number, skin: string, col: string, o?: number): void;
+  /** a prism: a profile (a0..a1 at y0, narrowing to t0..t1 at y1: t0 = t1 for a triangle) across `axis` "u" (the profile
+   *  is in u, extruded b0..b1 along v) or "v" (profile in v, extruded along u). Gables, mansards, sawtooth teeth */
+  prism(axis: "u" | "v", a0: number, a1: number, t0: number, t1: number, b0: number, b1: number, y0: number, y1: number, col: string, o?: number): void;
   /** a glowing ball (a bulb) */
   bulb(u: number, v: number, y: number, d: number, col: string): void;
   /** a picture from the shared sheet: centred at (u, v, y), w x h, facing `n` (glow: unlit, for neon and screens) */
@@ -263,6 +266,7 @@ function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
     k.box(W / 2 - sw / 2 - 0.12, W / 2 + sw / 2 + 0.12, -0.14, 0, fasciaY - sh / 2 - 0.1, fasciaY + sh / 2 + 0.1, "#1b1420", 0.012);
     k.pic(sign[k.s.id], W / 2, -0.165, fasciaY, sw, sh, [0, -1]);
   });
+  roofs(k);
   // the display case: a base, a glass top, the goods inside (the goods are the store's own: see each store)
   if (fx.case) {
     const [u0, u1, v0, v1, h] = fx.case;
@@ -621,4 +625,31 @@ function bonbon(k: StoreKit) {
   for (const y of [1.6, 2.3]) { k.box(2.0, W - 2.0, D - T - 0.3, D - T, y - 0.04, y, CREAM, 0.006); goods(k, 2.2, W - 2.2, D - T - 0.15, y, 12, ["#ff9ad0", "#ffd54a", "#9fe3ff", "#c8f0a0", "#ff7a1a"], "jar"); }
   for (let i = 0; i < 5; i++) { const u = 1.8 + i * 1.6, v = 2.6 + (i % 2) * 2.2, y = H - 2.2 - (i % 2) * 0.4; k.cyl(u, v, (y + H) / 2, 0.02, H - y, "#c8ccd4", 0, 3); k.cyl(u, v, y - 0.3, 0.04, 0.6, "#f4f1ea", 0, 4); k.cyl(u, v, y - 0.75, 0.6, 0.06, ["#ff5fa8", "#43e0c6", "#ffd54a"][i % 3], 0.006, 18, "v"); k.cyl(u, v, y - 0.75, 0.34, 0.07, "#ffffff", 0, 14, "v"); }
   void D;
+}
+
+// ---- R13b: THE BUILDINGS' TOPS (outside: always with the street): roof shapes, cornices, bands between the floors ----
+function roofs(k: StoreKit) {
+  const b = STORE_BUILDINGS[k.s.id], W = k.W, D = k.D, H = k.H, top = storeTop(k.s);
+  k.outside(() => {
+    for (const u of b.uppers) {
+      // a band at each floor line on the front (and round the corners a little), a cornice at the top
+      const trim = u.wall === "brick" ? "#d8ccb4" : u.wall === "stone" ? "#f4eee2" : u.wall === "paint" ? "#fff4f0" : u.wall === "clapboard" ? "#3a2a1a" : "#c8c4b8";
+      for (let f = 1; f < u.floors; f++) { const y = H + 0.3 + f * u.fh; k.box(u.u0 - 0.06, u.u1 + 0.06, -0.12, 0.6, y - 0.08, y + 0.08, trim, 0.008); }
+      if (b.roof === "flat") { const y = H + 0.3 + u.floors * u.fh; k.box(u.u0 - 0.2, u.u1 + 0.2, -0.32, D, y, y + 0.22, trim, 0.012); k.box(u.u0 - 0.12, u.u1 + 0.12, -0.2, D, y + 0.22, y + 0.7, u.color, 0.012); k.box(u.u0 - 0.18, u.u1 + 0.18, -0.26, D, y + 0.7, y + 0.82, trim, 0.008); }
+    }
+    if (b.roof === "sawtooth") { // (over the yard bay: three teeth, glazed faces to the back)
+      const u0 = 5.6, u1 = W, n = 3, L = D / n, y = H + 0.3;
+      for (let i = 0; i < n; i++) { const v0 = i * L, v1 = v0 + L; k.prism("v", v0, v1, v1, v1, u0, u1, y, y + 1.5, "#5a5a60", 0.012); k.box(u0 + 0.1, u1 - 0.1, v1 - 0.06, v1 - 0.02, y + 0.1, y + 1.4, "#9fc4d8", 0.006); }
+      k.box(u0 - 0.1, u1 + 0.1, -0.3, D, y, y + 0.18, "#4a4a50", 0.01); // (a gutter line)
+    }
+    if (b.roof === "gable") { // (the gable to the street, the eaves out over the walls)
+      k.prism("u", -0.4, W + 0.4, W / 2, W / 2, -0.6, D + 0.2, top, top + 4.2, "#3a4a3a", 0.016);
+      k.prism("u", 0.3, W - 0.3, W / 2, W / 2, -0.02, 0.3, top, top + 3.5, "#6a4a30", 0.012); // (the gable end's boards)
+    }
+    if (b.roof === "mansard") { // (steep slate slopes, dormers, a flat top)
+      k.prism("u", -0.15, W + 0.15, 1.0, W - 1.0, 0, D, top, top + 3.2, "#5a6070", 0.014);
+      k.box(-0.3, W + 0.3, -0.3, D, top - 0.3, top, "#f4eee2", 0.012);
+      for (const du of [W * 0.25, W * 0.5, W * 0.75]) { k.box(du - 0.55, du + 0.55, 0.35, 1.6, top + 0.3, top + 2.0, "#e8e0d0", 0.01); k.prism("u", du - 0.7, du + 0.7, du, du, 0.25, 1.7, top + 2.0, top + 2.7, "#5a6070", 0.008); k.box(du - 0.35, du + 0.35, 0.32, 0.36, top + 0.6, top + 1.8, "#3a4a5a", 0.004); }
+    }
+  });
 }

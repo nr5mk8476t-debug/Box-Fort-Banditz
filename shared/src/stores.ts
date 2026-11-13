@@ -100,25 +100,25 @@ export const STORE_SHELLS: Record<StoreId, StoreShellSpec> = {
     front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 3.3, t: "window" }, { u0: 3.3, u1: 4.9, t: "door" }, { u0: 4.9, u1: 5.6, t: "wall" }, { u0: 5.6, u1: 9.44, t: "open" }],
     counter: [0.8, 4.4, 6.2, 7.0], keeper: [2.6, 7.8] },
   // the mirror plot on Write-Off Avenue: the door by the corner, one long window of stacked tellies
-  plugpray: { H: 7.0, wall: "#5a6a72", floor: "#8a8478", roof: "#3a3c40",
+  plugpray: { H: 4.2, wall: "#5a6a72", floor: "#8a8478", roof: "#3a3c40",
     front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 1.9, t: "door" }, { u0: 1.9, u1: 2.2, t: "wall" }, { u0: 2.2, u1: 8.9, t: "window" }, { u0: 8.9, u1: 9.44, t: "wall" }],
     counter: [2.6, 6.8, 5.6, 6.4], keeper: [4.7, 7.2] },
   // north of the pub: a deep recessed entrance between two display windows
-  needledrop: { H: 5.5, wall: "#2e3a5a", floor: "#7a5a3a", roof: "#262630",
+  needledrop: { H: 4.6, wall: "#2e3a5a", floor: "#7a5a3a", roof: "#262630",
     front: [{ u0: 0, u1: 0.4, t: "wall" }, { u0: 0.4, u1: 3.9, t: "window" }, { u0: 3.9, u1: 7.84, t: "door" }, { u0: 7.84, u1: 11.34, t: "window" }, { u0: 11.34, u1: 11.74, t: "wall" }],
     recess: { u0: 3.9, u1: 7.84, depth: 1.6 },
     counter: [3.4, 8.3, 8.4, 9.2], keeper: [5.9, 10.0] },
   // north of the club: a timber front, the door in the middle (the porch comes with the dressing)
-  peakfomo: { H: 6.0, wall: "#6a5034", floor: "#8a7a5a", roof: "#2e3a2e",
+  peakfomo: { H: 4.8, wall: "#6a5034", floor: "#8a7a5a", roof: "#2e3a2e",
     front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 4.7, t: "window" }, { u0: 4.7, u1: 7.04, t: "door" }, { u0: 7.04, u1: 11.24, t: "window" }, { u0: 11.24, u1: 11.74, t: "wall" }],
     counter: [8.4, 11.2, 6.2, 7.0], keeper: [9.8, 7.8] },
   // Snob Row: pale stone, tall windows either side of a recessed door
-  maisonpong: { H: 8.0, wall: "#e2dccf", floor: "#d8d0c4", roof: "#5a5650", glassTop: 4.6,
+  maisonpong: { H: 5.2, wall: "#e2dccf", floor: "#d8d0c4", roof: "#5a5650", glassTop: 4.2,
     front: [{ u0: 0, u1: 0.6, t: "wall" }, { u0: 0.6, u1: 3.4, t: "window" }, { u0: 3.4, u1: 6.75, t: "door" }, { u0: 6.75, u1: 9.55, t: "window" }, { u0: 9.55, u1: 10.15, t: "wall" }],
     recess: { u0: 3.4, u1: 6.75, depth: 1.2 },
     counter: [3.6, 6.55, 6.6, 7.4], keeper: [5.07, 8.3] },
   // Snob Row's mirror: the door to one side, a long display window (bowed, with the dressing)
-  bonbon: { H: 7.0, wall: "#f2d6dc", floor: "#e8e0d4", roof: "#6a4a52", glassTop: 3.4,
+  bonbon: { H: 4.4, wall: "#f2d6dc", floor: "#e8e0d4", roof: "#6a4a52", glassTop: 3.4,
     front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 2.0, t: "door" }, { u0: 2.0, u1: 2.5, t: "wall" }, { u0: 2.5, u1: 9.65, t: "window" }, { u0: 9.65, u1: 10.15, t: "wall" }],
     counter: [3.2, 8.2, 7.2, 8.0], keeper: [5.7, 8.9] },
 };
@@ -254,3 +254,32 @@ export const STORE_BROWSE: Record<StoreId, { n: number; spots: [number, number, 
   maisonpong: { n: 2, spots: [[1.8, 6.0, 0, -1], [8.35, 6.0, 0, -1], [5.07, 9.6, 0, 1], [3.0, 9.0, -1, 0]] },
   bonbon: { n: 2, spots: [[4.15, 5.6, 0, -1], [7.3, 5.6, 0, -1], [2.0, 6.5, -1, 0], [7.5, 10.4, 1, 0]] },
 };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// R13b (Blake: "design each shop as part of a complete building and streetscape"): what stands above each shop. The upper
+// floors are façade shells (the city's own walls and windows: no rooms behind them); the roofs' shapes (sawtooth, gable,
+// mansard), cornices and bands come with the dressing. Heights are set against the neighbours (docs/design-decisions.md R13b)
+export interface StoreUpper { u0: number; u1: number; floors: number; fh: number; color: string; wall: NonNullable<Box["wallKind"]>; win: NonNullable<Box["winKind"]> }
+export interface StoreBuilding { uppers: StoreUpper[]; roof: "flat" | "sawtooth" | "gable" | "mansard"; kind: string }
+export const STORE_BUILDINGS: Record<StoreId, StoreBuilding> = {
+  // an old workshop: a one-storey brick office over the shop half, the yard bay under a sawtooth roof (north lights)
+  rustbucket: { kind: "workshop", roof: "sawtooth", uppers: [{ u0: 0, u1: 5.6, floors: 1, fh: 3.0, color: "#8a4a32", wall: "brick", win: "winBoarded" }] },
+  // a narrow tenement: two floors of flats over the repair shop
+  plugpray: { kind: "tenement", roof: "flat", uppers: [{ u0: 0, u1: 9.44, floors: 2, fh: 3.1, color: "#7a8a80", wall: "render", win: "winBlinds" }] },
+  // an old brick commercial block: three floors (flats, and the studio on top) between the pub and the news tower
+  needledrop: { kind: "brick block", roof: "flat", uppers: [{ u0: 0, u1: 11.74, floors: 3, fh: 3.2, color: "#7a3426", wall: "brick", win: "windows" }] },
+  // a mountain lodge: a timber upper floor under a steep gable to the street, low on purpose beside the glass tower
+  peakfomo: { kind: "lodge", roof: "gable", uppers: [{ u0: 0, u1: 11.74, floors: 1, fh: 3.0, color: "#6a4a30", wall: "clapboard", win: "winCurtain" }] },
+  // a stone town house: three floors of tall windows and a mansard, stepping down from the 47 m tower to the hotel
+  maisonpong: { kind: "town house", roof: "mansard", uppers: [{ u0: 0, u1: 10.15, floors: 3, fh: 3.4, color: "#e8e0d0", wall: "stone", win: "winArched" }] },
+  // a pastel terrace house: three floors, a finished cornice
+  bonbon: { kind: "terrace", roof: "flat", uppers: [{ u0: 0, u1: 10.15, floors: 3, fh: 3.2, color: "#f0c4d0", wall: "paint", win: "winCurtain" }] },
+};
+/** the upper floors' boxes (façade shells), on the shop's roof slab */
+export function storeUpperBoxes(s: StoreDef): Box[] {
+  const f = storeFrame(s), H = STORE_SHELLS[s.id].H, out: Box[] = [];
+  for (const u of STORE_BUILDINGS[s.id].uppers) out.push(f.box(u.u0, u.u1, 0, f.D, u.floors * u.fh, "building", H + 0.3, { color: u.color, windows: true, face: s.face, wallKind: u.wall, winKind: u.win }));
+  return out;
+}
+/** the height of a store's building (its upper floors' top) */
+export function storeTop(s: StoreDef): number { const H = STORE_SHELLS[s.id].H; return H + 0.3 + Math.max(0, ...STORE_BUILDINGS[s.id].uppers.map((u) => u.floors * u.fh)); }

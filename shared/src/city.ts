@@ -23,7 +23,7 @@
 // Every block is lined with buildings wall to wall (a gap for the alley into the courtyard behind);
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
-import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS, STORE_BROWSE, STORE_FLOOR } from "./stores.js";
+import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS, STORE_BROWSE, STORE_FLOOR, storeUpperBoxes } from "./stores.js";
 import { canonBoxes,
   box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind, type GearKind,
   CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
@@ -1423,7 +1423,8 @@ export function buildTrashington(): ArenaLayout {
       for (let q = boxes.length - 1; q >= boxStart; q--) { const b = boxes[q]; if ((b.kind === "building" || b.kind === "tower") && inRect(st.plot, b.x, b.z, 0.2)) boxes.splice(q, 1); }
       for (let q = loot.length - 1; q >= 0; q--) if (inRect(st.plot, loot[q].x, loot[q].z, -0.5)) loot.splice(q, 1);
       const sh = storeShell(st);
-      boxes.push(...sh.boxes);
+      boxes.push(...storeUpperBoxes(st)); // (R13b: the floors above: façade shells)
+      boxes.push(...sh.boxes); // (the door's leaf last: see below)
       const doorProp = "storedoor_" + st.id;
       props.push({ id: doorProp, kind: "door", x: sh.door.x, y: 1.3, z: sh.door.z, yaw: sh.door.yaw, hw: sh.door.hw, hd: sh.door.hd, box: boxes.length - 1, closer: 5 });
       stores.push({ id: st.id, name: st.name, tier: st.tier, door: { x: sh.door.x, z: sh.door.z }, doorProp, keeper: sh.keeper, counter: sh.counter, inside: sh.inside });

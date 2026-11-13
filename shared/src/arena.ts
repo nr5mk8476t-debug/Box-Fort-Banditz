@@ -17,6 +17,9 @@ export interface Box {
   /** optional look hints for the renderer (colour, sign text, windows...) */
   color?: string;
   sign?: string;
+  /** R13b: a façade's wall material and window style, chosen (else picked by the district) */
+  wallKind?: "brick" | "render" | "stone" | "paint" | "concrete" | "tile" | "corrugated" | "clapboard";
+  winKind?: "windows" | "curtain" | "winShutter" | "winArched" | "winBlinds" | "winCurtain" | "winBoarded";
   windows?: boolean;
   /** Slice 2A: which way the sign faces (unit vector on x/z); default = toward the city centre */
   face?: [number, number];
