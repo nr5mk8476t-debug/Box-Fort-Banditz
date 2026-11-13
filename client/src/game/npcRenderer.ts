@@ -4,7 +4,7 @@
 // windup (arm pulled back), ko (flat on the ground + stars), film (phone up), gloat, huff.
 // Poses ease toward targets (same animation approach as the players), so they never get stuck.
 import { Scene, MeshBuilder, Mesh, TransformNode, StandardMaterial, Color3, type Camera } from "./babylon.ts";
-import { toon, ink, textTexture, unlitTextured, bakeGroup } from "./look.ts";
+import { toon, ink, textTexture, unlitTextured, bakeGroup, skinBody, SKIN_PEOPLE } from "./look.ts";
 import { NPC_DEFS, type NpcView } from "@bfb/shared";
 
 const INTERP_MS = 110;
@@ -604,6 +604,7 @@ export class NpcRenderer {
     }
     // merge each moving body part into one mesh (big draw-call saving with a crowd on screen)
     for (const g of [pivot, head, legL, legR, armL, armR, prop, stars]) if (g) bakeGroup(sc, g, g === stars ? 0 : 0.022);
+    if (SKIN_PEOPLE) skinBody(sc, root, [pivot, head, legL, legR, armL, armR, prop].filter((g): g is TransformNode => !!g)); // (R13b: one mesh a person)
     return {
       root, pivot, head, armL, armR, legL, legR, prop, stars, bang, huh, big, beam, laser, bubble: null, bubbleT: 0, pub: pubV,
       snaps: [], view: { ...v }, phase: Math.random() * 6, lastX: v.x, lastZ: v.z,

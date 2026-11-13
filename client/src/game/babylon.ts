@@ -15,6 +15,8 @@ export { Mesh } from "@babylonjs/core/Meshes/mesh.js";
 export { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData.js";
 export { VertexBuffer } from "@babylonjs/core/Buffers/buffer.js";
 export { TransformNode } from "@babylonjs/core/Meshes/transformNode.js";
+export { Skeleton } from "@babylonjs/core/Bones/skeleton.js";
+export { Bone } from "@babylonjs/core/Bones/bone.js";
 export type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
 export { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial.js";
 export { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture.js";

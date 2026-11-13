@@ -1,6 +1,6 @@
 // Shared "look" helpers: toon materials + thick outlines. This is the start of the
 // Box Fort Banditz art style; it will be refined in the art/polish phases.
-import { CellMaterial, Color3, DynamicTexture, Mesh, VertexBuffer, type Scene, type TransformNode, StandardMaterial } from "./babylon.ts";
+import { CellMaterial, Color3, DynamicTexture, Mesh, VertexBuffer, type Scene, type TransformNode, StandardMaterial, Skeleton, Bone, Vector3 } from "./babylon.ts";
 import { tierAt, type ArenaLayout } from "@bfb/shared";
 
 const cache = new Map<string, CellMaterial>();
@@ -61,6 +61,56 @@ export function bakeGroup(scene: Scene, node: TransformNode, outline = 0.022): M
   merged.setParent(node);
   if (outline > 0) ink(merged, outline);
   return merged;
+}
+
+/**
+ * R13b (Blake: "make people cheaper"): a character's moving parts (each already one vertex-coloured mesh: see bakeGroup)
+ * become ONE skinned mesh. Each part's node gets a bone that follows it (Babylon's linked transform nodes), so the
+ * animation code moves the same nodes as before and nothing else changes. A person was 6-7 meshes (on Blake's PC the
+ * frame is the meshes, ~7 µs each); now 1. Bone matrices go in uniforms, not a texture (no texture upload per person
+ * per frame). `?skin=0` builds people the old way, for comparisons.
+ */
+export const SKIN_PEOPLE = typeof location === "undefined" || !/[?&]skin=0\b/.test(location.search);
+export function skinBody(scene: Scene, root: TransformNode, groups: TransformNode[], outline = 0.022): Mesh | null {
+  const parts: { m: Mesh; g: TransformNode }[] = [];
+  for (const g of groups) for (const m of g.getChildMeshes(true)) if (m instanceof Mesh && m.name.endsWith("_merged") && m.getTotalVertices() > 0) parts.push({ m, g });
+  if (parts.length < 2) return null;
+  root.computeWorldMatrix(true);
+  for (const d of root.getDescendants(false)) (d as TransformNode).computeWorldMatrix?.(true);
+  const rootInv = root.getWorldMatrix().clone().invert();
+  const sk = new Skeleton(root.name + "-sk", root.name + "-sk", scene);
+  sk.useTextureToStoreBoneMatrices = false;
+  const boneOf = new Map<TransformNode, Bone>();
+  const boneFor = (n: TransformNode): Bone | null => {
+    if (n === root) return null;
+    const had = boneOf.get(n); if (had) return had;
+    const par = n.parent as TransformNode, pb = boneFor(par);
+    const local = n.getWorldMatrix().multiply(par === root ? rootInv : par.getWorldMatrix().clone().invert());
+    const b = new Bone(n.name, sk, pb, local);
+    b.linkTransformNode(n); boneOf.set(n, b); return b;
+  };
+  const pos: number[] = [], nor: number[] = [], col: number[] = [], ind: number[] = [], mi: number[] = [], mw: number[] = [];
+  const p = new Vector3(), q = new Vector3();
+  for (const { m, g } of parts) {
+    const bi = boneFor(g)!.getIndex(), toRoot = m.getWorldMatrix().multiply(rootInv);
+    const P = m.getVerticesData(VertexBuffer.PositionKind)!, N = m.getVerticesData(VertexBuffer.NormalKind)!, C = m.getVerticesData(VertexBuffer.ColorKind), I = m.getIndices()!;
+    const base = pos.length / 3, nv = P.length / 3;
+    for (let i = 0; i < nv; i++) {
+      Vector3.TransformCoordinatesFromFloatsToRef(P[i * 3], P[i * 3 + 1], P[i * 3 + 2], toRoot, p); pos.push(p.x, p.y, p.z);
+      Vector3.TransformNormalFromFloatsToRef(N[i * 3], N[i * 3 + 1], N[i * 3 + 2], toRoot, q); q.normalize(); nor.push(q.x, q.y, q.z);
+      if (C) col.push(C[i * 4], C[i * 4 + 1], C[i * 4 + 2], C[i * 4 + 3]); else col.push(1, 1, 1, 1);
+      mi.push(bi, 0, 0, 0); mw.push(1, 0, 0, 0);
+    }
+    for (let i = 0; i < I.length; i++) ind.push(base + I[i]);
+  }
+  const body = new Mesh(root.name + "-body", scene);
+  body.setVerticesData(VertexBuffer.PositionKind, pos); body.setVerticesData(VertexBuffer.NormalKind, nor); body.setVerticesData(VertexBuffer.ColorKind, col);
+  body.setVerticesData(VertexBuffer.MatricesIndicesKind, mi); body.setVerticesData(VertexBuffer.MatricesWeightsKind, mw); body.setIndices(ind);
+  body.parent = root; body.skeleton = sk; body.numBoneInfluencers = 1;
+  body.material = toon(scene, "#ffffff", "vc"); body.useVertexColors = true; body.isPickable = false;
+  if (outline > 0) ink(body, outline);
+  for (const { m } of parts) m.dispose();
+  return body;
 }
 
 /** Colour palette: bright but a bit grimy. */
