@@ -557,9 +557,9 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 | Draw budget | 25 views (10 old + 15 store views from `tests/store-views.json`) | `tests/draw-budget.mjs`; budgets for the store views = R12.9 x 1.15 | R12.9 build at the same cameras | all within; total draws -6.3%, meshes -1.6% (`screenshots/r13b/draws-final.json`) |
 | People | one skinned mesh each | mesh count per person; screenshots old vs new (`screenshots/r13b/people-skinned-vs-old.jpg`) | 7.2 meshes | 2.0 (1 + the hidden "dazed" stars); bar view people draws 156 -> 28 |
 | Looks | each store across the road, both diagonals, inside, the centrepiece, looking out, day and night | screenshots `screenshots/r13b/*` | - | reviewed |
-| Unit | | `npm test` | | 313 + 31 + 8, pass |
+| Unit | | `npm test` | | 321 (shared, with the 8 store tests) + 31 (client), pass |
 | Smokes | signal, server (79 NPCs: +6 keepers, +10 customers) | | | pass |
-| Browser e2e | normal / 110 ms | e2e | | PENDING / PENDING |
+| Browser e2e | normal / 110 ms | e2e | | 439/439 / 438/438 (first normal run 438/439: the walk-sync check; A's lobby spawn faces a crate 3.8 m away, and since R12.9's +15% a 45-step walk reached it: the same 3.82 m on the R12.9 build. The check now walks sideways (7 m clear): 439/439, 5.17 m for ~4.60 expected) |
 
 ## R12.9: speed +15% and the pub playtest list (2026-11-12)
 
