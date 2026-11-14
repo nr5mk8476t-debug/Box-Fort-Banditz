@@ -477,6 +477,14 @@ export class ArenaScene {
   }
 
   /** Online mode: the server's authoritative view of me. */
+  /**
+   * R13.1: solo, a frame with no new World state: only my own player is reconciled (my pending inputs replayed on the
+   * latest state, against the world as it is NOW). That's what every frame did before the solo view stopped being
+   * re-applied, and moving floors need it: stepping on alone between ticks while THE DROP's bed rose under you could
+   * leave you inside it (and the World takes your predicted position), so it shoved you off (e2e: 2 runs in 9).
+   */
+  reconcileMine(view: WorldView, myId: string) { const p = view.players.get(myId); if (p) this.reconcile(p as ServerPlayerView); }
+
   reconcile(me: ServerPlayerView) {
     // Drop inputs the server has already applied
     let i = 0;

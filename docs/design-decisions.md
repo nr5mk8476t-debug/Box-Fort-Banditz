@@ -2243,6 +2243,15 @@ flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the 
   A side effect worth having: people are drawn 110 ms in the past from a 16-snapshot buffer, which at 240 FPS held only
   67 ms (they were drawn from the oldest snapshot, not interpolated); at 60 a second it holds ~270 ms. The browser host
   already only refreshed on ticks; the 60 Hz simulation and the network cadence are unchanged.
+  **Found by the 110 ms e2e and fixed:** gating the whole apply also stopped your OWN player being reconciled every
+  frame, and on a moving floor that matters: the World takes your predicted position, so stepping on alone between
+  ticks while THE DROP's bed rose could leave you inside it, and it shoved you off (repro, the DROP alone: R13 21/21,
+  gated 7/9). Between ticks the client now reconciles just your player (`reconcileMine`: a few inputs replayed, as
+  every frame did before); the copying and applying of everything else stays gated: 23/24. The one miss, like every
+  miss, was the first drop after loading, shoved off the bed within 1.5 s of the teleport, before the drop: the
+  client's and the World's bobbing beds run on separate clocks and the World takes the client's position, a hazard
+  older than this round (its rate can't be told apart from R13's on these numbers). `?applyall` (tests) applies every
+  frame the R13 way, for comparisons.
 - **Glass doors:** each leaf's opaque parts are one mesh (a glass leaf was 7 meshes, now 2; the snug door 15, now 1).
   Leaves still swing on their own hinges; the pane stays its own see-through mesh.
 - **Remote players:** 13 meshes each, now 7: one per moving group and outline width (body; skull + hat; eyes + nose;

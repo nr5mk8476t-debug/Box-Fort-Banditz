@@ -25,7 +25,8 @@ Every update to Box Fort Banditz, newest first. Each round has its screenshots i
   that everyone shares, so the rest were drawn with a default material. Each person's skeleton is now cleaned up with
   them too.
 - **A leaner frame (test box; relative numbers):**
-  - Solo copies the world's state 60 times a second, not once per drawn frame. At 240 FPS that was 240 times.
+  - Solo copies the world's state 60 times a second, not once per drawn frame. At 240 FPS that was 240 times. Your own
+    player is still checked every frame: the e2e caught a first version that let THE DROP's rising bed shove you off.
   - Glass doors are 2 meshes a leaf (it was 7).
   - Other players are 7 meshes each (it was 13).
   - Across 53 fixed views: draws −6.7%, meshes −7.5% against R13.

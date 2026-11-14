@@ -1107,6 +1107,8 @@ let fpsSmooth = 60;
 /** R12.4 (tests: clips): "film" mode: the live loop stops and the tests step the game a fixed time per frame (the
  *  same code, a steady clock), so a clip shows motion at its real speed on a machine that can't draw it live */
 let sfxDepth = 0;
+/** (tests: ?applyall: solo applies the view every frame, the R13 way, for comparisons) */
+const APPLY_ALL = new URLSearchParams(location.search).has("applyall");
 let filming = false, filmNow = 0;
 engine.runRenderLoop(() => { if (!filming) frame(engine.getDeltaTime() / 1000, performance.now()); });
 function frame(dt: number, now: number) {
@@ -1127,7 +1129,8 @@ function frame(dt: number, now: number) {
       local.sendInputs(out);
       const ev = local.step(dt);
       const t2 = performance.now();
-      if (local.fresh) arena.applyWorld(local.view, SOLO_ID, now); // (R13.1: only a new state: see LocalSession.fresh)
+      // (R13.1: the whole view only when it's new: see LocalSession.fresh; between ticks just my own reconciliation)
+      if (local.fresh || APPLY_ALL) arena.applyWorld(local.view, SOLO_ID, now); else arena.reconcileMine(local.view, SOLO_ID);
       const t3 = performance.now();
       if (ev.length) arena.handleEvents(ev);
       perf.update = Math.max(perf.update, t1 - t0); perf.world = Math.max(perf.world, t2 - t1); perf.apply = Math.max(perf.apply, t3 - t2); perf.events = Math.max(perf.events, performance.now() - t3);
@@ -1249,7 +1252,7 @@ enterTitle();
     // C4a: smashed things (how many this screen has hidden) and whether a spot is blocked for this screen
     smashed: () => arena?.city.brokenCount ?? 0,
     worldProp: (id: string) => { const ps = local?.world.props.props.get(id); return ps ? { ready: ps.ready, hp: ps.hp } : null; },
-    worldMe: () => { const p = local?.world.players.get(SOLO_ID); return p ? { x: p.move.x, z: p.move.z, knockT: p.move.knockT, punchCd: p.punchCd, hand: p.hand, sel: p.sel, respawnT: p.respawnT, connected: p.connected } : null; },
+    worldMe: () => { const p = local?.world.players.get(SOLO_ID); return p ? { x: p.move.x, y: p.move.y, z: p.move.z, knockT: p.move.knockT, punchCd: p.punchCd, hand: p.hand, sel: p.sel, respawnT: p.respawnT, connected: p.connected } : null; },
     blockedAt: (x: number, z: number) => { const a = arena?.arenaLayout; if (!a) return null; return nearBoxes(a, x, z, 0.1).some((b) => inFoot(b, x, z) && b.y - b.h / 2 < 1 && b.y + b.h / 2 > 0.3); },
     // C5a: the lobby squat and the map
     lobby: () => { const me = netView()?.players?.get(myPlayerId()); const m = arena?.moveState; return { phase: arena?.match.phase ?? null, onRoof: !!(arena && m && inLobby(arena.arenaLayout, m.x, m.z, 3) && m.y > 20), y: m?.y ?? null, tb: me?.tb ?? 0, rb: me?.rb ?? 0, lg: me?.lg ?? "", hud: !$("lobby-hud").classList.contains("hidden") }; },
