@@ -8,7 +8,7 @@ import { ShopScreen } from "./ui/shopScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { STORE_TRADE, STORE_VOICE, lootDef as lootDefOf, type StoreId } from "@bfb/shared";
+import { STORE_TRADE, STORE_VOICE, STORES, STORE_SHELLS, storeFrame, lootDef as lootDefOf, type StoreId } from "@bfb/shared";
 import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, MICKEY, GCH, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
 import { softwareRendering, gpuHelpHtml } from "./gpuCheck.ts";
 import { adaptStep } from "./game/adaptive.ts";
@@ -1127,7 +1127,7 @@ function frame(dt: number, now: number) {
       local.sendInputs(out);
       const ev = local.step(dt);
       const t2 = performance.now();
-      arena.applyWorld(local.view, SOLO_ID, now);
+      if (local.fresh) arena.applyWorld(local.view, SOLO_ID, now); // (R13.1: only a new state: see LocalSession.fresh)
       const t3 = performance.now();
       if (ev.length) arena.handleEvents(ev);
       perf.update = Math.max(perf.update, t1 - t0); perf.world = Math.max(perf.world, t2 - t1); perf.apply = Math.max(perf.apply, t3 - t2); perf.events = Math.max(perf.events, performance.now() - t3);
@@ -1341,6 +1341,15 @@ enterTitle();
     lights: () => (arena as any)?.city?.lampStates() ?? [],
     worldTime: () => local?.world.time ?? null,
     testInput: (on: boolean) => { input.assumeLocked = on; input.enabled = on; if (!on) input.clear(); show("pause", !on && screen === "playing"); },
+    // R13.1: what one solo refresh + applyWorld costs here (n of each; ms per call; and the heap before/after)
+    applyBench: (n = 200) => {
+      if (!local || !arena) return null;
+      const m0 = (performance as any).memory?.usedJSHeapSize ?? 0;
+      let t = performance.now(); for (let i = 0; i < n; i++) local.refresh(); const refresh = (performance.now() - t) / n;
+      t = performance.now(); for (let i = 0; i < n; i++) arena.applyWorld(local.view, SOLO_ID, performance.now()); const apply = (performance.now() - t) / n;
+      const m1 = (performance as any).memory?.usedJSHeapSize ?? 0;
+      return { refresh, apply, heapKB: Math.round((m1 - m0) / 1024), items: local.view.items.size, npcs: local.view.npcs?.size ?? 0, props: local.view.props?.size ?? 0 };
+    },
     perf: (reset = false) => { const o = { ...perf }; if (reset) for (const k in perf) (perf as any)[k] = 0; return o; },
     move: () => arena?.moveState ?? null,
     scene: () => (title?.scene ?? arena?.scene),
@@ -1370,6 +1379,12 @@ enterTitle();
     useTarget: () => arena?.useTarget ?? null,
     robTarget: () => arena?.robTarget ?? null,
     robT: () => arena?.robT ?? -1,
+    // R13.1: where to stand at each store's counter (its two ends and the middle, the customer's side) and what the
+    // counters said back to me (the e2e presses E at each)
+    storeSpots: () => STORES.map((s) => { const f = storeFrame(s), [c0, c1, cv0] = STORE_SHELLS[s.id].counter;
+      return { id: s.id, name: s.name, spots: [c0 + 0.35, (c0 + c1) / 2, c1 - 0.35].map((u) => ({ stand: f.at(u, cv0 - 0.7), look: f.at(u, cv0 + 0.6) })) }; }),
+    storeLog: () => arena?.storeLog.slice() ?? [],
+    storeTrade: (id: StoreId) => STORE_TRADE[id] ?? null,
     respawnT: () => arena?.respawnT ?? 0,
     wipeout: () => { if (local) { const p = local.world.players.get(SOLO_ID)!; local.world.traffic.wipeout(p, local.world.traffic.cars[0]); } else room?.send("dbg", { op: "wipeout" }); },
     npcStats: () => arena?.npcStats() ?? null,

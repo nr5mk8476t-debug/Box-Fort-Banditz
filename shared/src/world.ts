@@ -1252,7 +1252,6 @@ export class World {
     p.cash -= sv.price; this.storeBuyT.set(key, this.time);
     if (sv.what === "trailmix") p.move.boostT = FEVER.boost;
     else if (sv.what === "spritz") p.notoriety = Math.max(0, p.notoriety - SPRITZ_HEAT);
-    else p.move.speedT = DEAL.goods.zoomies.time;
     this.emit({ t: "storeBought", p: p.id, store: storeId, what: sv.what, cash: sv.price });
   }
 

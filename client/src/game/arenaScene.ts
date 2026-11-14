@@ -138,6 +138,8 @@ export class ArenaScene {
   /** Stats for the debug overlay + tests */
   /** C5a: had a server position yet? */
   private synced = false;
+  /** R13.1: my store-counter answers, for the e2e (bought: / sold: / no:store:reason) */
+  readonly storeLog: string[] = [];
   stats = { corrections: 0, snaps: 0, lastError: 0, pending: 0, steps: 0, moveSteps: 0, droppedMs: 0 };
 
   // Feel/sfx bookkeeping
@@ -958,9 +960,9 @@ export class ArenaScene {
           this.onFeedback?.(e.heat ? "A cop saw that. Heat!" : "A wee bit of heat. That's the price of doing business.", "bad");
         } break;
         // R13: the stores
-        case "storeSold": if (e.p === me) { sfx.cash(); const v = STORE_VOICE[e.store as StoreId]; this.onBanner?.(`+$${e.cash}`, `${v?.keeper ?? "The shop"} takes the ${(lootDef(e.type)?.name ?? e.type).toUpperCase()}. ${v?.sold ?? ""}`, "good"); } break;
-        case "storeBought": if (e.p === me) { sfx.cash(); const tr = STORE_TRADE[e.store as StoreId], v = STORE_VOICE[e.store as StoreId]; this.onBanner?.((tr?.sells?.name ?? "BOUGHT") + "!", `${tr?.sells?.blurb ?? ""}. ${v?.bought ?? ""}`, "good"); } break;
-        case "storeNo": if (e.p === me) { const v = STORE_VOICE[e.store as StoreId]; if (v) this.onFeedback?.(v[e.reason] || v.hands || v.nobuy, "info"); } break;
+        case "storeSold": if (e.p === me) this.storeLog.push("sold:" + e.store); if (e.p === me) { sfx.cash(); const v = STORE_VOICE[e.store as StoreId]; this.onBanner?.(`+$${e.cash}`, `${v?.keeper ?? "The shop"} takes the ${(lootDef(e.type)?.name ?? e.type).toUpperCase()}. ${v?.sold ?? ""}`, "good"); } break;
+        case "storeBought": if (e.p === me) this.storeLog.push("bought:" + e.store); if (e.p === me) { sfx.cash(); const tr = STORE_TRADE[e.store as StoreId], v = STORE_VOICE[e.store as StoreId]; this.onBanner?.((tr?.sells?.name ?? "BOUGHT") + "!", `${tr?.sells?.blurb ?? ""}. ${v?.bought ?? ""}`, "good"); } break;
+        case "storeNo": if (e.p === me) this.storeLog.push("no:" + e.store + ":" + e.reason); if (e.p === me) { const v = STORE_VOICE[e.store as StoreId]; if (v) this.onFeedback?.(v[e.reason] || v.hands || v.nobuy, "info"); } break;
         case "mickeyNo": if (e.p === me) this.onFeedback?.({ day: `"Not in the daylight, ya eejit. Come back when it's dark."`, hands: `"Got anything for me? Hold it up, then."`, junk: `"Rubbish. Literally."`, money: `"That's just money, pal. Spend it."`, broke: `"Come back with cash, sunshine."`, full: "You've already got one of those.", shut: `"Shop's SHUT. You know what you did."`, away: "Wee Mickey's not here." }[e.reason], "bad"); break;
         case "gearUsed": {
           if (e.gear === "smoke") { this.smokePuff(e.x, e.z); sfx.dodge(); }

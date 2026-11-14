@@ -4,7 +4,7 @@
 // Poses (crouch, slide, dodge, climb, stumble) use the same ease-toward-target
 // animation approach as the first-person hands, so they can't get stuck.
 import { Scene, MeshBuilder, TransformNode, Mesh, Vector3, StandardMaterial, Color3 } from "./babylon.ts";
-import { toon, ink, PALETTE, textTexture, unlitTextured, disposeOwned } from "./look.ts";
+import { toon, ink, PALETTE, textTexture, unlitTextured, disposeOwned, bakeGroup } from "./look.ts";
 import { PLAYER, PLAYER_COLORS, movePose, readMoveState, unpackPk, type MovePose } from "@bfb/shared";
 
 export const INTERP_DELAY_MS = 110;
@@ -123,10 +123,23 @@ export class RemotePlayers {
     tag.billboardMode = Mesh.BILLBOARDMODE_ALL;
     tag.material = unlitTextured(scene, textTexture(scene, info.name, { w: 512, h: 128, fg: color, stroke: "#1b1420" }), "tagMat");
     tag.renderingGroupId = 1; // draw on top so names stay readable (NOTE: must change before stealth in Phase 4)
+
+    // R13.1: each moving group's pieces become one mesh per outline width, colours in the vertices (13 meshes a player
+    // was 7): the body; the head's skull + hat, its eyes + nose (thin outlines), its pupils (none); each arm + mitten.
+    // The groups still move on their own, so every pose, the punch, the carry and the pint work as before.
+    for (const p of head.getChildMeshes(false)) if (p.name === "rpupil") p.setParent(head);
+    const merged = [
+      bakeGroup(scene, bodyPivot, 0.03),
+      bakeGroup(scene, head, 0.03, (m) => m.name === "rhead" || m.name === "rhat"),
+      bakeGroup(scene, head, 0.013, (m) => m.name === "reye" || m.name === "rnose"),
+      bakeGroup(scene, head, 0, (m) => m.name === "rpupil"),
+      bakeGroup(scene, armL, 0.02), bakeGroup(scene, armR, 0.02),
+    ].filter((m): m is Mesh => !!m);
+    if (merged.length === 6) { meshes.length = 0; meshes.push(...merged); }
     meshes.push(tag);
 
     return {
-      root, bodyPivot, body, head, armL, armR, tag, snaps: [], pose: "idle", connected: true, phase: 0,
+      root, bodyPivot, body: merged.length === 6 ? merged[0] : body, head, armL, armR, tag, snaps: [], pose: "idle", connected: true, phase: 0,
       lastPos: new Vector3(info.x, info.y, info.z), meshes,
       crouch: 0, lean: 0, roll: 0, armUp: 0, squash: 0, armFwd: 0, armFwdR: 0, carry: "none", yaw: 0, punchT: 0, pl: 0, pd: false, raise: 0,
     };

@@ -106,3 +106,23 @@ test("R13.1 items and remote players: removing one keeps the rest's shared mater
   }
   items.dispose(); remotes.dispose(); scene.dispose(); engine.dispose();
 });
+
+test("R13.1 a remote player is 7 meshes (was 13): a mesh per moving group and outline width, plus the name; fading when disconnected reaches all of them", async () => {
+  const { RemotePlayers } = await import("../src/game/remotePlayers.ts");
+  const engine = new NullEngine(), scene = new Scene(engine);
+  const r = new RemotePlayers(scene);
+  const info = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, name: "P", colorIdx: 2, connected: true } as any;
+  r.push("p1", info, 0);
+  const mine = scene.meshes.filter((m) => { let p: any = m; while (p.parent) p = p.parent; return p.name === "remote-p1"; });
+  assert.equal(mine.length, 7, mine.map((m) => m.name).join(","));
+  // the moving groups still move: the arms swing on their shoulders, the head turns
+  for (const want of ["rshoulder", "rheadPivot", "rbodyPivot"]) assert.ok(mine.some((m) => { let p: any = m.parent; while (p) { if (p.name === want) return true; p = p.parent; } return false; }), `something hangs off ${want}`);
+  r.push("p1", { ...info, connected: false }, 50);
+  assert.ok(mine.filter((m) => m.name !== "rtag").every((m) => m.visibility < 1), "all of it fades when they drop");
+  r.dispose(); scene.dispose(); engine.dispose();
+});
+
+test("R13.1 the stores' picture sheet fits (it's packed when the module loads: an overflow used to show only in the browser)", async () => {
+  const d = await import("../src/game/storeDressing.ts");
+  for (const c of ["signCarat", "caratEyes", "caratPigeon", "caratNote", "caratCert"] as const) { const [u0, v0, u1, v1] = d.sheetUV(c); assert.ok(u0 >= 0 && v0 >= 0 && u1 <= 1 && v1 <= 1 && u1 > u0 && v1 > v0, c); }
+});

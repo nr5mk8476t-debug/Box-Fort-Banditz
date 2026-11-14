@@ -69,9 +69,9 @@ export function ink(mesh: Mesh, width = 0.035): Mesh {
  * `node`. Cuts a pedestrian from ~25 draw calls (+25 outline passes) to ~7.
  * Call once right after building, while the character is still at the origin.
  */
-export function bakeGroup(scene: Scene, node: TransformNode, outline = 0.022): Mesh | null {
-  // only plain toon-coloured parts (textured decals like signs keep their own mesh)
-  const parts = node.getChildMeshes(true).filter((m): m is Mesh => m instanceof Mesh && m.getTotalVertices() > 0 && !m.billboardMode && m.material instanceof CellMaterial && m.visibility === 1);
+export function bakeGroup(scene: Scene, node: TransformNode, outline = 0.022, pick?: (m: Mesh) => boolean): Mesh | null {
+  // only plain toon-coloured parts (textured decals like signs keep their own mesh); `pick`: only some of them (R13.1)
+  const parts = node.getChildMeshes(true).filter((m): m is Mesh => m instanceof Mesh && m.getTotalVertices() > 0 && !m.billboardMode && m.material instanceof CellMaterial && m.visibility === 1 && (!pick || pick(m)));
   if (parts.length === 0) return null;
   // make sure every world matrix in the chain is current (the parts are baked in world space)
   let top: TransformNode = node;

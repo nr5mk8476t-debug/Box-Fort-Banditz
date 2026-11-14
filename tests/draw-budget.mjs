@@ -2,7 +2,11 @@
 // the same on any machine, so this runs on the test box (software rendering) and still means something.
 // For each fixed view: draws = meshes drawn + outlined meshes (an ink outline is a second draw), by class.
 //   node tests/draw-budget.mjs                 compare with tests/draw-budgets.json (exit 1 when a view's over)
-//   UPDATE=1 node tests/draw-budget.mjs        write the budgets (what's measured now + 12%)
+//   UPDATE=1 node tests/draw-budget.mjs        write the budgets (what's measured now + 12%): ALL of them, on purpose
+//   UPDATE=new node tests/draw-budget.mjs      add budgets for views that have none yet (keeps the others)
+// R13.1: meshes are budgeted too (on Blake's PC the frame follows the meshes drawn, ~7 µs each, more than the draws);
+// a view with no budget, or a budgeted view that wasn't measured, FAILS (it used to be skipped: a pass that
+// checked nothing). Old budget files (a number per view) are the draws only.
 //   CLIENT_URL=http://localhost:4173  OUT=report.json  SHOTS=dir (a screenshot of each view)
 import { chromium } from "playwright";
 import fs from "node:fs";
@@ -33,6 +37,10 @@ const views = {
 // R13: the six stores, outside (from across the street) and inside (just in from the door), and each district from above
 // (tests/store-views.json, made from shared/src/stores.ts: the same cameras before and after the stores were built)
 { const f = new URL("./store-views.json", import.meta.url); if (fs.existsSync(f) && !process.env.NO_STORES) Object.assign(views, JSON.parse(fs.readFileSync(f, "utf8"))); }
+// R13.1: every glass / panel door, from 3.5 m out on each side (the doors are props: each leaf moves on its own hinge)
+for (const d of await ev(() => window.__bfb.propDefs().filter((p) => p.kind === "door").map((p) => ({ id: p.id, x: p.x, y: p.y, z: p.z, yaw: p.yaw }))))
+  for (const [k, sg] of [["a", 1], ["b", -1]]) { const nx = Math.sin(d.yaw) * sg, nz = Math.cos(d.yaw) * sg; views[`door_${d.id}_${k}`] = [d.x + nx * 3.5, d.y + 0.4, d.z + nz * 3.5, Math.atan2(-nx, -nz), 0.05]; }
+if (process.env.ONLY) for (const n of Object.keys(views)) if (!new RegExp(process.env.ONLY).test(n)) delete views[n];
 const out = {};
 for (const [n, v] of Object.entries(views)) {
   await ev((v) => window.__bfb.camAt(...v), v); await sleep(8000);
@@ -54,9 +62,22 @@ if (process.env.OUT) fs.writeFileSync(process.env.OUT, JSON.stringify(out, null,
 const cols = ["draws", "est", "meshes", "cityMerged", "citySingles", "citySkins", "cityOtherMerged", "props", "tags", "people", "cars", "loot", "other"];
 console.log("view".padEnd(14) + cols.map((c) => c.slice(0, 9).padStart(10)).join(""));
 for (const [n, r] of Object.entries(out)) console.log(n.padEnd(14) + cols.map((c) => String(r[c] ?? 0).padStart(10)).join(""));
-if (process.env.UPDATE) { const b = {}; for (const [n, r] of Object.entries(out)) b[n] = Math.ceil(r.draws * 1.12); /* (people and cars come and go: the same view varies by ~8% run to run) */ fs.writeFileSync(file, JSON.stringify(b, null, 1) + "\n"); console.log("budgets written"); process.exit(0); }
-const budgets = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+const old = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+const norm = (b) => (typeof b === "number" ? { draws: b } : b);
+const fresh = (r) => ({ draws: Math.ceil(r.draws * 1.12), meshes: Math.ceil(r.meshes * 1.12) }); /* (people and cars come and go: the same view varies by ~8% run to run) */
+if (process.env.UPDATE) {
+  const b = process.env.UPDATE === "new" ? { ...old } : {};
+  let added = 0;
+  for (const [n, r] of Object.entries(out)) if (process.env.UPDATE !== "new" || b[n] === undefined) { b[n] = fresh(r); added++; }
+  fs.writeFileSync(file, JSON.stringify(b, null, 1) + "\n"); console.log(`budgets written (${added} view(s))`); process.exit(0);
+}
 let over = 0;
-for (const [n, r] of Object.entries(out)) { const b = budgets[n]; if (b === undefined) { console.log(`  (no budget for ${n})`); continue; } if (r.draws > b) { over++; console.log(`OVER BUDGET: ${n}: ${r.draws} draws (budget ${b})`); } }
-console.log(over ? `${over} view(s) over the draw budget` : "ALL VIEWS WITHIN THE DRAW BUDGET");
+for (const [n, r] of Object.entries(out)) {
+  const b = old[n] === undefined ? undefined : norm(old[n]);
+  if (b === undefined) { over++; console.log(`NO BUDGET: ${n} (${r.draws} draws, ${r.meshes} meshes): add it on purpose with UPDATE=new`); continue; }
+  if (r.draws > b.draws) { over++; console.log(`OVER BUDGET: ${n}: ${r.draws} draws (budget ${b.draws})`); }
+  if (b.meshes !== undefined && r.meshes > b.meshes) { over++; console.log(`OVER BUDGET: ${n}: ${r.meshes} meshes (budget ${b.meshes})`); }
+}
+if (!process.env.ONLY) for (const n of Object.keys(old)) if (!out[n]) { over++; console.log(`NOT MEASURED: ${n} has a budget but no view: coverage was dropped`); }
+console.log(over ? `${over} problem(s): over budget, unbudgeted or missing views` : "ALL VIEWS WITHIN THE DRAW AND MESH BUDGETS");
 process.exit(over ? 1 : 0);

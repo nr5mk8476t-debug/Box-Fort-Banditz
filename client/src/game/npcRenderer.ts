@@ -15,7 +15,7 @@ const BIGSHOT_DRAW_DISTANCE = 90; // (no $$$ any more, Blake 5A: spot them by th
 interface Snap { t: number; x: number; y: number; z: number; yaw: number; }
 
 interface Look {
-  body: string; legs: string; skin: string; hat?: string; hatShape?: "cap" | "sunhat" | "beret" | "band" | "none" | "scarf";
+  body: string; legs: string; skin: string; hat?: string; hatShape?: "cap" | "sunhat" | "beret" | "band" | "none" | "scarf" | "tophat";
   prop?: "camera" | "briefcase" | "phone" | "none" | "crumbs" | "cane" | "moneybag" | "laptop" | "rod"; bulk?: number; face?: string;
 }
 
@@ -28,7 +28,7 @@ const KEEPER_LOOKS: Record<string, Look> = {
   needledrop: { body: "#1b1420", legs: "#3a3444", skin: "#f0c8a0", hat: "#ff5fa8", hatShape: "beret", prop: "none", bulk: 0.9 }, // DEZ: all black, a pink beret
   peakfomo: { body: "#e8902a", legs: "#5a6a3a", skin: "#f0b98a", hat: "#3a6a4a", hatShape: "sunhat", prop: "none", bulk: 1.1 }, // SUMMIT STEPH
   maisonpong: { body: "#f4f1ea", legs: "#1b1420", skin: "#e8b48a", hat: "#1b1420", hatShape: "beret", prop: "none", bulk: 1.0 }, // MONSIEUR NEZ
-  bonbon: { body: "#ff8fb5", legs: "#7a1840", skin: "#f5c29a", hat: "#c2185b", hatShape: "scarf", prop: "none", bulk: 1.2 }, // MADAME GANACHE
+  caratrun: { body: "#1f5a44", legs: "#5a1f2a", skin: "#f0c8a0", hat: "#1b1420", hatShape: "tophat", prop: "none", bulk: 1.05 }, // PERCY FACET: emerald tails, oxblood trousers, a top hat and a gold monocle (R13.1)
 };
 /** R13: the stores' customers, dressed for their street (The Yards, the middle, Snob Row) */
 const SHOPPER_LOOKS: Look[][] = [
@@ -36,7 +36,7 @@ const SHOPPER_LOOKS: Look[][] = [
   [{ body: "#43c7a6", legs: "#2b2433", skin: "#c98a5c", hat: "#ff5fa8", hatShape: "beret", prop: "none" }, { body: "#ffcf3a", legs: "#3d6fb5", skin: "#f0b98a", hat: "#1b1420", hatShape: "cap", prop: "phone" }, { body: "#7a3fa0", legs: "#1b1420", skin: "#e8b48a", hatShape: "none", prop: "none" }],
   [{ body: "#f4f1ea", legs: "#c8b88a", skin: "#f0c8a0", hat: "#d9b45a", hatShape: "sunhat", prop: "none" }, { body: "#2b2433", legs: "#1b1420", skin: "#e0a878", hatShape: "none", prop: "briefcase", bulk: 1.1 }, { body: "#ff8fb5", legs: "#f4f1ea", skin: "#f5c29a", hat: "#ffffff", hatShape: "scarf", prop: "phone" }],
 ];
-const STORE_TIER: Record<string, number> = { rustbucket: 0, plugpray: 0, needledrop: 1, peakfomo: 1, maisonpong: 2, bonbon: 2 };
+const STORE_TIER: Record<string, number> = { rustbucket: 0, plugpray: 0, needledrop: 1, peakfomo: 1, maisonpong: 2, caratrun: 2 };
 const LOOKS: Record<string, Look> = {
   tourist: { body: "#ff9a3c", legs: "#e8d7a8", skin: "#f0b98a", hat: "#f3e2b8", hatShape: "sunhat", prop: "camera" },
   businessman: { body: "#5b6170", legs: "#3e4350", skin: "#e8a878", hat: "#2b2433", hatShape: "none", prop: "briefcase" },
@@ -267,6 +267,12 @@ export class NpcRenderer {
     if (L.hatShape === "cap") { const h = part(MeshBuilder.CreateSphere("cap", { diameter: 0.42, segments: 8, slice: 0.5 }, sc), hc, head, 0.015); h.position.y = 0.05; const b = part(MeshBuilder.CreateBox("brim", { width: 0.26, height: 0.03, depth: 0.18 }, sc), hc, head, 0.01); b.position.set(0, 0.1, 0.2); }
     if (L.hatShape === "beret") { const h = part(MeshBuilder.CreateCylinder("beret", { diameter: 0.4, height: 0.08, tessellation: 12 }, sc), hc, head, 0.015); h.position.set(0.04, 0.2, 0); h.rotation.z = -0.25; }
     if (L.hatShape === "band") { const h = part(MeshBuilder.CreateTorus("band", { diameter: 0.4, thickness: 0.06, tessellation: 12 }, sc), hc, head, 0.01); h.position.y = 0.08; }
+    if (L.hatShape === "tophat") { // (R13.1: far too tall, and a monocle on a gold chain: the face, not the chest)
+      const b = part(MeshBuilder.CreateCylinder("tophatBrim", { diameter: 0.46, height: 0.03, tessellation: 14 }, sc), hc, head, 0.012); b.position.y = 0.17;
+      const c = part(MeshBuilder.CreateCylinder("tophat", { diameter: 0.3, height: 0.42, tessellation: 12 }, sc), hc, head, 0.015); c.position.y = 0.39;
+      const band = part(MeshBuilder.CreateCylinder("tophatBand", { diameter: 0.305, height: 0.05, tessellation: 12 }, sc), "#c9a227", head, 0); band.position.y = 0.21;
+      const mono = part(MeshBuilder.CreateTorus("monocle", { diameter: 0.11, thickness: 0.018, tessellation: 12 }, sc), "#d9b45a", head, 0.004); mono.rotation.x = Math.PI / 2; mono.position.set(0.09, 0.04, 0.2);
+    }
     if (L.hatShape === "scarf") { const h = part(MeshBuilder.CreateTorus("scarf", { diameter: 0.34, thickness: 0.12, tessellation: 10 }, sc), hc, pivot, 0.015); h.position.y = 1.42; const bird = part(MeshBuilder.CreateSphere("pigeon", { diameter: 0.16, segments: 6 }, sc), "#8a94a8", pivot, 0.012); bird.position.set(0.28, 1.5, 0); }
     if (v.kind === "doorman") {
       // gold buttons, epaulettes, white gloves

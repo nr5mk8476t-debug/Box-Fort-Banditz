@@ -1162,6 +1162,17 @@ try {
   }
   ok(cTug, "C grabs the other end: TUG OF WAR (mash meter)");
   ok(await A.waitForFunction(() => !!window.__bfb.tug(), null, { timeout: 15000 }).then(() => true, () => false), "A sees the tug of war too");
+  // R13.1: mid tug both are held still (carry speed 0). C leans on W for 1.5 s: C's own prediction must agree (it
+  // used to read the 0 as "missing" and predict a run, then snap back), so C stays put with no big correction.
+  {
+    const c0 = await C.evaluate(() => ({ m: window.__bfb.move(), st: { ...window.__bfb.info().stats }, cm: window.__bfb.serverInventory()?.carryMul }));
+    await C.evaluate(() => window.__bfb.setAxes({ mx: 0, mz: 1, sprint: false }));
+    let maxD = 0;
+    for (let k = 0; k < 10; k++) { await sleep(150); const m = await C.evaluate(() => window.__bfb.move()); maxD = Math.max(maxD, Math.hypot(m.x - c0.m.x, m.z - c0.m.z)); }
+    await C.evaluate(() => window.__bfb.setAxes(null));
+    const st1 = await C.evaluate(() => window.__bfb.info().stats);
+    ok(c0.cm === 0 && maxD < 0.35 && st1.snaps === c0.st.snaps, `tug: C pushing W stays put in their own view too (carry speed ${c0.cm}, drifted ${maxD.toFixed(2)} m, snaps +${st1.snaps - c0.st.snaps}, corrections +${st1.corrections - c0.st.corrections})`);
+  }
   // C mashes E (about 12 presses a second, right in the page so test lag doesn't slow it); A doesn't
   const mashing = C.evaluate(async () => { for (let k = 0; k < 40; k++) { window.__bfb.tugPress(); await new Promise((r) => setTimeout(r, 80)); } });
   await sleep(700);
@@ -1891,6 +1902,64 @@ try {
         await R3.evaluate((c) => window.__bfb.camAt(c.x, c.y, c.z, c.yaw, c.pitch), shots3[2][1]); await sleep(3000); await hideOverlays(R3); await shot(R3, "r123-booths-night.png");
         await R3.evaluate(() => { window.__bfb.forceNight(false); window.__bfb.camFree(); window.__bfb.pgAct({ op: "leave", st: "dartsoche1" }); window.__bfb.pgQuiet(false); });
       }
+    }
+  }
+  // ---- R13.1: the store counters through the real keyboard (they used to be answered by the host but never targeted:
+  // E did nothing at all six). Both ends and the middle of each counter; broke, buying once when E's mashed, the wrong
+  // thing, empty hands, a sale; and no hold-up started by trading at a counter with a till on it.
+  {
+    console.log("\n# R13.1 store counters by E (solo, the new city)");
+    const SP = await R3.evaluate(() => window.__bfb.storeSpots());
+    const face = (st, lk) => Math.atan2(lk.x - st.x, lk.z - st.z);
+    const aimAt = async (sp) => {
+      await R3.evaluate(([st, yaw]) => { window.__bfb.clearItems(st.x, st.z, 1.6); window.__bfb.teleport(st.x, st.z, yaw); window.__bfb.setYaw(yaw); window.__bfb.setPitch(0.3); }, [sp.stand, face(sp.stand, sp.look)]);
+    };
+    const target = (id) => R3.waitForFunction((sid) => { const u = window.__bfb.useTarget(); return !window.__bfb.lookTarget() && u?.kind === "storecounter" && u.def?.store === sid; }, id, { timeout: 15000 }).then(() => true, () => false);
+    const pressE = async () => { await R3.keyboard.press("e"); await sleep(450); };
+    const log = () => R3.evaluate(() => window.__bfb.storeLog());
+    const answered = async (n0, re, ms = 6000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const l = await log(); if (l.slice(n0).some((x) => re.test(x))) return l.slice(n0); await sleep(150); } return (await log()).slice(n0); };
+    for (const st of SP) {
+      const ends = [];
+      for (const k of [0, 2, 1]) { await aimAt(st.spots[k]); ends.push(await target(st.id)); }
+      ok(ends.every(Boolean), `${st.name}: E picks out the counter from both ends and the middle (${ends.map((e) => (e ? "y" : "n")).join("")})`);
+      const prompt = await R3.evaluate(() => window.__bfb.promptText());
+      ok(/[A-Za-z]/.test(prompt) && !/HOLD R/.test(prompt), `${st.name}: the counter's prompt shows (${prompt.trim().slice(0, 70)})`);
+      const sells = await R3.evaluate((id) => !!window.__bfb.storeTrade?.(id)?.sells, st.id);
+      if (sells) {
+        await R3.evaluate(() => window.__bfb.setCash(0));
+        let n0 = (await log()).length; await pressE();
+        ok((await answered(n0, new RegExp("^no:" + st.id + ":broke"))).some((x) => x.endsWith(":broke")), `${st.name}: E with no money: "broke", nothing bought`);
+        await R3.evaluate(() => window.__bfb.setCash(500)); await sleep(300);
+        n0 = (await log()).length;
+        for (let i = 0; i < 4; i++) await R3.keyboard.press("e");
+        const got = await answered(n0, new RegExp("^bought:" + st.id));
+        await sleep(400);
+        const all = (await log()).slice(n0), cash = await R3.evaluate(() => window.__bfb.myCash());
+        const price = await R3.evaluate((id) => window.__bfb.storeTrade(id).sells.price, st.id);
+        ok(all.filter((x) => x === "bought:" + st.id).length === 1 && cash === 500 - price, `${st.name}: E mashed 4 times: bought once, charged once ($${500 - cash} of $${price}) ${JSON.stringify(got)}`);
+      } else {
+        await R3.evaluate(() => window.__bfb.dropAll()); await sleep(300);
+        const n0 = (await log()).length; await pressE();
+        ok((await answered(n0, new RegExp("^no:" + st.id))).some((x) => x.startsWith("no:" + st.id)), `${st.name}: E with empty hands: the keeper says what they buy`);
+      }
+      ok((await R3.evaluate(() => window.__bfb.robT())) <= 0, `${st.name}: trading at the counter started no hold-up`);
+    }
+    // a sale and a refusal, at NEEDLE DROP, with the thing out of a pocket (selected with its number key)
+    const nd = SP.find((s) => s.id === "needledrop");
+    if (nd) {
+      for (const [type, want] of [["vinyl_record", /^sold:needledrop/], ["rubber_chicken", /^no:needledrop:wrong/]]) {
+        await R3.evaluate(() => window.__bfb.dropAll()); await aimAt(nd.spots[1]);
+        await R3.evaluate(([t, st]) => window.__bfb.spawnItem(t, st.x, st.z), [type, nd.spots[1].stand]);
+        const id = await R3.waitForFunction((t) => window.__bfb.items().find((i) => i.type === t && i.mode === "free")?.id, type, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
+        await R3.evaluate((i) => window.__bfb.shopAct({ a: "grab", item: i }), id);
+        await R3.waitForFunction((i) => window.__bfb.serverInventory()?.pockets.includes(i) || window.__bfb.serverInventory()?.hand === i, id, { timeout: 10000 }).catch(() => {});
+        const inv = await R3.evaluate(() => window.__bfb.serverInventory()), slot = inv?.pockets.indexOf(id) ?? -1;
+        if (slot >= 0) await R3.keyboard.press(String(slot + 1));
+        await aimAt(nd.spots[1]); await target("needledrop");
+        const n0 = (await log()).length; await pressE();
+        ok((await answered(n0, want)).some((x) => want.test(x)), `NEEDLE DROP: E holding a ${type}: ${want.source.includes("sold") ? "sold" : "refused"}`);
+      }
+      await R3.evaluate(() => window.__bfb.dropAll());
     }
   }
   ok(r3errs.length === 0, `new city: no JS errors${r3errs.length ? " -> " + r3errs.slice(0, 3).join(" | ") : ""}`);

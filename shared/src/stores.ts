@@ -10,7 +10,7 @@
 // boxes for whichever way the store faces.
 import type { Box, Rect } from "./arena.js";
 
-export type StoreId = "rustbucket" | "plugpray" | "needledrop" | "peakfomo" | "maisonpong" | "bonbon";
+export type StoreId = "rustbucket" | "plugpray" | "needledrop" | "peakfomo" | "maisonpong" | "caratrun";
 export type StoreTier = 0 | 1 | 2;
 
 export interface StoreDef {
@@ -32,7 +32,8 @@ export const STORES: StoreDef[] = [
   { id: "needledrop", name: "NEEDLE DROP RECORDS", tier: 1, plot: { minX: -83.83, maxX: -72.83, minZ: 33.45, maxZ: 45.19 }, face: [1, 0], replaces: ["VINTAGE RECORDS"] },
   { id: "peakfomo", name: "PEAK FOMO OUTFITTERS", tier: 1, plot: { minX: 72.83, maxX: 83.83, minZ: 33.45, maxZ: 45.19 }, face: [-1, 0], replaces: ["SPECS APPEAL"] },
   { id: "maisonpong", name: "MAISON PONG", tier: 2, plot: { minX: -42.39, maxX: -32.24, minZ: 53.5, maxZ: 65.5 }, face: [0, 1], replaces: ["CRUNCHO+ TOWER"] },
-  { id: "bonbon", name: "BONBON VIVANT", tier: 2, plot: { minX: 32.24, maxX: 42.39, minZ: 53.5, maxZ: 65.5 }, face: [0, 1], replaces: ["CAVIAR EXPRESS"] },
+  // (R13.1: CARAT & RUN, the jeweller, took BONBON VIVANT's plot: Blake's brief; the sugar-rush truffle went with it)
+  { id: "caratrun", name: "CARAT & RUN", tier: 2, plot: { minX: 32.24, maxX: 42.39, minZ: 53.5, maxZ: 65.5 }, face: [0, 1], replaces: ["CAVIAR EXPRESS"] },
 ];
 
 /** the stores' floor level (the pavement under them is 0.15 m up) */
@@ -118,10 +119,12 @@ export const STORE_SHELLS: Record<StoreId, StoreShellSpec> = {
     front: [{ u0: 0, u1: 0.6, t: "wall" }, { u0: 0.6, u1: 3.4, t: "window" }, { u0: 3.4, u1: 6.75, t: "door" }, { u0: 6.75, u1: 9.55, t: "window" }, { u0: 9.55, u1: 10.15, t: "wall" }],
     recess: { u0: 3.4, u1: 6.75, depth: 1.2 },
     counter: [3.6, 6.55, 6.6, 7.4], keeper: [5.07, 8.3] },
-  // Snob Row's mirror: the door to one side, a long display window (bowed, with the dressing)
-  bonbon: { H: 4.8, wall: "#f2d6dc", floor: "#e8e0d4", roof: "#6a4a52", glassTop: 3.1,
-    front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 2.0, t: "door" }, { u0: 2.0, u1: 2.5, t: "wall" }, { u0: 2.5, u1: 9.65, t: "window" }, { u0: 9.65, u1: 10.15, t: "wall" }],
-    counter: [3.2, 8.2, 7.2, 8.0], keeper: [5.7, 8.9] },
+  // Snob Row's mirror (R13.1, the jeweller): deep emerald, a recessed door off-centre between a small window and a long
+  // one (MAISON PONG across the road is symmetrical: this isn't), the keeper's counter straight ahead of the door
+  caratrun: { H: 4.8, wall: "#22483a", floor: "#5a2430", roof: "#3a3430", glassTop: 3.0,
+    front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 3.2, t: "window" }, { u0: 3.2, u1: 5.6, t: "door" }, { u0: 5.6, u1: 9.65, t: "window" }, { u0: 9.65, u1: 10.15, t: "wall" }],
+    recess: { u0: 3.2, u1: 5.6, depth: 1.3 },
+    counter: [3.6, 7.4, 8.0, 8.8], keeper: [5.5, 9.6] },
 };
 
 export interface StoreShellOut {
@@ -185,7 +188,7 @@ export function storeShell(s: StoreDef): StoreShellOut {
 // Prices sit against the pawn shops (40% of an item's worth, 3x for their wanted list) and WEE MICKEY (75%, night only,
 // heat): a specialist pays 60% by day, no heat; the salvage yard pays a few dollars for junk nobody else will take.
 
-export type StoreService = "trailmix" | "spritz" | "sugarrush";
+export type StoreService = "trailmix" | "spritz";
 export interface StoreTrade {
   type: import("./arena.js").ShopType;
   /** theft heat, against the low-end's 1 */
@@ -206,9 +209,10 @@ export const STORE_TRADE: Record<StoreId, StoreTrade> = {
   peakfomo: { type: "outdoor", heat: 1.25, sells: { what: "trailmix", name: "TRAIL MIX", price: 10, blurb: "stamina for 40 s" } },
   maisonpong: { type: "perfume", heat: 2, sells: { what: "spritz", name: "A SPRITZ", price: 40, blurb: "you smell innocent: a lot less heat" },
     caseLoot: [["fancy_fizz", 2], ["pearl_necklace", 1], ["designer_scarf", 1]] },
-  bonbon: { type: "sweets", heat: 2, sells: { what: "sugarrush", name: "SUGAR RUSH TRUFFLE", price: 25, blurb: "speed for 20 s (then the crash)" },
-    buys: { types: ["macaron_box", "golden_truffle", "fancy_cheese", "fancy_fizz", "cheese_wheel", "birthday_cake", "tiramisu", "mooncake"], mult: 0.6 },
-    caseLoot: [["golden_truffle", 1], ["macaron_box", 3]] },
+  // R13.1: the jeweller buys jewellery at the specialists' 60% (the pawn shops pay 40%, WEE MICKEY 75% at night with heat);
+  // it sells nothing (no service: the sugar-rush truffle that was here is gone, not moved). Its case: mostly pearls
+  caratrun: { type: "jewels", heat: 2, buys: { types: ["diamond_ring", "gold_chain", "pearl_necklace", "rolecks_watch", "diamond_pigeon"], mult: 0.6 },
+    caseLoot: [["pearl_necklace", 3], ["gold_chain", 2], ["diamond_ring", 1]] },
 };
 /** what a spritz takes off your heat */
 export const SPRITZ_HEAT = 30;
@@ -233,8 +237,10 @@ export const STORE_FIXTURES: Record<StoreId, StoreFixtures> = {
   peakfomo: { till: [10.6, 6.6], shelves: [[1.0, 4.4, 3.0, 6.0, 0.4], [0.32, 0.92, 6.6, 10.4, 1.5]], stock: [[2.7, 4.5, 0], [0.62, 7.6, 1], [0.62, 9.4, 1]] },
   maisonpong: { till: [6.0, 7.0], case: [3.2, 6.95, 11.0, 11.7, 1.8], shelves: [[1.4, 2.2, 4.4, 5.2, 1.1], [7.95, 8.75, 4.4, 5.2, 1.1]], stock: [[1.8, 4.8, 0], [8.35, 4.8, 1]],
     solids: [[4.42, 5.72, 3.95, 5.25, 0.5]] }, // (the perfume fountain's basin: R13b, smaller, further in)
-  bonbon: { till: [7.7, 7.6], case: [3.0, 5.3, 4.0, 4.8, 1.0], shelves: [[6.0, 8.6, 4.0, 4.8, 1.0]], stock: [[6.8, 4.4, 0], [7.9, 4.4, 0]],
-    solids: [[8.35, 9.65, 6.95, 8.25, 2.4]] }, // (the chocolate tower: R13b, at the end of the counter, part of it)
+  // R13.1: the velvet wall cabinet (left) holds the real stock; the smashable vitrine (right of the way in); the diamond
+  // pigeon's plinth in the back left corner; the appraisal bench behind the counter (the keeper's side)
+  caratrun: { till: [6.7, 8.4], case: [6.4, 9.0, 3.6, 4.4, 1.0], shelves: [[0.35, 1.0, 3.2, 7.6, 1.1]], stock: [[0.68, 4.2, 0], [0.68, 6.2, 0]],
+    solids: [[1.2, 2.6, 8.9, 10.3, 1.1], [7.9, 9.8, 11.0, 11.7, 0.95]] },
 };
 
 /** R13: the keepers (each store's cashier, in their own clothes) and what they say at the counter */
@@ -245,7 +251,7 @@ export const STORE_VOICE: Record<StoreId, StoreVoice> = {
   needledrop: { keeper: "DEZ", sold: `"Hm. Acceptable taste. Here."`, bought: "", wrong: `"This is a record shop."`, nobuy: "", hands: `"Records, tapes, guitars, headphones. I'll know if it's good."`, broke: "", shut: `"Shop's shut. Somebody ruined the vibe."`, black: `"No."` },
   peakfomo: { keeper: "SUMMIT STEPH", sold: "", bought: `"FUEL UP! The mountains await! (I wouldn't know.)"`, wrong: "", nobuy: `"We sell adventure, we don't buy it! TRAIL MIX though?"`, hands: "", broke: `"Ten dollars for the summit, friend!"`, shut: `"Not right now, there's a SITUATION!"`, black: "" },
   maisonpong: { keeper: "MONSIEUR NEZ", sold: "", bought: `"Top notes of innocence, a base of plausible deniability."`, wrong: "", nobuy: `"We do not purchase, monsieur. We anoint."`, hands: "", broke: `"Forty. The innocence is not cheap."`, shut: `"The boutique is closed. The air is... ruined."`, black: "" },
-  bonbon: { keeper: "MADAME GANACHE", sold: `"Acceptable. Your money, darling."`, bought: `"Mind the crash, sweetie."`, wrong: `"We are a confectioner. Not a skip."`, nobuy: "", hands: "", broke: `"Twenty-five, darling. Come back richer."`, shut: `"We are closed. There has been an incident."`, black: `"Absolutely not."` },
+  caratrun: { keeper: "PERCY FACET", sold: `"Genuine imitation. Professionally overpriced. Your cut, darling."`, bought: "", wrong: `"Look with your eyes, darling. Preferably your own. That doesn't sparkle."`, nobuy: "", hands: `"Rings, chains, pearls, watches. Bring me anything that sparkles: I'll tell you it's worth less."`, broke: "", shut: `"CLOSED. The pigeon is priceless. The alarm is extra."`, black: `"I have never seen that. Neither have you."` },
 };
 
 /** R13: where the browsing customers stand (u, v, and the way they face: du, dv), and how many each store has */
@@ -255,7 +261,7 @@ export const STORE_BROWSE: Record<StoreId, { n: number; spots: [number, number, 
   needledrop: { n: 2, spots: [[4.0, 5.0, -1, 0], [7.7, 4.6, 1, 0], [8.4, 8.6, 1, 0], [5.9, 7.3, 0, 1], [2.0, 8.6, -1, 0], [10.2, 6.9, 1, 0]] },
   peakfomo: { n: 2, spots: [[2.7, 6.9, 0, -1], [1.7, 8.5, -1, 0], [6.0, 5.0, 0, 1], [8.2, 5.4, 0, 1]] },
   maisonpong: { n: 2, spots: [[1.8, 6.0, 0, -1], [8.35, 6.0, 0, -1], [5.07, 9.6, 0, 1], [1.4, 8.6, -1, 0], [8.7, 8.6, 1, 0]] },
-  bonbon: { n: 2, spots: [[4.15, 5.6, 0, -1], [7.3, 5.6, 0, -1], [2.0, 6.5, -1, 0], [8.4, 6.0, 1, 0.5]] },
+  caratrun: { n: 2, spots: [[1.9, 4.4, -1, 0], [7.7, 3.0, 0, 1], [3.1, 8.3, -1, 1], [1.9, 6.4, -1, 0], [7.9, 5.2, 0, -1]] },
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -275,8 +281,8 @@ export const STORE_BUILDINGS: Record<StoreId, StoreBuilding> = {
   peakfomo: { kind: "lodge", roof: "gable", uppers: [{ u0: 0, u1: 11.74, floors: 1, fh: 3.0, color: "#6a4a30", wall: "clapboard", win: "winCurtain" }] },
   // a stone town house: three floors of tall windows and a mansard, stepping down from the 47 m tower to the hotel
   maisonpong: { kind: "town house", roof: "mansard", uppers: [{ u0: 0, u1: 10.15, floors: 3, fh: 3.4, color: "#e8e0d0", wall: "stone", win: "winArched" }] },
-  // a pastel terrace house: three floors, a finished cornice
-  bonbon: { kind: "terrace", roof: "flat", uppers: [{ u0: 0, u1: 10.15, floors: 3, fh: 3.2, color: "#f0c4d0", wall: "paint", win: "winCurtain" }] },
+  // a warm stone-painted terrace house: three floors, a finished cornice (R13.1: was BONBON's pastel pink)
+  caratrun: { kind: "terrace", roof: "flat", uppers: [{ u0: 0, u1: 10.15, floors: 3, fh: 3.2, color: "#d6c8ae", wall: "paint", win: "winCurtain" }] },
 };
 /** the upper floors' boxes (façade shells), on the shop's roof slab */
 export function storeUpperBoxes(s: StoreDef): Box[] {

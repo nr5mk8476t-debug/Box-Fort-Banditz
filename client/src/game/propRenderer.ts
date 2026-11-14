@@ -2,7 +2,7 @@
 // (gone when smashed), vending machine glass (cracked), parked car windows (smashed) and
 // flashing alarm lights on cars and shop tills. Static bodies are merged into the city.
 import { Scene, MeshBuilder, Mesh, StandardMaterial, CellMaterial, VertexBuffer, Color3, TransformNode, Vector3, DynamicTexture } from "./babylon.ts";
-import { toon, ink, textTexture, unlitTextured, disposeOwned, shareMat } from "./look.ts";
+import { toon, ink, textTexture, unlitTextured, disposeOwned, shareMat, bakeGroup } from "./look.ts";
 import { buildCarGlass } from "./carModel.ts";
 import { buildLootModel } from "./models.ts";
 import { PLAYER_COLORS, nearBoxes, type PropDef, type PropView, type TagView, type ArenaLayout } from "@bfb/shared";
@@ -341,6 +341,10 @@ export class PropRenderer {
             const bar = MeshBuilder.CreateBox("doorBar", { width: lw * (d.door === "exit" ? 0.8 : 0.55), height: 0.06, depth: 0.06 }, scene); bar.parent = hinge; bar.position.set(-side * lw * (d.door === "exit" ? 0.5 : 0.55), 0.05, inZ); bar.material = toon(scene, "#c9ccd4"); bar.isPickable = false;
             if (!d.oneWay) { const bar2 = bar.clone("doorBar2"); bar2.position.z = -0.06; }
           }
+          // R13.1: the leaf's opaque bits (frame, push bars, panels, insets, knobs) become ONE mesh, colours in its vertices;
+          // a glass pane stays its own (transparent) mesh. Each leaf swings on its own hinge, so leaves aren't merged together.
+          // A glass leaf was 7 meshes (now 2), a solid one 9, the snug's 15 (now 1).
+          bakeGroup(scene, hinge, 0);
           v.leaves.push({ hinge, dir: side });
         }
         v.open = 0;

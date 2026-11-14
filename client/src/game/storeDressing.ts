@@ -26,12 +26,12 @@ export function storeArea(s: StoreDef): InteriorArea {
     needledrop: [L("bins", W * 0.5, D * 0.42, lamp, "#ffcc88", 11, 0.87), L("counter", W * 0.5, D * 0.8, lamp, "#ff9ad0", 8, 0.58)],
     peakfomo: [L("lodge", W * 0.35, D * 0.5, lamp, "#ffd8a0", 11, 0.87), L("till", W * 0.8, D * 0.6, lamp, "#ffe8c0", 8, 0.65)],
     maisonpong: [L("chandelier", W * 0.5, D * 0.45, Math.min(H - 1.4, 5.2), "#fff0d8", 12, 0.65), L("altar", W * 0.5, D * 0.88, 3.2, "#ffe0a0", 7, 0.72)],
-    bonbon: [L("front", W * 0.5, D * 0.35, lamp, "#ffe0e8", 11, 0.87), L("counter", W * 0.5, D * 0.75, lamp, "#ffd8b0", 8, 0.65)],
+    caratrun: [L("front", W * 0.55, D * 0.36, lamp, "#fff0d8", 11, 0.87), L("counter", W * 0.5, D * 0.76, lamp, "#ffe4b8", 8, 0.7)], // (R13.1: warm gallery light)
   };
   return { id: "store-" + s.id, rect: s.plot, floors: [{ y0: 0, y1: H }], outside: { on: 34, off: 40 }, lights: lights[s.id] };
 }
 /** the stores whose shelves and counter this file dresses in full (the city leaves off its generic goods and worktop) */
-export const STORE_OWN_FIXTURES = new Set<StoreId>(["rustbucket", "plugpray", "needledrop", "peakfomo", "maisonpong", "bonbon"]);
+export const STORE_OWN_FIXTURES = new Set<StoreId>(["rustbucket", "plugpray", "needledrop", "peakfomo", "maisonpong", "caratrun"]);
 /** the visibility group of a store's inside */
 export const storeGroup = (i: number) => 9410 + i;
 
@@ -107,11 +107,10 @@ const CELLS: Record<string, Cell> = {
     centered(c, "M A I S O N   P O N G", w / 2, h * 0.46, w * 0.84, 88, SERIF, "#e8c878");
     centered(c, "PARFUMERIE  ·  TRASHINGTON  ·  PARIS (TEXAS)", w / 2, h * 0.78, w * 0.6, 22, SERIF, "#c8b88a", undefined, 0);
   } },
-  signBonbon: { w: 1024, h: 176, draw: (c, w, h) => {
-    c.fillStyle = "#ffd6e2"; c.fillRect(0, 0, w, h); c.fillStyle = "#ffffff"; for (let x = 0; x < w; x += 64) c.fillRect(x, 0, 32, h);
-    c.fillStyle = "rgba(255,214,226,0.7)"; c.fillRect(0, 0, w, h);
-    centered(c, "Bonbon Vivant", w / 2, h * 0.44, w * 0.84, 116, ROUND, "#c2185b", "#fff4f8", 12);
-    centered(c, "CONFISEUR  ·  SWEETS FOR THE SWEETLY LOADED", w / 2, h * 0.84, w * 0.7, 26, CHUNK, "#7a1840");
+  signCarat: { w: 1024, h: 176, draw: (c, w, h) => { // (R13.1: gold leaf on emerald, a double gold rule)
+    c.fillStyle = "#173f31"; c.fillRect(0, 0, w, h); c.strokeStyle = "#d9b45a"; c.lineWidth = 4; c.strokeRect(12, 12, w - 24, h - 24); c.lineWidth = 2; c.strokeRect(22, 22, w - 44, h - 44);
+    centered(c, "CARAT & RUN", w / 2, h * 0.45, w * 0.8, 96, SERIF, "#f0d78a", "#5a4210", 3);
+    centered(c, "FINE JEWELLERY  ·  FLEXIBLE MORALS", w / 2, h * 0.8, w * 0.62, 26, SERIF, "#d9c48a");
   } },
   // ---- NEEDLE DROP: the sleeve wall, the browser cards, the posters, the neon
   sleeves: { w: 512, h: 512, s: 0.75, draw: (c, w) => { const r = seeded(77), n = 4, s = w / n; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) sleeve(c, x * s + 4, y * s + 4, s - 8, r); } },
@@ -160,7 +159,6 @@ const CELLS: Record<string, Cell> = {
     for (let k = 0; k < 6; k++) { c.strokeStyle = ["#ff5fa8", "#43e0c6", "#ffd54a"][k % 3]; c.lineWidth = 10; c.beginPath(); c.moveTo(0, 120 + k * 60); c.lineTo(w, 60 + k * 60); c.stroke(); }
     c.save(); c.translate(w / 2, h / 2); c.rotate(-Math.PI / 2); centered(c, "TRASH BLASTER", 0, 0, h * 0.85, 56, CHUNK, "#f4f1ea", "#1b1420", 8); c.restore(); } },
   summit: { w: 256, h: 128, draw: (c, w, h) => { c.fillStyle = "#e8463a"; c.beginPath(); c.moveTo(0, 0); c.lineTo(w, h / 2); c.lineTo(0, h); c.fill(); centered(c, "SUMMIT", w * 0.38, h / 2, w * 0.6, 40, CHUNK, "#f4f1ea"); } },
-  stripes: { w: 256, h: 256, s: 0.75, draw: (c, w, h) => { for (let x = 0; x < w; x += 32) { c.fillStyle = (x / 32) % 2 ? "#ffd6e2" : "#fff4f8"; c.fillRect(x, 0, 32, h); } c.fillStyle = "#e85a8a"; for (let x = 0; x < w; x += 64) for (let y = 16; y < h; y += 64) { c.beginPath(); c.arc(x + 16, y, 4, 0, 6.3); c.fill(); } } },
   rustBand: { w: 1024, h: 128, draw: (c, w, h) => { c.fillStyle = "#e8dcc0"; c.globalAlpha = 0.85; centered(c, "SCRAP · SALVAGE · SURPRISES", w / 2, h / 2, w * 0.94, 70, CHUNK, "#f0e4c8"); c.globalAlpha = 1; } },
   rustSide: { w: 1024, h: 256, s: 0.6, draw: (c, w, h) => { centered(c, "RUST BUCKET", w / 2, h * 0.4, w * 0.94, 150, CHUNK, "#f4e8d0", "#3a2010", 10); centered(c, "WE BUY · WE SELL · WE WELD", w / 2, h * 0.85, w * 0.8, 44, CHUNK, "#ffd54a"); } },
   rustBins: { w: 512, h: 64, draw: (c, w, h) => { ["BOLTS", "TAPS", "KNOBS", "MYSTERY"].forEach((t, i) => { c.fillStyle = "#f4ecd8"; c.fillRect(i * 128 + 6, 6, 116, h - 12); centered(c, t, i * 128 + 64, h / 2, 104, 30, ROUND, "#2a1a10"); }); } },
@@ -190,8 +188,6 @@ const CELLS: Record<string, Cell> = {
   staffOnly: { w: 256, h: 96, draw: (c, w, h) => { c.fillStyle = "#e8d8b8"; c.fillRect(0, 0, w, h); centered(c, "STAFF ONLY", w / 2, h / 2, w * 0.9, 40, CHUNK, "#3a2a1a"); } },
   maisonLaunch: { w: 384, h: 192, s: 0.75, draw: (c, w, h) => { c.fillStyle = "#14161a"; c.fillRect(0, 0, w, h); c.strokeStyle = "#d9b45a"; c.lineWidth = 3; c.strokeRect(10, 10, w - 20, h - 20); centered(c, "NOUVEAU", w / 2, 48, w * 0.6, 30, SERIF, "#c8b88a"); centered(c, "ALIBI No. 2", w / 2, 100, w * 0.8, 52, SERIF, "#efe8da"); centered(c, "now with extra plausible deniability", w / 2, 152, w * 0.85, 20, SERIF, "#c8b88a"); } },
   maisonPlaque: { w: 256, h: 128, draw: (c, w, h) => { c.fillStyle = "#c8a24a"; c.fillRect(0, 0, w, h); c.strokeStyle = "#7a5a1a"; c.lineWidth = 4; c.strokeRect(6, 6, w - 12, h - 12); centered(c, "MAISON PONG", w / 2, h * 0.4, w * 0.85, 30, SERIF, "#3a2a10"); centered(c, "by appointment (or not)", w / 2, h * 0.72, w * 0.85, 18, SERIF, "#3a2a10"); } },
-  bonbonOrder: { w: 256, h: 128, draw: (c, w, h) => { c.fillStyle = "#fff4f8"; c.fillRect(0, 0, w, h); c.strokeStyle = "#c2185b"; c.lineWidth = 4; c.strokeRect(4, 4, w - 8, h - 8); c.fillStyle = "#7a1840"; c.font = `bold 26px ${ROUND}`; c.textAlign = "center"; c.fillText("FOR: THE MAYOR", w / 2, 44); c.fillText("URGENT (AGAIN)", w / 2, 82); } },
-  bonbonToday: { w: 256, h: 192, s: 0.75, draw: (c, w, h) => { c.fillStyle = "#3a1a10"; c.fillRect(0, 0, w, h); c.strokeStyle = "#f4f1ea"; c.lineWidth = 4; c.strokeRect(8, 8, w - 16, h - 16); centered(c, "TODAY", w / 2, 46, w * 0.7, 36, ROUND, "#ff9ad0"); centered(c, "SALTED", w / 2, 100, w * 0.8, 36, ROUND, "#f4f1ea"); centered(c, "CARAMEL", w / 2, 146, w * 0.8, 36, ROUND, "#f4f1ea"); } },
   // ---- the others' hero pictures (the blockout: one each)
   screens: { w: 512, h: 128, draw: (c, w, h) => {
     const r = seeded(9), s = h;
@@ -215,11 +211,16 @@ const CELLS: Record<string, Cell> = {
     c.fillStyle = "#d9b45a"; c.fillRect(w / 2 - 14, h * 0.2, 28, h * 0.12); c.beginPath(); c.arc(w / 2, h * 0.18, 20, 0, 6.3); c.fill();
     centered(c, "ALIBI", w / 2, h * 0.74, w * 0.8, 54, SERIF, "#2a2420"); centered(c, "EAU DE INNOCENCE", w / 2, h * 0.84, w * 0.8, 20, SERIF, "#7a6a4a", undefined, 0);
   } },
-  jarsBonbon: { w: 512, h: 128, s: 0.75, draw: (c, w, h) => {
-    const r = seeded(21); c.clearRect(0, 0, w, h);
-    for (let i = 0; i < 6; i++) { const x = i * w / 6 + 8, jw = w / 6 - 16; c.fillStyle = "rgba(220,240,255,0.55)"; c.fillRect(x, 20, jw, h - 24); c.fillStyle = "#c2185b"; c.fillRect(x - 3, 8, jw + 6, 14);
-      for (let k = 0; k < 26; k++) { c.fillStyle = ["#ff5fa8", "#ffd54a", "#43e0c6", "#ff7a1a", "#9fe3ff", "#f4f1ea"][Math.floor(r() * 6)]; c.beginPath(); c.arc(x + 6 + r() * (jw - 12), 40 + r() * (h - 50), 5 + r() * 3, 0, 6.3); c.fill(); } }
-  } },
+  // ---- R13.1 CARAT & RUN: the window card, the pigeon's plaque, the appraisal, the certificate
+  caratEyes: { w: 256, h: 160, s: 0.75, draw: (c, w, h) => { c.fillStyle = "#f4ecd8"; c.fillRect(0, 0, w, h); c.strokeStyle = "#c9a227"; c.lineWidth = 5; c.strokeRect(6, 6, w - 12, h - 12);
+    centered(c, "LOOK WITH YOUR EYES.", w / 2, h * 0.38, w * 0.86, 30, SERIF, "#173f31"); centered(c, "(preferably your own)", w / 2, h * 0.68, w * 0.8, 22, SERIF, "#5a1f2a"); } },
+  caratPigeon: { w: 512, h: 160, s: 0.75, draw: (c, w, h) => { c.fillStyle = "#c8a24a"; c.fillRect(0, 0, w, h); c.strokeStyle = "#6a4a12"; c.lineWidth = 5; c.strokeRect(8, 8, w - 16, h - 16);
+    centered(c, "THE PIGEON OF PROVENANCE", w / 2, h * 0.3, w * 0.86, 40, SERIF, "#2a1a08"); centered(c, "Priceless. The alarm is extra.", w / 2, h * 0.58, w * 0.8, 30, SERIF, "#2a1a08"); centered(c, "PLEASE DO NOT FEED", w / 2, h * 0.82, w * 0.5, 20, SERIF, "#5a1f2a"); } },
+  caratNote: { w: 256, h: 192, s: 0.75, draw: (c, w, h) => { c.fillStyle = "#fffaf0"; c.fillRect(0, 0, w, h); c.fillStyle = "#1b1420"; c.font = `24px ${SERIF}`; c.textAlign = "left"; c.textBaseline = "top";
+    ["APPRAISAL #4471", "Diamond? ...glass.", "Charge double.", "\"That ring has history.", "Please stop explaining it.\""].forEach((t, i) => c.fillText(t, 12, 10 + i * 35)); c.strokeStyle = "#c83a2a"; c.lineWidth = 3; c.beginPath(); c.moveTo(150, 46); c.lineTo(236, 68); c.stroke(); } },
+  caratCert: { w: 384, h: 288, s: 0.6, draw: (c, w, h) => { c.fillStyle = "#f4ecd8"; c.fillRect(0, 0, w, h); c.strokeStyle = "#c9a227"; c.lineWidth = 10; c.strokeRect(10, 10, w - 20, h - 20); c.lineWidth = 2; c.strokeRect(24, 24, w - 48, h - 48);
+    centered(c, "CERTIFICATE OF", w / 2, 64, w * 0.7, 30, SERIF, "#173f31"); centered(c, "GENUINE IMITATION", w / 2, 108, w * 0.8, 40, SERIF, "#173f31");
+    centered(c, "Professionally overpriced.", w / 2, 160, w * 0.7, 24, SERIF, "#5a1f2a"); c.fillStyle = "#c83a2a"; c.beginPath(); c.arc(w * 0.72, 220, 30, 0, 6.3); c.fill(); centered(c, "SEAL", w * 0.72, 220, 50, 16, SERIF, "#f4ecd8"); } },
 };
 const SHEET = 2048;
 /** where each cell sits on the sheet (pixels), packed once */
@@ -288,15 +289,15 @@ export interface StoreKit {
 export function dressStore(k: StoreKit) {
   const fx = STORE_FIXTURES[k.s.id];
   common(k, fx);
-  ({ rustbucket, plugpray, needledrop, peakfomo, maisonpong, bonbon })[k.s.id](k);
+  ({ rustbucket, plugpray, needledrop, peakfomo, maisonpong, caratrun })[k.s.id](k);
 }
 
 /** what every store has: its fascia, the display case (if it has one), lamp shades for its lights */
 function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
   const sp = STORE_SHELLS[k.s.id], W = k.W, gTop = sp.glassTop ?? 2.9;
-  const sign: Record<StoreId, SheetCell> = { rustbucket: "signRust", plugpray: "signPlug", needledrop: "signNeedle", peakfomo: "signPeak", maisonpong: "signMaison", bonbon: "signBonbon" };
+  const sign: Record<StoreId, SheetCell> = { rustbucket: "signRust", plugpray: "signPlug", needledrop: "signNeedle", peakfomo: "signPeak", maisonpong: "signMaison", caratrun: "signCarat" };
   const up = FASCIA_UP[k.s.id], span = FASCIA_SPAN[k.s.id] ?? [0.5, W - 0.5], sw = up ? up.w : Math.min(span[1] - span[0], 8.4), sh = sw * 176 / 1024, sc = (span[0] + span[1]) / 2;
-  const fasciaY = up ? storeTop(k.s) + up.dy : Math.min(sp.H - 0.2 - sh / 2, gTop + 0.3 + sh / 2 + (k.s.id === "bonbon" ? 0.4 : 0));
+  const fasciaY = up ? storeTop(k.s) + up.dy : Math.min(sp.H - 0.2 - sh / 2, gTop + 0.3 + sh / 2);
   k.outside(() => {
     // the fascia board and its sign (2 cm proud of the board, the board 12 cm proud of the wall)
     const v0 = up ? up.v : 0;
@@ -322,7 +323,7 @@ function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
   }
 }
 /** R13b: where a store's fascia sits along its frontage (default: across it) */
-const FASCIA_SPAN: Partial<Record<StoreId, [number, number]>> = { rustbucket: [0.3, 5.4], maisonpong: [2.9, 7.25], bonbon: [2.6, 9.5] };
+const FASCIA_SPAN: Partial<Record<StoreId, [number, number]>> = { rustbucket: [0.3, 5.4], maisonpong: [2.9, 7.25], caratrun: [0.7, 9.45] };
 /** R13b: a sign that isn't over the shopfront: its height (from the building's top) and how far out it sits */
 const FASCIA_UP: Partial<Record<StoreId, { dy: number; w: number; v: number }>> = { peakfomo: { dy: 1.1, w: 5.2, v: -0.1 } };
 /** world (x, z) back to the store's (u, v) */
@@ -789,56 +790,117 @@ function maisonpong(k: StoreKit) {
   for (let i = 0; i < 10; i++) { const a = (i / 10) * 6.283; k.bulb(cu + Math.cos(a) * 0.45, cv + Math.sin(a) * 0.45, cy - 0.08, 0.09, "#fff4d8"); k.cyl(cu + Math.cos(a) * 0.45, cv + Math.sin(a) * 0.45, cy - 0.26, 0.04, 0.2, "#e8f4ff", 0, 6); }
 }
 
-function bonbon(k: StoreKit) {
-  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, PINK = "#e85a8a", CHOC = "#5a2e1a", CHOC2 = "#3a1a0e", CREAM = "#fff4e8", MINT = "#bfe8d8", gTop = STORE_SHELLS.bonbon.glassTop ?? 2.9;
-  // the floor: big pink and cream checks; the walls quiet cream, the stripes only on the back wall behind the counter
-  for (let i = 0; i < Math.floor((W - 2 * T) / 0.8); i++) for (let j = 0; j < Math.floor((D - 2 * T) / 0.8); j++) k.box(T + i * 0.8, T + (i + 1) * 0.8, T + j * 0.8, T + (j + 1) * 0.8, F + 0.004, F + 0.016, (i + j) % 2 ? "#f8d8e2" : "#fff8f4", 0);
-  for (const [u0, u1] of [[T, T + 0.03], [W - T - 0.03, W - T]] as const) { k.box(u0, u1, T, D - T, F, 1.0, "#f4c8d4", 0); k.box(u0, u1, T, D - T, 1.0, 1.06, CREAM, 0); k.box(u0, u1, T, D - T, 1.06, H - 0.3, "#fff4ec", 0); }
-  k.pic("stripes", W / 2, D - T - 0.03, 2.6, W - 0.8, 3.6, [0, -1]);
-  // ================================ OUTSIDE: cream joinery, a pink riser, a refined awning with a scalloped edge
+// ---- R13.1: CARAT & RUN (Snob Row, BONBON VIVANT's old plot): a pretentious cartoon jeweller ----------------------
+// Deep emerald and oxblood velvet, aged brass, stone framing; a recessed door off-centre (MAISON PONG across the road
+// is symmetrical). Inside: a runner from the door to the keeper's counter, the velvet wall cabinet (the real stock),
+// the vitrine (smash it: alarm, heat), the appraisal bench behind the counter with an unfinished job, and THE DIAMOND
+// PIGEON in the back corner, under glass, roped off, presented with total seriousness.
+// Cost: 3 see-through panes (the vitrine, the cabinet's front, the pigeon's case); glints are glow bulbs (merged), no
+// lights per jewel, no reflections.
+function caratrun(k: StoreKit) {
+  const W = k.W, D = k.D, H = k.H, T = k.T, F = STORE_FLOOR, sp = STORE_SHELLS.caratrun, gTop = sp.glassTop ?? 2.9, rc = sp.recess!;
+  const EMER = "#1f5a44", EMER2 = "#173f31", GOLD = "#c9a227", BRASS = "#a8823a", STONE = "#e4dccb", VEL = "#6a1f2c", VEL2 = "#3e1019", ICE = "#d8f4ff", ICE2 = "#a8dcf4", PEARL = "#f6f0e4";
+  /** a little sparkle: a glowing speck (merged with the store's glow pieces) */
+  const glint = (u: number, v: number, y: number, d = 0.035) => k.bulb(u, v, y, d, "#ffffff");
+  /** a ring: a gold band (a short fat cylinder lying on its side) and a faceted stone on top */
+  const ring = (u: number, v: number, y: number, stone: string) => { k.cyl(u, v, y + 0.035, 0.07, 0.025, GOLD, 0, 10, "u"); k.ball(u, v, y + 0.085, 0.045, stone, 0, 2); };
+  // ================================ OUTSIDE: stone framing, emerald panels, brass, the recessed door, the giant ring
   k.outside(() => {
-    for (const u of [0.25, 2.25, W - 0.25]) k.box(u - 0.2, u + 0.2, -0.12, 0, 0, H, CREAM, 0.012);
-    k.box(2.5, 9.65, -0.1, 0, 0, 0.55, PINK, 0.008); k.box(2.5, 9.65, -0.14, 0, 0.53, 0.6, CREAM, 0.006);
-    const n = 8, a0 = 2.5, a1 = W - 0.5, y = gTop + 0.15;
-    for (let i = 0; i < n; i++) { const u0 = a0 + i * (a1 - a0) / n, u1 = u0 + (a1 - a0) / n; k.B((u0 + u1) / 2, -0.55, y, u1 - u0, 0.05, 1.15, i % 2 ? "#ffffff" : PINK, 0.006, 0, 0.38);
-      for (const h2 of [0, 0.5]) { const p0 = u0 + h2 * (u1 - u0), p1 = p0 + (u1 - u0) / 2; k.prism("u", p0, p1, (p0 + p1) / 2, (p0 + p1) / 2, -1.12, -1.07, y - 0.22, y - 0.42, i % 2 ? "#ffffff" : PINK, 0.004); } } // (the valance: little points)
-    k.box(a0, a1, -0.08, 0, y + 0.1, y + 0.2, CREAM, 0.006);
-    k.box(0.5, 2.0, -0.6, 0, 2.7, 2.78, CREAM, 0.008); // (a little canopy over the door)
+    for (const [u0, u1] of [[0, 0.5], [9.65, W]] as const) k.box(u0, u1, -0.12, 0, 0, H, STONE, 0.012); // (stone piers at the ends)
+    for (const u of [rc.u0, rc.u1]) k.box(u - 0.18, u + 0.18, -0.12, 0, 0, H, STONE, 0.012); // (and either side of the recess)
+    for (const [u0, u1] of [[0.5, 3.2], [5.6, 9.65]] as const) {
+      k.box(u0, u1, -0.14, 0, 0, 0.5, EMER2, 0.008); k.box(u0 - 0.02, u1 + 0.02, -0.18, 0, 0.5, 0.6, STONE, 0.008); // (an emerald riser, a stone sill)
+      const n = Math.max(2, Math.round((u1 - u0) / 1.3));
+      for (let q = 0; q <= n; q++) { const u = u0 + (u1 - u0) * q / n; k.box(u - 0.03, u + 0.03, -0.07, 0, 0.6, gTop, BRASS, 0.004); } // (slim brass mullions)
+      k.box(u0, u1, -0.07, 0, gTop - 0.03, gTop + 0.03, BRASS, 0.004);
+    }
+    k.box(-0.1, W + 0.1, -0.16, 0, H - 0.25, H, STONE, 0.012); // (a cornice over the shopfront)
+    k.box(rc.u0, rc.u1, 0, rc.depth, 0.15, 0.17, "#f4f0ea", 0); // (a marble step into the recess)
+    for (const u of [rc.u0 + 0.21, rc.u1 - 0.21]) k.box(u - 0.01, u + 0.01, 0.05, rc.depth, 0.3, 2.6, BRASS, 0); // (brass edges on its reveals)
+    // a giant gold ring hung off the right-hand pier on a bracket, its diamond on top (a cartoon, not a logo; clear of
+    // the fascia's lettering)
+    const ru = W - 0.25, rv = -0.95, ry = 3.25;
+    k.box(ru - 0.04, ru + 0.04, -1.1, 0, ry + 0.62, ry + 0.7, "#1b1420", 0.006);
+    for (const dv of [-0.95, -0.35]) k.cyl(ru, dv, ry + 0.66 - 0.15, 0.02, 0.3, "#1b1420", 0, 4);
+    for (let q = 0; q < 12; q++) { const a = (q / 12) * 6.283; k.B(ru + Math.cos(a) * 0.3, rv, ry + Math.sin(a) * 0.3, 0.17, 0.08, 0.1, GOLD, 0.006, 0, 0, -a + Math.PI / 2); }
+    k.ball(ru, rv, ry + 0.48, 0.34, ICE, 0.008, 2); glint(ru + 0.08, rv - 0.16, ry + 0.56, 0.06); glint(ru - 0.1, rv - 0.14, ry + 0.42, 0.04);
   });
-  // THE WINDOW: a curated display: three cake stands, a giant lollipop, the board of the day, jars on the ledge behind
-  k.box(2.6, W - 0.6, 0.32, 1.0, F, 0.7, "#f8e8ee", 0.012);
-  for (const [u, tiers] of [[3.6, 3], [5.6, 2], [7.8, 3]] as const) { let y = 0.7;
-    for (let t = 0; t < tiers; t++) { const d = 0.7 - t * 0.18; k.cyl(u, 0.65, y + 0.1, 0.05, 0.2, CREAM, 0, 6); k.cyl(u, 0.65, y + 0.22, d, 0.03, CREAM, 0.004, 16); y += 0.24;
-      for (let q = 0; q < 6 - t; q++) { const a = (q / (6 - t)) * 6.283; k.cyl(u + Math.cos(a) * d * 0.33, 0.65 + Math.sin(a) * d * 0.33, y, 0.11, 0.07, ["#ff9ad0", MINT, "#ffd54a", "#c8a0e8"][(q + t) % 4], 0.002, 10); } } }
-  k.cyl(9.0, 0.7, 1.4, 0.03, 1.4, CREAM, 0, 4); k.cyl(9.0, 0.7, 2.2, 0.7, 0.06, "#ff5fa8", 0.006, 20, "v"); k.cyl(9.0, 0.68, 2.2, 0.4, 0.07, "#ffffff", 0, 16, "v");
-  k.B(4.6, 0.75, 1.25, 0.04, 0.6, 0.04, CREAM, 0, 0, 0.15); k.pic("bonbonToday", 4.6, 0.72, 1.2, 0.5, 0.375, [0, -1]);
-  k.pic("jarsBonbon", (2.6 + W - 0.6) / 2, 0.98, 0.95, W - 3.6, (W - 3.6) / 8, [0, -1], false, [0, 0.5, 1, 1]);
-  // the truffle case's goods; the macaron shelf
-  { const [u0, u1, v0, , h] = STORE_FIXTURES.bonbon.case!;
-    k.breakable("storecase_bonbon", () => { for (let i = 0; i < 12; i++) k.ball(u0 + 0.25 + (i % 6) * (u1 - u0 - 0.5) / 5, v0 + 0.25 + Math.floor(i / 6) * 0.3, h * 0.55 + 0.06, 0.11, [CHOC, CHOC2, "#d9b45a"][i % 3], 0.003, 2); }); }
-  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.bonbon.shelves[0];
-    k.box(u0, u1, v0, v1, F, h, "#fff4f8", 0.01); k.box(u0 - 0.03, u1 + 0.03, v0 - 0.03, v1 + 0.03, h - 0.04, h, PINK, 0.004);
-    for (let t = 0; t < 3; t++) { const u = u0 + 0.4 + t * 0.9; for (let q = 0; q < 6; q++) k.cyl(u, (v0 + v1) / 2, h + 0.04 + q * 0.07, 0.3 - q * 0.035, 0.06, ["#ff9ad0", "#9fe3ff", "#ffd54a", "#c8f0a0"][(q + t) % 4], 0.003, 12); } }
-  // THE COUNTER with THE CHOCOLATE TOWER at its end (on a round plinth that's part of the counter), candy-cane posts
-  { const [c0, c1, cv0, cv1] = STORE_SHELLS.bonbon.counter, cm = (cv0 + cv1) / 2;
-    k.box(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.05, CREAM, 0.01); k.box(c0, c1, cv0 - 0.02, cv0, F, 0.98, PINK, 0.004);
-    k.cyl(c0 - 0.2, cm, F + 0.65, 0.14, 1.3, "#ffffff", 0.006, 10); for (let i = 0; i < 5; i++) k.cyl(c0 - 0.2, cm, F + 0.15 + i * 0.25, 0.15, 0.08, "#e8302a", 0, 10); k.ball(c0 - 0.2, cm, F + 1.35, 0.2, "#e8302a", 0.004, 3);
-    k.cyl(c0 + 0.8, cm, 1.15, 0.05, 0.2, CREAM, 0, 6); k.cyl(c0 + 0.8, cm, 1.26, 0.5, 0.03, CREAM, 0.004, 16); k.cyl(c0 + 0.8, cm, 1.38, 0.35, 0.22, "#ff9ad0", 0.006, 16);
-    const tu = 9.0, tv = 7.6;
-    k.cyl(tu, tv, F + 0.42, 1.3, 0.84, CREAM, 0.012, 22); k.cyl(tu, tv, F + 0.86, 1.36, 0.06, PINK, 0.004, 22);
-    [[1.0, 0.5], [0.76, 0.42], [0.5, 0.36]].reduce((y, [d, h]) => { k.cyl(tu, tv, y + h / 2, d, h, CHOC, 0.012, 20); k.cyl(tu, tv, y + h - 0.04, d + 0.04, 0.08, "#ff9ad0", 0.004, 20);
-      for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.283; k.ball(tu + Math.cos(a) * d / 2, tv + Math.sin(a) * d / 2, y + h + 0.03, 0.09, i % 2 ? CHOC2 : "#d9b45a", 0, 2); } return y + h; }, F + 0.9);
-    k.ball(tu, tv, F + 2.25, 0.22, "#e8302a", 0.006, 4); k.B(tu, tv, F + 2.38, 0.08, 0.06, 0.08, "#3a8a3a", 0); }
-  // THE WRAPPING BENCH behind the counter: ribbon reels on a rail, a paper roll, boxes, the half-wrapped order for the Mayor
-  { const u0 = 2.2, u1 = 7.6, v0 = D - T - 0.6, v1 = D - T;
-    k.box(u0, u1, v0, v1, F, 0.95, CREAM, 0.01); k.box(u0 - 0.02, u1 + 0.02, v0 - 0.02, v1, 0.95, 1.0, PINK, 0.004);
-    k.cyl((u0 + u1) / 2 - 1.4, v1 - 0.12, 1.25, 0.02, 1.8, "#c8ccd4", 0, 4, "u"); for (let i = 0; i < 6; i++) k.cyl((u0 + u1) / 2 - 2.1 + i * 0.28, v1 - 0.12, 1.25, 0.2, 0.08, ["#e8302a", "#ffd54a", "#43c7a6", PINK, "#c8a0e8", "#ffffff"][i], 0.004, 12, "u");
-    k.cyl(u1 - 0.6, v1 - 0.2, 1.12, 0.22, 0.9, "#fff4f8", 0.006, 12, "u");
-    for (let i = 0; i < 3; i++) k.B(u0 + 0.5 + i * 0.1, v0 + 0.3, 1.05 + i * 0.2, 0.42, 0.18, 0.32, ["#ff9ad0", MINT, "#ffffff"][i], 0.004);
-    k.B(4.6, v0 + 0.3, 1.1, 0.5, 0.2, 0.36, "#ffffff", 0.006); k.B(4.6, v0 + 0.3, 1.21, 0.06, 0.02, 0.37, "#e8302a", 0); k.B(4.6, v0 + 0.3, 1.21, 0.5, 0.02, 0.06, "#e8302a", 0);
-    k.pic("bonbonOrder", 4.95, v0 + 0.1, 1.15, 0.24, 0.12, [0, -1]); }
-  for (const y of [1.7, 2.35]) { k.box(2.0, W - 2.0, D - T - 0.3, D - T, y - 0.04, y, CREAM, 0.006); goods(k, 2.2, W - 2.2, D - T - 0.15, y, 12, ["#ff9ad0", "#ffd54a", "#9fe3ff", "#c8f0a0", "#ff7a1a"], "jar"); }
-  for (let i = 0; i < 3; i++) { const u = 2.6 + i * 2.6, v = 3.0 + (i % 2) * 1.6, y = H - 1.4; k.cyl(u, v, (y + H) / 2, 0.02, H - y, "#c8ccd4", 0, 3); k.cyl(u, v, y - 0.3, 0.04, 0.6, "#f4f1ea", 0, 4); k.cyl(u, v, y - 0.75, 0.6, 0.06, ["#ff5fa8", "#43e0c6", "#ffd54a"][i % 3], 0.006, 18, "v"); k.cyl(u, v, y - 0.75, 0.34, 0.07, "#ffffff", 0, 14, "v"); }
+  // the floor: a runner from the door to the counter (emerald, gold edges); brass dado and picture rails on the walls
+  k.box(3.75, 5.05, rc.depth + 0.35, 7.95, F + 0.004, F + 0.014, EMER2, 0);
+  for (const u of [3.75, 5.0]) k.box(u, u + 0.05, rc.depth + 0.35, 7.95, F + 0.014, F + 0.018, GOLD, 0);
+  for (const [u0, u1] of [[T, T + 0.03], [W - T - 0.03, W - T]] as const) { k.box(u0, u1, T, D - T, 0.98, 1.04, BRASS, 0); k.box(u0, u1, T, D - T, H - 0.55, H - 0.5, BRASS, 0); }
+  // THE WINDOWS: the small one a single necklace on a bust and the card; the long one, ring boxes on velvet risers
+  { const um = 1.85;
+    k.box(0.7, 3.0, 0.32, 1.0, F, 0.75, VEL2, 0.01); k.cyl(um, 0.66, 0.95, 0.26, 0.4, VEL, 0.006, 10, "y", 0.12); k.ball(um, 0.66, 1.28, 0.24, VEL, 0.006, 4);
+    for (let q = 0; q < 9; q++) { const a = Math.PI * (0.15 + 0.7 * q / 8); k.ball(um + Math.cos(a) * 0.15, 0.66 - Math.sin(a) * 0.12, 1.12 - Math.sin(a) * 0.08, 0.04, PEARL, 0, 3); }
+    k.B(2.6, 0.62, 0.95, 0.04, 0.4, 0.04, BRASS, 0, 0, 0.18); k.pic("caratEyes", 2.6, 0.6, 1.05, 0.5, 0.31, [0, -1]);
+    k.bulb(um, 0.66, 2.7, 0.07, "#fff4d8"); }
+  { k.box(5.8, 9.45, 0.32, 1.0, F, 0.7, VEL2, 0.01);
+    for (const [u, h] of [[6.4, 0.18], [7.6, 0.34], [8.8, 0.18]] as const) { k.box(u - 0.35, u + 0.35, 0.42, 0.9, 0.7, 0.7 + h, VEL, 0.006);
+      k.box(u - 0.11, u + 0.11, 0.56, 0.76, 0.7 + h, 0.7 + h + 0.12, EMER, 0.004); k.B(u, 0.78, 0.7 + h + 0.2, 0.22, 0.14, 0.02, EMER, 0.004, 0, -0.5); ring(u, 0.66, 0.7 + h + 0.1, u === 7.6 ? ICE : "#ff6a8a"); glint(u + 0.03, 0.62, 0.7 + h + 0.2); }
+    for (const u of [6.4, 7.6, 8.8]) k.bulb(u, 0.7, 2.7, 0.06, "#fff4d8"); }
+  // THE WALL CABINET (the real stock sits on its velvet; necklace busts between): velvet top, a glass front, brass
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.caratrun.shelves[0];
+    k.box(u0, u1 + 0.02, v0 - 0.02, v1 + 0.02, h - 0.04, h, VEL, 0.006); k.box(u0, u1 + 0.04, v0 - 0.04, v1 + 0.04, h - 0.06, h - 0.04, BRASS, 0);
+    k.box(u1, u1 + 0.02, v0, v1, F, h - 0.06, EMER2, 0.006);
+    k.box(u0, u0 + 0.04, v0, v1, h, 2.3, VEL2, 0); k.box(u0, u1, v0, v1, 2.3, 2.36, BRASS, 0.006); // (the velvet back, the cabinet's top)
+    k.glassBox(u1 - 0.02, u1, v0 + 0.05, v1 - 0.05, h + 0.02, 2.28);
+    for (const v of [3.5, 5.2, 7.1]) { const bu = (u0 + u1) / 2;
+      k.cyl(bu, v, h + 0.2, 0.2, 0.36, VEL2, 0.004, 10, "y", 0.1); k.cyl(bu, v, h + 0.42, 0.08, 0.1, VEL2, 0, 8);
+      for (let q = 0; q < 7; q++) { const a = Math.PI * (0.2 + 0.6 * q / 6); k.ball(bu + Math.sin(a) * 0.1, v - Math.cos(a) * 0.1, h + 0.34 - Math.sin(a) * 0.05, 0.035, v === 5.2 ? GOLD : PEARL, 0, 3); }
+      glint(bu + 0.1, v, h + 0.32); }
+    k.bulb(u1 - 0.1, (v0 + v1) / 2, 2.2, 0.06, "#fff4d8"); }
+  // THE VITRINE's goods (they go when it's smashed: the real loot spills instead): velvet trays, rings, a watch pillow
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.caratrun.case!;
+    k.breakable("storecase_caratrun", () => {
+      k.box(u0 + 0.1, u1 - 0.1, v0 + 0.1, v1 - 0.1, h * 0.55, h * 0.55 + 0.03, VEL, 0);
+      for (let q = 0; q < 6; q++) { const u = u0 + 0.35 + q * (u1 - u0 - 0.7) / 5; ring(u, (v0 + v1) / 2 - 0.12, h * 0.55 + 0.03, [ICE, "#ff6a8a", "#7af0b0"][q % 3]); }
+      for (let q = 0; q < 3; q++) { const u = u0 + 0.6 + q * 0.7; k.B(u, (v0 + v1) / 2 + 0.16, h * 0.55 + 0.07, 0.14, 0.08, 0.12, VEL2, 0); k.cyl(u, (v0 + v1) / 2 + 0.16, h * 0.55 + 0.12, 0.09, 0.03, GOLD, 0, 10, "v"); }
+      for (let q = 0; q < 4; q++) glint(u0 + 0.4 + q * 0.6, (v0 + v1) / 2, h * 0.55 + 0.14);
+    });
+    k.box(u0 - 0.03, u1 + 0.03, v0 - 0.03, v1 + 0.03, 0, 0.08, BRASS, 0); }
+  // THE COUNTER: marble on emerald, a brass edge; a velvet pad with a ring tray, the bell, the loupe on its stand
+  { const [c0, c1, cv0, cv1] = sp.counter, cm = (cv0 + cv1) / 2;
+    k.skin(c0 - 0.05, c1 + 0.05, cv0 - 0.05, cv1 + 0.05, 1.0, 1.06, "marble", "#f2eee6", 0.01); k.box(c0 - 0.06, c1 + 0.06, cv0 - 0.06, cv1 + 0.06, 0.98, 1.0, BRASS, 0.004);
+    k.box(c0, c1, cv0 - 0.02, cv0, F, 0.98, EMER, 0.006); for (const u of [c0 + 0.6, (c0 + c1) / 2, c1 - 0.6]) k.box(u - 0.02, u + 0.02, cv0 - 0.04, cv0 - 0.02, F + 0.1, 0.9, BRASS, 0);
+    k.box(c0 + 0.4, c0 + 1.2, cv0 + 0.12, cv1 - 0.12, 1.06, 1.08, VEL, 0.003); for (let q = 0; q < 3; q++) ring(c0 + 0.55 + q * 0.25, cm, 1.08, [ICE, GOLD, "#ff6a8a"][q]);
+    k.cyl(c0 + 1.7, cm, 1.1, 0.12, 0.06, GOLD, 0.004, 12, "y", 0.02); k.ball(c0 + 1.7, cm, 1.15, 0.03, "#1b1420", 0, 3); // (the bell)
+    k.cyl(c1 - 0.25, cm, 1.2, 0.02, 0.28, BRASS, 0, 6); k.cyl(c1 - 0.25, cm - 0.06, 1.33, 0.09, 0.05, "#1b1420", 0.004, 10, "v"); } // (the loupe on its stand)
+  // THE APPRAISAL BENCH (the keeper's side, behind the counter): a hooded lamp, tweezers, scales, a ring mid-job, the note
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.caratrun.solids![1];
+    k.skin(u0, u1, v0, v1, F, h, "wood", "#5a3a20", 0.01); k.box(u0 - 0.02, u1 + 0.02, v0 - 0.02, v1, h, h + 0.04, "#3a2414", 0.006);
+    const lu = u0 + 0.5, lv = (v0 + v1) / 2;
+    k.cyl(lu, lv + 0.2, h + 0.3, 0.025, 0.56, BRASS, 0, 6); k.B(lu, lv, h + 0.56, 0.06, 0.04, 0.42, BRASS, 0, 0, 0.3); k.cyl(lu, lv - 0.2, h + 0.48, 0.2, 0.14, EMER, 0.006, 12, "y", 0.08); k.bulb(lu, lv - 0.2, h + 0.4, 0.07, "#fff4d8");
+    ring(lu, lv - 0.2, h + 0.04, ICE); glint(lu + 0.03, lv - 0.24, h + 0.15);
+    k.B(lu + 0.35, lv - 0.1, h + 0.055, 0.14, 0.01, 0.02, "#c8ccd4", 0, 0.4); k.cyl(lu + 0.5, lv + 0.05, h + 0.07, 0.07, 0.05, "#1b1420", 0.003, 10, "v"); // (tweezers, a loupe)
+    const su = u1 - 0.45; k.cyl(su, lv, h + 0.2, 0.03, 0.36, BRASS, 0, 6); k.B(su, lv, h + 0.38, 0.5, 0.02, 0.03, BRASS, 0); for (const du of [-0.22, 0.22]) k.cyl(su + du, lv, h + 0.26, 0.16, 0.02, BRASS, 0.003, 12);
+    k.B(u0 + 1.1, v0 + 0.14, h + 0.13, 0.32, 0.25, 0.02, "#3a2414", 0, 0, -0.25); k.pic("caratNote", u0 + 1.1, v0 + 0.11, h + 0.14, 0.28, 0.21, [0, -1]); // (the unfinished appraisal, propped up)
+    k.pic("caratCert", u0 + 0.95, D - T - 0.03, h + 1.0, 0.75, 0.56, [0, -1]); k.box(u0 + 0.55, u0 + 1.35, D - T - 0.04, D - T - 0.02, h + 0.69, h + 1.31, GOLD, 0.004); }
+  // THE DIAMOND PIGEON (the centrepiece): a marble plinth, a velvet cushion, a faceted pigeon the size of a dog, a glass
+  // case, brass stanchions and a velvet rope, its plaque, a spotlight. It is not for sale. It is barely for looking at.
+  { const [u0, u1, v0, v1, h] = STORE_FIXTURES.caratrun.solids![0], pu = (u0 + u1) / 2, pv = (v0 + v1) / 2;
+    k.skin(u0, u1, v0, v1, F, h, "marble", "#f2eee6", 0.012); k.box(u0 - 0.03, u1 + 0.03, v0 - 0.03, v1 + 0.03, h - 0.04, h, GOLD, 0.004); k.box(u0 - 0.04, u1 + 0.04, v0 - 0.04, v1 + 0.04, F, F + 0.1, GOLD, 0.004);
+    k.cyl(pu, pv, h + 0.05, 0.8, 0.1, VEL, 0.006, 16, "y", 0.7);
+    const y = h + 0.1;
+    // (it faces the door: its front is -v. A plump chest, a body behind it, an iridescent neck, a fanned tail, wings,
+    //  pink feet, an unimpressed face and a tiny gold crown: pigeon, not teapot)
+    k.ball(pu, pv - 0.12, y + 0.42, 0.62, ICE, 0.012, 2); // (the chest)
+    k.ball(pu, pv + 0.2, y + 0.46, 0.54, ICE2, 0.01, 2); // (the body)
+    k.ball(pu, pv - 0.22, y + 0.74, 0.34, "#b8f4dc", 0.008, 2); // (the neck: pigeon-green glass)
+    k.ball(pu, pv - 0.3, y + 0.94, 0.3, ICE, 0.01, 2); // (the head)
+    k.B(pu, pv - 0.47, y + 0.91, 0.06, 0.05, 0.12, GOLD, 0.004, 0, 0.35); // (a gold beak)
+    for (const du of [-0.09, 0.09]) k.ball(pu + du, pv - 0.42, y + 1.0, 0.055, "#1b1420", 0, 3); // (two unimpressed eyes)
+    for (let q = 0; q < 5; q++) k.B(pu + (q - 2) * 0.05, pv - 0.3, y + 1.12 + (q % 2) * 0.03, 0.04, 0.08 + (q % 2) * 0.04, 0.04, GOLD, 0.003); // (a tiny crown)
+    k.box(pu - 0.12, pu + 0.12, pv - 0.34, pv - 0.26, y + 1.07, y + 1.11, GOLD, 0.003);
+    for (const yw of [-0.4, 0, 0.4]) k.B(pu + Math.sin(yw) * 0.12, pv + 0.5 + Math.cos(yw) * 0.06, y + 0.36, 0.13, 0.04, 0.28, ICE2, 0.006, yw); // (the tail: a short flat fan of three feathers)
+    for (const s2 of [-1, 1]) for (const [dv, dy, d] of [[-0.02, 0.52, 0.28], [0.16, 0.5, 0.26], [0.32, 0.45, 0.2]] as const) k.ball(pu + s2 * 0.25, pv + dv, y + dy, d, "#c4ecfa", 0.006, 2); // (folded wings: feather clumps)
+    for (const du of [-0.11, 0.11]) { k.cyl(pu + du, pv - 0.05, y + 0.06, 0.04, 0.12, "#ff8a6a", 0, 6); k.B(pu + du, pv - 0.12, y + 0.015, 0.1, 0.03, 0.14, "#ff8a6a", 0); } // (pink feet)
+    for (const [du, dv, dy] of [[0.2, -0.35, 0.5], [-0.25, -0.1, 0.62], [0.05, 0.1, 0.72], [0.22, -0.42, 0.9], [-0.15, 0.3, 0.3]] as const) glint(pu + du, pv + dv, y + dy, 0.05);
+    k.glassBox(u0 + 0.05, u1 - 0.05, v0 + 0.05, v1 - 0.05, h + 0.02, h + 1.25); k.box(u0 + 0.03, u1 - 0.03, v0 + 0.03, v1 - 0.03, h + 1.25, h + 1.3, GOLD, 0.006);
+    for (const [su, sv] of [[u0 - 0.35, v0 - 0.35], [u1 + 0.35, v0 - 0.35], [u1 + 0.35, v1 + 0.2]] as const) { k.cyl(su, sv, F + 0.45, 0.06, 0.9, BRASS, 0.004, 8); k.ball(su, sv, F + 0.93, 0.1, GOLD, 0.004, 3); k.cyl(su, sv, F + 0.03, 0.24, 0.06, BRASS, 0.004, 12); }
+    k.cyl((u0 + u1) / 2 + 0, v0 - 0.35, F + 0.78, 0.05, u1 - u0 + 0.7, VEL, 0.004, 8, "u"); k.cyl(u1 + 0.35, (v0 + v1) / 2 - 0.08, F + 0.78, 0.05, v1 - v0 + 0.55, VEL, 0.004, 8, "v");
+    k.B(pu, v0 - 0.08, h - 0.4, 0.62, 0.2, 0.02, "#6a4a12", 0); k.pic("caratPigeon", pu, v0 - 0.1, h - 0.4, 0.6, 0.19, [0, -1]);
+    k.bulb(pu, pv - 0.4, H - 0.35, 0.1, "#fff4d8"); k.cyl(pu, pv - 0.4, H - 0.22, 0.2, 0.2, "#1b1420", 0.006, 10, "y", 0.12); }
 }
 
 // ---- R13b: THE BUILDINGS' TOPS (outside: always with the street): roof shapes, cornices, bands between the floors ----

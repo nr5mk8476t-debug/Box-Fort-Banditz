@@ -130,7 +130,7 @@ export const SHOP_POOLS: Record<ShopType, string[]> = {
   records: ["vinyl_record", "mixtape", "guitar", "dj_headphones"],
   outdoor: ["protein_shaker", "sunglasses", "energy_drink", "disposable_camera"],
   perfume: ["fancy_fizz", "designer_scarf", "pearl_necklace"],
-  sweets: ["macaron_box", "golden_truffle", "fancy_fizz", "birthday_cake"],
+  jewels: ["pearl_necklace", "gold_chain", "pearl_necklace", "rolecks_watch"], // (R13.1 CARAT & RUN: no legendaries on the shelf)
   mart: ["canned_beans", "energy_drink", "candy_bar", "soda_can", "lottery_ticket", "fancy_cheese"],
   pawn: ["gold_chain", "guitar", "sunglasses", "golden_spork", "snow_globe", "mixtape", "crt_tv", "award_trophy", "vinyl_record", "rolecks_watch"],
   bakery: ["bagel", "baguette", "birthday_cake", "fancy_cheese", "donut"],

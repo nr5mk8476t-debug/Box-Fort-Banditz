@@ -73,6 +73,15 @@ switched off when nobody's within 90 m.
 - Characters with a job (a barman, a dealer, a bouncer): add the kind to `SPECIAL_KINDS`. They're always updated fully
   and never recycled.
 - Looks: `LOOKS` in `npcRenderer.ts`; each look is merged into a few meshes when built.
+- **Removing anything built from cached materials (R13.1): `disposeOwned(node)` (look.ts), never `node.dispose(false,
+  true)`.** `toon()` colours and every renderer's cached materials (beams, tags, sparkles, bubbles, icons) are shared:
+  disposing one clears it off every other mesh using it (the first passer-by to leave used to strip everyone's body
+  material). Mark a new cache's materials with `shareMat()`. `disposeOwned` also disposes the skeletons a skinned
+  character owns, and only the materials and textures nothing else still uses. `client/test/lifetimes.test.ts` checks
+  spawn/remove cycles come back to the same counts.
+- A moving group's pieces (an arm and its mitten, a head and its hat) are one mesh per outline width (`bakeGroup`, with
+  its `pick` filter to split by outline). People are one skinned mesh (`skinBody`); remote players are 7 (R13.1).
+- A glass door's leaf: its opaque parts are one mesh, the pane its own (R13.1). Each leaf swings on its own hinge.
 
 ## 5. An activity
 

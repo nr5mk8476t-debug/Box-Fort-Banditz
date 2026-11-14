@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World, type WorldEvent } from "../src/world.js";
 import { buildTrashington } from "../src/city.js";
-import { setCityMap as useCity, STORES, storeFrame, STORE_SHELLS, STORE_TRADE, STORE_BUY_GAP, SPRITZ_HEAT, FEVER, LOOT, type StoreId } from "../src/index.js";
+import { setCityMap as useCity, STORES, storeFrame, STORE_SHELLS, STORE_TRADE, STORE_FIXTURES, STORE_BUY_GAP, SPRITZ_HEAT, FEVER, LOOT, type StoreId } from "../src/index.js";
 
 function settle(w: World, seconds = 1) { for (let i = 0; i < seconds * 60; i++) w.tick(); }
 function storeWorld(players = 1) {
@@ -70,13 +70,13 @@ test("R13 stores: not enough money buys nothing and takes nothing; enough buys e
 test("R13 stores: mashing E buys once per second (no double charges), then again after the gap", () => {
   const { w } = storeWorld();
   const a = w.players.get("p0")!;
-  atCounter(w, "p0", "bonbon");
+  atCounter(w, "p0", "peakfomo");
   a.cash = 200;
-  for (let i = 0; i < 6; i++) { use(w, "p0", "bonbon"); w.tick(); }
-  assert.equal(ev(w.takeEvents(), "storeBought").length, 1, "one truffle");
-  assert.equal(a.cash, 200 - STORE_TRADE.bonbon.sells!.price);
+  for (let i = 0; i < 6; i++) { use(w, "p0", "peakfomo"); w.tick(); }
+  assert.equal(ev(w.takeEvents(), "storeBought").length, 1, "one bag of trail mix");
+  assert.equal(a.cash, 200 - STORE_TRADE.peakfomo.sells!.price);
   settle(w, STORE_BUY_GAP + 0.1);
-  use(w, "p0", "bonbon");
+  use(w, "p0", "peakfomo");
   assert.equal(ev(w.takeEvents(), "storeBought").length, 1, "and another after the gap");
 });
 
@@ -155,13 +155,70 @@ test("R13 stores: a rummage spot gives once a day, even with full pockets (the f
 
 test("R13 stores: a player who leaves mid-visit takes nothing with them from the counter, and the next customer's served", () => {
   const { w } = storeWorld(2);
-  atCounter(w, "p0", "bonbon", -0.7); atCounter(w, "p1", "bonbon", 0.7);
+  atCounter(w, "p0", "maisonpong", -0.7); atCounter(w, "p1", "maisonpong", 0.7);
   w.players.get("p0")!.cash = 100;
-  use(w, "p0", "bonbon");
+  use(w, "p0", "maisonpong");
   w.removePlayer("p0");
   settle(w, 0.2);
   const b = w.players.get("p1")!;
-  b.cash = 100; use(w, "p1", "bonbon");
+  settle(w, STORE_BUY_GAP + 0.1); w.takeEvents();
+  b.cash = 100; use(w, "p1", "maisonpong");
   assert.equal(ev(w.takeEvents(), "storeBought").filter((e) => e.p === "p1").length, 1);
-  assert.equal(b.cash, 100 - STORE_TRADE.bonbon.sells!.price);
+  assert.equal(b.cash, 100 - STORE_TRADE.maisonpong.sells!.price);
+});
+
+// ---- R13.1: CARAT & RUN, the jeweller (it took BONBON VIVANT's plot)
+test("R13.1 CARAT & RUN: buys jewellery at the specialists' 60%, refuses the rest, sells nothing (the sugar-rush truffle went with BONBON)", () => {
+  const { w } = storeWorld();
+  const a = w.players.get("p0")!;
+  assert.equal(STORE_TRADE.caratrun.sells, undefined, "no service");
+  assert.equal(STORE_TRADE.caratrun.buys!.mult, 0.6);
+  atCounter(w, "p0", "caratrun");
+  a.cash = 0;
+  use(w, "p0", "caratrun");
+  assert.ok(ev(w.takeEvents(), "storeNo").some((e) => e.reason === "hands"), "empty hands: it says what it buys");
+  holdNew(w, "p0", "pearl_necklace", 100);
+  use(w, "p0", "caratrun");
+  const sold = ev(w.takeEvents(), "storeSold");
+  assert.equal(sold.length, 1); assert.equal(a.cash, 60);
+  holdNew(w, "p0", "rubber_chicken", 20);
+  use(w, "p0", "caratrun");
+  assert.ok(ev(w.takeEvents(), "storeNo").some((e) => e.reason === "wrong"));
+  assert.equal(a.cash, 60, "no money for a chicken");
+});
+
+test("R13.1 CARAT & RUN: Snob Row heat; shelf stock from its own pool (no legendaries); the case's contents are jewellery", () => {
+  const { w } = storeWorld();
+  const shop = w.arena.shops!.find((s) => s.name === "CARAT & RUN")!;
+  assert.ok(shop, "the shop's in the city"); assert.equal(shop.type, "jewels"); assert.equal(shop.heat, 2);
+  assert.ok(!w.arena.shops!.some((s) => /BONBON/.test(s.name)), "BONBON VIVANT is gone");
+  const stock = (w.arena.lootSpawns ?? []).filter((l) => l.shop === shop.id);
+  assert.equal(stock.length, STORE_FIXTURES.caratrun.stock.length);
+  for (const l of stock) for (const t of l.pool!) assert.notEqual(LOOT.find((d) => d.type === t)!.rarity, "legendary", t);
+  for (const [t] of STORE_TRADE.caratrun.caseLoot!) assert.ok(STORE_TRADE.caratrun.buys!.types!.includes(t), `${t}: the case holds what the shop deals in`);
+});
+
+test("R13.1 CARAT & RUN: smashing the case spills once (alarm, heat); a second smash and the restock don't duplicate it; it's full again next round", () => {
+  const { w } = storeWorld();
+  const a = w.players.get("p0")!;
+  const c = w.arena.props!.find((p) => p.id === "storecase_caratrun")!;
+  const f = storeFrame(def("caratrun")), [u0, u1, v0] = STORE_FIXTURES.caratrun.case!, st = f.at((u0 + u1) / 2, v0 - 0.6), lk = f.at((u0 + u1) / 2, v0 + 0.4);
+  const yaw = Math.atan2(lk.x - st.x, lk.z - st.z);
+  w.debugTeleport("p0", st.x, st.z, yaw, 0.2); settle(w, 0.3); w.takeEvents();
+  const n0 = w.items.size, h0 = a.notoriety;
+  const hit = () => { a.move.yaw = yaw; w.action("p0", { a: "punch", yaw, pitch: 0.3 }); settle(w, 0.8); };
+  for (let i = 0; i < 4; i++) hit();
+  const spilled = [...w.items.values()].filter((it) => STORE_TRADE.caratrun.caseLoot!.some(([t]) => t === it.type) && Math.hypot(it.body.x - c.x, it.body.z - c.z) < 3);
+  assert.ok(w.items.size > n0 && spilled.length > 0, "the jewellery spilled out");
+  assert.ok(a.notoriety > h0, "heat for it");
+  const n1 = w.items.size;
+  for (let i = 0; i < 4; i++) hit();
+  assert.equal(w.items.size, n1, "a smashed case gives nothing more");
+  w.resetCity(true); settle(w, 0.5); // (nightfall: still smashed)
+  assert.equal(w.props.props.get(c.id)!.ready, false, "still smashed at night");
+  w.resetCity(false); settle(w, 0.5); // (dawn: repaired and refilled, once)
+  assert.equal(w.props.props.get(c.id)!.ready, true, "fixed at dawn");
+  w.debugTeleport("p0", st.x, st.z, yaw, 0.2); settle(w, 0.3);
+  const n2 = w.items.size; for (let i = 0; i < 4; i++) hit();
+  assert.ok(w.items.size > n2 && w.items.size <= n2 + 2, "and it spills again (one or two things), once");
 });
