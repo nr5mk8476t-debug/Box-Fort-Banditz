@@ -1,27 +1,230 @@
 {
- "balconyFront": 931,
- "street": 633,
- "acrossRoad": 315,
- "window": 846,
- "bar": 390,
- "fireside": 260,
- "darts": 179,
- "littleItaly": 955,
- "crossroads": 955,
- "uptown": 1054,
- "rustbucketOut": 501,
- "rustbucketIn": 439,
- "plugprayOut": 498,
- "plugprayIn": 405,
- "needledropOut": 740,
- "needledropIn": 428,
- "peakfomoOut": 762,
- "peakfomoIn": 496,
- "maisonpongOut": 1054,
- "maisonpongIn": 1002,
- "caratrunOut": 1321,
- "caratrunIn": 1154,
- "lowDistrict": 1188,
- "medDistrict": 423,
- "highDistrict": 227
+ "balconyFront": {
+  "draws": 931,
+  "meshes": 601
+ },
+ "street": {
+  "draws": 633,
+  "meshes": 445
+ },
+ "acrossRoad": {
+  "draws": 315,
+  "meshes": 200
+ },
+ "window": {
+  "draws": 846,
+  "meshes": 517
+ },
+ "bar": {
+  "draws": 390,
+  "meshes": 195
+ },
+ "fireside": {
+  "draws": 260,
+  "meshes": 190
+ },
+ "darts": {
+  "draws": 179,
+  "meshes": 135
+ },
+ "littleItaly": {
+  "draws": 955,
+  "meshes": 471
+ },
+ "crossroads": {
+  "draws": 955,
+  "meshes": 1001
+ },
+ "uptown": {
+  "draws": 1054,
+  "meshes": 1117
+ },
+ "rustbucketOut": {
+  "draws": 501,
+  "meshes": 357
+ },
+ "rustbucketIn": {
+  "draws": 439,
+  "meshes": 289
+ },
+ "plugprayOut": {
+  "draws": 498,
+  "meshes": 353
+ },
+ "plugprayIn": {
+  "draws": 405,
+  "meshes": 293
+ },
+ "needledropOut": {
+  "draws": 740,
+  "meshes": 401
+ },
+ "needledropIn": {
+  "draws": 428,
+  "meshes": 256
+ },
+ "peakfomoOut": {
+  "draws": 762,
+  "meshes": 736
+ },
+ "peakfomoIn": {
+  "draws": 496,
+  "meshes": 394
+ },
+ "maisonpongOut": {
+  "draws": 1054,
+  "meshes": 724
+ },
+ "maisonpongIn": {
+  "draws": 1002,
+  "meshes": 651
+ },
+ "caratrunOut": {
+  "draws": 1321,
+  "meshes": 1197
+ },
+ "caratrunIn": {
+  "draws": 1154,
+  "meshes": 918
+ },
+ "lowDistrict": {
+  "draws": 1188,
+  "meshes": 817
+ },
+ "medDistrict": {
+  "draws": 423,
+  "meshes": 260
+ },
+ "highDistrict": {
+  "draws": 227,
+  "meshes": 137
+ },
+ "caratrunDiagL": {
+  "draws": 856,
+  "meshes": 653
+ },
+ "caratrunDiagR": {
+  "draws": 987,
+  "meshes": 1117
+ },
+ "caratrunPigeon": {
+  "draws": 615,
+  "meshes": 661
+ },
+ "caratrunLookOut": {
+  "draws": 129,
+  "meshes": 96
+ },
+ "door_storedoor_rustbucket_a": {
+  "draws": 438,
+  "meshes": 339
+ },
+ "door_storedoor_rustbucket_b": {
+  "draws": 580,
+  "meshes": 413
+ },
+ "door_storedoor_plugpray_a": {
+  "draws": 427,
+  "meshes": 325
+ },
+ "door_storedoor_plugpray_b": {
+  "draws": 979,
+  "meshes": 1099
+ },
+ "door_storedoor_needledrop_a": {
+  "draws": 403,
+  "meshes": 303
+ },
+ "door_storedoor_needledrop_b": {
+  "draws": 662,
+  "meshes": 494
+ },
+ "door_storedoor_peakfomo_a": {
+  "draws": 537,
+  "meshes": 529
+ },
+ "door_storedoor_peakfomo_b": {
+  "draws": 595,
+  "meshes": 450
+ },
+ "door_storedoor_maisonpong_a": {
+  "draws": 891,
+  "meshes": 670
+ },
+ "door_storedoor_maisonpong_b": {
+  "draws": 119,
+  "meshes": 88
+ },
+ "door_storedoor_caratrun_a": {
+  "draws": 1115,
+  "meshes": 1025
+ },
+ "door_storedoor_caratrun_b": {
+  "draws": 102,
+  "meshes": 79
+ },
+ "door_door1_a": {
+  "draws": 483,
+  "meshes": 372
+ },
+ "door_door1_b": {
+  "draws": 557,
+  "meshes": 427
+ },
+ "door_door2_a": {
+  "draws": 923,
+  "meshes": 742
+ },
+ "door_door2_b": {
+  "draws": 172,
+  "meshes": 129
+ },
+ "door_door3_a": {
+  "draws": 844,
+  "meshes": 683
+ },
+ "door_door3_b": {
+  "draws": 180,
+  "meshes": 130
+ },
+ "door_feverdoor_wing_a": {
+  "draws": 669,
+  "meshes": 527
+ },
+ "door_feverdoor_wing_b": {
+  "draws": 494,
+  "meshes": 438
+ },
+ "door_feverdoor_MEN_a": {
+  "draws": 197,
+  "meshes": 172
+ },
+ "door_feverdoor_MEN_b": {
+  "draws": 1042,
+  "meshes": 965
+ },
+ "door_feverdoor_WOMEN_a": {
+  "draws": 211,
+  "meshes": 175
+ },
+ "door_feverdoor_WOMEN_b": {
+  "draws": 1050,
+  "meshes": 982
+ },
+ "door_feverdoor_exit_a": {
+  "draws": 936,
+  "meshes": 960
+ },
+ "door_feverdoor_exit_b": {
+  "draws": 282,
+  "meshes": 216
+ },
+ "door_snugdoor_a": {
+  "draws": 1017,
+  "meshes": 778
+ },
+ "door_snugdoor_b": {
+  "draws": 221,
+  "meshes": 172
+ }
 }

@@ -51,7 +51,17 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R13)
+## Next up (as of R13.1)
+- R13.1: four bugs fixed (E at the store counters: `eUsable()` is the ONE list of what E targets; a carry speed of 0
+  survives to the client; a giant mid tug can't be sold; removing a character no longer disposes SHARED materials:
+  use `disposeOwned()`, never `dispose(false, true)`, and `shareMat()` for a new cache). Solo refreshes only on a new
+  state; door leaves and remote players merged; CARAT & RUN (the jeweller, the DIAMOND PIGEON, PERCY FACET) replaced
+  BONBON VIVANT (the sugar-rush truffle is gone, not moved). Budgets hold meshes; unbudgeted views fail.
+- Waiting on Blake: a BENCHMARK on R13.1 (solo at his refresh rate, and hosting with a friend), a walk round CARAT & RUN,
+  and his call on the remote players' outlines (one skinned mesh would save 6 more meshes a player but thins the outline).
+- Then: Blake's pick (the pub brawl, the quiz, the G-split champ, R13's alleys).
+
+## Earlier: Next up (as of R13)
 - R13: six stores as whole buildings (`shared/src/stores.ts` for plots, shells, upper floors, trade; the look in
   `client/src/game/storeDressing.ts` through a kit in each store's own frame; pictures on one shared sheet). People are one
   skinned mesh each (`look.ts` skinBody; `?skin=0` for the old way). New buildings: upper floors are façade shells

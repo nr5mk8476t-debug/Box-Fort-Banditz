@@ -2,6 +2,36 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R13.1: four bug fixes, a leaner frame, and CARAT & RUN replaces BONBON VIVANT (2026-11-14)
+
+- **CARAT & RUN, "FINE JEWELLERY · FLEXIBLE MORALS"**, takes BONBON VIVANT's plot on Snob Row (still six stores). It's a
+  pretentious cartoon jeweller:
+  - **The building:** emerald and stone, aged brass, a recessed door off to one side, and a giant gold ring with its
+    diamond hung off the corner.
+  - **Inside:** the velvet wall cabinet, the vitrine (smash it for the alarm and double heat), and the appraisal bench
+    (a ring mid-job, a note saying "Diamond? ...glass. Charge double.", and the CERTIFICATE OF GENUINE IMITATION).
+  - **The centrepiece:** **the DIAMOND PIGEON**, dog-sized, crowned, under glass, roped off ("Priceless. The alarm is
+    extra. PLEASE DO NOT FEED").
+  - **The keeper:** PERCY FACET, with an enormous top hat and a monocle.
+  - **Trade:** it buys rings, chains, pearls, Rolecks watches and diamond pigeons at 60%, and sells nothing. The
+    sugar-rush truffle went with BONBON (the speed buff itself is still SKETCHY STEVE's).
+- **E works at all six store counters.** The counters answered, but E never picked them out. Client and host now share
+  one list.
+- **A tug of war holds still on your own screen too.** Your game used to predict you running off mid-tug, then pull you
+  back.
+- **Nobody can sell half a thing.** A giant item mid tug of war can't be sold, pawned or fenced until someone wins the
+  tug. Whoever was left holding a deleted item used to be stuck at a standstill; now they let go.
+- **People no longer lose their look when someone leaves.** Removing one pedestrian, item or player disposed materials
+  that everyone shares, so the rest were drawn with a default material. Each person's skeleton is now cleaned up with
+  them too.
+- **A leaner frame (test box; relative numbers):**
+  - Solo copies the world's state 60 times a second, not once per drawn frame. At 240 FPS that was 240 times.
+  - Glass doors are 2 meshes a leaf (it was 7).
+  - Other players are 7 meshes each (it was 13).
+  - Across 53 fixed views: draws −6.7%, meshes −7.5% against R13.
+- **The performance checks check what they claim to.** Mesh budgets are added, and every door is covered. A view with no
+  budget, missing stretches, a different machine, or any new frame over 50 ms now fails the check instead of passing.
+
 ## R13: six new stores, each a whole building in its street (2026-11-13)
 
 - **Six stores on the new map**, in mirrored pairs (nothing else in the city moved): RUST BUCKET SALVAGE and PLUG & PRAY

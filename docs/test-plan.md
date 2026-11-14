@@ -546,6 +546,25 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R13.1: four bugs, measured optimisations, CARAT & RUN (2026-11-14)
+
+| Check | What | How | Baseline | Result |
+|---|---|---|---|---|
+| Unit | shared + client | `npm test`; `npm run typecheck` | R13: 321 + 31 | 334 + 40 pass; typecheck clean |
+| Bug A: E at the counters | every kind `use()` answers is an E target; all six counters | `shared/test/use-targets.test.ts` (reads the host's dispatch); e2e "R13.1 store counters by E": both ends + middle of each counter, broke, mashing E (bought once, charged once), empty hands, a sale and a refusal from a pocket, no hold-up started | the test fails on R13 (storecounter not targetable) | E2E_A |
+| Bug B: carry speed 0 | round trip + 60 steps; junk / missing → 1; the e2e tug: C pushes W mid tug | `shared/test/contested.test.ts`; e2e tug check | R13: client z 6.32 m vs host 0 | identical; e2e E2E_B |
+| Bug C: contested giant | both ends, mashed E, same-tick grab/sale both orders, pawn counter + case, a carrier leaving, `consumeItem` for both carriers, a stale hand recovering | `shared/test/contested.test.ts` (8 tests: money, ownership, speed, heavy, hands, tug) | 7 of 8 fail on R13 (the leaving test is a guard) | pass |
+| Bug D + materials | 10 people × 5 spawn/remove cycles; one leaving; the next built; leaving and starting again; items + remote players; the sheet fits | `client/test/lifetimes.test.ts` (NullEngine) | R13: 10 skeletons / 20 bones left, every remaining body's material disposed | counts back to the same; materials live |
+| Solo refresh | 240 FPS: 60 fresh views; an action between ticks fresh next frame; events once; test hooks | `client/test/localSession.test.ts`; `tests/apply-bench.mjs` | 240 refreshes a second; refresh 0.038 ms + apply 0.040 ms each | 60 a second |
+| CARAT & RUN trade | buys at 60%, refuses, sells nothing; heat ×2; no legendary shelf stock; the case spills once, still smashed at night, fixed and spills again at dawn | `shared/test/stores.test.ts` (11 tests) | — | pass |
+| Draw + mesh budget | 57 views (25 R13, 28 doors, 4 new jewellery) | `tests/draw-budget.mjs` | R13 build, same machine, same cameras | draws −6.7%, meshes −7.5% (53 comparable views); none over |
+| Smokes | matchmaking + server (79 NPCs) | `tests/signal-smoke.ts`, `tests/server-smoke.ts` | — | both pass on the first run |
+| e2e | normal and 110 ms | `tests/e2e-phase0.mjs` | R13: 439/439, 438/438 | E2E_N; E2E_L |
+| Visual | the jeweller day/night, both diagonals, inside, counter (the E prompt), bench, pigeon, cabinet, vitrine before/after a smash, looking out | `tests/carat-shots.mjs` → `screenshots/r13_1/` | — | reviewed (fixes: the ring off the sign, the pigeon from a teapot to a pigeon) |
+
+Not measured here: frame times on Blake's PC (the solo change shows at high refresh rates; the remote players with
+friends in view), hosting/joining at 144/240 FPS. Not changed: the network cadence, the 60 Hz simulation.
+
 ## R13 / R13b: six stores as whole buildings; people as one mesh (2026-11-13)
 
 | Area | Check | How | Before | Result |

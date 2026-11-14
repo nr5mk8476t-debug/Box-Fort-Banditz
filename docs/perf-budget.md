@@ -9,6 +9,24 @@ pub outside, downstairs, upstairs pool and darts, the balcony, back out, then th
 On the test box: `CLIENT_URL=... OUT_DIR=... LABEL=... node tests/perf-route.mjs`; compare two runs with
 `node tests/perf-compare.mjs before.json after.json`.
 
+## R13.1: what changed, measured (test box, software rendering: relative numbers only)
+
+Same machine, same settings, the R13 build (d5f03cd) and this one, back to back, at 53 fixed views (the 25 R13 views and
+every door from both sides): **draws 29,635 → 27,664 (−6.7%), meshes 25,404 → 23,492 (−7.5%)**; no view over its
+budget. The jewellery store at BONBON's cameras: across the road −5.4% draws / −5.7% meshes, inside −2.2% / −3.0%.
+Where it came from: glass-door leaves (7 meshes → 2), remote players (13 → 7), the NPCs' shared icon materials, and the
+solo view copied only when the World changed (240 → 60 refreshes a second at 240 FPS; ~0.08 ms each here). Data:
+`screenshots/r13_1/draws-r13-baseline.json`, `draws-r13_1.json`.
+
+**The budgets now hold meshes too** (`tests/draw-budgets.json`: `{ draws, meshes }` per view; the R13 views' draw budgets
+unchanged, the mesh budgets and the 32 new views' budgets = this round's measurement + 12%). A view with no budget or a
+budget with no view fails. `tests/perf-compare.mjs` compares active meshes, allows no new frames over 50 ms, refuses runs
+it can't fairly compare (GPU, resolution, mode, missing stretches) and has `OPT=1` for pure optimisations (no worse
+anywhere beyond 5% noise).
+
+**Still needs Blake's PC:** the BENCHMARK on this build, solo and hosting with a friend joined (the solo refresh change
+shows at high frame rates, which the test box can't reach; the remote-player change needs other players in view).
+
 ## R13: the six stores' budget (measured on the test box, software rendering: relative numbers only)
 
 Baseline: the R12.9 build (7e18e2e) at 15 fixed cameras made from `shared/src/stores.ts` (`tests/store-views.json`:
@@ -110,7 +128,8 @@ Still needed: the slowest friend's PC, and a 4-player hosting run.
 ## The per-change budget
 
 Any one addition (a building, a street, an interior, an activity) may make any stretch of the route at most:
-**median +10%, slow frames (99th percentile) +20%, draw calls +15%, triangles +15%, and no new frames over 50 ms.**
+**median +10%, slow frames (99th percentile) +20%, draw calls +15%, triangles +15%, meshes +15% (R13.1), and no new
+frames over 50 ms.**
 `tests/perf-compare.mjs` flags anything over it. A flag means *find out what it costs and fix that* (see the content
 guide), not *turn the whole game's graphics down to pay for it*.
 

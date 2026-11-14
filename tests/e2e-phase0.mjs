@@ -1950,14 +1950,16 @@ try {
       for (const [type, want] of [["vinyl_record", /^sold:needledrop/], ["rubber_chicken", /^no:needledrop:wrong/]]) {
         await R3.evaluate(() => window.__bfb.dropAll()); await aimAt(nd.spots[1]);
         await R3.evaluate(([t, st]) => window.__bfb.spawnItem(t, st.x, st.z), [type, nd.spots[1].stand]);
-        const id = await R3.waitForFunction((t) => window.__bfb.items().find((i) => i.type === t && i.mode === "free")?.id, type, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
+        // (the one spawned at our feet: the same thing can be lying anywhere else in the city too)
+        const id = await R3.waitForFunction(([t, p]) => window.__bfb.items().filter((i) => i.type === t && i.mode === "free" && Math.hypot(i.x - p.x, i.z - p.z) < 2.5).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0]?.id, [type, nd.spots[1].stand], { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
         await R3.evaluate((i) => window.__bfb.shopAct({ a: "grab", item: i }), id);
         await R3.waitForFunction((i) => window.__bfb.serverInventory()?.pockets.includes(i) || window.__bfb.serverInventory()?.hand === i, id, { timeout: 10000 }).catch(() => {});
         const inv = await R3.evaluate(() => window.__bfb.serverInventory()), slot = inv?.pockets.indexOf(id) ?? -1;
         if (slot >= 0) await R3.keyboard.press(String(slot + 1));
         await aimAt(nd.spots[1]); await target("needledrop");
         const n0 = (await log()).length; await pressE();
-        ok((await answered(n0, want)).some((x) => want.test(x)), `NEEDLE DROP: E holding a ${type}: ${want.source.includes("sold") ? "sold" : "refused"}`);
+        const got = await answered(n0, want);
+        ok(got.some((x) => want.test(x)), `NEEDLE DROP: E holding a ${type}: ${want.source.includes("sold") ? "sold" : "refused"} (${JSON.stringify(got)}, holding ${JSON.stringify(await R3.evaluate(() => window.__bfb.serverInventory()))})`);
       }
       await R3.evaluate(() => window.__bfb.dropAll());
     }

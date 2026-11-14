@@ -2210,3 +2210,71 @@ flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the 
   a cruiser on the sibling turn from the same road drove through a car stopped part-way round its turn (cars on turns
   now count as in the way 2.3 m out, was 1.7); one police-traffic test limit 45 -> 50 s (one missed green at the
   biggest junction; a lock-up is minutes).
+
+## R13.1: four bug fixes, measured optimisations, and CARAT & RUN replaces BONBON VIVANT (Blake's brief, 2026-11-14)
+
+**The bugs (each reproduced on the R13 build, d5f03cd, before it was fixed; each has a test that fails on the old code):**
+- **E never reached the six store counters.** The host answered a `use` on `storecounter`, but the client's targeting list
+  (SEARCHABLE / LOBBY_GAMES / RESTO_USE / CLUB_USE / HOLD_TIME) didn't include it. Fix at the source: ONE shared
+  predicate, `eUsable()` in `shared/src/props.ts`, used by the client; `shared/test/use-targets.test.ts` reads the host's
+  own `use()` dispatch and checks every kind it answers is targetable (the till excepted: HOLD R). Targeting priorities
+  are unchanged (loose loot first, then the use target; the till is a separate HOLD R target, so trading at a counter
+  with a till on it never starts a hold-up: the e2e checks it).
+- **A carry speed of 0 read as "missing" on the client.** `readMoveState` turned the tug of war's 0 into 1, so a client
+  mid-tug predicted a run and was corrected back. Now only missing or junk values (not a number, negative, infinite)
+  default to 1. No correction thresholds were touched.
+- **Selling a contested giant left the other carrier stuck.** The rule chosen (the least surprising, and how throwing
+  already worked): **a giant thing mid tug of war belongs to nobody yet**: the store counter, the pawn counter, the pawn
+  case, WEE MICKEY and Seamus all refuse it ("Win the tug of war first!") until the tug's won. And as a safety net,
+  `consumeItem` lets go of the item for every player holding it, and any hand or pocket pointing at an item that's gone
+  (the end of a round, the daily keycard swap) lets go within a tick, restoring speed, heavy and hands-full.
+- **People's skeletons outlived them, and removing anything disposed SHARED materials.** Worse than the leak the brief
+  found: `node.dispose(false, true)` disposed the cached toon materials too, and Babylon then cleared each from every
+  other mesh using it: the first pedestrian to walk off left everyone's body with no material (drawn with Babylon's
+  default), and the cache handed the disposed material to the next one built. The same for items and remote players.
+  Fix: `disposeOwned()` in `look.ts` (the meshes, the skeletons, and only the materials and textures nothing else uses;
+  caches mark theirs with `shareMat`), used by every renderer that removed things that way. The NPCs' "!" and "?"
+  are shared now too (they were two materials and two textures per person).
+
+**Optimisations kept (measured on the test box, software rendering: relative numbers):**
+- **Solo refreshes the view only when there's something new** (a tick, an action, a join, a test hook reaching in), not
+  every rendered frame: at 240 FPS, 60 refreshes a second instead of 240, and the game applies 60 states instead of 240.
+  Each redundant pair cost ~0.08 ms here (refresh 0.038 + apply 0.040). Events still go out every frame, exactly once.
+  A side effect worth having: people are drawn 110 ms in the past from a 16-snapshot buffer, which at 240 FPS held only
+  67 ms (they were drawn from the oldest snapshot, not interpolated); at 60 a second it holds ~270 ms. The browser host
+  already only refreshed on ticks; the 60 Hz simulation and the network cadence are unchanged.
+- **Glass doors:** each leaf's opaque parts are one mesh (a glass leaf was 7 meshes, now 2; the snug door 15, now 1).
+  Leaves still swing on their own hinges; the pane stays its own see-through mesh.
+- **Remote players:** 13 meshes each, now 7: one per moving group and outline width (body; skull + hat; eyes + nose;
+  pupils; each arm). Not the one-skinned-mesh treatment the NPCs got: that needs one outline width for the whole body,
+  which would visibly thin the players' outlines (Blake decides that).
+- **The perf tools now enforce the policy:** `tests/draw-budget.mjs` budgets meshes as well as draws, fails a view with
+  no budget or a budget with no view (both used to pass silently), and covers every door from both sides;
+  `tests/perf-compare.mjs` compares meshes, allows no new frames over 50 ms (it allowed two), refuses runs from a different
+  GPU, resolution or mode, or with stretches missing, and has a stricter `OPT=1` mode for pure optimisations.
+
+**Candidates measured and set aside:**
+- Per-frame allocation churn in `applyWorld`: after the gating above it runs 60 times a second at 0.04 ms; reworking it
+  into retained records adds aliasing risk for ~2 ms a second. Deferred until a profile on Blake's PC says otherwise.
+- A spatial index for targeting: ~150 props, scanned with cheap filters; not worth an index without a profile showing it.
+- Snapshot buffers / revision numbers for the network path: the network cadence is fine; not touched.
+
+**CARAT & RUN (BONBON VIVANT's plot on Snob Row; the six-store layout is unchanged):** "FINE JEWELLERY · FLEXIBLE MORALS".
+- **The building:** deep emerald and stone, aged brass, a recessed door off-centre between a small window and a long one
+  (MAISON PONG across the road is symmetrical); a giant gold ring with its diamond on a bracket off the corner pier; the
+  terrace above repainted warm stone (BONBON's pink is gone).
+- **Inside:** a runner from the door to the keeper's marble counter; the velvet wall cabinet (the real stock, necklace
+  busts between); the vitrine (smash it: rings and watch pillows vanish, the real loot spills, the alarm, Snob Row's
+  double heat); the appraisal bench behind the counter (a ring mid-job under the lamp, the note "Diamond? ...glass.
+  Charge double." and the CERTIFICATE OF GENUINE IMITATION on the wall); and **THE DIAMOND PIGEON**: a faceted
+  dog-sized pigeon with a tiny gold crown, on a velvet cushion on a marble plinth, under glass, roped off, with its
+  plaque ("The Pigeon of Provenance. Priceless. The alarm is extra. PLEASE DO NOT FEED").
+- **The keeper: PERCY FACET** (emerald tails, oxblood trousers, an enormous top hat, a gold monocle: the face, nothing on
+  the chest). "Genuine imitation. Professionally overpriced." / "Look with your eyes, darling. Preferably your own."
+- **Trade:** buys diamond rings, gold chains, pearl necklaces, Rolecks watches and diamond pigeons at the specialists'
+  60% (pawn 40%, WEE MICKEY 75% at night with heat); **sells nothing**. The SUGAR RUSH TRUFFLE (20 s of speed) was
+  BONBON's and is gone, not moved: the speed buff itself stays (SKETCHY STEVE's zoomies), and nothing replaces it here.
+  Shelf stock comes from a `jewels` pool with no legendaries (pearls twice, a chain, a Rolecks); the case holds pearls,
+  chains and, rarely, a diamond ring.
+- **Costs:** three see-through panes (the vitrine, the cabinet's front, the pigeon's case); the sparkles are tiny glow
+  bulbs merged with the store's glow pieces; no light per jewel, no reflections; two lamps as before.
