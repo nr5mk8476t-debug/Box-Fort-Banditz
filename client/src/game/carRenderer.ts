@@ -1,6 +1,6 @@
 // Traffic (Phase 3.5): each car is one baked mesh (+ outline), glided toward the synced position.
 import { Scene, TransformNode } from "./babylon.ts";
-import { toon, bakeGroup } from "./look.ts";
+import { toon, bakeGroup, disposeOwned } from "./look.ts";
 import { buildCarParts } from "./carModel.ts";
 import type { CarView } from "@bfb/shared";
 
@@ -58,5 +58,5 @@ export class CarRenderer {
   }
 
   count() { return this.map.size; }
-  dispose() { for (const c of this.map.values()) c.node.dispose(false, true); this.map.clear(); }
+  dispose() { for (const c of this.map.values()) disposeOwned(c.node); this.map.clear(); }
 }

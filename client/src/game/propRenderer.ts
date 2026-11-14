@@ -2,7 +2,7 @@
 // (gone when smashed), vending machine glass (cracked), parked car windows (smashed) and
 // flashing alarm lights on cars and shop tills. Static bodies are merged into the city.
 import { Scene, MeshBuilder, Mesh, StandardMaterial, CellMaterial, VertexBuffer, Color3, TransformNode, Vector3, DynamicTexture } from "./babylon.ts";
-import { toon, ink, textTexture, unlitTextured } from "./look.ts";
+import { toon, ink, textTexture, unlitTextured, disposeOwned, shareMat } from "./look.ts";
 import { buildCarGlass } from "./carModel.ts";
 import { buildLootModel } from "./models.ts";
 import { PLAYER_COLORS, nearBoxes, type PropDef, type PropView, type TagView, type ArenaLayout } from "@bfb/shared";
@@ -51,7 +51,7 @@ export class PropRenderer {
     this.paintTag(c, word, color, seed);
     tex.hasAlpha = true; tex.update();
     m = this.tagMaterial(tex);
-    this.tagMats.set(key, m);
+    this.tagMats.set(key, m); shareMat(m);
     return m;
   }
   private tagMaterial(tex: DynamicTexture): StandardMaterial {
@@ -523,7 +523,7 @@ export class PropRenderer {
   }
   /** C5c.3: show what's in the pawn case: each thing, a tag in its owner's colour, its price */
   private fillCase(v: Vis, note: string) {
-    v.items?.dispose(false, true);
+    disposeOwned(v.items);
     v.items = undefined;
     v.note = note;
     if (!note) return;
@@ -717,7 +717,7 @@ export class PropRenderer {
     for (let i = this.sprays.length - 1; i >= 0; i--) {
       const s = this.sprays[i];
       s.t -= dt;
-      if (s.t <= 0) { s.node.dispose(false, true); this.sprays.splice(i, 1); continue; }
+      if (s.t <= 0) { disposeOwned(s.node); this.sprays.splice(i, 1); continue; }
       s.drops.forEach((d, k) => { const ph = (this.t * 1.6 + k / s.drops.length) % 1, a = k * 2.4; d.position.set(Math.cos(a) * ph * 1.3, 3.4 * ph * (1.6 - ph) * 1.6, Math.sin(a) * ph * 1.3); });
       s.node.scaling.y = s.t < 2 ? s.t / 2 : 1;
     }
@@ -749,5 +749,5 @@ export class PropRenderer {
   /** Where the prop is (for sounds / prompts). */
   def(id: string) { return this.map.get(id)?.def ?? this.brkDefs.get(id); }
 
-  dispose() { for (const v of this.map.values()) v.node.dispose(false, true); this.map.clear(); }
+  dispose() { for (const v of this.map.values()) disposeOwned(v.node); this.map.clear(); }
 }

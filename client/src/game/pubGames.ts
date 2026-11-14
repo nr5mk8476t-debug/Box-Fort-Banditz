@@ -109,7 +109,7 @@ export function wornFloor(c: C2D, S: number) {
 
 // ================================================================================================ the live games
 import { MeshBuilder, Mesh, StandardMaterial, Color3, Vector3, TransformNode, DynamicTexture, Quaternion, type Scene } from "./babylon.ts";
-import { unlitTextured } from "./look.ts";
+import { unlitTextured, shareMat } from "./look.ts";
 import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh.js";
 import { sfxFrom, sfx } from "../audio.ts";
 import { settings } from "../settings.ts";
@@ -215,7 +215,7 @@ export class PubGamesView {
   private mat(col: string, shine = 0.5, tex?: DynamicTexture) {
     const k = col + shine + (tex ? tex.name : "");
     let m = this.mats.get(k);
-    if (!m) { m = new StandardMaterial("pgMat" + k, this.scene); m.diffuseColor = Color3.FromHexString(col); m.specularColor = new Color3(shine, shine, shine); m.specularPower = 48; m.emissiveColor = Color3.FromHexString(col).scale(0.25); if (tex) m.diffuseTexture = tex; this.mats.set(k, m); }
+    if (!m) { m = new StandardMaterial("pgMat" + k, this.scene); m.diffuseColor = Color3.FromHexString(col); m.specularColor = new Color3(shine, shine, shine); m.specularPower = 48; m.emissiveColor = Color3.FromHexString(col).scale(0.25); if (tex) m.diffuseTexture = tex; this.mats.set(k, m); shareMat(m); }
     return m;
   }
   /** a ball's skin: its colour, a little maker's dot (so you can see it roll); the cue ball's red spots */

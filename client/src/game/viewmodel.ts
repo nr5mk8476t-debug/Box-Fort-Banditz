@@ -8,7 +8,7 @@
 // toward "the pose for the current state", poses can never conflict, freeze or get stuck:
 // changing state simply changes the target. One-off impulses (landing dip) are springs on top.
 import { Scene, MeshBuilder, TransformNode, Mesh, Vector3, Color3, Matrix, StandardMaterial, VertexBuffer, type Camera } from "./babylon.ts";
-import { ink, PALETTE } from "./look.ts";
+import { ink, PALETTE, disposeOwned, shareMat } from "./look.ts";
 
 /**
  * 5A.1: the hands used the world's cel-shaded lighting, so whole faces went near-black whenever you
@@ -24,7 +24,7 @@ function shadedPart(scene: Scene, m: Mesh, hex: string) {
     mat = new StandardMaterial("vmFlat", scene);
     mat.disableLighting = true;
     mat.emissiveColor = Color3.White();
-    vmMats.set(scene.uid, mat);
+    vmMats.set(scene.uid, mat); shareMat(mat);
   }
   const c = Color3.FromHexString(hex);
   const rot = Matrix.RotationYawPitchRoll(m.rotation.y, m.rotation.x, m.rotation.z);
@@ -171,7 +171,7 @@ export class Viewmodel {
   /** Show an item in the hands (or clear with null). */
   setHeld(type: string | null, size: "small" | "big" | "giant" = "big") {
     if (this.held && this.held.type === type) return;
-    if (this.held) { this.held.root.dispose(false, true); this.held = null; }
+    if (this.held) { disposeOwned(this.held.root); this.held = null; }
     if (!type) return;
     const { root, meshes } = buildLootModel(this.scene, type);
     for (const m of meshes) { m.renderingGroupId = 2; if (m.renderOutline) m.outlineWidth = Math.min(m.outlineWidth, 0.012); }

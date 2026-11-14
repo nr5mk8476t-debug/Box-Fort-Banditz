@@ -4,7 +4,7 @@
 // Poses (crouch, slide, dodge, climb, stumble) use the same ease-toward-target
 // animation approach as the first-person hands, so they can't get stuck.
 import { Scene, MeshBuilder, TransformNode, Mesh, Vector3, StandardMaterial, Color3 } from "./babylon.ts";
-import { toon, ink, PALETTE, textTexture, unlitTextured } from "./look.ts";
+import { toon, ink, PALETTE, textTexture, unlitTextured, disposeOwned } from "./look.ts";
 import { PLAYER, PLAYER_COLORS, movePose, readMoveState, unpackPk, type MovePose } from "@bfb/shared";
 
 export const INTERP_DELAY_MS = 110;
@@ -155,12 +155,12 @@ export class RemotePlayers {
   warm(x: number, y: number, z: number): () => void {
     const r = this.build("__warm", { x, y, z, yaw: 0, pitch: 0, colorIdx: 0, name: "" } as unknown as RemoteInfo);
     r.root.position.set(x, y, z);
-    return () => r.root.dispose(false, true);
+    return () => disposeOwned(r.root);
   }
   retain(ids: Set<string>) {
     for (const [id, r] of this.map) {
       if (!ids.has(id)) {
-        r.root.dispose(false, true);
+        disposeOwned(r.root);
         this.map.delete(id);
       }
     }
@@ -320,7 +320,7 @@ export class RemotePlayers {
   count() { return this.map.size; }
 
   dispose() {
-    for (const r of this.map.values()) r.root.dispose(false, true);
+    for (const r of this.map.values()) disposeOwned(r.root);
     this.map.clear();
   }
 }

@@ -1,7 +1,7 @@
 // Phase 3 city events, drawn: the garbage truck, the happy-hour zone ring and the airdrop
 // landing marker. PLACEHOLDER-QUALITY shapes in the house style (toon + ink).
 import { Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial } from "./babylon.ts";
-import { toon, ink, textTexture, unlitTextured } from "./look.ts";
+import { toon, ink, textTexture, unlitTextured, disposeOwned } from "./look.ts";
 
 export interface EventState {
   evKind: string; evStage: string; evX: number; evZ: number; evR: number;
@@ -132,7 +132,7 @@ export class EventRenderer {
     if (drop) { this.drop.position.set(s.evX, 0, s.evZ); this.drop.rotation.y = this.t * 0.8; }
   }
 
-  dispose() { this.truck.dispose(false, true); this.zone.dispose(); this.zoneFill.dispose(); this.drop.dispose(false, true); }
+  dispose() { disposeOwned(this.truck); this.zone.dispose(); this.zoneFill.dispose(); disposeOwned(this.drop); }
 }
 
 /**

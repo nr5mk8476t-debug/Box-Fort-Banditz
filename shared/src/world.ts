@@ -190,7 +190,7 @@ export interface PlayerSim {
 export type WorldEvent =
   | PubEvent // R12.3: the pub's games (a shot, a dart, a message, a result)
   | { t: "grab"; p: string; item: string; to: "hand" | "pocket" | "carry" }
-  | { t: "whiff"; p: string; reason: "taken" | "far" | "full" | "hands" | "cooldown" | "locked" }
+  | { t: "whiff"; p: string; reason: "taken" | "far" | "full" | "hands" | "cooldown" | "locked" | "tug" }
   | { t: "drop"; p: string; item: string }
   | { t: "throw"; p: string; item: string; speed: number }
   | { t: "impact"; item: string; speed: number; x: number; y: number; z: number }
@@ -1118,9 +1118,29 @@ export class World {
 
   /** C5c: an item you're carrying is used up (the keycard stays in the vault's lock) */
   consumeItem(p: PlayerSim, id: string) {
-    if (p.hand === id) p.hand = ""; else { const i = p.pockets.indexOf(id); if (i >= 0) p.pockets[i] = ""; }
+    // R13.1: everybody's let go of it, not just whoever used it up (a giant mid tug of war has two carriers: the other
+    // one was left holding a deleted item, stuck at carry speed 0). Sales refuse a contested item first (contested()).
+    for (const o of this.players.values()) {
+      let had = o === p;
+      if (o.hand === id) { o.hand = ""; had = true; }
+      const i = o.pockets.indexOf(id); if (i >= 0) { o.pockets[i] = ""; had = true; }
+      if (had) this.updateCarry(o);
+    }
     this.items.delete(id);
-    this.updateCarry(p);
+  }
+  /** R13.1: hands or pockets pointing at an item that's gone (deleted by some other path: a sale, the end of a round,
+   *  the keycard's daily swap): let go, and the carry speed / heavy / hands-full come back with it */
+  private dropStale(p: PlayerSim) {
+    let stale = false;
+    if (p.hand && !this.items.has(p.hand)) { p.hand = ""; stale = true; }
+    for (let i = 0; i < p.pockets.length; i++) if (p.pockets[i] && !this.items.has(p.pockets[i])) { p.pockets[i] = ""; stale = true; }
+    if (stale || (!p.hand && (p.move.carryMul !== 1 || p.move.carryHeavy || p.move.handsFull))) this.updateCarry(p);
+  }
+  /** R13.1: a giant thing mid tug of war belongs to nobody yet: no selling, pawning or handing it over until the tug's won */
+  contested(p: PlayerSim, it: ItemSim): boolean {
+    if (!(lootDef(it.type).size === "giant" && it.holder && it.holder2)) return false;
+    this.emit({ t: "whiff", p: p.id, reason: "tug" });
+    return true;
   }
 
   // ------------------------------------------------------------------ C5c: the giant WANTED screen
@@ -1212,6 +1232,7 @@ export class World {
     if (!keeper || keeper.state === "ko" || keeper.state === "cower") return no("shut");
     const held = this.activeItem(p)?.item;
     if (held) {
+      if (this.contested(p, held)) return;
       const def = lootDef(held.type);
       if (def.blackMarket) return no("black");
       let offer = 0;
@@ -1272,6 +1293,7 @@ export class World {
     if (!this.mickeyFor(p)) return;
     const it = this.activeItem(p)?.item;
     if (!it) { this.npc.mickeySay("idle"); return this.emit({ t: "mickeyNo", p: p.id, reason: "hands" }); }
+    if (this.contested(p, it)) return;
     const d = lootDef(it.type);
     if (d.money) { this.npc.mickeySay("no"); return this.emit({ t: "mickeyNo", p: p.id, reason: "money" }); }
     if (d.junk || it.value <= 0) { this.npc.mickeySay("no"); return this.emit({ t: "mickeyNo", p: p.id, reason: "junk" }); }
@@ -1450,6 +1472,7 @@ export class World {
     const held = this.activeItem(p)?.item; // (in your hands, or the pocket you've got out)
     const nm = (t: string) => articled(lootDef(t)?.name ?? t);
     if (job && held && held.type === job.type) {
+      if (this.contested(p, held)) return;
       const reward = job.big ? Math.max(SEAMUS.bonusMin, held.value * SEAMUS.bonusMult) : Math.max(SEAMUS.minPay, held.value * 2);
       this.consumeItem(p, held.id); p.cash += reward; this.seamusJobs.delete(p.id);
       return say("jobDone", job.big ? `Ohhh, would you LOOK at that. ${nm(job.type)}! The big pot for you: $${reward} in gold.` : `${nm(job.type)}. Grand job. A pot of gold for your trouble: $${reward}.`, reward);
@@ -1933,6 +1956,7 @@ export class World {
       if (p.queued && p.actionCd <= 0) { const q = p.queued; p.queued = null; this.action(p.id, q); }
       p.punchCd = Math.max(0, p.punchCd - dt);
       p.tugCd = Math.max(0, p.tugCd - dt);
+      this.dropStale(p);
       // health: back to full once you're up after a knockdown; otherwise regenerates after a quiet spell
       if (p.hp <= 0) { if (p.move.knockT <= 0) p.hp = HEALTH.max; }
       else if (p.hp < HEALTH.max && this.time - p.hurtT >= HEALTH.regenDelay) p.hp = Math.min(HEALTH.max, p.hp + HEALTH.regenRate * dt);

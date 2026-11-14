@@ -3,7 +3,7 @@
 // outlines and a small twinkling sparkle on rare+ loot (Phase 2.5: replaced the sky beams).
 import { Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture } from "./babylon.ts";
 import { buildLootModel } from "./models.ts";
-import { textTexture, unlitTextured, toon, ink } from "./look.ts";
+import { textTexture, unlitTextured, toon, ink, disposeOwned, shareMat } from "./look.ts";
 import {
   lootDef, hasSparkle, RARITY_COLOR, PLAYER_COLORS, LOCK_TIME, stepItem, type ItemView, type ItemBody, type ArenaLayout, type LootDef,
 } from "@bfb/shared";
@@ -81,7 +81,7 @@ export class ItemRenderer {
       m.diffuseTexture = tex; m.emissiveTexture = tex; m.opacityTexture = tex;
       m.disableLighting = true; m.backFaceCulling = false; m.fogEnabled = false;
       m.useAlphaFromDiffuseTexture = true;
-      this.sparkleMats.set(color, m);
+      this.sparkleMats.set(color, m); shareMat(m);
     }
     return m;
   }
@@ -126,9 +126,9 @@ export class ItemRenderer {
   retain(ids: Set<string>) {
     for (const [id, it] of this.map) {
       if (!ids.has(id)) {
-        it.root.dispose(false, true);
+        disposeOwned(it.root);
         for (const sp of it.sparkles) sp.dispose();
-        it.tag?.dispose(); it.chute?.dispose(false, true);
+        it.tag?.dispose(); disposeOwned(it.chute);
         this.map.delete(id);
       }
     }
@@ -259,7 +259,7 @@ export class ItemRenderer {
           const [text, who] = key.split("|");
           const color = who === "gold" ? "#ffcf3a" : PLAYER_COLORS[Number(who) % PLAYER_COLORS.length] ?? "#ffffff";
           mat = unlitTextured(this.scene, textTexture(this.scene, text, { w: 512, h: 160, fg: text === "BANKED" || who === "gold" ? color : "#ffffff", stroke: "#1b1420" }), "tag");
-          this.tagMats.set(key, mat);
+          this.tagMats.set(key, mat); shareMat(mat);
         }
         const wide = key.startsWith("BANKED");
         it.tag = MeshBuilder.CreatePlane("itemTag", { width: wide ? 0.8 : 0.55, height: wide ? 0.25 : 0.32 }, this.scene);
@@ -286,7 +286,7 @@ export class ItemRenderer {
         rope.parent = c; rope.position.set(x * 0.6, 1.4, z * 0.6); rope.rotation.set(z * 0.25, 0, -x * 0.25); rope.isPickable = false;
       }
     }
-    if (!on && it.chute) { it.chute.dispose(false, true); it.chute = null; }
+    if (!on && it.chute) { disposeOwned(it.chute); it.chute = null; }
     if (it.chute) {
       const p = it.root.position;
       it.chute.position.set(p.x, p.y, p.z);
@@ -308,7 +308,7 @@ export class ItemRenderer {
   }
 
   dispose() {
-    for (const it of this.map.values()) { it.root.dispose(false, true); for (const sp of it.sparkles) sp.dispose(); it.tag?.dispose(); it.chute?.dispose(false, true); }
+    for (const it of this.map.values()) { disposeOwned(it.root); for (const sp of it.sparkles) sp.dispose(); it.tag?.dispose(); disposeOwned(it.chute); }
     this.map.clear();
   }
 }

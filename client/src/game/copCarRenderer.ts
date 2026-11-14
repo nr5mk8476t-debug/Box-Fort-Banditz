@@ -1,7 +1,7 @@
 // Phase 4: police cruisers. They come and go (dispatched at 3 stars), glide toward the synced
 // position like traffic, and flash red/blue while their siren is on.
 import { Scene, TransformNode, StandardMaterial, Color3, type Mesh } from "./babylon.ts";
-import { toon, bakeGroup } from "./look.ts";
+import { toon, bakeGroup, disposeOwned } from "./look.ts";
 import { buildCopCarParts, buildCopLights } from "./carModel.ts";
 import type { CopCarView } from "@bfb/shared";
 
@@ -35,7 +35,7 @@ export class CopCarRenderer {
       if (!this.map.has(id)) this.map.set(id, this.build(id));
       this.targets.set(id, { x: v.x, z: v.z, yaw: v.yaw, siren: v.siren });
     });
-    for (const [id, c] of this.map) if (!seen.has(id)) { c.node.dispose(false, true); this.map.delete(id); this.targets.delete(id); }
+    for (const [id, c] of this.map) if (!seen.has(id)) { disposeOwned(c.node); this.map.delete(id); this.targets.delete(id); }
   }
 
   /** Cruisers with sirens on (for the siren sound). */
@@ -66,5 +66,5 @@ export class CopCarRenderer {
     }
   }
 
-  dispose() { for (const c of this.map.values()) c.node.dispose(false, true); this.map.clear(); }
+  dispose() { for (const c of this.map.values()) disposeOwned(c.node); this.map.clear(); }
 }

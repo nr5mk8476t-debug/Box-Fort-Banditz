@@ -142,7 +142,10 @@ export function readMoveState(src: Record<string, any>): MoveState {
   for (const k of MOVE_NUM_KEYS) s[k] = Number(src[k]) || 0;
   for (const k of MOVE_BOOL_KEYS) s[k] = src[k] === true;
   if (typeof src.bf === "number") unpackBuffs(src.bf, s); else for (const k of BUFF_KEYS) s[k] = Number(src[k]) || 0; // (R11.4)
-  if (!(s.carryMul > 0)) s.carryMul = 1; // older/partial state: treat as empty-handed
+  // older/partial state (no carryMul, or junk): treat as empty-handed. A real 0 stays 0: a tug of war holds both
+  // players still, and a client that predicted 1 there ran off 6 m in a second and was snapped back (R13.1)
+  const cm = src.carryMul;
+  s.carryMul = typeof cm === "number" && Number.isFinite(cm) && cm >= 0 ? cm : 1;
   return s;
 }
 

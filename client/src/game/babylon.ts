@@ -26,3 +26,5 @@ import "@babylonjs/core/Rendering/outlineRenderer.js";
 import "@babylonjs/core/Meshes/instancedMesh.js"; // (R11: the club crowd is instanced)
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent.js";
 import "@babylonjs/core/Culling/ray.js";
+export type { Material } from "@babylonjs/core/Materials/material.js";
+export type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture.js";

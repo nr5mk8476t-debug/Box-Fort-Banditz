@@ -1,10 +1,42 @@
 // Shared "look" helpers: toon materials + thick outlines. This is the start of the
 // Box Fort Banditz art style; it will be refined in the art/polish phases.
-import { CellMaterial, Color3, DynamicTexture, Mesh, VertexBuffer, type Scene, type TransformNode, StandardMaterial, Skeleton, Bone, Vector3 } from "./babylon.ts";
+import { CellMaterial, Color3, DynamicTexture, Mesh, VertexBuffer, type Scene, type TransformNode, StandardMaterial, Skeleton, Bone, Vector3, type Material, type BaseTexture } from "./babylon.ts";
 import { tierAt, type ArenaLayout } from "@bfb/shared";
 
 const cache = new Map<string, CellMaterial>();
 const cachedScenes = new Set<string>();
+
+/**
+ * R13.1: who owns what. A cached material (toon colours, a renderer's beam / tag / sparkle) is SHARED: many things
+ * draw with it, so removing one of them must never dispose it. (They used to: `node.dispose(false, true)` disposed
+ * every material under the node, and Babylon then clears that material off every OTHER mesh using it: the first
+ * pedestrian to walk off left everyone's body with no material, and the cache handed the disposed one to the next.)
+ */
+const SHARED = new WeakSet<Material>();
+const SHARED_TEX = new WeakSet<BaseTexture>();
+export function shareMat<T extends Material>(m: T): T { SHARED.add(m); for (const t of m.getActiveTextures()) SHARED_TEX.add(t); return m; }
+export function shareTex<T extends BaseTexture>(t: T): T { SHARED_TEX.add(t); return t; }
+/**
+ * Dispose a character / item / effect and what it alone owns: its meshes and nodes, its skeletons (a mesh's dispose
+ * only lets go of its skeleton: the bones stayed in the scene), and the materials and textures nothing else uses.
+ * Shared ones stay. Use this instead of `dispose(false, true)` on anything built from cached materials.
+ */
+export function disposeOwned(node: TransformNode | null | undefined) {
+  if (!node) return;
+  const sc = node.getScene();
+  const meshes = node.getChildMeshes(false);
+  if (node instanceof Mesh) meshes.push(node);
+  const mats = new Set<Material>(), sks = new Set<Skeleton>();
+  for (const m of meshes) { if (m.material) mats.add(m.material); if (m.skeleton) sks.add(m.skeleton); }
+  node.dispose(false, false);
+  for (const s of sks) if (!sc.meshes.some((m) => m.skeleton === s)) s.dispose();
+  for (const mat of mats) {
+    if (SHARED.has(mat) || sc.meshes.some((m) => m.material === mat)) continue;
+    const texs = mat.getActiveTextures();
+    mat.dispose(false, false);
+    for (const t of texs) if (!SHARED_TEX.has(t) && !sc.materials.some((o) => o.hasTexture(t))) t.dispose();
+  }
+}
 
 /** Cel-shaded material (hard light/shadow bands = cartoon look). Cached per colour. */
 export function toon(scene: Scene, hex: string, name = "toon"): CellMaterial {
@@ -16,7 +48,7 @@ export function toon(scene: Scene, hex: string, name = "toon"): CellMaterial {
     m = new CellMaterial(`${name}-${hex}`, scene);
     m.diffuseColor = Color3.FromHexString(hex);
     m.computeHighLevel = true;
-    cache.set(key, m);
+    cache.set(key, m); shareMat(m);
   }
   return m;
 }

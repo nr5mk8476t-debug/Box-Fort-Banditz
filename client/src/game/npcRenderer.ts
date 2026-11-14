@@ -4,7 +4,7 @@
 // windup (arm pulled back), ko (flat on the ground + stars), film (phone up), gloat, huff.
 // Poses ease toward targets (same animation approach as the players), so they never get stuck.
 import { Scene, MeshBuilder, Mesh, TransformNode, StandardMaterial, Color3, type Camera } from "./babylon.ts";
-import { toon, ink, textTexture, unlitTextured, bakeGroup, skinBody, SKIN_PEOPLE } from "./look.ts";
+import { toon, ink, textTexture, unlitTextured, bakeGroup, skinBody, SKIN_PEOPLE, disposeOwned, shareMat } from "./look.ts";
 import { NPC_DEFS, type NpcView } from "@bfb/shared";
 
 const INTERP_MS = 110;
@@ -181,14 +181,20 @@ export class NpcRenderer {
   private beamMat() {
     if (!this.beamM) {
       const m = (this.beamM = new StandardMaterial("beamMat", this.scene));
-      m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#fff3c4"); m.alpha = 0.16; m.backFaceCulling = false;
+      m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#fff3c4"); m.alpha = 0.16; m.backFaceCulling = false; shareMat(m);
     }
     return this.beamM;
+  }
+  private icons = new Map<string, StandardMaterial>();
+  private iconMat(ch: string, fg: string) {
+    let m = this.icons.get(ch);
+    if (!m) { m = shareMat(unlitTextured(this.scene, textTexture(this.scene, ch, { w: 128, h: 160, fg, stroke: "#1b1420" }), ch === "!" ? "bang" : "huh")); this.icons.set(ch, m); }
+    return m;
   }
   private laserMat() {
     if (!this.laserM) {
       const m = (this.laserM = new StandardMaterial("laserMat", this.scene));
-      m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#ff2030");
+      m.disableLighting = true; m.emissiveColor = Color3.FromHexString("#ff2030"); shareMat(m);
     }
     return this.laserM;
   }
@@ -554,12 +560,12 @@ export class NpcRenderer {
     // angry "!" when chasing you
     const bang = MeshBuilder.CreatePlane("bang", { width: 0.4, height: 0.5 }, sc);
     bang.parent = root; bang.position.y = 2.25; bang.billboardMode = Mesh.BILLBOARDMODE_ALL; bang.isPickable = false;
-    bang.material = unlitTextured(sc, textTexture(sc, "!", { w: 128, h: 160, fg: "#ff3b30", stroke: "#1b1420" }), "bang");
+    bang.material = this.iconMat("!", "#ff3b30"); // (R13.1: one per scene, not a material + texture per person)
     bang.setEnabled(false);
     // cops searching for you get a "?"
     const huh = MeshBuilder.CreatePlane("huh", { width: 0.4, height: 0.5 }, sc);
     huh.parent = root; huh.position.y = 2.25; huh.billboardMode = Mesh.BILLBOARDMODE_ALL; huh.isPickable = false;
-    huh.material = unlitTextured(sc, textTexture(sc, "?", { w: 128, h: 160, fg: "#ffcf3a", stroke: "#1b1420" }), "huh");
+    huh.material = this.iconMat("?", "#ffcf3a");
     huh.setEnabled(false);
     const big = !!NPC_DEFS[v.kind as keyof typeof NPC_DEFS]?.bigShot;
     // cops: a flashlight beam at night (a soft cone in front of them) and a red taser laser
@@ -627,7 +633,7 @@ export class NpcRenderer {
   }
 
   retain(ids: Set<string>) {
-    for (const [id, n] of this.map) if (!ids.has(id)) { n.root.dispose(false, true); n.bubble?.dispose(); this.map.delete(id); }
+    for (const [id, n] of this.map) if (!ids.has(id)) { disposeOwned(n.root); n.bubble?.dispose(); this.map.delete(id); }
   }
 
   /** Speech bubble over a pedestrian's head for a couple of seconds. */
@@ -638,7 +644,7 @@ export class NpcRenderer {
     let mat = this.bubbleTex.get(line);
     if (!mat) {
       mat = unlitTextured(this.scene, textTexture(this.scene, line, { w: 768, h: 128, bg: "#fffaf0", fg: "#1b1420" }), "bubble");
-      this.bubbleTex.set(line, mat);
+      this.bubbleTex.set(line, mat); shareMat(mat);
     }
     const b = MeshBuilder.CreatePlane("bubble", { width: 2.3, height: 0.38 }, this.scene);
     b.material = mat;
@@ -823,7 +829,10 @@ export class NpcRenderer {
   }
 
   dispose() {
-    for (const n of this.map.values()) { n.root.dispose(false, true); n.bubble?.dispose(); }
+    for (const n of this.map.values()) { disposeOwned(n.root); n.bubble?.dispose(); }
     this.map.clear();
+    // (R13.1: and the renderer's own shared ones, so leaving the game and starting another doesn't stack them up)
+    for (const m of [...this.icons.values(), ...this.bubbleTex.values(), this.beamM, this.laserM]) m?.dispose(true, true);
+    this.icons.clear(); this.bubbleTex.clear(); this.beamM = this.laserM = null;
   }
 }

@@ -77,6 +77,16 @@ export const SEARCHABLE = new Set<PropKind>(["dumpster", "bin", "washer", "dryer
   "clubbar", "rider", "lockers", "sortbin", "vipbooth", "storedig"]);
 /** C5c.3: E on these does something of its own: pay Big Crunch's cover, hijack the DJ's decks, sell to Sal, the pawn case */
 export const CLUB_USE = new Set<PropKind>(["clubrope", "mocktail", "djdecks", "pawncounter", "pawncase", "toilet", "celldoor", "door", "dealgoods", "pinttap", "seamus", "jukebox", "pooltable", "dartsoche", "mickey", "mickgoods", "pubboard"]);
+/** R13: the stores' counters (buy / sell at the keeper) */
+export const STORE_USE = new Set<PropKind>(["storecounter"]);
+/**
+ * R13.1: what E picks out in front of you (the client's prompt and key). ONE list for everything use() answers to
+ * except the till (that's HOLD R): R13's counters were answered by the host but never in this list, so E never
+ * reached them. shared/test/use-targets.test.ts checks every such prop in the map is here.
+ */
+export function eUsable(kind: PropKind): boolean {
+  return SEARCHABLE.has(kind) || LOBBY_GAMES.has(kind) || RESTO_USE.has(kind) || CLUB_USE.has(kind) || STORE_USE.has(kind) || HOLD_TIME[kind] !== undefined;
+}
 /** R11.4: a one-way fire door swings shut this long after it opens */
 export const ONE_WAY_SHUT = 3;
 /** R8: NPCs doing these don't open doors (standing at a post, down, sitting on someone) */

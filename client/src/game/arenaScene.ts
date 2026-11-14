@@ -7,7 +7,7 @@ import {
   Scene, Engine, UniversalCamera, Camera, HemisphericLight, DirectionalLight, ShadowGenerator,
   Vector3, Color3, Color4, MeshBuilder, Mesh, TransformNode, StandardMaterial,
 } from "./babylon.ts";
-import { toon, ink, textTexture, unlitTextured } from "./look.ts";
+import { toon, ink, textTexture, unlitTextured, disposeOwned } from "./look.ts";
 import { FpInput, type LootAction } from "./input.ts";
 import { RemotePlayers, type RemoteInfo, type CarryKind } from "./remotePlayers.ts";
 import { Viewmodel } from "./viewmodel.ts";
@@ -25,7 +25,7 @@ import { NightRenderer } from "./nightRenderer.ts";
 import { PubGamesView } from "./pubGames.ts";
 import {
   inDeepWater, makeMoveState, cloneMoveState, stepMovement, readMoveState, movePose, horizontalSpeed, lootDef,
-  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, SEARCHABLE, LOBBY_GAMES, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, ARREST, RESTO_USE, RESTO, CLUB, CLUB_USE, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, MICKEY, GCH, unpackPk, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
+  footFaces, throwSpeed, throwVelocity, GRAB_RANGE_CLIENT, POCKETS, FISTS, NPC_DEFS, fortAt, PLAYER_COLOR_NAMES, ROUNDS, ROB_TIME, PROP_RADIUS, USE_RANGE, SMASHABLE, inLobby, setBoxOff, propSurfaceDist, propNearest, nearBoxes, TAG, OPEN_TIME, PARADE, FESTA, HOLD_TIME, KEYCARD_TIME, eUsable, ARREST, RESTO, CLUB, PAWN_SHOP, applyClubFloor, clubStage, feverAt, FEVER, DEAL, MICKEY, GCH, unpackPk, BUFFS, PUB, tipsyAmount, JUKEBOX, DUSK_TIME, type PropDef,
   SIM_DT, PLAYER, PLAYER_COLORS, type MoveInput, type MoveState, type ArenaLayout, type MovePose,
   type WorldView, type WorldEvent, type WorldAction, type LootDef,
 } from "@bfb/shared";
@@ -185,7 +185,7 @@ export class ArenaScene {
     const shake = this.scene.onBeforeRenderObservable.add(() => {
       const t = (performance.now() - t0) / 1000;
       fist.position.y = 0.25 + Math.sin(t * 18) * 0.08;
-      if (t > 3.5) { this.scene.onBeforeRenderObservable.remove(shake); node.dispose(false, true); }
+      if (t > 3.5) { this.scene.onBeforeRenderObservable.remove(shake); disposeOwned(node); }
     });
     this.pop("OI!", x, y + 0.8, z, "#ff5a3c");
   }
@@ -634,7 +634,7 @@ export class ArenaScene {
             this.optimistic = null;
             if (e.reason !== "cooldown") {
               sfx.whiff();
-              this.onFeedback?.(e.reason === "taken" ? "Too slow!" : e.reason === "far" ? "Can't reach!" : e.reason === "locked" ? "Banked in a fort. Locked until NIGHT!" : e.reason === "full" ? "Pockets full!" : "Hands full!", "bad");
+              this.onFeedback?.(e.reason === "taken" ? "Too slow!" : e.reason === "far" ? "Can't reach!" : e.reason === "locked" ? "Banked in a fort. Locked until NIGHT!" : e.reason === "full" ? "Pockets full!" : e.reason === "tug" ? "Win the tug of war first! (Nobody sells half a thing.)" : "Hands full!", "bad");
             }
           }
           break;
@@ -1543,7 +1543,7 @@ export class ArenaScene {
     const till = this.propInFront((d) => d.kind === "till", USE_RANGE + 0.3);
     if (till) this.robTarget = { id: till.id, kind: "till", name: PROP_NAMES.till, empty: this.propState.get(till.id) === false || !this.registerNear(till) };
     if (this.lookTarget) return;
-    const best = this.propInFront((d) => SEARCHABLE.has(d.kind) || LOBBY_GAMES.has(d.kind) || RESTO_USE.has(d.kind) || CLUB_USE.has(d.kind) || HOLD_TIME[d.kind] !== undefined, USE_RANGE);
+    const best = this.propInFront((d) => eUsable(d.kind), USE_RANGE);
     if (best) this.useTarget = { id: best.id, kind: best.kind, name: PROP_NAMES[best.kind] ?? best.kind, empty: this.propState.get(best.id) === false, def: best };
   }
 
@@ -1885,13 +1885,13 @@ export class ArenaScene {
     label.material = unlitTextured(sc, textTexture(sc, text, { w: 512, h: 128, fg: grade === "perfect" ? "#ffd86a" : grade === "close" ? "#f4f1ea" : "#c8c4cc", stroke: "#1b1420" }), "gRevealLabelM");
     label.billboardMode = Mesh.BILLBOARDMODE_ALL; label.parent = node; label.position.y = 0.34; label.isPickable = false;
     this.reveals.push({ node, label, t: 0 });
-    while (this.reveals.length > 6) { const o = this.reveals.shift()!; o.label.material?.dispose(true, true); o.node.dispose(false, true); }
+    while (this.reveals.length > 6) { const o = this.reveals.shift()!; o.label.material?.dispose(true, true); disposeOwned(o.node); }
   }
   private updateReveals(dt: number) {
     for (let i = this.reveals.length - 1; i >= 0; i--) {
       const r = this.reveals[i]; r.t += dt;
       r.label.position.y = 0.34 + Math.min(0.06, r.t * 0.1);
-      if (r.t > 10) { r.label.material?.dispose(true, true); r.node.dispose(false, true); this.reveals.splice(i, 1); }
+      if (r.t > 10) { r.label.material?.dispose(true, true); disposeOwned(r.node); this.reveals.splice(i, 1); }
     }
   }
   /** R12.6: a smoke bomb's cloud (a few seconds of thick grey, drifting up) */

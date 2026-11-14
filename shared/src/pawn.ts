@@ -73,6 +73,7 @@ export class PawnSystem {
   fence(p: PlayerSim, shop = -1) {
     const it = this.w.activeItem(p)?.item;
     if (!it) return this.no(p, "hands");
+    if (this.w.contested(p, it)) return; // (R13.1: win the tug first)
     if (lootDef(it.type).blackMarket) return this.no(p, "black"); // (R6: nobody legit touches the Spoon of Destiny)
     const h = shop >= 0 ? this.lists[shop] : undefined;
     const hot = !!h && h.hot.includes(it.type) && !h.claimed.has(it.type);
@@ -167,6 +168,7 @@ export class PawnSystem {
   caseUse(p: PlayerSim) {
     const it = this.w.activeItem(p)?.item;
     if (it) {
+      if (this.w.contested(p, it)) return; // (R13.1)
       if (lootDef(it.type).blackMarket) return this.no(p, "black");
       if (this.slots.length >= PAWN_SHOP.caseMax) return this.no(p, "full");
       const loan = price(it.value, PAWN_SHOP.loan);
