@@ -2,6 +2,58 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R14: the first complete game loop: scavenge, bank, steal, build, quests, and RUN FOR MAYOR (2026-11-15)
+
+The whole match is now one loop, built from Blake's brief and his answers (all in `docs/game-loop-plan.md`). The rules
+live in `shared/src/loop/` as data: a new upgrade, recipe, aura task or boss job is one entry.
+
+- **The cycle:** a 5 s countdown at home, then **8:00 scavenging** (5:30 day, 0:30 sunset, 2:00 night), then **2:00 PREP**
+  at home. There are 8 cycles; after the last, **the most aura wins** (cash only breaks a tie). Warnings come at 2:30,
+  1:00 and 0:10. READY skips the rest of PREP when everyone's ready.
+- **The DEPOSIT MAT:** drop loot on your fort's mat and it's **banked after 10 s**: off the street and onto your shelves
+  (one card, one sound). **Anything not banked at the deadline is deleted.** Street counters still buy, at lower rates
+  (pawn 30%, specialists 45%, WEE MICKEY 60%).
+- **Your fort:** 8 shelf spots and a 2-slot **SAFE** (up to 16 and 4 with upgrades). The things on your shelves are the
+  real things, drawn there. Overflow goes on the lawn.
+- **PREP:** sell to **Sal's van** (60%, x2 for the first of each of today's 3 wanted things), choose what goes in the
+  safe, and **build** upgrades with cash plus materials by category:
+  - DUCT-TAPE FORT → PLYWOOD PALACE → THE MAYOR'S FORT;
+  - more shelves and safe slots, a WORKBENCH, ALARM I/II, a HAND TRUCK, a HARNESS.
+  - At the **workbench** you craft a MEGAPHONE, a FAKE MOUSTACHE, BANANA PEELS, CAMPAIGN POSTERS and a CEREMONIAL SASH.
+- **Night theft:** at night, aim at something on a rival's shelf and **hold E for 5 s**. Moving, being knocked down or
+  sunrise stops it. The safe can't be stolen from.
+  - There's **no alarm unless you build one** (Blake): ALARM I tells you who and where; ALARM II makes theft take 10 s.
+  - A theft is +2 aura (each thing once a cycle).
+- **Aura tasks:** **E at your fort's task board** buys a random task. The first costs $25, then x1.5 each that cycle,
+  one at a time. There are 8 tasks: TOUR OF SHAME, SHOW AND TELL, HEAVY LIFTING, HANG TIME, SLIDE SHOW, HOT POTATO,
+  SMASH AND DASH and STREET PERFORMER.
+  - Every attempt is **LIVE**: rivals see who's going for what, and where.
+  - A rival who knocks you down mid-task **interrupts** it: you lose 4 aura, they gain 3, once per pair per cycle.
+  - A BANANA PEEL makes them slip instead. A MEGAPHONE gives +50% on a stunt task.
+- **The bosses:** **SEAMUS O'SHORTLY** (at his bar) and **DON BINNIE** (his man at NEON FEVER's door) each have one job a
+  cycle (press J by them). A job pays cash, aura and +1 reputation (0-5); a failed job costs nothing.
+  - Reputation only adds perks and never locks anything: Sal pays 70%; a free banana peel each cycle; aura tasks 25%
+    off; a free fake moustache each cycle.
+- **STORE SECURITY** at CARAT & RUN and MAISON PONG: big, navy, a hi-vis cap and armbands, standing beside the door.
+  - In order: a **warning** when you lift something, a **shove** if you walk at them with it, a **chase** if you leave
+    with it (10 s, never more than 25 m from the door), then the **tackle**, and it goes back to the store.
+- **The HUD:** CASH and AURA up top; a **quest tracker** (your task and job, progress, time, an arrow and distance;
+  rivals' live attempts); **J** for the full panel (bosses, reputation, perks).
+- **RUN FOR MAYOR:** qualify with **60 aura, $800, THE MAYOR'S FORT, posters and a sash**, then declare at your board.
+  The fee and the gear are all spent at once.
+  - The **4:00 campaign stops the round's clock for everyone**:
+    1. shake **PRESIDENT MARMALADE**'s hand (an orange-faced giant at an announced spot);
+    2. put up 5 of 8 posters ("VOTE <you> FOR MAYOR", in your colour);
+    3. do two random goofy objectives;
+    4. then give **the speech** at the fountain.
+  - Rivals see it all, with a ping of you every 20 s. Each knockdown is a strike (-15 s); 3 strikes, an arrest or the
+    time running out **fails** it: aura halved, the fort down a level, no campaign again this cycle.
+  - **Win and the match ends: YOU ARE THE MAYOR OF TRASHINGTON.**
+- **Fixes found on the way:**
+  - A cruiser no longer clips a car stopped part-way round the next turn.
+  - The pool window steps you up for your turn even if the table's news arrived before it knew who you were.
+  - Pedestrians who sidestep an obstacle no longer step off the kerb in front of a car.
+
 ## R13.1: four bug fixes, a leaner frame, and CARAT & RUN replaces BONBON VIVANT (2026-11-14)
 
 - **CARAT & RUN, "FINE JEWELLERY · FLEXIBLE MORALS"**, takes BONBON VIVANT's plot on Snob Row (still six stores). It's a

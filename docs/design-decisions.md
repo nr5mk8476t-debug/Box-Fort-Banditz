@@ -2287,3 +2287,44 @@ flat, frame times within noise. Mickey's yard: ~40 small meshes merged into the 
   chains and, rarely, a diamond ring.
 - **Costs:** three see-through panes (the vitrine, the cabinet's front, the pigeon's case); the sparkles are tiny glow
   bulbs merged with the store's glow pieces; no light per jewel, no reflections; two lamps as before.
+
+## R14: the first complete game loop (Blake's brief + his 16 answers, 2026-11-15)
+
+The plan and every one of Blake's answers are in `docs/game-loop-plan.md`. How it's built:
+- **One place for the rules:** `shared/src/loop/`.
+  - `catalog.ts`: the LOOP tuning values, item categories, UPGRADES, RECIPES.
+  - `fort.ts`: banking, storage, the van, the safe, upgrades, crafting, theft.
+  - `aura.ts`: every aura change, with its reason, plus the anti-farming rules.
+  - `quests.ts`: aura tasks and boss jobs, as data.
+  - `security.ts`: STORE SECURITY.
+  - `mayor.ts`: qualifying, the campaign, failure and victory.
+  - The host decides everything; clients only ask (actions) and draw what they're sent.
+- **Banked things are records, not world items.** A record has exactly one owner, can't be grabbed from the street and
+  can't be duplicated. A theft turns a record back into a real item in the thief's hands.
+- **Sending it:** the Colyseus player schema is at its 63-field limit, so each player's loop state (fort, gear, quests,
+  qualification, the campaign) travels as one JSON string in the existing `shop` field (`World.loopJson`). It's cached
+  by a version key, so it's rebuilt only when something changes, at most once a second while a timer runs.
+- **Places are checked:** `questLocs` only lists places that really exist on the map (the pub's and NEON FEVER's doors,
+  the six store doors, Chinatown's and Little Italy's gates, the fountain). A task whose places are missing is never
+  offered. Unit tests check every task and job on the new map.
+- **Fairness choices I made (Blake to confirm):**
+  - An interrupted task always fails, but the aura swap (-4/+3) is once per pair per cycle. So repeat griefing scores
+    nothing.
+  - A failed campaign blocks a new one for the rest of that cycle only.
+  - Boss jobs are taken by pressing J next to the boss. DON BINNIE's jobs come from "his man at NEON FEVER's door": the
+    Don sits in the VIP, behind his bodyguards, and reputation must never gate access.
+  - STORE SECURITY forgives you if you put the thing down. They give up past 10 s or 25 m. They never enter a fort or
+    block a street.
+  - The Mayor's podium is the fountain on the new map. The President stands at a random place 25+ m from the
+    candidate. On the new map that can be Chinatown's gate, which is on the road.
+- **Cost:**
+  - A fort's fixed parts (shelves, safe, workbench, alarm, task board, its level) are one merged mesh, rebuilt only when
+    its upgrades change.
+  - Banked things are small merged models.
+  - Posters are at most 8 billboards, and only during a campaign.
+  - STORE SECURITY is 2 more people (81 synced NPCs).
+  - `tests/draw-budget.mjs`: every view is within its draw and mesh budgets, unchanged.
+- **Two latent bugs the new NPCs' random sequence exposed** (both fixed, with the existing tests as the guard):
+  - A cruiser on a sibling turn kept 2.3 m from a car stopped part-way round, but its corner reaches 3.4 m.
+  - The pool window judged "is it my turn?" only when the table's news changed. News that arrived before the window
+    knew who it was meant the turn waited for the 40 s clock.

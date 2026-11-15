@@ -546,6 +546,27 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R14: the first complete game loop (2026-11-15)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Phases | countdown (frozen) → 5:30 day, 0:30 sunset, 2:00 night → 2:00 PREP at home; warnings 2:30/1:00/0:10; READY skips PREP; 8 cycles, then the most aura wins | unit `loop.test.ts`; e2e "Phase 5A cycle" | pass |
+| Banking | 10 s on your mat, one event; off the mat it stops; a full shelf waits; the deadline deletes the rest | unit `loop.test.ts`; e2e; `tests/loop-shots.mjs` | pass |
+| PREP | the van (60%, wanted x2 once), the safe, upgrades with materials, crafting, levels L1-L4 drawn | unit; `tests/loop-shots.mjs`, `tests/fort-levels.mjs` (screenshots) | pass |
+| Theft | night only, a rival's exposed shelf thing, 5 s (10 with ALARM II), cancelled by moving/knockdown/sunrise; the safe is never stolen; +2 aura once per thing per cycle | unit `loop.test.ts`; e2e "Night theft (online)" (2 players, ALARM I) | see e2e |
+| Gear | hand truck, harness, fake moustache (the next arrest), banana peel, megaphone | unit `loop.test.ts`, `quests.test.ts` | pass |
+| Aura tasks | board only, $25 then x1.5 in a cycle, one at a time, not in PREP; LIVE to rivals; visit/stunt/heist/time limit; interruption -4/+3 once per pair per cycle; banana = they slip; cops don't interrupt | unit `quests.test.ts` (6); `tests/quest-shots.mjs` (6 checks + screenshots) | pass |
+| Places | every task and job points at real places on the new map; the classic map has ≥3 valid tasks | unit `quests.test.ts` | pass |
+| Boss jobs | at the boss only, once per boss per cycle, cash + aura + rep; the thing is handed over; a failed job loses no rep; perks (van 70%, task discount, free banana/moustache) | unit `quests.test.ts`; `tests/quest-shots.mjs` (J at Seamus) | pass |
+| STORE SECURITY | two heavies inside, beside the door; warn → shove → chase → tackle takes it back; gives up past the 25 m leash; readable look | unit `security.test.ts` (2); screenshot `s4-06` | pass |
+| Mayor | qualification listed and spent atomically; the clock stops; the President appears at the announced spot; one candidate at a time; handshake, 5 posters, 2 goofy (each kind tested), speech last → match over, Mayor first; 3 strikes (-15 s each), banana = no strike, cops don't strike; arrest/time fail; failure halves aura, drops a level, blocks the cycle | unit `mayor.test.ts` (5); `tests/mayor-shots.mjs` (7 checks + screenshots) | pass |
+| Regressions | traffic soak (a cruiser and a car on sibling turns), pool step-up when the note arrives first | unit `traffic-flow.test.ts`, client `sync.test.ts` | pass (after fixes) |
+| Totals | shared unit 348/348, client 40/40, typecheck; signal + server smoke (81 NPCs); draw budget (all views within) | as CLAUDE.md | pass |
+| Browser e2e | normal and LATENCY=110 | `tests/e2e-phase0.mjs` | E2E_RESULTS |
+
+Known: on the new map, seed 5 of the kerb soak still has one near-miss (a walker sidestepping onto the road edge); the
+classic map is clean on all 10 seeds. Not yet tested in a browser: a full online campaign with a rival striking.
+
 ## R13.1: four bugs, measured optimisations, CARAT & RUN (2026-11-14)
 
 | Check | What | How | Baseline | Result |

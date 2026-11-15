@@ -9,7 +9,7 @@ import { QuestHud } from "./ui/questHud.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { STORE_TRADE, STORE_VOICE, STORES, STORE_SHELLS, storeFrame, lootDef as lootDefOf, LOOP, fortAt2, FORT_SPOTS, type StoreId } from "@bfb/shared";
+import { STORE_TRADE, STORE_VOICE, STORES, STORE_SHELLS, storeFrame, lootDef as lootDefOf, LOOP, fortAt2, FORT_SPOTS, shelfSpot, type StoreId } from "@bfb/shared";
 import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, MICKEY, GCH, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
 import { softwareRendering, gpuHelpHtml } from "./gpuCheck.ts";
 import { adaptStep } from "./game/adaptive.ts";
@@ -1422,6 +1422,8 @@ enterTitle();
     mayorQualify: () => { if (!local) return; const w = local.world, p = w.players.get(SOLO_ID)!, f = w.fort.of(p); p.aura = Math.max(p.aura, 70); p.cash = Math.max(p.cash, 1000); for (const u of ["level2", "level3", "level4"]) f.ups.add(u as never); f.gear.posters = 1; f.gear.sash = 1; f.v++; },
     mayor: () => { const c = local?.world.mayor.c; if (!c) return null; const pn = local!.world.npc.npcs.get(c.presNpc); return { t: c.t, strikes: c.strikes, pres: pn ? { x: pn.move.x, z: pn.move.z, yaw: pn.move.yaw } : c.pres, presDone: c.presDone, posters: c.posters.map((x) => ({ x: x.loc.x, z: x.loc.z, done: x.done, name: x.loc.name })), podium: c.podium, speech: c.speech, goofy: c.goofy.map((g) => g.name) }; },
     mayorGoofyDone: () => { const c = local?.world.mayor.c; if (c) for (const g of c.goofy) g.prog = g.need; },
+    fortUp: (id: string) => { if (local) { const p = local.world.players.get(SOLO_ID)!, f = local.world.fort.of(p); f.ups.add(id as never); f.v++; } else room?.send("dbg", { op: "fortUp", id }); },
+    shelfAt: (slot: number, i: number) => { const l = arena?.arenaLayout.forts?.find((f) => f.slot === slot); return l ? shelfSpot(l, i) : null; },
     myBoard: () => { const l = arena?.arenaLayout.forts?.find((f) => f.slot === arena!.myColorIdx); return l ? fortAt2(l, FORT_SPOTS.board.u, FORT_SPOTS.board.v) : null; },
     heavies: () => (local ? [...local.world.npc.npcs.values()].filter((n) => n.kind === "store_heavy").map((n) => ({ id: n.id, x: n.move.x, z: n.move.z, yaw: n.move.yaw, state: n.state, shop: n.shop })) : []),
     shopAct: (act: any) => arena?.onAction?.(act),

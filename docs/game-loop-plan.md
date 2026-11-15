@@ -156,3 +156,7 @@ one rules module per system, the World calls them; the client only draws and ask
 15. Prices as above.
 16. **No alarm by default.** ALARM I: you're told when a thief is at your fort. ALARM II: theft at your fort takes
     **10 s** instead of 5, and you're told who and where (a map ping).
+
+## Status (2026-11-15)
+All five stages are built and tested (see CHANGELOG R14, docs/test-plan.md R14). The judgement calls I made where the
+brief left room are listed in docs/design-decisions.md under R14 "Fairness choices", for Blake to confirm.

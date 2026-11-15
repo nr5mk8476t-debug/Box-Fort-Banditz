@@ -51,7 +51,20 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R13.1)
+## Next up (as of R14)
+- R14: the first complete loop. The rules are in `shared/src/loop/` (catalog, fort, aura, quests, security, mayor), all
+  data-driven; Blake's answers are in `docs/game-loop-plan.md`.
+  - Banked things are RECORDS, not world items.
+  - Per-player loop state rides in the player view's `shop` JSON field (the schema is at its 63-field limit):
+    `World.loopJson`, cached by a version key. A new system adds `view(p)` and `version(p)` there.
+  - Quest places come from `questLocs` (only what's on the map).
+  - New tests: `shared/test/{loop,quests,security,mayor}.test.ts`; `tests/{loop-shots,fort-levels,quest-shots,mayor-shots}.mjs`.
+- Waiting on Blake: a play of the full loop (are 8 cycles too long? task prices, the -4/+3, the van at 60%), his calls on
+  my fairness choices (design-decisions R14), whether the President may stand in the road at Chinatown, and a
+  BENCHMARK with a friend.
+- Then: Blake's pick (the pub brawl, the quiz, the G-split champ, R13's alleys), plus balance from playtests.
+
+## Earlier: Next up (as of R13.1)
 - R13.1: four bugs fixed (E at the store counters: `eUsable()` is the ONE list of what E targets; a carry speed of 0
   survives to the client; a giant mid tug can't be sold; removing a character no longer disposes SHARED materials:
   use `disposeOwned()`, never `dispose(false, true)`, and `shareMat()` for a new cache). Solo refreshes only on a new

@@ -8,6 +8,7 @@ export function applyDebug(world: World, id: string, m: any): void {
   if (m.op === "spawn") world.placeItem(String(m.type), Number(m.x), world.floorAt(Number(m.x), Number(m.z)) + 0.3, Number(m.z));
   if (m.op === "npc") world.npc.place(m.kind, Number(m.x), Number(m.z), Number(m.yaw) || 0);
   if (m.op === "event") world.match.trigger(m.kind);
+  if (m.op === "fortUp") { const p = world.players.get(id); if (p) { const f = world.fort.of(p); f.ups.add(String(m.id) as never); f.v++; } } // (R14 tests: an upgrade, free)
   if (m.op === "time" && world.match.phase !== "lobby") world.match.timeLeft = Math.max(0.1, Number(m.t) || 1);
   if (m.op === "noEvents") world.match.cancelPlannedEvents();
   if (m.op === "wipeout") { const p = world.players.get(id); if (p) world.traffic.wipeout(p, world.traffic.cars[0]); }

@@ -1342,38 +1342,38 @@ try {
   const [ta, tb] = await Promise.all([A, B].map((P) => P.evaluate(() => window.__bfb.match().timeLeft)));
   ok(Math.abs(ta - tb) < 4, `everyone sees the same round timer (${ta.toFixed(1)} vs ${tb.toFixed(1)})`);
 
-  // ---- Phase 5A: night raid ----
-  console.log("\n# Night raid (online)");
+  // ---- R14: night theft (online): A banks a TV on their mat; B aims at it on A's shelf at night and holds E 5 s ----
+  console.log("\n# Night theft (online)");
   await A.evaluate(() => window.__bfb.noEvents());
-  const aHome = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z, yaw: m.yaw }; });
-  const tvAt = { x: aHome.x + Math.sin(aHome.yaw) * 2, z: aHome.z + Math.cos(aHome.yaw) * 2 };
-  await A.evaluate(([x, z]) => window.__bfb.spawnItem("crt_tv", x, z), [tvAt.x, tvAt.z]);
-  const tvId = await A.waitForFunction(() => window.__bfb.items().find((i) => i.type === "crt_tv" && i.lock === 100)?.id, null, { timeout: 40000 }).then((h) => h.jsonValue(), () => null);
-  ok(!!tvId, "A banks a TV in their fort");
+  const aLot = await A.evaluate(() => window.__bfb.myLot());
+  await A.evaluate((l) => window.__bfb.spawnItem("crt_tv", l.padX + 0.4, l.padZ), aLot);
+  ok(await A.waitForFunction(() => (window.__bfb.loop()?.r ?? []).some((r) => r[1] === "crt_tv"), null, { timeout: 60000 }).then(() => true, () => false), "A banks a TV on their deposit mat (onto their shelves)");
+  ok(await B.waitForFunction((s) => (window.__bfb.fortOf(s)?.r ?? []).some((r) => r[1] === "crt_tv"), aLot.slot, { timeout: 20000 }).then(() => true, () => false), "B sees it on A's shelves");
+  await A.evaluate(() => window.__bfb.fortUp("alarm1")); // (ALARM I: A gets told who and where)
   await A.evaluate(() => window.__bfb.setTimeLeft(0.3));
   await B.waitForFunction(() => window.__bfb.match().phase === "dusk", null, { timeout: 40000 }).catch(() => {});
   await A.evaluate(() => window.__bfb.setTimeLeft(0.3)); // (R12.3: skip the 30 s sunset)
   ok(await B.waitForFunction(() => window.__bfb.match().phase === "night", null, { timeout: 40000 }).then(() => true, () => false), "night falls for everyone");
   ok(await B.waitForFunction(() => window.__bfb.night().level > 0.5, null, { timeout: 20000 }).then(() => true, () => false), "B's city goes dark too");
-  const tvNow2 = await B.evaluate((id) => window.__bfb.items().find((i) => i.id === id), tvId);
-  // stand between the TV and the city centre (away from the fort box), facing the TV
-  const dl = Math.hypot(tvNow2.x, tvNow2.z), bx = tvNow2.x - (tvNow2.x / dl) * 1.3, bz = tvNow2.z - (tvNow2.z / dl) * 1.3;
-  let raided = false;
-  const bPosLog = [];
-  for (let k = 0; k < 3 && !raided; k++) {
-    // (re-teleport each try and wait until B is really there: note anything that moved B away)
-    await B.evaluate(([x, z, y]) => window.__bfb.teleport(x, z, y), [bx, bz, Math.atan2(tvNow2.x - bx, tvNow2.z - bz)]);
-    await B.waitForFunction(([x, z]) => { const m = window.__bfb.move(); return Math.hypot(m.x - x, m.z - z) < 0.6; }, [bx, bz], { timeout: 10000 }).catch(() => {});
+  const spot = await B.evaluate((s) => window.__bfb.shelfAt(s, 0), aLot.slot);
+  // stand 1.4 m in front of the shelf spot (out in the yard: +v of A's lot), looking down at it
+  const fx = Math.sin(aLot.yaw), fz = Math.cos(aLot.yaw), sx = spot.x + fx * 1.4, sz = spot.z + fz * 1.4;
+  let stole = false;
+  for (let k = 0; k < 3 && !stole; k++) {
+    await B.evaluate(([x, z, yaw]) => { window.__bfb.teleport(x, z, yaw); }, [sx, sz, Math.atan2(spot.x - sx, spot.z - sz)]);
+    await B.waitForFunction(([x, z]) => { const m = window.__bfb.move(); return Math.hypot(m.x - x, m.z - z) < 0.6; }, [sx, sz], { timeout: 10000 }).catch(() => {});
+    await B.evaluate((sp) => { const m = window.__bfb.move(); window.__bfb.setPitch(Math.atan2(1.6 - sp.y, Math.hypot(sp.x - m.x, sp.z - m.z))); }, spot);
     await sleep(800);
-    bPosLog.push(await B.evaluate(() => { const m = window.__bfb.move(); return `${m.x.toFixed(1)},${m.z.toFixed(1)} fx=${window.__bfb.fxHistory().slice(-3).join("/")}`; }));
-    await B.evaluate((id) => window.__bfb.shopAct({ a: "grab", item: id }), tvId);
-    raided = await B.waitForFunction((id) => window.__bfb.serverInventory().hand === id, tvId, { timeout: 8000 }).then(() => true, () => false);
+    const tgt = await B.evaluate(() => window.__bfb.stealTarget());
+    if (k === 0) ok(!!tgt && tgt.owner === aId, `B aims at A's TV on the shelf (${JSON.stringify(tgt)})`);
+    if (tgt) { await B.keyboard.down("e"); } else await B.evaluate(([o, r]) => window.__bfb.shopAct({ a: "steal", owner: o, rec: r }), [aId, (await B.evaluate((s) => window.__bfb.fortOf(s).r.find((r) => r[1] === "crt_tv")?.[0], aLot.slot))]);
+    stole = await B.waitForFunction(() => { const h = window.__bfb.serverInventory().hand; return !!h && window.__bfb.items().some((i) => i.id === h && i.type === "crt_tv"); }, null, { timeout: 60000 }).then(() => true, () => false); // (5 s of game time: slower on this box)
+    await B.keyboard.up("e");
   }
-  console.log(`   [diag] raid tries: B positions before grabbing ${JSON.stringify(bPosLog)}`);
-  if (!raided) console.log(`   [diag] raid: B at ${JSON.stringify(await B.evaluate(() => window.__bfb.move()))} tv ${JSON.stringify(await B.evaluate((id) => window.__bfb.items().find((i) => i.id === id), tvId))} flash "${await B.textContent("#flash")}" phase ${(await B.evaluate(() => window.__bfb.match())).phase}`);
-  ok(raided, "B raids A's fort at night and takes the TV");
-  ok(await A.waitForFunction(() => /RAIDING YOUR FORT|STOLE YOUR/.test(document.getElementById("bb-title").textContent), null, { timeout: 15000 }).then(() => true, () => false), `A's raid alarm goes off, naming the raider ("${await A.textContent("#bb-title")}")`);
-  ok(await A.evaluate(() => window.__bfb.raidAlert()), "A gets the red screen edge + the arrow home");
+  ok(stole, "B holds E for 5 s and walks off with A's TV");
+  ok(await A.waitForFunction(() => /ROBBING YOUR FORT|STOLE YOUR/.test(document.getElementById("bb-title").textContent), null, { timeout: 15000 }).then(() => true, () => false), `A's ALARM I goes off, naming the thief ("${await A.textContent("#bb-title")}")`);
+  ok(await A.evaluate(() => window.__bfb.raidAlert()), "A gets the red screen edge + the arrow to the thief");
+  ok(!(await A.evaluate(() => window.__bfb.loop().r)).some((r) => r[1] === "crt_tv"), "it's off A's shelves");
   await A.evaluate(() => { document.getElementById("pause").classList.remove("hidden"); });
   await A.click("#btn-leave");
   await sleep(600);
