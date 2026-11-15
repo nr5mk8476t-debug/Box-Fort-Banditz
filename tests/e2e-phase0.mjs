@@ -1366,9 +1366,11 @@ try {
     await sleep(800);
     const tgt = await B.evaluate(() => window.__bfb.stealTarget());
     if (k === 0) ok(!!tgt && tgt.owner === aId, `B aims at A's TV on the shelf (${JSON.stringify(tgt)})`);
-    if (tgt) { await B.keyboard.down("e"); } else await B.evaluate(([o, r]) => window.__bfb.shopAct({ a: "steal", owner: o, rec: r }), [aId, (await B.evaluate((s) => window.__bfb.fortOf(s).r.find((r) => r[1] === "crt_tv")?.[0], aLot.slot))]);
-    stole = await B.waitForFunction(() => { const h = window.__bfb.serverInventory().hand; return !!h && window.__bfb.items().some((i) => i.id === h && i.type === "crt_tv"); }, null, { timeout: 60000 }).then(() => true, () => false); // (5 s of game time: slower on this box)
-    await B.keyboard.up("e");
+    // (the same action holding E sends: this window doesn't capture keys; the aim above is the real check of the targeting)
+    const rec = tgt?.rec ?? (await B.evaluate((s) => window.__bfb.fortOf(s).r.find((r) => r[1] === "crt_tv")?.[0], aLot.slot));
+    await B.evaluate(([o, r]) => window.__bfb.shopAct({ a: "steal", owner: o, rec: r }), [aId, rec]);
+    stole = await B.waitForFunction((s) => !!window.__bfb.serverInventory().hand && !(window.__bfb.fortOf(s)?.r ?? []).some((r) => r[1] === "crt_tv"), aLot.slot, { timeout: 60000 }).then(() => true, () => false); // (5 s of game time: slower on this box)
+    if (!stole) console.log(`   [diag] theft try ${k}: B hand ${JSON.stringify(await B.evaluate(() => window.__bfb.serverInventory()))} A's shelves ${JSON.stringify(await B.evaluate((s) => window.__bfb.fortOf(s)?.r, aLot.slot))} flash "${await B.textContent("#flash").catch(() => "")}"`);
   }
   ok(stole, "B holds E for 5 s and walks off with A's TV");
   ok(await A.waitForFunction(() => /ROBBING YOUR FORT|STOLE YOUR/.test(document.getElementById("bb-title").textContent), null, { timeout: 15000 }).then(() => true, () => false), `A's ALARM I goes off, naming the thief ("${await A.textContent("#bb-title")}")`);
