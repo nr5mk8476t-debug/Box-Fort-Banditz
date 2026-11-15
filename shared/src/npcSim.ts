@@ -179,6 +179,13 @@ export class NpcSystem {
       if (po.kind === "store_heavy") n.shop = po.v ?? -1; // (R14: which store's security)
     }
   }
+  /** R14: someone placed by the game at a spot (PRESIDENT MARMALADE): stands there */
+  spawnAt(kind: NpcKind, x: number, z: number, yaw: number) {
+    const n = this.spawn(kind);
+    if (!n) return null;
+    n.post = { x, z, yaw }; n.move = makeMoveState(x, z, yaw); n.state = "work";
+    return n;
+  }
   /** R14: STORE SECURITY (loop/security.ts): the heavy of shop `shop`, a line, after someone (10 s at most, 25 m from the door) */
   heavyOf(shop: number) { for (const n of this.npcs.values()) if (n.kind === "store_heavy" && n.shop === shop && n.state !== "ko") return n; return undefined; }
   heavySay(id: string, what: "warn" | "fight" | "win" | "lost") { const n = this.npcs.get(id); if (n) this.say(n, NPC_DEFS.store_heavy.lines[what], true); }

@@ -69,6 +69,7 @@ const LOOKS: Record<string, Look> = {
   fran: { body: "#c84a8a", legs: "#2b2433", skin: "#f0c09a", hat: "#ff8fd0", hatShape: "none", prop: "none", bulk: 1.05 },
   cold_cuts: { body: "#3a4a3a", legs: "#2b2433", skin: "#c98a5c", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 2.0 },
   don: { body: "#f4f1ea", legs: "#ece6dc", skin: "#e0a878", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.5 }, // (R11.1: DON BINNIE: the white suit)
+  president: { body: "#1f2a5a", legs: "#1b1f3a", skin: "#ff9a3c", hat: "#ffd84a", hatShape: "none", prop: "none", bulk: 1.6 }, // (R14: PRESIDENT MARMALADE: orange, navy, enormous)
   store_heavy: { body: "#22263a", legs: "#1b1d2a", skin: "#c98a5c", hat: "#ffd23c", hatShape: "cap", prop: "none", bulk: 1.7 }, // (R14: STORE SECURITY: huge, navy, a hi-vis cap: you can tell at a glance)
   velvet_guard: { body: "#141018", legs: "#141018", skin: "#b07a52", hat: "#1b1420", hatShape: "none", prop: "none", bulk: 1.75 },
   wee_mickey: { body: "#5a6a3a", legs: "#3a3028", skin: "#e8b08a", hat: "#7a6a4a", hatShape: "none", prop: "none", bulk: 0.9 }, // (R12.6: the night fence: a moss cardigan, a tweed flat cap)
@@ -370,6 +371,13 @@ export class NpcRenderer {
       const belt = part(MeshBuilder.CreateBox("steveBelt", { width: 0.5 * bulk, height: 0.06, depth: 0.5 * bulk }, sc), "#6b4a2b", pivot, 0); belt.position.y = 0.92;
       for (let i = 0; i < 5; i++) { const seg = part(MeshBuilder.CreateCylinder("steveTail", { diameter: 0.2 - i * 0.02, height: 0.16, tessellation: 8 }, sc), i % 2 ? "#2b2433" : "#8a8a96", pivot, 0.01); seg.rotation.x = -1.0; seg.position.set(0, 0.45 + i * 0.07, -0.3 - i * 0.12); }
     }
+    if (v.kind === "president") {
+      // R14: the swoop of yellow hair, pale goggle-eyes rings, a smug little mouth
+      const hair = part(MeshBuilder.CreateSphere("presHair", { diameter: 0.46, segments: 8 }, sc), "#ffd84a", head, 0.01); hair.scaling.set(1.1, 0.42, 1.05); hair.position.set(0, 0.2, 0.02);
+      const flick = part(MeshBuilder.CreateSphere("presFlick", { diameter: 0.22, segments: 6 }, sc), "#ffd84a", head, 0.01); flick.scaling.set(1.2, 0.5, 0.8); flick.position.set(0.08, 0.2, 0.2);
+      for (const sx of [-1, 1]) { const ring = part(MeshBuilder.CreateSphere("presRing", { diameter: 0.1, segments: 6 }, sc), "#fff0d0", head, 0); ring.scaling.z = 0.3; ring.position.set(sx * 0.08, 0.05, 0.19); }
+      const mouth = part(MeshBuilder.CreateBox("presMouth", { width: 0.08, height: 0.035, depth: 0.03 }, sc), "#b0442a", head, 0); mouth.position.set(0, -0.09, 0.2);
+    }
     if (v.kind === "store_heavy") {
       // R14: hi-vis armbands and an earpiece (nothing on the chest)
       for (const sx of [-1, 1]) { const band = part(MeshBuilder.CreateCylinder("shBand", { diameter: 0.2 * bulk, height: 0.1, tessellation: 10 }, sc), "#ffd23c", pivot, 0.008); band.position.set(sx * 0.36 * bulk, 1.32, 0); }
@@ -612,7 +620,7 @@ export class NpcRenderer {
       }
       root.scaling.setAll(0.55);
     }
-    if (v.kind === "meat_locker" || v.kind === "cold_cuts" || v.kind === "velvet_guard" || v.kind === "store_heavy") root.scaling.setAll(v.kind === "velvet_guard" || v.kind === "store_heavy" ? 1.22 : 1.32); // (R5: enormous; R7: his twin too)
+    if (v.kind === "meat_locker" || v.kind === "cold_cuts" || v.kind === "velvet_guard" || v.kind === "store_heavy" || v.kind === "president") root.scaling.setAll(v.kind === "president" ? 1.4 : v.kind === "velvet_guard" || v.kind === "store_heavy" ? 1.22 : 1.32); // (R5: enormous; R7: his twin too)
     if (v.kind === "champ") {
       root.scaling.setAll(1.38); // (R6: bigger still)
       const sp = new TransformNode("spoon", sc); sp.parent = armR; sp.position.set(0, -0.62, 0.06);

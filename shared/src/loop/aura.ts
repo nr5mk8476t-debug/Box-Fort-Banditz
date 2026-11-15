@@ -6,6 +6,7 @@
 import type { World, PlayerSim } from "../world.js";
 import { LOOP } from "./catalog.js";
 import type { SecurityEvent } from "./security.js";
+import type { MayorEvent } from "./mayor.js";
 
 export type LoopEvent =
   | { t: "storageFull"; p: string }
@@ -28,7 +29,8 @@ export type LoopEvent =
   | { t: "questLive"; p: string; name: string; x: number; z: number }
   | { t: "questInterrupt"; p: string; by: string; name: string; scored: boolean }
   | { t: "bananaSlip"; p: string; owner: string }
-  | SecurityEvent;
+  | SecurityEvent
+  | MayorEvent;
 
 export class AuraSystem {
   private copsHit = new Map<string, Set<string>>();

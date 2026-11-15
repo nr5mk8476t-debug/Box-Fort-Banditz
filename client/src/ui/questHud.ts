@@ -15,27 +15,37 @@ export class QuestHud {
   private psig = "";
 
   /** me: where I am and which way I'm looking (yaw: 0 = +z); names: player id -> name */
-  update(L: LoopView | null, live: boolean, me: { x: number; z: number; yaw: number }, names: Map<string, string>) {
+  update(L: LoopView | null, live: boolean, me: { x: number; z: number; yaw: number }, names: Map<string, string>, myId = "") {
     const q = L?.q;
-    const show = live && !!q && (!!q.t || !!q.j || q.lv.length > 0);
+    const cam = L?.c;
+    const show = live && ((!!q && (!!q.t || !!q.j || q.lv.length > 0)) || !!cam);
     const box = $("quest");
     box.classList.toggle("hidden", !show);
-    if (show && q) {
-      const where = (r: QuestRow) => {
-        if (r[5] === null || r[6] === null) return "";
-        const dx = r[5] - me.x, dz = r[6] - me.z, d = Math.hypot(dx, dz);
+    if (show) {
+      const whereXZ = (x: number | null, z: number | null) => {
+        if (x === null || z === null) return "";
+        const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz);
         if (d < 3) return `<span class="qd">HERE</span>`;
         let rel = Math.atan2(dx, dz) - me.yaw; rel = ((rel % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
         return `<span class="qd">${ARROWS[Math.round(rel / (Math.PI / 4)) % 8]} ${Math.round(d)} m</span>`;
       };
+      const where = (r: QuestRow) => whereXZ(r[5], r[6]);
       const row = (r: QuestRow, kind: string) => {
         const pct = Math.max(0, Math.min(100, (r[2] / Math.max(1, r[3])) * 100));
         const prog = r[3] > 1 ? `${Math.floor(r[2])}/${r[3]}` : "";
         return `<div class="qrow ${kind}"><div class="qh"><b>${kind === "job" ? "JOB" : "TASK"}: ${esc(r[0])}</b><span class="qt${r[4] <= 20 ? " hurry" : ""}">${r[4]}s</span></div>
           <div class="qx">${esc(r[1])}${r[8] ? " · MEGAPHONE +50%" : ""}</div><div class="qb"><i style="width:${pct.toFixed(0)}%"></i></div><div class="qf">${prog}${where(r)}</div></div>`;
       };
-      const rivals = q.lv.map(([id, name]) => `<div class="qlive">● ${esc(names.get(id) ?? "A rival")} is going for <b>${esc(name)}</b></div>`).join("");
-      const html = (q.t ? row(q.t, "task") : "") + (q.j ? row(q.j, "job") : "") + rivals;
+      // R14 stage 5: the Mayor campaign (the candidate: their checklist; everyone else: the same, to stop them)
+      let camp = "";
+      if (cam) {
+        const mine = cam.p === myId, who = names.get(cam.p) ?? "A rival";
+        const items = cam.o.map(([label, done, x, z]) => `<li class="${done ? "ok" : ""}">${done ? "✔" : "○"} ${esc(label)} ${done ? "" : whereXZ(x, z)}</li>`).join("");
+        camp = `<div class="qrow camp${mine ? " mine" : ""}"><div class="qh"><b>${mine ? "YOUR CAMPAIGN" : esc(who.toUpperCase()) + " FOR MAYOR"}</b><span class="qt${cam.t <= 30 ? " hurry" : ""}">${Math.floor(cam.t / 60)}:${String(cam.t % 60).padStart(2, "0")}</span></div>
+          <div class="qx">STRIKES ${"✖".repeat(cam.s)}${"·".repeat(Math.max(0, 3 - cam.s))} ${mine ? "· rivals knock you down = a strike (-15 s)" : `· knock them down! ${cam.pg ? "last seen " + whereXZ(cam.pg[0], cam.pg[1]) : ""}`}</div><ul class="qc">${items}</ul></div>`;
+      }
+      const rivals = (q?.lv ?? []).map(([id, name]) => `<div class="qlive">● ${esc(names.get(id) ?? "A rival")} is going for <b>${esc(name)}</b></div>`).join("");
+      const html = camp + (q?.t ? row(q.t, "task") : "") + (q?.j ? row(q.j, "job") : "") + rivals;
       if (html !== this.sig) { this.sig = html; box.innerHTML = html; }
     }
     const panel = $("qpanel");

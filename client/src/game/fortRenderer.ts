@@ -13,6 +13,9 @@ export interface LoopView {
   L: number; S: number; F: number; u: string[]; r: [string, string, number, number][]; g: Record<string, number>;
   w?: string[]; ws?: string[]; th?: [string, string, number, number];
   /** R14 stage 4 (quests.ts view): my task/job [name, text, prog, need, secs, x, z, stage, megaphone], price, rep, jobs on offer, rivals' live attempts, van rate */
+  /** R14 stage 5 (mayor.ts view): my qualification [label, ok], my cooldown, the campaign (everyone sees it) */
+  mq?: [string, number][]; mc?: number;
+  c?: { p: string; t: number; s: number; o: [string, number, number | null, number | null][]; ps: [number, number, number][]; pg: [number, number] | null };
   q?: { t: QuestRow | null; j: QuestRow | null; tp: number; rep: [number, number]; jo: [string, string, string][]; lv: [string, string, number, number][]; vr: number };
   [k: string]: unknown;
 }

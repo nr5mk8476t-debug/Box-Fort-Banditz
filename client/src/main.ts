@@ -365,7 +365,7 @@ function updateMatchHud(a: ArenaScene) {
   // R14 stage 4: the quest tracker + the J panel
   { const ph = m.phase, live = ph === "scavenge" || ph === "dusk" || ph === "night"; if (!live) questHud.open = false;
     const names = new Map(a.scores.map((x) => [x.id, x.name] as [string, string]));
-    questHud.update(a.myLoop, live && ov !== "prep", { x: a.position.x, z: a.position.z, yaw: a.viewYaw }, names); }
+    questHud.update(a.myLoop, live && ov !== "prep", { x: a.position.x, z: a.position.z, yaw: a.viewYaw }, names, a.scores.find((x) => x.me)?.id ?? ""); }
   // R14: the purse: CASH and AURA, big, always (bumps when either changes)
   const showPurse = m.phase !== "lobby";
   $("purse").classList.toggle("hidden", !showPurse);
@@ -937,7 +937,7 @@ function updateHud(a: ArenaScene) {
   const stl = a.stealTarget, thp = a.theftProgress;
   const atMat = (() => { const f = a.arenaLayout.forts?.find((q) => q.slot === a.myColorIdx); return !!f && Math.abs(a.position.x - f.padX) < 1.7 && Math.abs(a.position.z - f.padZ) < 1.7; })();
   const qv = a.myLoop?.q, nb = a.nearBoss, nbJob = nb ? qv?.jo.find((j) => j[0] === nb) : undefined;
-  const loopSig = thp >= 0 ? "thief" : stl ? "steal" + stl.rec : a.atBoard && !t ? "board" + (qv?.tp ?? 0) + (qv?.t ? 1 : 0) : nb && !t ? "boss" + nb + (nbJob?.[1] ?? "") + (qv?.j ? 1 : 0) : atMat && (a.match.phase === "scavenge" || a.match.phase === "dusk" || a.match.phase === "night") ? "mat" + (a.inventory.hand || a.inventory.pockets.join("")) : "";
+  const loopSig = thp >= 0 ? "thief" : stl ? "steal" + stl.rec : a.atBoard && !t ? "board" + (qv?.tp ?? 0) + (qv?.t ? 1 : 0) + JSON.stringify(a.myLoop?.mq ?? []) + (a.myLoop?.c ? 1 : 0) : nb && !t ? "boss" + nb + (nbJob?.[1] ?? "") + (qv?.j ? 1 : 0) : atMat && (a.match.phase === "scavenge" || a.match.phase === "dusk" || a.match.phase === "night") ? "mat" + (a.inventory.hand || a.inventory.pockets.join("")) : "";
   const sig = loopSig ? loopSig : jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "mickey" || ut.kind === "mickgoods" || ut.kind === "storecounter" ? JSON.stringify(a.heldInfo()) + a.myGear : "") + (ut.kind === "pubboard" ? JSON.stringify(a.gch) : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
@@ -952,6 +952,7 @@ function updateHud(a: ArenaScene) {
     promptSig = sig;
     if (thp >= 0) simple("HOLD E", " STEALING... ", "", "don't move! Knocked down, moved, or sunrise = it's off");
     else if (stl) simple("HOLD E", " Steal ", `${lootDefOf(stl.type)?.name ?? stl.type} ($${stl.value})`, "5 s (10 if they've got a proper alarm). Then carry it home and bank it.");
+    else if (loopSig.startsWith("board") && a.myLoop?.mq?.every((x) => x[1]) && !qv?.t && !a.myLoop?.c) simple("E", " RUN FOR MAYOR ", `$${LOOP.mayorFee}`, "spends the fee, your posters and your sash. 4:00 to win it; the clock stops for everyone. 3 knockdowns and it's over.");
     else if (loopSig.startsWith("board")) { if (qv?.t) simple("", " YOUR TASK BOARD ", "", `one task at a time: finish ${qv.t[0]} first (J: details)`); else simple("E", " Buy an AURA TASK ", `$${qv?.tp ?? LOOP.taskPrice0}`, "a random task. It's LIVE: everyone sees you going for it, and a rival who knocks you down interrupts it."); }
     else if (loopSig.startsWith("boss")) { const bn = nb === "seamus" ? "SEAMUS O'SHORTLY" : "DON BINNIE's man"; if (qv?.j) simple("", ` ${bn} `, "", `finish your job first: ${qv.j[0]}`); else if (nbJob) simple("J", " Take a job from ", bn, `${nbJob[1]}: ${nbJob[2]}`); else simple("", ` ${bn} `, "", "nothing more for you this cycle. Come back next cycle."); }
     else if (loopSig.startsWith("mat")) simple("", " YOUR DEPOSIT MAT ", "", "drop or throw loot here (G): 10 s on the mat and it's BANKED onto your shelves. Anyone can grab it till then.");
@@ -1417,6 +1418,10 @@ enterTitle();
     },
     questRep: (boss: "seamus" | "binnie", n: number) => { if (!local) return; const p = local.world.players.get(SOLO_ID)!; (local.world.loopQuests as any).of(p).rep[boss] = n; (local.world.loopQuests as any).of(p).v++; },
     questPanel: (on: boolean) => { questHud.open = on; },
+    /** (tests, solo) R14 stage 5: qualify for MAYOR; the campaign as the host has it; finish the goofy ones */
+    mayorQualify: () => { if (!local) return; const w = local.world, p = w.players.get(SOLO_ID)!, f = w.fort.of(p); p.aura = Math.max(p.aura, 70); p.cash = Math.max(p.cash, 1000); for (const u of ["level2", "level3", "level4"]) f.ups.add(u as never); f.gear.posters = 1; f.gear.sash = 1; f.v++; },
+    mayor: () => { const c = local?.world.mayor.c; if (!c) return null; const pn = local!.world.npc.npcs.get(c.presNpc); return { t: c.t, strikes: c.strikes, pres: pn ? { x: pn.move.x, z: pn.move.z, yaw: pn.move.yaw } : c.pres, presDone: c.presDone, posters: c.posters.map((x) => ({ x: x.loc.x, z: x.loc.z, done: x.done, name: x.loc.name })), podium: c.podium, speech: c.speech, goofy: c.goofy.map((g) => g.name) }; },
+    mayorGoofyDone: () => { const c = local?.world.mayor.c; if (c) for (const g of c.goofy) g.prog = g.need; },
     myBoard: () => { const l = arena?.arenaLayout.forts?.find((f) => f.slot === arena!.myColorIdx); return l ? fortAt2(l, FORT_SPOTS.board.u, FORT_SPOTS.board.v) : null; },
     heavies: () => (local ? [...local.world.npc.npcs.values()].filter((n) => n.kind === "store_heavy").map((n) => ({ id: n.id, x: n.move.x, z: n.move.z, yaw: n.move.yaw, state: n.state, shop: n.shop })) : []),
     shopAct: (act: any) => arena?.onAction?.(act),

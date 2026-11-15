@@ -17,6 +17,7 @@ import { CityRenderer } from "./cityRenderer.ts";
 import { RaidAlert } from "../ui/raidAlert.ts";
 import { ItemRenderer } from "./itemRenderer.ts";
 import { FortRenderer, parseLoop, type LoopView } from "./fortRenderer.ts";
+import { CampaignRenderer } from "./campaignRenderer.ts";
 import { NpcRenderer } from "./npcRenderer.ts";
 import { EventRenderer, DragonRenderer, FestaRenderer } from "./eventRenderer.ts";
 import { PropRenderer } from "./propRenderer.ts";
@@ -306,6 +307,7 @@ export class ArenaScene {
     for (const [b, k] of [["seamus", "seamus"], ["binnie", "fever"]] as const) { const l = this.qlocs.get(k); if (l && Math.hypot(this.cur.x - l.x, this.cur.z - l.z) < QUEST.bossReach) return b; }
     return null;
   }
+  readonly campaignR: CampaignRenderer;
   get myLoop(): LoopView | null { if (this.loopCache.json !== this.shopJson) this.loopCache = { json: this.shopJson, v: parseLoop(this.shopJson) }; return this.loopCache.v; }
   private cars: CarRenderer;
   private copCars: CopCarRenderer;
@@ -436,6 +438,7 @@ export class ArenaScene {
     if (this.arena.littleItaly) this.festa = new FestaRenderer(scene, this.arena.littleItaly.route, { gap: FESTA.gap, segments: FESTA.segments });
     this.propsR = new PropRenderer(scene, this.arena.props ?? []);
     this.fortsR = new FortRenderer(scene, this.arena);
+    this.campaignR = new CampaignRenderer(scene);
     for (const pd of this.arena.props ?? []) if (pd.box !== undefined) this.brkBox.set(pd.id, pd.box);
     this.propsR.wallArt(this.arena); // (C4b: graffiti round the lower city)
     this.cars = new CarRenderer(scene);
@@ -584,6 +587,8 @@ export class ArenaScene {
     { // R14: every fort as its owner has built it
       this.fortOwner.clear();
       view.players.forEach((p, id) => { this.fortOwner.set(p.colorIdx, id); this.fortsR.update(p.colorIdx, (p as any).shop ?? ""); });
+      { const c = this.myLoop?.c; const cand = c ? view.players.get(c.p) : undefined; // (R14 stage 5: the campaign's posters)
+        this.campaignR.update(c?.ps ?? null, cand?.name ?? "", PLAYER_COLORS[cand?.colorIdx ?? 0] ?? "#e14b4b"); }
       this.fortsR.retain(new Set(this.fortOwner.keys()));
     }
     { // C5c.1: everyone else's heat (the M map's WANTED pins) and who's lying flat nearby (citizen's arrest)
@@ -1194,6 +1199,30 @@ export class ArenaScene {
           if (e.p === me) this.onFeedback?.("You slipped on their BANANA PEEL!", "bad");
           else if (e.owner === me) this.onFeedback?.("They slipped on your BANANA PEEL: your task carries on!", "good");
           break;
+        // ---- R14 stage 5: the Mayor campaign
+        case "mayorNo": if (e.p === me) { sfx.full(); this.onFeedback?.(e.reason.charAt(0).toUpperCase() + e.reason.slice(1) + ".", "bad"); } break;
+        case "mayorStart": {
+          sfx.raidSiren(1);
+          const who = this.scores.find((x) => x.id === e.p)?.name ?? "Someone";
+          if (e.p === me) this.onBanner?.("YOU'RE RUNNING FOR MAYOR!", "4:00 (the clock's stopped for everyone). Shake PRESIDENT MARMALADE's hand, 5 posters, 2 stunts, then THE SPEECH. 3 knockdowns and it's over.", "good");
+          else this.onBanner?.(`${who.toUpperCase()} IS RUNNING FOR MAYOR!`, "Stop them: knock them down 3 times (each costs them 15 s). Their objectives are in your tracker.", "bad");
+          break;
+        }
+        case "mayorStep": if (e.p === me) { sfx.checkpoint(); this.onFeedback?.("CAMPAIGN: " + e.what, "good"); } break;
+        case "mayorStrike": {
+          const who = this.scores.find((x) => x.id === e.by)?.name ?? "A rival", them = this.scores.find((x) => x.id === e.p)?.name ?? "the candidate";
+          if (e.p === me) { sfx.full(); this.onFeedback?.(`STRIKE ${e.strikes}/${LOOP.campaignStrikes}: ${who} flattened you (-${LOOP.strikeTime} s)`, "bad"); }
+          else this.onFeedback?.(`STRIKE ${e.strikes}/${LOOP.campaignStrikes} on ${them}${e.by === me ? " (you!)" : ""}`, "good");
+          break;
+        }
+        case "mayorPing": if (e.p !== me) this.raidAlert.start(e.x, e.z, 4); break;
+        case "mayorEnd": {
+          const who = this.scores.find((x) => x.id === e.p)?.name ?? "The candidate";
+          if (e.ok) { sfx.gameDone(); this.onBanner?.(e.p === me ? "YOU ARE THE MAYOR OF TRASHINGTON!" : `${who.toUpperCase()} IS THE MAYOR!`, "Elected by a landslide (of rubbish).", e.p === me ? "good" : "bad"); }
+          else if (e.p === me) { sfx.full(); this.onBanner?.("THE CAMPAIGN FAILED", `${e.reason}. Aura halved, the fort's down a level. Try again next cycle.`, "bad"); }
+          else this.onBanner?.(`${who.toUpperCase()}'S CAMPAIGN IS OVER`, `${e.reason}. The clock's running again.`, "info");
+          break;
+        }
         case "secWarn": if (e.p === me) this.onFeedback?.(`${e.store} SECURITY: "Pay for that." Walk out with it and they'll chase you.`, "bad"); break;
         case "secShove": if (e.p === me) this.onFeedback?.("Shoved back in. Pay for it or put it down.", "bad"); break;
         case "secChase": if (e.p === me) { sfx.raidAlarm(); this.onBanner?.("SECURITY'S AFTER YOU!", "Outrun them for 10 s or get 25 m clear of the store. Caught = it goes back.", "bad"); } break;
@@ -1449,7 +1478,7 @@ export class ArenaScene {
     if (a === "grab" && this.stealTarget && !this.lookTarget) { // (R14: night: hold E at a rival's shelves)
       this.stealHeld = true; this.onAction?.({ a: "steal", owner: this.stealTarget.owner, rec: this.stealTarget.rec }); sfx.uiClick(); return;
     }
-    if (a === "grab" && this.atBoard && !this.lookTarget && !this.useTarget && !this.stealTarget) { this.onAction?.({ a: "taskBuy" }); return; } // (R14: your fort's board: an aura task)
+    if (a === "grab" && this.atBoard && !this.lookTarget && !this.useTarget && !this.stealTarget) { const L = this.myLoop; this.onAction?.(L?.mq?.every((x) => x[1]) && !L.q?.t && !L.c ? { a: "mayorRun" } : { a: "taskBuy" }); return; } // (R14: your fort's board: an aura task)
     if (a === "grab" && this.arrestTarget && !this.pinOn) { // (C5c.1: citizen's arrest: beats grabbing whatever's lying there)
       this.onAction?.({ a: "arrest", p: this.arrestTarget.id });
       return;

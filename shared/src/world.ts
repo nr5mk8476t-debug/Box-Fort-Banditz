@@ -33,6 +33,7 @@ import { FortSystem } from "./loop/fort.js";
 import { AuraSystem, type LoopEvent } from "./loop/aura.js";
 import { QuestSystem } from "./loop/quests.js";
 import { ShopSecurity } from "./loop/security.js";
+import { MayorSystem } from "./loop/mayor.js";
 
 /** C4a: how far away a pedestrian notices you breaking something (they also need a clear line of sight) */
 export const WITNESS_RANGE = 20;
@@ -339,7 +340,7 @@ export type WorldAction =
   | { a: "sell"; item: string } | { a: "haggle"; item: string } | { a: "sellAll" } // pawn shop
   // R14: the game loop: PREP (sell to the van, the safe, upgrades, the workbench); night theft
   | { a: "vanSell"; recs: string[] } | { a: "protect"; rec: string; on: boolean } | { a: "upgrade"; id: string } | { a: "craft"; id: string }
-  | { a: "steal"; owner: string; rec: string } | { a: "stealStop" } | { a: "taskBuy" } | { a: "jobTake"; boss: string } | { a: "questDrop"; src: string }
+  | { a: "steal"; owner: string; rec: string } | { a: "stealStop" } | { a: "taskBuy" } | { a: "mayorRun" } | { a: "jobTake"; boss: string } | { a: "questDrop"; src: string }
   | { a: "ready" }; // done shopping / upgrading
 
 /** Small, fast, seedable random numbers (deterministic worlds for tests). */
@@ -392,6 +393,7 @@ export class World {
   readonly loopAura: AuraSystem;
   readonly loopQuests: QuestSystem;
   readonly security: ShopSecurity;
+  readonly mayor: MayorSystem;
 
   constructor(opts: WorldOptions = {}) {
     this.arena = opts.arena ?? buildTrashington();
@@ -411,6 +413,7 @@ export class World {
     this.loopAura = new AuraSystem(this);
     this.loopQuests = new QuestSystem(this);
     this.security = new ShopSecurity(this);
+    this.mayor = new MayorSystem(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
@@ -624,10 +627,10 @@ export class World {
   /** R14: a player's fort (and quests) for the client: JSON, rebuilt only when it changed */
   loopJson(p: PlayerSim): string {
     const f = this.fort.of(p), th = this.fort.thefts.get(p.id);
-    const k = `${f.v}|${this.match.phase}|${th ? th.t.toFixed(1) : ""}|${this.loopQuests.version(p)}`;
+    const k = `${f.v}|${this.match.phase}|${th ? th.t.toFixed(1) : ""}|${this.loopQuests.version(p)}|${this.mayor.version(p)}`;
     const c = this.loopCache.get(p.id);
     if (c && c.k === k) return c.json;
-    const json = JSON.stringify({ ...this.fort.view(p), ...this.loopQuests.view(p) });
+    const json = JSON.stringify({ ...this.fort.view(p), ...this.loopQuests.view(p), ...this.mayor.view(p) });
     this.loopCache.set(p.id, { k, json });
     return json;
   }
@@ -875,6 +878,7 @@ export class World {
     if (act.a === "upgrade") { this.fort.buyUpgrade(p, String((act as any).id ?? "") as never); return; }
     if (act.a === "craft") { this.fort.craft(p, String((act as any).id ?? "") as never); return; }
     if (act.a === "stealStop") { this.fort.theftStop(p); return; }
+    if (act.a === "mayorRun") { this.mayor.run(p); return; } // (R14 stage 5: at your fort's board)
     if (act.a === "taskBuy") { this.loopQuests.buyTask(p); return; } // (R14 stage 4: at your fort's board)
     if (act.a === "jobTake") { const b = String((act as any).boss ?? ""); if (b === "seamus" || b === "binnie") this.loopQuests.takeJob(p, b); return; }
     if (act.a === "questDrop") { this.loopQuests.drop(p, (act as any).src === "job" ? "job" : "task"); return; }
@@ -2040,6 +2044,7 @@ export class World {
     this.match.tick(dt);
     this.loopQuests.tick(dt);
     this.security.tick();
+    this.mayor.tick(dt);
     this.props.tick(dt);
     this.pawn.tick(dt);
     this.lobby.tick(dt);
@@ -2320,7 +2325,7 @@ export class World {
   }
 
   // ------------------------------------------------------------------ events
-  emit(e: WorldEvent) { this.events.push(e); if (e.t === "knockdown" || e.t === "robDone") this.loopQuests?.onEvent(e); else if (e.t === "shoplift") this.security?.lifted(e.p, e.shop, e.item ?? ""); }
+  emit(e: WorldEvent) { this.events.push(e); if (e.t === "knockdown" || e.t === "robDone") { this.loopQuests?.onEvent(e); this.mayor?.onEvent(e); } else if (e.t === "shoplift") this.security?.lifted(e.p, e.shop, e.item ?? ""); }
   takeEvents(): WorldEvent[] { const e = this.events; this.events = []; return e; }
 }
 

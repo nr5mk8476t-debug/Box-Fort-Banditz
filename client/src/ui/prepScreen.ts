@@ -66,6 +66,10 @@ export class PrepScreen {
     const gear = Object.entries(L.g ?? {}).filter(([, n]) => n > 0).map(([k, n]) => `${esc(RECIPES.find((r) => r.id === k)?.name ?? k)} x${n}`).join(", ") || "none";
     $("prep-craft").innerHTML = `<h3>WORKBENCH</h3><p class="small">${bench ? "Crafting uses up the materials (cheapest first, the safe's last)." : "Build a WORKBENCH to craft."} Your gear: ${gear}</p>` + RECIPES.map((r) => `<div class="pp-card"><b>${esc(r.name)}</b><span>${esc(r.blurb)}</span><em>${costLine(r.cash, r.items)}</em>
       <button class="btn btn-tiny" data-craft="${r.id}" ${!bench || !affordable(r.cash, r.items) ? "disabled" : ""}>CRAFT</button></div>`).join("");
+    // R14 stage 5: the road to MAYOR (declared at your fort's board in the scavenge)
+    const mq = L.mq ?? [];
+    $("prep-mayor").innerHTML = `<h3>RUN FOR MAYOR</h3><p class="small">${mq.every((x) => x[1]) ? "<b>You qualify!</b> Next scavenge: E at your fort's task board to declare." : "Qualify, then declare at your fort's task board in the scavenge."}${L.mc ? " <b>Not this cycle: your campaign just failed.</b>" : ""}</p>
+      <ul class="pp-mq">${mq.map(([l, ok]) => `<li class="${ok ? "ok" : "no"}">${ok ? "✔" : "✖"} ${esc(l)}</li>`).join("")}</ul>`;
     ($("btn-prep-ready") as HTMLButtonElement).textContent = ready ? "WAITING FOR THE OTHERS..." : "READY";
   }
 }

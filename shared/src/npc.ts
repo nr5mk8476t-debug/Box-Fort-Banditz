@@ -43,7 +43,9 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   // R13: customers browsing the six stores (they wander between a store's spots)
   | "shopper"
   // R14: the high-end stores' security (CARAT & RUN, MAISON PONG): warns, shoves, chases 10 s, tackles, takes it back
-  | "store_heavy";
+  | "store_heavy"
+  // R14: PRESIDENT MARMALADE (the Mayor campaign: shake his hand)
+  | "president";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -213,6 +215,14 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       perfect: ["Ah, beautiful!", "Did you SEE that?!", "Slainte! Lovely!"],
       close: ["Not bad, not bad.", "Nearly had it!"],
       miss: ["Ah, unlucky.", "Back of the queue, you."],
+    },
+  },
+  president: {
+    kind: "president", name: "PRESIDENT MARMALADE", walk: 0.9, flee: 2.0, fighter: false, hp: 99, dodge: 0, notoriety: 40, spawnWeight: 0,
+    loot: [["gold_nose", 1]],
+    lines: {
+      idle: ["Tremendous city. The best trash. Everyone says so.", "I know cardboard. Nobody knows cardboard like me.", "Shake my hand. It's the biggest hand.", "Many people are saying I'm orange. Fake news.", "I'll endorse you. Probably. Maybe. Who are you?", "Wonderful. Beautiful. Bigly."],
+      hit: ["SAD!", "Very unfair! VERY unfair!", "My lawyers will hear about this!"],
     },
   },
   store_heavy: {
@@ -502,7 +512,7 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
 /** Pedestrian types that wander the streets (raccoons and cashiers have their own jobs). */
 export const NPC_KINDS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => NPC_DEFS[k].spawnWeight > 0);
 /** Kinds that are never part of the everyday crowd (own jobs, own counts). */
-export const SPECIAL_KINDS = new Set<NpcKind>(["store_heavy", "wee_mickey", "raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "lou", "meat_locker", "champ", "fran", "cold_cuts", "receptionist", "don", "velvet_guard", "sketchy_steve", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
+export const SPECIAL_KINDS = new Set<NpcKind>(["president", "store_heavy", "wee_mickey", "raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "lou", "meat_locker", "champ", "fran", "cold_cuts", "receptionist", "don", "velvet_guard", "sketchy_steve", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
 /** The four big shots. */
 export const BIG_SHOTS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => !!NPC_DEFS[k].bigShot);
 
