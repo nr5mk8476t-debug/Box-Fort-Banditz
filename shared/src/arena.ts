@@ -175,7 +175,9 @@ export type ShopType = "mart" | "pawn" | "bakery" | "gadget"
   // Slice 2A
   | "donut" | "pharmacy" | "pizza" | "taco" | "arcade" | "thrift" | "sneaker" | "jeweller" | "phone" | "laundry" | "barber" | "pet"
   // R13
-  | "salvage" | "repair" | "records" | "outdoor" | "perfume" | "jewels";
+  | "salvage" | "repair" | "records" | "outdoor" | "perfume" | "jewels"
+  // R15
+  | "hardware";
 export interface ShopDef {
   id: number; name: string; type: ShopType;
   /** inside of the shop (for "caught shoplifting" checks) */

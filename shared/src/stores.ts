@@ -10,7 +10,9 @@
 // boxes for whichever way the store faces.
 import type { Box, Rect } from "./arena.js";
 
-export type StoreId = "rustbucket" | "plugpray" | "needledrop" | "peakfomo" | "maisonpong" | "caratrun";
+export type StoreId = "rustbucket" | "plugpray" | "needledrop" | "peakfomo" | "maisonpong" | "caratrun"
+  // R15: Blake's six (docs/shop-plan.md)
+  | "lastscrew";
 /** R14: the stores with STORE SECURITY inside the door (loop/security.ts) */
 export const HIGH_END_STORES = new Set<string>(["caratrun", "maisonpong"]);
 export type StoreTier = 0 | 1 | 2;
@@ -36,6 +38,9 @@ export const STORES: StoreDef[] = [
   { id: "maisonpong", name: "MAISON PONG", tier: 2, plot: { minX: -42.39, maxX: -32.24, minZ: 53.5, maxZ: 65.5 }, face: [0, 1], replaces: ["CRUNCHO+ TOWER"] },
   // (R13.1: CARAT & RUN, the jeweller, took BONBON VIVANT's plot: Blake's brief; the sugar-rush truffle went with it)
   { id: "caratrun", name: "CARAT & RUN", tier: 2, plot: { minX: 32.24, maxX: 42.39, minZ: 53.5, maxZ: 65.5 }, face: [0, 1], replaces: ["CAVIAR EXPRESS"] },
+  // R15 (Blake's six, ~2x the floor of the R13 stores): the builders' merchant takes KEYS CUT, the empty gap and FISH? FISH.
+  // beside RUST BUCKET: a 14.4 x 11 m hall and an 8.4 x 11 m timber yard with a gate to the street
+  { id: "lastscrew", name: "LAST SCREW HARDWARE", tier: 0, plot: { minX: -50.39, maxX: -27.6, minZ: -70.5, maxZ: -59.5 }, face: [0, 1], replaces: ["KEYS CUT WHILE U WAIT (LONG)", "FISH? FISH."] },
 ];
 
 /** the stores' floor level (the pavement under them is 0.15 m up) */
@@ -81,7 +86,7 @@ export function storeFrame(s: StoreDef): StoreFrame {
 // The shells (R13 blockout): the walls, the frontage (windows, the door, an open bay), the floor, the roof, the counter.
 // Everything solid is a plain box the city draws as it is; the stores' dressing comes on top in the renderer.
 
-export type Span = { u0: number; u1: number; t: "wall" | "window" | "door" | "open" };
+export type Span = { u0: number; u1: number; t: "wall" | "window" | "door" | "open" | "fence" | "gate" };
 export interface StoreShellSpec {
   /** wall height (the roof sits on it) */
   H: number;
@@ -95,6 +100,10 @@ export interface StoreShellSpec {
   wall: string; floor: string; roof: string;
   /** how tall the windows' glass goes (default 2.9) */
   glassTop?: number;
+  /** R15: an open yard at the left end (u0 = 0..u1): no roof, boundary walls `h` high (the frontage there: "fence" + "gate") */
+  yard?: { u1: number; h: number };
+  /** R15: inner walls (u0, u1, v0, v1, height = the wall's): partitions, the stockroom, the hall/yard wall (leave gaps for doors) */
+  inner?: [number, number, number, number, number?][];
 }
 
 export const STORE_SHELLS: Record<StoreId, StoreShellSpec> = {
@@ -123,6 +132,15 @@ export const STORE_SHELLS: Record<StoreId, StoreShellSpec> = {
     counter: [3.6, 6.55, 6.6, 7.4], keeper: [5.07, 8.3] },
   // Snob Row's mirror (R13.1, the jeweller): deep emerald, a recessed door off-centre between a small window and a long
   // one (MAISON PONG across the road is symmetrical: this isn't), the keeper's counter straight ahead of the door
+  // R15 LAST SCREW HARDWARE: the yard on the left (fence, a wide gate), the hall on the right (a long window of goods, a
+  // recessed door near the end). Inside: the wall between hall and yard (a side door at the front, the stockroom's roller
+  // door at the back), the stockroom in the back left corner (its door from the hall)
+  lastscrew: { H: 4.4, wall: "#7a6e60", floor: "#8a8478", roof: "#4a4640", glassTop: 2.7,
+    yard: { u1: 8.4, h: 2.6 },
+    front: [{ u0: 0, u1: 2.1, t: "fence" }, { u0: 2.1, u1: 6.3, t: "gate" }, { u0: 6.3, u1: 8.4, t: "fence" }, { u0: 8.4, u1: 9.0, t: "wall" }, { u0: 9.0, u1: 17.2, t: "window" }, { u0: 17.2, u1: 21.2, t: "door" }, { u0: 21.2, u1: 22.79, t: "wall" }],
+    recess: { u0: 17.2, u1: 21.2, depth: 1.4 },
+    inner: [[8.4, 8.7, 0.3, 3.6], [8.4, 8.7, 5.0, 8.0], [8.4, 8.7, 10.3, 10.7], [8.7, 10.2, 6.6, 6.9], [11.4, 12.4, 6.6, 6.9], [12.1, 12.4, 6.9, 10.7]],
+    counter: [13.6, 17.4, 2.2, 3.0], keeper: [15.5, 3.7] },
   caratrun: { H: 4.8, wall: "#22483a", floor: "#5a2430", roof: "#3a3430", glassTop: 3.0,
     front: [{ u0: 0, u1: 0.5, t: "wall" }, { u0: 0.5, u1: 3.2, t: "window" }, { u0: 3.2, u1: 5.6, t: "door" }, { u0: 5.6, u1: 9.65, t: "window" }, { u0: 9.65, u1: 10.15, t: "wall" }],
     recess: { u0: 3.2, u1: 5.6, depth: 1.3 },
@@ -146,8 +164,12 @@ export function storeShell(s: StoreDef): StoreShellOut {
   const wall = (u0: number, u1: number, v0: number, v1: number, h: number, y0 = 0) => { if (u1 - u0 > 0.01 && v1 - v0 > 0.01 && h > 0.01) out.push(f.box(u0, u1, v0, v1, h, "wall", y0, { color: sp.wall })); };
   // the floor, the roof, the back and the sides
   out.push(f.box(T, W - T, T, D - T, STORE_FLOOR, "shopfloor", 0, { color: sp.floor })); // (its top just above the pavement it stands on)
-  out.push(f.box(-0.15, W + 0.15, -0.15, D + 0.15, 0.3, "roof", H, { color: sp.roof }));
-  wall(0, W, D - T, D, H); wall(0, T, T, D - T, H); wall(W - T, W, T, D - T, H);
+  const yd = sp.yard, ru0 = yd ? yd.u1 : -0.15;
+  out.push(f.box(ru0, W + 0.15, -0.15, D + 0.15, 0.3, "roof", H, { color: sp.roof }));
+  if (yd) { wall(0, yd.u1, D - T, D, yd.h); wall(0, T, T, D - T, yd.h); wall(yd.u1, W, D - T, D, H); } // (R15: the yard's boundary walls are low)
+  else { wall(0, W, D - T, D, H); wall(0, T, T, D - T, H); }
+  wall(W - T, W, T, D - T, H);
+  for (const [u0, u1, v0, v1, h] of sp.inner ?? []) wall(u0, u1, v0, v1, h ?? H);
   // the frontage
   const rc = sp.recess;
   let door: StoreShellOut["door"] | null = null;
@@ -163,6 +185,8 @@ export function storeShell(s: StoreDef): StoreShellOut {
     if (q.t === "wall") wall(q.u0, q.u1, 0, T, H);
     else if (q.t === "window") { wall(q.u0, q.u1, 0, T, 0.6); out.push(f.box(q.u0, q.u1, 0.1, 0.2, gTop - 0.6, "glass", 0.6)); wall(q.u0, q.u1, 0, T, H - gTop, gTop); }
     else if (q.t === "open") wall(q.u0, q.u1, 0, T, H - 3.4, 3.4); // (a bay: open below 3.4 m)
+    else if (q.t === "fence") out.push(f.box(q.u0, q.u1, 0, 0.12, 2.4, "wall", 0, { hide: true })); // (R15: chain-link: the dressing draws it)
+    // ("gate": an opening, nothing at all: the dressing draws its gate, open)
     else if (q.t === "door") {
       if (rc && rc.u0 <= q.u0 + 0.01 && rc.u1 >= q.u1 - 0.01) {
         // the recess: its reveals, its back wall with the door in the middle, the frontage above it
@@ -213,6 +237,7 @@ export const STORE_TRADE: Record<StoreId, StoreTrade> = {
     caseLoot: [["fancy_fizz", 2], ["pearl_necklace", 1], ["designer_scarf", 1]] },
   // R13.1: the jeweller buys jewellery at the specialists' 60% (the pawn shops pay 40%, WEE MICKEY 75% at night with heat);
   // it sells nothing (no service: the sugar-rush truffle that was here is gone, not moved). Its case: mostly pearls
+  lastscrew: { type: "hardware", heat: 1, dig: [["bag_of_screws", 3], ["nails_box", 3], ["pipe_fittings", 2], ["duct_tape", 1], ["liquid_nails", 1]] }, // (R15: the counter sells from the stock; the SPARE SCREWS (LOOSE) bin)
   caratrun: { type: "jewels", heat: 2, buys: { types: ["diamond_ring", "gold_chain", "pearl_necklace", "rolecks_watch", "diamond_pigeon"], mult: 0.45 },
     caseLoot: [["pearl_necklace", 3], ["gold_chain", 2], ["diamond_ring", 1]] },
 };
@@ -223,7 +248,7 @@ export const STORE_BUY_GAP = 1.0;
 
 /** where the fixtures go, in the store's frame (u, v): the till on the counter, the rummage spot, the display case, shelves
  *  (u0, u1, v0, v1, height) and the real stock spots on them (u, v, which shelf) */
-export interface StoreFixtures { /** R15: the stock slots, [u0, u1, v, height (0 = floor), n] rows (shopStock.ts); none = rows along the shelves */ racks?: [number, number, number, number, number][]; till: [number, number]; dig?: [number, number]; case?: [number, number, number, number, number]; shelves: [number, number, number, number, number][]; stock: [number, number, number][];
+export interface StoreFixtures { /** R15: the stock slots, [a0, a1, b, height (0 = floor), n, along v?] rows (shopStock.ts): a row from u=a0 to a1 at v=b (or, with a 6th 1, from v=a0 to a1 at u=b); none = rows along the shelves */ racks?: [number, number, number, number, number, number?][]; till: [number, number]; dig?: [number, number]; case?: [number, number, number, number, number]; shelves: [number, number, number, number, number][]; stock: [number, number, number][];
   /** R13b: the centrepiece's solid parts (u0, u1, v0, v1, height): you bump into them (drawn by the store's dressing) */
   solids?: [number, number, number, number, number][] }
 export const STORE_FIXTURES: Record<StoreId, StoreFixtures> = {
@@ -241,6 +266,23 @@ export const STORE_FIXTURES: Record<StoreId, StoreFixtures> = {
     solids: [[4.42, 5.72, 3.95, 5.25, 0.5]] }, // (the perfume fountain's basin: R13b, smaller, further in)
   // R13.1: the velvet wall cabinet (left) holds the real stock; the smashable vitrine (right of the way in); the diamond
   // pigeon's plinth in the back left corner; the appraisal bench behind the counter (the keeper's side)
+  // R15: three gondola runs (front to back), the pipe-and-fittings bins along the yard wall, the SPARE SCREWS bin (dig),
+  // the pegboard along the back. The yard: the timber racks along its back wall, the pipe rack, the scrap heap, the bricks
+  lastscrew: { till: [14.4, 2.6], dig: [9.25, 5.6], shelves: [],
+    solids: [[13.9, 14.8, 4.4, 8.8, 1.6], [16.9, 17.8, 4.4, 8.8, 1.6], [19.9, 20.8, 4.4, 8.8, 1.6], [8.7, 9.6, 1.0, 3.4, 0.9], [8.7, 9.8, 5.1, 6.1, 0.85],
+      [0.6, 7.8, 9.6, 10.7, 1.6], [0.3, 0.9, 2.2, 6.6, 1.2], [2.0, 4.2, 4.6, 6.6, 0.9], [5.0, 7.0, 4.8, 6.4, 0.6], [6.9, 7.9, 2.0, 3.0, 1.3]],
+    stock: [],
+    racks: [
+      // the gondolas: both faces, two shelves each (v rows: [v0, v1, u, height, n, 1])
+      [4.8, 8.4, 14.05, 0.62, 4, 1], [4.8, 8.4, 14.65, 0.62, 4, 1], [4.8, 8.4, 14.05, 1.12, 3, 1], [4.8, 8.4, 14.65, 1.12, 3, 1],
+      [4.8, 8.4, 17.05, 0.62, 4, 1], [4.8, 8.4, 17.65, 0.62, 4, 1], [4.8, 8.4, 17.05, 1.12, 3, 1], [4.8, 8.4, 17.65, 1.12, 3, 1],
+      [4.8, 8.4, 20.05, 0.62, 4, 1], [4.8, 8.4, 20.65, 0.62, 4, 1], [4.8, 8.4, 20.05, 1.12, 3, 1], [4.8, 8.4, 20.65, 1.12, 3, 1],
+      [1.3, 3.1, 9.15, 0.92, 3, 1], // (the pipe and fittings bins)
+      [12.9, 22.0, 10.2, 0.0, 5], // (the floor along the pegboard: toolboxes, saws, timber offcuts)
+      [1.2, 7.2, 10.15, 1.62, 5], [1.2, 7.2, 9.9, 0.0, 4], // (the timber racks: on top and in front)
+      [2.6, 6.0, 0.6, 1.22, 3, 1], [2.4, 3.8, 5.6, 0.92, 2], [5.4, 6.6, 5.6, 0.62, 2], // (the pipe rack, the scrap, the bricks)
+      [9.4, 11.8, 9.6, 0.0, 3], // (the stockroom floor: the good stuff)
+    ] },
   caratrun: { till: [6.7, 8.4], case: [6.4, 9.0, 3.6, 4.4, 1.0], shelves: [[0.35, 1.0, 3.2, 7.6, 1.1]], stock: [[0.68, 4.2, 0], [0.68, 6.2, 0]],
     solids: [[1.2, 2.6, 8.9, 10.3, 1.1], [7.9, 9.8, 11.0, 11.7, 0.95]] },
 };
@@ -253,6 +295,7 @@ export const STORE_VOICE: Record<StoreId, StoreVoice> = {
   needledrop: { keeper: "DEZ", sold: `"Hm. Acceptable taste. Here."`, bought: "", wrong: `"This is a record shop."`, nobuy: "", hands: `"Records, tapes, guitars, headphones. I'll know if it's good."`, broke: "", shut: `"Shop's shut. Somebody ruined the vibe."`, black: `"No."` },
   peakfomo: { keeper: "SUMMIT STEPH", sold: "", bought: `"FUEL UP! The mountains await! (I wouldn't know.)"`, wrong: "", nobuy: `"We sell adventure, we don't buy it! TRAIL MIX though?"`, hands: "", broke: `"Ten dollars for the summit, friend!"`, shut: `"Not right now, there's a SITUATION!"`, black: "" },
   maisonpong: { keeper: "MONSIEUR NEZ", sold: "", bought: `"Top notes of innocence, a base of plausible deniability."`, wrong: "", nobuy: `"We do not purchase, monsieur. We anoint."`, hands: "", broke: `"Forty. The innocence is not cheap."`, shut: `"The boutique is closed. The air is... ruined."`, black: "" },
+  lastscrew: { keeper: "HANK THE HINGE", sold: "", bought: `"Pleasure doing business. Mind the step. There is no step. Mind it anyway."`, wrong: "", nobuy: `"We SELL screws, pal. We don't buy 'em back. Especially not ours."`, hands: `"Looking for something? Aisle 2. It's always aisle 2."`, broke: `"Cash first, hammer second."`, shut: `"CLOSED. Somebody unscrewed the 'open' sign."`, black: `"I didn't see that. I don't see much. Safety glasses are scratched."` },
   caratrun: { keeper: "PERCY FACET", sold: `"Genuine imitation. Professionally overpriced. Your cut, darling."`, bought: "", wrong: `"Look with your eyes, darling. Preferably your own. That doesn't sparkle."`, nobuy: "", hands: `"Rings, chains, pearls, watches. Bring me anything that sparkles: I'll tell you it's worth less."`, broke: "", shut: `"CLOSED. The pigeon is priceless. The alarm is extra."`, black: `"I have never seen that. Neither have you."` },
 };
 
@@ -263,6 +306,7 @@ export const STORE_BROWSE: Record<StoreId, { n: number; spots: [number, number, 
   needledrop: { n: 2, spots: [[4.0, 5.0, -1, 0], [7.7, 4.6, 1, 0], [8.4, 8.6, 1, 0], [5.9, 7.3, 0, 1], [2.0, 8.6, -1, 0], [10.2, 6.9, 1, 0]] },
   peakfomo: { n: 2, spots: [[2.7, 6.9, 0, -1], [1.7, 8.5, -1, 0], [6.0, 5.0, 0, 1], [8.2, 5.4, 0, 1]] },
   maisonpong: { n: 2, spots: [[1.8, 6.0, 0, -1], [8.35, 6.0, 0, -1], [5.07, 9.6, 0, 1], [1.4, 8.6, -1, 0], [8.7, 8.6, 1, 0]] },
+  lastscrew: { n: 2, spots: [[15.85, 6.2, -1, 0], [18.85, 5.4, 1, 0], [21.6, 7.4, 1, 0], [10.6, 3.0, -1, 0], [4.6, 8.2, 0, 1]] },
   caratrun: { n: 2, spots: [[1.9, 4.4, -1, 0], [7.7, 3.0, 0, 1], [3.1, 8.3, -1, 1], [1.9, 6.4, -1, 0], [7.9, 5.2, 0, -1]] },
 };
 
@@ -284,6 +328,8 @@ export const STORE_BUILDINGS: Record<StoreId, StoreBuilding> = {
   // a stone town house: three floors of tall windows and a mansard, stepping down from the 47 m tower to the hotel
   maisonpong: { kind: "town house", roof: "mansard", uppers: [{ u0: 0, u1: 10.15, floors: 3, fh: 3.4, color: "#e8e0d0", wall: "stone", win: "winArched" }] },
   // a warm stone-painted terrace house: three floors, a finished cornice (R13.1: was BONBON's pastel pink)
+  // R15: a worn builders' merchant: one brick floor (the office, the flat) over the hall; the yard open to the sky
+  lastscrew: { kind: "builders' merchant", roof: "flat", uppers: [{ u0: 8.4, u1: 22.79, floors: 1, fh: 3.6, color: "#8a5a42", wall: "brick", win: "winBlinds" }] },
   caratrun: { kind: "terrace", roof: "flat", uppers: [{ u0: 0, u1: 10.15, floors: 3, fh: 3.2, color: "#d6c8ae", wall: "paint", win: "winCurtain" }] },
 };
 /** the upper floors' boxes (façade shells), on the shop's roof slab */

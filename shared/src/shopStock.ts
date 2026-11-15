@@ -58,7 +58,7 @@ export const STORE_STOCK: Record<string, StoreStock> = {
 /** a place on a store's shelves: shelf slots take small/big things, floor slots anything (giants, bulky) */
 export interface StockSlot { x: number; y: number; z: number; floor: boolean }
 /** [u0, u1, v, height, how many] = a row of slots from u0 to u1 at depth v; height 0 = the floor (bulky things) */
-export type StockRack = [number, number, number, number, number];
+export type StockRack = [number, number, number, number, number, number?];
 
 /** the slots of a store: its explicit racks (stores.ts STORE_FIXTURES[id].racks) or, failing that, rows along the tops
  *  of its shelves (two rows on a deep shelf) */
@@ -70,7 +70,10 @@ export function stockSlots(id: string): StockSlot[] {
     for (let i = 0; i < n; i++) { const u = n === 1 ? (u0 + u1) / 2 : u0 + ((u1 - u0) * i) / (n - 1); const p = fr.at(u, v); out.push({ x: p.x, y: STORE_FLOOR + y, z: p.z, floor: y <= 0.05 }); }
   };
   const racks = (fx as { racks?: StockRack[] }).racks;
-  if (racks) for (const [u0, u1, v, y, n] of racks) row(u0, u1, v, y, n);
+  if (racks) for (const [a0, a1, b, y, n, alongV] of racks) {
+    if (!alongV) { row(a0, a1, b, y, n); continue; }
+    for (let i = 0; i < n; i++) { const v = n === 1 ? (a0 + a1) / 2 : a0 + ((a1 - a0) * i) / (n - 1); const p = fr.at(b, v); out.push({ x: p.x, y: STORE_FLOOR + y, z: p.z, floor: y <= 0.05 }); }
+  }
   else for (const [u0, u1, v0, v1, h] of fx.shelves) {
     const lu = u1 - u0, lv = v1 - v0;
     if (lu >= lv) { const n = Math.max(1, Math.floor(lu / 0.42)); for (const v of lv > 0.8 ? [v0 + lv * 0.3, v0 + lv * 0.7] : [(v0 + v1) / 2]) row(u0 + 0.2, u1 - 0.2, v, h, n); }

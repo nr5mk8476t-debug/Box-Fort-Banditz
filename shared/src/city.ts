@@ -126,6 +126,7 @@ export const TIER_TOWERS: string[][] = [
 export const SHOP_POOLS: Record<ShopType, string[]> = {
   // R13: the six stores' shelves (a few real things each, the rest of the stock is scenery)
   salvage: ["traffic_cone", "giant_toaster", "gold_sign", "cardboard_cutout"],
+  hardware: ["duct_tape", "hammer", "nails_box"], // (R15: LAST SCREW's real stock is shopStock.ts)
   repair: ["crt_tv", "giant_toaster", "phone_handset", "laptop", "disposable_camera"],
   records: ["vinyl_record", "mixtape", "guitar", "dj_headphones"],
   outdoor: ["protein_shaker", "sunglasses", "energy_drink", "disposable_camera"],

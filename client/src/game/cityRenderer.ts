@@ -14,6 +14,7 @@ import { areaZone, areaGroupId, floorVisible, checkAreaLights, LIGHT_BUDGET, typ
 import { drawDartboard, drawChalkDoor, drawCloth, drawHouseRules, drawLeaguePhoto, notice, wornFloor } from "./pubGames.ts";
 import { buildCarParts, buildCopCarParts, buildCopLights } from "./carModel.ts";
 import { dressStore, drawStoreSheet, STORE_OWN_FIXTURES, sheetUV, storeArea, storeGroup, STORE_SHEET_SIZE, type StoreKit } from "./storeDressing.ts";
+import { drawStoreSheet2, sheet2UV, isR15Cell } from "./storesR15.ts";
 
 
 const KIND_COLOR: Partial<Record<Box["kind"], string>> = {
@@ -6025,6 +6026,15 @@ export class CityRenderer {
     drawStoreSheet(tex.getContext() as unknown as CanvasRenderingContext2D); tex.hasAlpha = true; tex.update();
     const litMat = new StandardMaterial("storeSheetLit", sc); litMat.diffuseTexture = tex; litMat.emissiveColor = new Color3(0.42, 0.42, 0.42); litMat.specularColor = new Color3(0.06, 0.06, 0.06); litMat.backFaceCulling = false; litMat.zOffset = -2; litMat.zOffsetUnits = -4;
     const glowMat = new StandardMaterial("storeSheetGlow", sc); glowMat.diffuseTexture = tex; glowMat.emissiveTexture = tex; glowMat.disableLighting = true; glowMat.backFaceCulling = false; glowMat.zOffset = -2; glowMat.zOffsetUnits = -4;
+    // R15: the six new stores' pictures: a second sheet (the first is full), its two materials made the first time they're used
+    let s2: { lit: StandardMaterial; glow: StandardMaterial } | null = null;
+    const sheet2 = () => s2 ??= (() => {
+      const t2 = new DynamicTexture("storeSheet2", { width: STORE_SHEET_SIZE, height: STORE_SHEET_SIZE }, sc, true);
+      drawStoreSheet2(t2.getContext() as unknown as CanvasRenderingContext2D); t2.hasAlpha = true; t2.update();
+      const lit = litMat.clone("storeSheet2Lit"); lit.diffuseTexture = t2;
+      const glow = glowMat.clone("storeSheet2Glow"); glow.diffuseTexture = t2; glow.emissiveTexture = t2;
+      return { lit, glow };
+    })();
     const bulbMat = new Map<string, StandardMaterial>();
     const pics = new Map<string, { mat: StandardMaterial; grp: number; list: Mesh[] }>();
     const keep = (m: Mesh, mat: StandardMaterial) => { m.isPickable = false; const grp = this.zoneOf(m), key = mat.uniqueId + "|" + grp; (pics.get(key) ?? pics.set(key, { mat, grp, list: [] }).get(key)!).list.push(m); };
@@ -6064,9 +6074,9 @@ export class CityRenderer {
           const p = MB.CreatePlane("stp", { width: w, height: h }, sc); place(p, u, v, y);
           const nx = rx * n[0] - rz * n[1], nz = rz * n[0] + rx * n[1]; // (the frame's v axis is (-rz, rx))
           p.rotation.y = Math.atan2(-nx, -nz);
-          const [u0, v0, u1, v1] = sheetUV(cell, sub), uv = p.getVerticesData(VertexBuffer.UVKind);
+          const two = isR15Cell(cell), [u0, v0, u1, v1] = two ? sheet2UV(cell, sub) : sheetUV(cell as never, sub), uv = p.getVerticesData(VertexBuffer.UVKind);
           if (uv) { for (let q = 0; q < uv.length; q += 2) { uv[q] = u0 + uv[q] * (u1 - u0); uv[q + 1] = v0 + uv[q + 1] * (v1 - v0); } p.setVerticesData(VertexBuffer.UVKind, uv); }
-          keep(p, glow ? glowMat : litMat);
+          if (two) { const m2 = sheet2(); keep(p, glow ? m2.glow : m2.lit); } else keep(p, glow ? glowMat : litMat); // (R15: the second sheet)
         },
         outside: (fn) => { const was = this.outsideOnly; this.outsideOnly = true; try { fn(); } finally { this.outsideOnly = was; } },
         breakable: (id, fn) => { const was = this.brk; this.brk = id; try { fn(); } finally { this.brk = was; } },

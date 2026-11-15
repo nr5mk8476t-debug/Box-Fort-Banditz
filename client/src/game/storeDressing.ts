@@ -14,6 +14,7 @@
 import type { StoreDef, StoreId } from "@bfb/shared";
 import { storeFrame, STORE_SHELLS, STORE_FIXTURES, STORE_FLOOR, STORE_BUILDINGS, storeTop } from "@bfb/shared";
 import type { AreaLight, InteriorArea } from "./areas.ts";
+import { lastscrew, type R15Cell } from "./storesR15.ts";
 
 /** the interior area of a store: its plot, one floor, drawn from outside within 34 m (hidden past 40) */
 export function storeArea(s: StoreDef): InteriorArea {
@@ -27,11 +28,14 @@ export function storeArea(s: StoreDef): InteriorArea {
     peakfomo: [L("lodge", W * 0.35, D * 0.5, lamp, "#ffd8a0", 11, 0.87), L("till", W * 0.8, D * 0.6, lamp, "#ffe8c0", 8, 0.65)],
     maisonpong: [L("chandelier", W * 0.5, D * 0.45, Math.min(H - 1.4, 5.2), "#fff0d8", 12, 0.65), L("altar", W * 0.5, D * 0.88, 3.2, "#ffe0a0", 7, 0.72)],
     caratrun: [L("front", W * 0.55, D * 0.36, lamp, "#fff0d8", 11, 0.87), L("counter", W * 0.5, D * 0.76, lamp, "#ffe4b8", 8, 0.7)], // (R13.1: warm gallery light)
+    lastscrew: [L("tubes", 16.8, 5.2, lamp, "#e8f4ff", 13, 0.9), L("yard", 4.2, 5.0, 3.6, "#fff0c8", 10, 0.7)], // (R15: the fluorescent hall, the yard's floodlight)
   };
   return { id: "store-" + s.id, rect: s.plot, floors: [{ y0: 0, y1: H }], outside: { on: 34, off: 40 }, lights: lights[s.id] };
 }
+/** R15: Blake's six (storesR15.ts): their own light fittings, lit signs, the second picture sheet */
+export const R15_STORES = new Set<StoreId>(["lastscrew"]);
 /** the stores whose shelves and counter this file dresses in full (the city leaves off its generic goods and worktop) */
-export const STORE_OWN_FIXTURES = new Set<StoreId>(["rustbucket", "plugpray", "needledrop", "peakfomo", "maisonpong", "caratrun"]);
+export const STORE_OWN_FIXTURES = new Set<StoreId>(["rustbucket", "plugpray", "needledrop", "peakfomo", "maisonpong", "caratrun", "lastscrew"]);
 /** the visibility group of a store's inside */
 export const storeGroup = (i: number) => 9410 + i;
 
@@ -45,14 +49,14 @@ const fitFont = (c: CanvasRenderingContext2D, text: string, maxW: number, size: 
   while (size > 8 && c.measureText(text).width > maxW) { size -= 2; c.font = `${weight} ${size}px ${font}`; }
   return size;
 };
-const centered = (c: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, size: number, font: string, fill: string, stroke?: string, lw = 6) => {
+export const centered = (c: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, size: number, font: string, fill: string, stroke?: string, lw = 6) => {
   fitFont(c, text, maxW, size, font); c.textAlign = "center"; c.textBaseline = "middle";
   if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw; c.lineJoin = "round"; c.strokeText(text, x, y); }
   c.fillStyle = fill; c.fillText(text, x, y);
 };
-const CHUNK = `"Bungee", "Arial Black", Impact, sans-serif`, SERIF = `Didot, "Bodoni MT", Georgia, "Times New Roman", serif`, ROUND = `"Luckiest Guy", "Comic Sans MS", "Arial Rounded MT Bold", sans-serif`;
+export const CHUNK = `"Bungee", "Arial Black", Impact, sans-serif`, SERIF = `Didot, "Bodoni MT", Georgia, "Times New Roman", serif`, ROUND = `"Luckiest Guy", "Comic Sans MS", "Arial Rounded MT Bold", sans-serif`;
 /** a little seeded random (the same pictures every load) */
-const seeded = (s: number) => () => ((s = (s * 16807) % 2147483647) / 2147483647);
+export const seeded = (s: number) => () => ((s = (s * 16807) % 2147483647) / 2147483647);
 const SLEEVE_COLS = ["#e8463a", "#f4c430", "#2fa4a0", "#1f3a8a", "#ff8fa3", "#f4f1ea", "#1b1420", "#7a3fa0", "#43c7a6", "#ff7a1a", "#9fe3ff", "#3a7a3a"];
 /** one record sleeve's art (bold blocks, circles, stripes: made up) */
 function sleeve(c: CanvasRenderingContext2D, x: number, y: number, s: number, r: () => number) {
@@ -223,6 +227,7 @@ const CELLS: Record<string, Cell> = {
     centered(c, "Professionally overpriced.", w / 2, 160, w * 0.7, 24, SERIF, "#5a1f2a"); c.fillStyle = "#c83a2a"; c.beginPath(); c.arc(w * 0.72, 220, 30, 0, 6.3); c.fill(); centered(c, "SEAL", w * 0.72, 220, 50, 16, SERIF, "#f4ecd8"); } },
 };
 const SHEET = 2048;
+let sheetUsed = 0;
 /** where each cell sits on the sheet (pixels), packed once */
 const PACK = (() => {
   const out: Record<string, { x: number; y: number; w: number; h: number }> = {};
@@ -237,8 +242,11 @@ const PACK = (() => {
     out[k] = { x: bx * STEP, y: by, w, h }; for (let q = bx; q < bx + n; q++) cols[q] = by + h; top = Math.max(top, by + h);
   }
   if (top > SHEET) throw new Error("store sheet overflow: " + top + " px tall");
+  sheetUsed = top;
   return out;
 })();
+/** how much of the sheet's height is used (px) */
+export function storeSheetUsed() { return sheetUsed; }
 export type SheetCell = keyof typeof CELLS;
 /** draw the whole sheet (once) */
 export function drawStoreSheet(c: CanvasRenderingContext2D) {
@@ -274,7 +282,7 @@ export interface StoreKit {
   /** a glowing ball (a bulb) */
   bulb(u: number, v: number, y: number, d: number, col: string): void;
   /** a picture from the shared sheet: centred at (u, v, y), w x h, facing `n` (glow: unlit, for neon and screens) */
-  pic(cell: SheetCell, u: number, v: number, y: number, w: number, h: number, n: Facing, glow?: boolean, sub?: [number, number, number, number]): void;
+  pic(cell: SheetCell | R15Cell, u: number, v: number, y: number, w: number, h: number, n: Facing, glow?: boolean, sub?: [number, number, number, number]): void;
   /** pieces built in `fn` are outside the store (always drawn with the street) */
   outside(fn: () => void): void;
   /** a breakable's pieces (they vanish when it's smashed); glass: its see-through pane */
@@ -289,20 +297,20 @@ export interface StoreKit {
 export function dressStore(k: StoreKit) {
   const fx = STORE_FIXTURES[k.s.id];
   common(k, fx);
-  ({ rustbucket, plugpray, needledrop, peakfomo, maisonpong, caratrun })[k.s.id](k);
+  ({ rustbucket, plugpray, needledrop, peakfomo, maisonpong, caratrun, lastscrew })[k.s.id](k);
 }
 
 /** what every store has: its fascia, the display case (if it has one), lamp shades for its lights */
 function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
   const sp = STORE_SHELLS[k.s.id], W = k.W, gTop = sp.glassTop ?? 2.9;
-  const sign: Record<StoreId, SheetCell> = { rustbucket: "signRust", plugpray: "signPlug", needledrop: "signNeedle", peakfomo: "signPeak", maisonpong: "signMaison", caratrun: "signCarat" };
+  const sign: Record<StoreId, SheetCell | R15Cell> = { lastscrew: "signScrew", rustbucket: "signRust", plugpray: "signPlug", needledrop: "signNeedle", peakfomo: "signPeak", maisonpong: "signMaison", caratrun: "signCarat" };
   const up = FASCIA_UP[k.s.id], span = FASCIA_SPAN[k.s.id] ?? [0.5, W - 0.5], sw = up ? up.w : Math.min(span[1] - span[0], 8.4), sh = sw * 176 / 1024, sc = (span[0] + span[1]) / 2;
   const fasciaY = up ? storeTop(k.s) + up.dy : Math.min(sp.H - 0.2 - sh / 2, gTop + 0.3 + sh / 2);
   k.outside(() => {
     // the fascia board and its sign (2 cm proud of the board, the board 12 cm proud of the wall)
     const v0 = up ? up.v : 0;
     k.box(sc - sw / 2 - 0.12, sc + sw / 2 + 0.12, v0 - 0.14, v0, fasciaY - sh / 2 - 0.1, fasciaY + sh / 2 + 0.1, "#1b1420", 0.012);
-    k.pic(sign[k.s.id], sc, v0 - 0.165, fasciaY, sw, sh, [0, -1]);
+    k.pic(sign[k.s.id], sc, v0 - 0.165, fasciaY, sw, sh, [0, -1], R15_STORES.has(k.s.id)); // (R15: the new stores' signs are lit at night: Blake)
   });
   roofs(k);
   // the display case: a base, a glass top, the goods inside (the goods are the store's own: see each store)
@@ -314,8 +322,8 @@ function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
       k.glassBox(u0 + 0.02, u1 - 0.02, v0 + 0.02, v1 - 0.02, h * 0.55, h - 0.03);
     });
   }
-  // the lamps' shades and bulbs, where the real lights are
-  for (const L of storeArea(k.s).lights ?? []) {
+  // the lamps' shades and bulbs, where the real lights are (R15 stores dress their own: tubes, a floodlight)
+  if (!R15_STORES.has(k.s.id)) for (const L of storeArea(k.s).lights ?? []) {
     const p = local(k, L.x, L.z), top = k.H - 0.02;
     k.cyl(p.u, p.v, (top + L.y + 0.25) / 2, 0.02, top - L.y - 0.25, "#1b1420", 0, 4);
     k.cyl(p.u, p.v, L.y + 0.12, 0.42, 0.24, "#1b1420", 0.008, 12, "y", 0.12);
@@ -323,7 +331,7 @@ function common(k: StoreKit, fx: (typeof STORE_FIXTURES)[StoreId]) {
   }
 }
 /** R13b: where a store's fascia sits along its frontage (default: across it) */
-const FASCIA_SPAN: Partial<Record<StoreId, [number, number]>> = { rustbucket: [0.3, 5.4], maisonpong: [2.9, 7.25], caratrun: [0.7, 9.45] };
+const FASCIA_SPAN: Partial<Record<StoreId, [number, number]>> = { lastscrew: [9.1, 16.9], rustbucket: [0.3, 5.4], maisonpong: [2.9, 7.25], caratrun: [0.7, 9.45] };
 /** R13b: a sign that isn't over the shopfront: its height (from the building's top) and how far out it sits */
 const FASCIA_UP: Partial<Record<StoreId, { dy: number; w: number; v: number }>> = { peakfomo: { dy: 1.1, w: 5.2, v: -0.1 } };
 /** world (x, z) back to the store's (u, v) */
@@ -336,7 +344,7 @@ function local(k: StoreKit, x: number, z: number) {
 // ---- LOW END: THE YARDS ---------------------------------------------------------------------------------------------
 
 /** stock on a shelf: n little things in a row (cols picked in turn); `kind` shapes them */
-function goods(k: StoreKit, u0: number, u1: number, v: number, y: number, n: number, cols: string[], kind: "box" | "can" | "jar" | "bottle", alongV = false, v1 = v) {
+export function goods(k: StoreKit, u0: number, u1: number, v: number, y: number, n: number, cols: string[], kind: "box" | "can" | "jar" | "bottle", alongV = false, v1 = v) {
   for (let i = 0; i < n; i++) {
     const t = (i + 0.5) / n, u = alongV ? u0 : u0 + (u1 - u0) * t, vv = alongV ? v + (v1 - v) * t : v, col = cols[i % cols.length], h = 0.14 + k.rnd() * 0.12;
     if (kind === "box") k.B(u, vv, y + h / 2, 0.16 + k.rnd() * 0.08, h, 0.14, col, 0.004, (k.rnd() - 0.5) * 0.3);
