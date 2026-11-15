@@ -85,13 +85,13 @@ test("R12.6 Wee Mickey exploits: no selling money or junk, empty hands = nothing
   holdNew(w, "p0", "gold_chain", 80);
   for (let i = 0; i < 5; i++) w.action("p0", { a: "use", prop: "mickey1" });
   assert.equal(ev(w.takeEvents(), "mickey").length, 1, "one item, one payment");
-  assert.equal(a.cash, 60);
+  assert.equal(a.cash, Math.round(80 * MICKEY.fence)); // (R14: the street rate, 60%)
   // from across the yard: out of reach (the prop reach check)
   holdNew(w, "p0", "gold_chain", 80);
   w.debugTeleport("p0", w.arena.pub!.mickey!.x, w.arena.pub!.mickey!.z + 6, Math.PI); settle(w, 0.3); w.takeEvents();
   w.action("p0", { a: "use", prop: "mickey1" });
   assert.equal(ev(w.takeEvents(), "mickey").length, 0, "too far");
-  assert.equal(a.cash, 60);
+  assert.equal(a.cash, Math.round(80 * MICKEY.fence)); // (R14: the street rate, 60%)
 });
 
 test("R12.6 Wee Mickey's gear: one of each at a time, paid for; hit him and he shuts up shop", () => {

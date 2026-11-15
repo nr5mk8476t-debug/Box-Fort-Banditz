@@ -13,7 +13,7 @@ import { hyp } from "./fmath.js";
  *    or at dawn it goes on sale to anybody;
  *  - smash the case (3 punches): everything in it spills on the floor, the alarm goes, Big Vinnie comes swinging.
  */
-export const PAWN_SHOP = { fence: 0.4, loan: 0.3, back: 0.4, sale: 0.7, smashHeat: 25, caseMax: 8 };
+export const PAWN_SHOP = { fence: 0.3, /* (R14: the street rate: Blake; banked loot sells for 60% in PREP) */ loan: 0.3, back: 0.4, sale: 0.7, smashHeat: 25, caseMax: 8 };
 /**
  * R5/R7: the new city's two walk-in pawn shops (HOT STUFF PAWN & LOAN: Twitchy Lou; FINDERS KEEPERS PAWN: Sticky
  * Fran). You sell over the till (cash on the spot, like Sal's counter). Each scavenge each owner wants 3 things: bring

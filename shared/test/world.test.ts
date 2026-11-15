@@ -1438,7 +1438,7 @@ test("C5c.3 the safe: hold E 6 s: a fat bag of cash = $40 + every cover charge p
   assert.ok(ev.some((e) => e.t === "alarm"));
 });
 
-test("C5c.3 PAWN-O-RAMA: in the Yards; fence (40%), pawn (30% now, buy back 40% before dawn), unclaimed = on sale (70%) to anybody; a smashed case spills everything and Big Vinnie comes", () => {
+test("C5c.3 PAWN-O-RAMA: in the Yards; fence (30%: R14 street rate), pawn (30% now, buy back 40% before dawn), unclaimed = on sale (70%) to anybody; a smashed case spills everything and Big Vinnie comes", () => {
   const w = new World({ seed: 6, npcs: 0 });
   const a = w.addPlayer("a", "A"), b = w.addPlayer("b", "B");
   const ps = w.arena.pawnShop!;
@@ -1461,14 +1461,14 @@ test("C5c.3 PAWN-O-RAMA: in the Yards; fence (40%), pawn (30% now, buy back 40% 
   assert.ok(w.takeEvents().some((e) => e.t === "pawnNo" && e.reason === "hands"));
   hold(a, "gold_chain", 100);
   w.action("a", { a: "use", prop: counter.def.id });
-  assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 40));
-  assert.equal(a.cash, 40); assert.equal(w.activeItem(a), null);
+  assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 30));
+  assert.equal(a.cash, 30); assert.equal(w.activeItem(a), null);
   // pawn: 30% now, it's in the case with A's colour
   stand(a, cs);
   hold(a, "rolecks_watch", 200);
   w.action("a", { a: "use", prop: cs.def.id });
   assert.ok(w.takeEvents().some((e) => e.t === "pawned" && e.cash === 60));
-  assert.equal(a.cash, 100);
+  assert.equal(a.cash, 90);
   let note = JSON.parse(w.props.stateOf(cs.def.id).note);
   assert.equal(note.length, 1); assert.equal(note[0].t, "rolecks_watch"); assert.equal(note[0].p, 80); assert.equal(note[0].o, "a");
   // B can't buy it before dawn (it's A's to buy back); A buys it back for 40%
@@ -1478,7 +1478,7 @@ test("C5c.3 PAWN-O-RAMA: in the Yards; fence (40%), pawn (30% now, buy back 40% 
   stand(a, cs);
   w.action("a", { a: "use", prop: cs.def.id });
   assert.ok(w.takeEvents().some((e) => e.t === "redeemed" && e.cash === 80 && !e.sale));
-  assert.equal(a.cash, 20);
+  assert.equal(a.cash, 10);
   assert.ok([...w.items.values()].some((it) => it.type === "rolecks_watch" && it.value === 200), "got it back (same value)");
   // pawn again; dawn comes; now it's on sale to anybody at 70%
   for (const it of [...w.items.values()]) if (it.type === "rolecks_watch") w.items.delete(it.id);
@@ -1562,7 +1562,7 @@ const meat = (w: World, kind = "meat_locker") => [...w.npc.npcs.values()].find((
 const louN = (w: World, kind = "lou") => [...w.npc.npcs.values()].find((n) => n.kind === kind)!;
 const shopProp = (w: World, kind: string, shop: number) => [...w.props.props.values()].find((p) => p.def.kind === kind && p.def.shop === shop)!;
 
-test("R7 the two pawn shops: each owner buys over the till (40%), each has their own 3 wanted things (x3, the first of each), and mutters them only to whoever walks up", () => {
+test("R7 the two pawn shops: each owner buys over the till (30%: R14 street rate), each has their own 3 wanted things (x3, the first of each), and mutters them only to whoever walks up", () => {
   const { w, ps: [a, b], shops } = hotWorld();
   assert.equal(shops.length, 2);
   assert.ok(louN(w, "lou") && louN(w, "fran") && meat(w, "meat_locker") && meat(w, "cold_cuts"), "Lou, Fran, Meat Locker and Cold Cuts are in");
@@ -1581,14 +1581,14 @@ test("R7 the two pawn shops: each owner buys over the till (40%), each has their
     assert.deepEqual(told[0].types, w.pawn.wanted(i));
     holdNew(w, a, "gold_chain", 100);
     w.action(a.id, { a: "use", prop: till.def.id });
-    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 40 && !e.hot), "40% on the spot"); assert.equal(a.cash, 40);
+    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 30 && !e.hot), "30% on the spot (R14: the street rate)"); assert.equal(a.cash, 30);
     const want = w.pawn.lists[i].hot[0];
     holdNew(w, a, want, 50);
     w.action(a.id, { a: "use", prop: till.def.id });
-    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 150 && e.hot), "x3"); assert.equal(a.cash, 190);
+    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 150 && e.hot), "x3"); assert.equal(a.cash, 180);
     holdNew(w, a, want, 50);
     w.action(a.id, { a: "use", prop: till.def.id });
-    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 20 && !e.hot), "already got one");
+    assert.ok(w.takeEvents().some((e) => e.t === "fenced" && e.cash === 15 && !e.hot), "already got one");
     assert.ok(!w.pawn.wanted(i).includes(want), "crossed off");
   }
   // a new scavenge: new lists, everybody's told again

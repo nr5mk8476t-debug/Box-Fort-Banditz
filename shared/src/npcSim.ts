@@ -948,7 +948,13 @@ export class NpcSystem {
       let wantYaw = face ?? (dist > 0.05 ? Math.atan2(dx, dz) : m.yaw);
       // walk around parked cars, benches, bins... instead of pushing into them (chasers and
       // fleeing people head straight for their target, so the route map alone doesn't cover them)
-      if (face === null && speed > 0 && dist > 0.6 && n.state !== "ko" && n.state !== "stunned") wantYaw = this.avoid(n, wantYaw, dist, dt);
+      if (face === null && speed > 0 && dist > 0.6 && n.state !== "ko" && n.state !== "stunned") {
+        const routeYaw = wantYaw;
+        wantYaw = this.avoid(n, wantYaw, dist, dt);
+        // (R14: going round something on the pavement can step a walker off the kerb where the route doesn't cross, so
+        //  the kerb check never ran: check the way they're actually going, and wait if a car's coming)
+        if (n.state === "walk" && wantYaw !== routeYaw && this.mustWait(n, m.x + Math.sin(wantYaw) * 3, m.z + Math.cos(wantYaw) * 3)) speed = 0;
+      }
       const urgent = n.state === "chase" || n.state === "flee" || n.state === "escape" || n.state === "scram" || n.state === "sneak" || n.kind === "cop";
       m.yaw = turnToward(m.yaw, wantYaw, (urgent ? 8 : n.state === "idle" ? 2 : 3.2) * dt);
       // slow down while turning sharply, and ease speed up/down (no instant starts/stops)

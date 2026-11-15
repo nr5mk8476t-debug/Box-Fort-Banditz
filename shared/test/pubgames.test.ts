@@ -403,7 +403,7 @@ test("in the pub: the 8-minute scavenge: last orders 90 s from the end; at sunri
   assert.match(w.pubGames.act("c", { op: "open", st: "pooltable1", vs: "npc", stake: 0 }), /LAST ORDERS/);
   // sunrise: called off, both stakes back
   w.match.timeLeft = 0.01; run(0.2);
-  assert.equal(w.match.phase, "dawn"); assert.equal(w.pubGames.st.get("dartsoche2")!.end, "void"); assert.equal(a.cash, 100); assert.equal(b.cash, 100);
+  assert.equal(w.match.phase, "prep"); assert.equal(w.pubGames.st.get("dartsoche2")!.end, "void"); // (R14: PREP is the new sunrise) assert.equal(a.cash, 100); assert.equal(b.cash, 100);
   void ROUND_TIME; void NIGHT_TIME;
 });
 test("in the pub: all four stations at once (Hughie at one table, two mates at the other, Big Dinny at one oche, two mates at the other): nothing crosses over", () => {

@@ -149,6 +149,12 @@ export function readMoveState(src: Record<string, any>): MoveState {
   return s;
 }
 
+/** R14: the same input with the feet taken out (you can still look round): the countdown at your fort, PREP. The
+ *  client sends these too, so its prediction agrees with the host. */
+export function freezeInput(inp: MoveInput): MoveInput {
+  return { ...inp, mx: 0, mz: 0, jump: false, sprint: false, crouch: false, dodge: false };
+}
+
 export function writeMoveState(dst: Record<string, any>, s: MoveState): void {
   for (const k of MOVE_NUM_KEYS) dst[k] = s[k];
   for (const k of MOVE_BOOL_KEYS) dst[k] = s[k];

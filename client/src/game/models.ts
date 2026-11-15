@@ -498,6 +498,12 @@ export function buildLootModel(scene: Scene, type: string, outlineColor?: Color3
       break;
     }
     case "brick": P(MB.CreateBox("br", { width: 0.22, height: 0.07, depth: 0.11 }, scene), "#b3553f", 0.012); break;
+    // R14: building materials and furnishings for the fort
+    case "plank": { const b = P(MB.CreateBox("pl", { width: 0.9, height: 0.05, depth: 0.2 }, scene), "#c9955b", 0.012); b.rotation.y = 0.2; const n = P(MB.CreateCylinder("knot", { diameter: 0.05, height: 0.052, tessellation: 8 }, scene), "#8a5a2b", 0); n.position.set(0.2, 0, 0.03); break; }
+    case "duct_tape": { const r = P(MB.CreateTorus("dt", { diameter: 0.11, thickness: 0.05, tessellation: 14 }, scene), "#a8acb4", 0.01); void r; break; }
+    case "bag_of_screws": { P(MB.CreateSphere("bag", { diameterX: 0.14, diameterY: 0.1, diameterZ: 0.12, segments: 6 }, scene), "#d8e4ec", 0.01); const k = P(MB.CreateCylinder("tie", { diameter: 0.03, height: 0.04, tessellation: 6 }, scene), "#e8463a", 0); k.position.y = 0.06; break; }
+    case "lava_lamp": { const b = P(MB.CreateCylinder("base", { diameterTop: 0.06, diameterBottom: 0.1, height: 0.07, tessellation: 10 }, scene), "#c8ccd4", 0.008); b.position.y = -0.06; const g = P(MB.CreateCylinder("glass", { diameterTop: 0.05, diameterBottom: 0.08, height: 0.16, tessellation: 10 }, scene), "#ff5fa8", 0.008); g.position.y = 0.05; const cap = P(MB.CreateCylinder("cap", { diameter: 0.05, height: 0.03, tessellation: 10 }, scene), "#c8ccd4", 0); cap.position.y = 0.145; break; }
+    case "armchair": { const seat = P(MB.CreateBox("seat", { width: 0.6, height: 0.2, depth: 0.55 }, scene), "#3d6fb5", 0.014); seat.position.y = -0.1; const back = P(MB.CreateBox("back", { width: 0.6, height: 0.45, depth: 0.14 }, scene), "#3d6fb5", 0.014); back.position.set(0, 0.12, -0.22); for (const sx of [-0.33, 0.33]) { const arm = P(MB.CreateBox("arm", { width: 0.1, height: 0.28, depth: 0.55 }, scene), "#2f5a96", 0.012); arm.position.set(sx, -0.02, 0); } break; }
     case "smelly_fish": {
       const b = P(MB.CreateSphere("f", { diameterX: 0.28, diameterY: 0.1, diameterZ: 0.1, segments: 8 }, scene), "#8a9ab0", 0.012);
       void b;

@@ -20,3 +20,6 @@ export * from "./debug.js";
 export * from "./pawn.js";
 export * from "./pubgames.js";
 export * from "./stores.js";
+export * from "./loop/catalog.js";
+export * from "./loop/fort.js";
+export * from "./loop/aura.js";

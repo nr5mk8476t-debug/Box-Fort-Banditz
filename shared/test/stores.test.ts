@@ -168,11 +168,11 @@ test("R13 stores: a player who leaves mid-visit takes nothing with them from the
 });
 
 // ---- R13.1: CARAT & RUN, the jeweller (it took BONBON VIVANT's plot)
-test("R13.1 CARAT & RUN: buys jewellery at the specialists' 60%, refuses the rest, sells nothing (the sugar-rush truffle went with BONBON)", () => {
+test("R13.1 CARAT & RUN: buys jewellery at the specialists' street rate (45%), refuses the rest, sells nothing (the sugar-rush truffle went with BONBON)", () => {
   const { w } = storeWorld();
   const a = w.players.get("p0")!;
   assert.equal(STORE_TRADE.caratrun.sells, undefined, "no service");
-  assert.equal(STORE_TRADE.caratrun.buys!.mult, 0.6);
+  assert.equal(STORE_TRADE.caratrun.buys!.mult, 0.45); // (R14: the street rate; banked loot sells for 60% in PREP)
   atCounter(w, "p0", "caratrun");
   a.cash = 0;
   use(w, "p0", "caratrun");
@@ -180,11 +180,11 @@ test("R13.1 CARAT & RUN: buys jewellery at the specialists' 60%, refuses the res
   holdNew(w, "p0", "pearl_necklace", 100);
   use(w, "p0", "caratrun");
   const sold = ev(w.takeEvents(), "storeSold");
-  assert.equal(sold.length, 1); assert.equal(a.cash, 60);
+  assert.equal(sold.length, 1); assert.equal(a.cash, 45);
   holdNew(w, "p0", "rubber_chicken", 20);
   use(w, "p0", "caratrun");
   assert.ok(ev(w.takeEvents(), "storeNo").some((e) => e.reason === "wrong"));
-  assert.equal(a.cash, 60, "no money for a chicken");
+  assert.equal(a.cash, 45, "no money for a chicken");
 });
 
 test("R13.1 CARAT & RUN: Snob Row heat; shelf stock from its own pool (no legendaries); the case's contents are jewellery", () => {

@@ -13,10 +13,16 @@
 // Small money (coins, cash, wallets) goes straight into your cash when you pick it up.
 // 5A ending (temporary, until the Mayor race): after 3 cycles the richest bandit wins.
 import { fortAt } from "./arena.js";
+import { LOOP } from "./loop/catalog.js";
 import type { World, ItemSim, PlayerSim } from "./world.js";
 import { hyp } from "./fmath.js";
 
-export type MatchPhase = "lobby" | "intro" | "scavenge" | "dusk" | "night" | "dawn" | "shop" | "upgrades" | "over";
+/** R14: lobby → intro (5 s countdown at your own fort) → scavenge (day 5:30) → dusk (0:30) → night (2:00) → prep (2:00:
+ *  sell, upgrade, craft at home) → intro... until someone's MAYOR or 8 cycles. ("dawn", "shop", "upgrades" were the old
+ *  rounds: no longer entered.) */
+export type MatchPhase = "lobby" | "intro" | "scavenge" | "dusk" | "night" | "prep" | "dawn" | "shop" | "upgrades" | "over";
+/** R14: you can't move in these (the countdown at your fort, PREP at home) */
+export const frozenPhase = (ph: string) => ph === "intro" || ph === "prep";
 export type CityEventKind = "airdrop" | "truck" | "happyhour" | "raccoons" | "parade" | "festa";
 /** C5b: the dragon parade: walking pace, how far behind the head each of the dragon's body segments is, red envelopes every few metres */
 export const PARADE = { speed: 1.6, segments: 9, gap: 1.15, envelopeEvery: 2.6, push: 5.5, r: 1.0 };
@@ -36,12 +42,12 @@ export const FESTA = {
   splashR: 3.5, splashEvery: 3,
 };
 
-export const CYCLES = 3;
+export const CYCLES = LOOP.maxCycles; // (R14: 8 cycles at most; Blake)
 /** (kept for older code: a "round" is now a whole cycle) */
 export const ROUNDS = CYCLES;
 export const ROUND_TIME = 330;
 export const NIGHT_TIME = 120;
-export const INTRO_TIME = 5;
+export const INTRO_TIME = LOOP.introTime;
 export const DUSK_TIME = 30;
 /** R12.3: the whole scavenge (day + sunset + night) */
 export const SCAVENGE_TOTAL = ROUND_TIME + DUSK_TIME + NIGHT_TIME;
@@ -70,6 +76,8 @@ export interface RoundLine {
   stolen: number; // items raccoons got away with
   cash: number; // cash so far
   aura: number; // C4b: aura points (tags); the race for Mayor uses them later
+  /** R14: became MAYOR (the match ends) */
+  mayor?: boolean;
 }
 
 /** What clients need to show the current event. */
@@ -132,6 +140,11 @@ export class MatchSystem {
   festaV = 0;
   private nextDrop = 0;
   private splashT = 0;
+  /** R14: the round clock stops while a MAYOR campaign is on (Blake) */
+  paused = false;
+  /** R14: who became MAYOR (the match is over) */
+  mayor = "";
+  private warnedAt = new Set<number>();
 
   constructor(private w: World) {}
 
@@ -154,6 +167,7 @@ export class MatchSystem {
     if (this.phase !== "lobby" && this.phase !== "over") return false;
     this.w.pubGames?.voidAll("The match is starting: game called off, stakes back."); // (R12.3: before the cash resets)
     for (const p of this.w.players.values()) { p.cash = 0; p.gear = { pick: 0, smoke: 0 }; } // (R12.6: and WEE MICKEY's gear)
+    this.w.fort.resetAll(); this.w.loopAura.resetMatch(); this.mayor = ""; this.paused = false; // (R14: a new match: box forts, nothing banked)
     this.w.lobby.matchStart(); // (C5a: off the roof; aura starts at 0)
     this.w.pubBoard.length = 0; // (R12.1: a clean chalkboard every match)
     this.w.gch = null; // (R12.6: and no challenge left over)
@@ -170,9 +184,11 @@ export class MatchSystem {
     this.phase = "intro";
     this.timeLeft = INTRO_TIME;
     this.warned = false;
+    this.warnedAt.clear();
     this.ready.clear();
     this.lost.clear();
-    this.w.resetCity(false);
+    this.w.resetCity(false); // (the city's loot, stock and cases back; everyone at their own fort's mat)
+    this.w.loopAura.newCycle();
     this.w.emit({ t: "round", phase: "intro", round: this.round });
   }
 
@@ -185,35 +201,31 @@ export class MatchSystem {
   }
 
   tick(dt: number) {
-    if (this.phase === "lobby") return;
-    this.timeLeft = Math.max(0, this.timeLeft - dt);
+    if (this.phase === "lobby" || this.phase === "over") return;
+    if (!(this.paused && this.scavenging)) this.timeLeft = Math.max(0, this.timeLeft - dt); // (R14: a campaign stops the clock)
+    if (this.scavenging) {
+      this.w.fort.matTick(dt);
+      const left = this.scavengeLeft;
+      for (const at of LOOP.warnAt) if (left <= at && !this.warnedAt.has(at)) { this.warnedAt.add(at); this.w.emit({ t: "loopWarn", left: at, round: this.round }); }
+    }
     switch (this.phase) {
       case "intro":
         if (this.timeLeft <= 0) { this.go("scavenge", ROUND_TIME); this.planEvents(); }
         break;
       case "scavenge":
-        this.bankTick(dt);
         this.eventTick(dt);
         if (this.timeLeft <= 0) this.go("dusk", DUSK_TIME); // (R12.3: the sun starts going down; nothing's lost, nothing's wiped)
         break;
       case "dusk":
-        this.bankTick(dt);
         this.eventTick(dt);
         if (this.timeLeft <= 0) { this.stopEvent(); this.go("night", NIGHT_TIME); this.w.nightFalls(); }
         break;
       case "night":
-        this.bankTick(dt);
+        this.w.fort.theftTick(dt);
         if (!this.warned && this.timeLeft <= NIGHT_WARNING) { this.warned = true; this.w.emit({ t: "round", phase: "hurry", round: this.round }); }
         if (this.timeLeft <= 0) this.endScavenge(true);
         break;
-      case "dawn":
-        if (this.timeLeft <= 0) this.openShop();
-        break;
-      case "shop":
-        this.skipIfReady();
-        if (this.timeLeft <= 0) this.closeShop();
-        break;
-      case "upgrades":
+      case "prep":
         this.skipIfReady();
         if (this.timeLeft <= 0) this.nextCycle();
         break;
@@ -222,7 +234,7 @@ export class MatchSystem {
 
   /** READY in the shop / upgrades round. */
   setReady(p: PlayerSim) {
-    if (this.phase !== "shop" && this.phase !== "upgrades") return;
+    if (this.phase !== "shop" && this.phase !== "upgrades" && this.phase !== "prep") return;
     this.ready.add(p.id);
   }
 
@@ -238,25 +250,10 @@ export class MatchSystem {
     return undefined;
   }
 
-  private bankTick(dt: number) {
-    for (const it of this.w.items.values()) {
-      if (it.mode !== "free") { it.bankT = 0; it.locked = false; it.fort = -1; continue; }
-      const slot = fortAt(this.w.arena, it.body.x, it.body.z);
-      if (slot < 0 || !this.ownerOf(slot)) { it.bankT = 0; it.locked = false; it.fort = -1; continue; }
-      if (slot !== it.fort) { it.fort = slot; it.bankT = 0; it.locked = false; }
-      if (it.locked) continue;
-      it.bankT += dt;
-      if (it.bankT >= LOCK_TIME) {
-        it.locked = true;
-        this.w.emit({ t: "banked", item: it.id, p: this.ownerOf(slot)!.id, value: itemWorth(it) });
-      }
-    }
-  }
-
-  /** Value of locked loot sitting in a player's fort right now (live score). */
+  /** R14: what's banked in a player's fort (shelves + safe) */
   bankedValue(p: PlayerSim): number {
     let v = 0;
-    for (const it of this.w.items.values()) if (it.locked && it.fort === p.colorIdx) v += itemWorth(it);
+    for (const r of this.w.fort.of(p).recs) v += r.value;
     return v;
   }
 
@@ -275,77 +272,40 @@ export class MatchSystem {
     this.lost.set(p.id, l);
   }
 
-  /** Time's up (day or night): carried loot away from home is lost, carried at home goes in the yard. */
+  /** R14: time's up: anything not banked is gone (Blake); then PREP at home (or the match ends after the last cycle) */
   private endScavenge(night: boolean) {
+    void night;
     this.stopEvent();
     this.w.npc.clearRaccoons();
-    const arena = this.w.arena;
-    const home = (p: PlayerSim) => fortAt(arena, p.move.x, p.move.z) === p.colorIdx;
-    for (const p of this.w.players.values()) {
-      const carried = this.w.carriedItems(p);
-      if (!carried.length) continue;
-      let n = 0, v = 0;
-      for (const it of carried) {
-        if (home(p)) {
-          this.w.putInYard(p, it);
-        } else {
-          n++; v += itemWorth(it);
-          this.w.items.delete(it.id);
-        }
-      }
-      p.hand = ""; p.pockets.fill("");
-      this.w.refreshCarry(p);
-      if (n) { this.addLost(p, n, v); this.w.emit({ t: "lost", p: p.id, count: n, value: v }); }
-    }
-    // everything left in a yard counts as banked (even if its 10 s weren't up yet)
-    for (const it of this.w.items.values()) {
-      if (it.mode !== "free") continue;
-      const slot = fortAt(arena, it.body.x, it.body.z);
-      if (slot >= 0 && this.ownerOf(slot)) { it.fort = slot; it.locked = true; it.bankT = LOCK_TIME; }
-    }
+    for (const l of this.w.fort.deadline()) this.addLost(l.p, l.n, l.v);
+    this.w.loopQuests?.phaseEnd();
     this.results = this.lines();
-    void night;
-    this.go("dawn", DAWN_TIME);
+    if (this.round >= CYCLES) return this.finish();
+    this.w.prepHome();
+    this.w.fort.openPrep();
+    this.go("prep", LOOP.prepTime);
+  }
+
+  /** R14: the match is over: the MAYOR, or (after 8 cycles) the most aura (cash breaks a tie) */
+  finish(mayorId = "") {
+    this.stopEvent();
+    this.mayor = mayorId;
+    this.results = this.lines().sort((a, b) => Number(!!b.mayor) - Number(!!a.mayor) || b.aura - a.aura || b.cash - a.cash);
+    this.go("over", 0);
   }
 
   private lines(): RoundLine[] {
     const out: RoundLine[] = [];
     for (const p of this.w.players.values()) {
-      const items = this.fortItems(p);
+      const recs = this.w.fort.of(p).recs;
       const l = this.lost.get(p.id) ?? { n: 0, v: 0 };
       out.push({
         id: p.id, name: p.name, colorIdx: p.colorIdx,
-        banked: items.length, bankedValue: items.reduce((a, it) => a + itemWorth(it), 0),
-        lost: l.n, lostValue: l.v, stolen: p.stolenThisRound, cash: p.cash, aura: p.aura,
+        banked: recs.length, bankedValue: recs.reduce((a, r) => a + r.value, 0),
+        lost: l.n, lostValue: l.v, stolen: p.stolenThisRound, cash: p.cash, aura: p.aura, ...(this.mayor === p.id ? { mayor: true } : {}),
       });
     }
-    return out.sort((a, b) => b.cash + b.bankedValue - (a.cash + a.bankedValue));
-  }
-
-  /** Shop round: Sal makes an offer on everything in each fort. */
-  private openShop() {
-    const byPlayer = new Map<string, { id: string; type: string; value: number }[]>();
-    for (const p of this.w.players.values()) {
-      const items = this.fortItems(p);
-      byPlayer.set(p.id, items.map((it) => ({ id: it.id, type: it.type, value: itemWorth(it) })));
-      for (const it of items) this.w.items.delete(it.id); // carted off to the pawn shop
-    }
-    this.w.pawn.open(byPlayer);
-    this.go("shop", SHOP_TIME);
-  }
-
-  private closeShop() {
-    for (const p of this.w.players.values()) {
-      const left = this.w.pawn.unsold(p.id);
-      if (!left.length) continue;
-      const v = left.reduce((a, o) => a + o.value, 0);
-      this.addLost(p, left.length, v);
-      this.w.emit({ t: "lost", p: p.id, count: left.length, value: v, unsold: true });
-    }
-    this.w.pawn.close();
-    this.results = this.lines().sort((a, b) => b.cash - a.cash);
-    if (this.round >= CYCLES) this.go("over", 0);
-    else this.go("upgrades", UPGRADE_TIME);
+    return out.sort((a, b) => b.aura - a.aura || b.cash - a.cash);
   }
 
   // ---------------------------------------------------------------- events

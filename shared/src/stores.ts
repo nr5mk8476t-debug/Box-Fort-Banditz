@@ -203,15 +203,15 @@ export interface StoreTrade {
 export const STORE_TRADE: Record<StoreId, StoreTrade> = {
   rustbucket: { type: "salvage", heat: 1, buys: { junk: [2, 6] },
     dig: [["brick", 3], ["plastic_crate", 2], ["bin_lid", 2], ["traffic_cone", 3], ["crt_tv", 1], ["giant_toaster", 0.8], ["gold_sign", 0.6], ["golden_spork", 0.05]] },
-  plugpray: { type: "repair", heat: 1, buys: { types: ["crt_tv", "giant_toaster", "arcade_machine", "laptop", "phone_handset", "bedazzled_phone", "fancy_earbuds", "disposable_camera", "dj_headphones"], mult: 0.6 } },
-  needledrop: { type: "records", heat: 1.25, buys: { types: ["vinyl_record", "golden_record", "mixtape", "guitar", "dj_headphones", "golden_accordion", "mirror_ball"], mult: 0.6 },
+  plugpray: { type: "repair", heat: 1, buys: { types: ["crt_tv", "giant_toaster", "arcade_machine", "laptop", "phone_handset", "bedazzled_phone", "fancy_earbuds", "disposable_camera", "dj_headphones"], mult: 0.45 } },
+  needledrop: { type: "records", heat: 1.25, buys: { types: ["vinyl_record", "golden_record", "mixtape", "guitar", "dj_headphones", "golden_accordion", "mirror_ball"], mult: 0.45 },
     dig: [["vinyl_record", 6], ["mixtape", 5], ["golden_record", 0.35]], caseLoot: [["golden_record", 1], ["vinyl_record", 3]] },
   peakfomo: { type: "outdoor", heat: 1.25, sells: { what: "trailmix", name: "TRAIL MIX", price: 10, blurb: "stamina for 40 s" } },
   maisonpong: { type: "perfume", heat: 2, sells: { what: "spritz", name: "A SPRITZ", price: 40, blurb: "you smell innocent: a lot less heat" },
     caseLoot: [["fancy_fizz", 2], ["pearl_necklace", 1], ["designer_scarf", 1]] },
   // R13.1: the jeweller buys jewellery at the specialists' 60% (the pawn shops pay 40%, WEE MICKEY 75% at night with heat);
   // it sells nothing (no service: the sugar-rush truffle that was here is gone, not moved). Its case: mostly pearls
-  caratrun: { type: "jewels", heat: 2, buys: { types: ["diamond_ring", "gold_chain", "pearl_necklace", "rolecks_watch", "diamond_pigeon"], mult: 0.6 },
+  caratrun: { type: "jewels", heat: 2, buys: { types: ["diamond_ring", "gold_chain", "pearl_necklace", "rolecks_watch", "diamond_pigeon"], mult: 0.45 },
     caseLoot: [["pearl_necklace", 3], ["gold_chain", 2], ["diamond_ring", 1]] },
 };
 /** what a spritz takes off your heat */

@@ -54,6 +54,13 @@ export const LOOT: LootDef[] = [
   { type: "giant_toaster", name: "Giant Toaster", size: "big", rarity: "rare", valueMin: 60, valueMax: 120, weight: 0.4, heavy: true, material: "metal", radius: 0.42, bounce: 0.15, spawnWeight: 2.5, blurb: "Toasts one (1) mattress." },
   { type: "mystery_suitcase", name: "Mystery Suitcase", size: "big", rarity: "rare", valueMin: 20, valueMax: 200, mystery: true, weight: 0.2, material: "cloth", radius: 0.38, bounce: 0.15, spawnWeight: 2.5, blurb: "Locked. Rattling. Promising." },
 
+  // ---- R14: the game loop's building materials and furnishings (spawn everywhere: no upgrade waits on a rare drop) ----
+  { type: "plank", name: "Plank of Wood", size: "big", rarity: "common", valueMin: 4, valueMax: 9, weight: 0.15, material: "cardboard", radius: 0.45, bounce: 0.2, spawnWeight: 4, blurb: "Load-bearing. Probably. Construction supplies." },
+  { type: "duct_tape", name: "Duct Tape", size: "small", rarity: "common", valueMin: 3, valueMax: 7, weight: 0, material: "plastic", radius: 0.07, bounce: 0.4, spawnWeight: 5, blurb: "Holds the city together. Construction supplies." },
+  { type: "bag_of_screws", name: "Bag of Screws", size: "small", rarity: "common", valueMin: 3, valueMax: 8, weight: 0, material: "plastic", radius: 0.08, bounce: 0.2, spawnWeight: 4, blurb: "Rattles. One is a coin. Construction supplies." },
+  { type: "lava_lamp", name: "Lava Lamp", size: "small", rarity: "uncommon", valueMin: 15, valueMax: 35, weight: 0, material: "glass", radius: 0.1, bounce: 0.2, spawnWeight: 3, blurb: "Groovy. Slightly warm. A furnishing." },
+  { type: "armchair", name: "Comfy Armchair", size: "big", rarity: "uncommon", valueMin: 20, valueMax: 45, weight: 0.3, heavy: true, material: "cloth", radius: 0.48, bounce: 0.15, spawnWeight: 2, blurb: "Someone's nan is looking for this. A furnishing." },
+
   // ---- giant (two players) ------------------------------------------------------------
   { type: "arcade_machine", name: "Broken Arcade Machine", size: "giant", rarity: "epic", valueMin: 180, valueMax: 320, weight: 0.4, heavy: true, material: "metal", radius: 0.65, bounce: 0.05, spawnWeight: 1, blurb: "High score held by a raccoon. Drag it home." },
   { type: "rubber_duck", name: "Giant Rubber Duck", size: "giant", rarity: "legendary", valueMin: 300, valueMax: 600, weight: 0.4, heavy: true, material: "rubber", radius: 0.75, bounce: 0.5, spawnWeight: 0.5, blurb: "Escaped from a parade. Drag it home." },

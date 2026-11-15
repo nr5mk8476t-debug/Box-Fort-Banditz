@@ -2,7 +2,8 @@
 // Your own movement is simulated immediately in the browser ("prediction") using the
 // exact same rules as the server. When the server's answer arrives we quietly correct
 // any difference ("reconciliation"), smoothing small corrections so you never feel a snap.
-import { STORE_TRADE, STORE_VOICE, type StoreId } from "@bfb/shared";
+import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput,
+} from "@bfb/shared";
 import {
   Scene, Engine, UniversalCamera, Camera, HemisphericLight, DirectionalLight, ShadowGenerator,
   Vector3, Color3, Color4, MeshBuilder, Mesh, TransformNode, StandardMaterial,
@@ -745,11 +746,11 @@ export class ArenaScene {
           break;
         // ---- Phase 3: rounds, banking, city events ----
         case "round": if (e.phase !== "hurry") this.shopWants = {}; this.onRound(e.phase, e.round); break; // (R5: a new scavenge, a new list)
-        case "banked": {
+        case "banked": { // R14: everything banked in one go: one sound, one card
           if (e.p !== me) break;
-          const p = this.items.drawnPos(e.item);
-          sfx.cash();
-          if (p) this.pop("+$" + e.value, p.x, p.y + 0.9, p.z, "#7fe07a");
+          sfx.banked(e.types.length);
+          const n = e.types.length, names = [...new Set(e.types.map((t) => lootDef(t).name))].slice(0, 3).join(", ");
+          this.onBanner?.(`+${n} BANKED`, `${names}${e.types.length > 3 ? "..." : ""}  ·  worth $${e.value}`, "good");
           break;
         }
         case "lost":
@@ -1940,10 +1941,11 @@ export class ArenaScene {
       this.stats.steps++;
       const a = this.input.axes();
       if (a.mx || a.mz) this.stats.moveSteps++;
-      const inp: MoveInput = {
+      let inp: MoveInput = {
         seq: this.seq++, mx: a.mx, mz: a.mz, yaw: this.input.yaw, pitch: this.input.pitch,
         sprint: a.sprint, jump: a.jump, crouch: a.crouch, dodge: a.dodge,
       };
+      if (frozenPhase(this.match.phase)) inp = freezeInput(inp); // (R14: the countdown and PREP: the host does the same)
       this.prev = cloneMoveState(this.cur);
       this.clubFloorNow();
       stepMovement(this.cur, inp, this.arena);

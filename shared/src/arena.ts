@@ -154,7 +154,7 @@ export interface PropDef {
  */
 export type GearKind = "pick" | "smoke";
 export const MICKEY = {
-  fence: 0.75, black: 0.9, heat: 6, copHeat: 18, copRange: 25, sulk: 45, reach: 2.4,
+  fence: 0.6, black: 0.9, /* (R14: the street rate; Blake) */ heat: 6, copHeat: 18, copRange: 25, sulk: 45, reach: 2.4,
   goods: {
     pick: { name: "LOCKPICK KIT", price: 30, what: "your next stretch in the cells is halved" },
     smoke: { name: "SMOKE BOMB", price: 25, what: "the next cop who grabs or tasers you gets a face full of smoke" },

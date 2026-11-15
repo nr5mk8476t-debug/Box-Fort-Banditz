@@ -6,7 +6,7 @@
 // Phase 2 contents: players (movement + inventory), loot items (spawning, physics,
 // grab / pocket / drop / throw, two-person giant items), events for sounds/effects, cleanup.
 import { PLAYER, SIM_DT, MAX_PLAYERS, MAX_INPUTS_PER_TICK, PLAYER_COLORS } from "./constants.js";
-import { makeMoveState, stepMovement, sanitizeInput, groundHeightAt, type MoveInput, type MoveState } from "./movement.js";
+import { makeMoveState, stepMovement, sanitizeInput, groundHeightAt, freezeInput, type MoveInput, type MoveState } from "./movement.js";
 import { stepItem, type ItemBody } from "./itemPhysics.js";
 import { STORE_TRADE, STORE_BUY_GAP, SPRITZ_HEAT, type StoreId } from "./stores.js";
 import { LOOT, lootDef, rollValue, carrySpeedMul, type LootDef } from "./loot.js";
@@ -19,7 +19,7 @@ const articled = (name: string) => (/^(the |some |a |an |yesterday)/i.test(name)
 /** R6: the holding cell's toilet: how hard it erupts, how often */
 export const FLUSH = { cooldown: 6, push: 9, lift: 4.5, stumble: 0.8 };
 import { NpcSystem, PUNCH_RANGE, type NpcHost, type BigShotEvent, type OldLadyEvent } from "./npcSim.js";
-import { MatchSystem, itemWorth, LOCK_TIME, type MatchPhase, type CityEventKind } from "./match.js";
+import { MatchSystem, itemWorth, LOCK_TIME, frozenPhase, type MatchPhase, type CityEventKind } from "./match.js";
 import { PawnSystem } from "./pawn.js";
 import { fortAt, inDeepWater, nearBoxes, inLobby, footFaces, CLUB, clubStage, applyClubFloor, FEVER, inRect, DEAL, type DealKind, MICKEY, type GearKind, GCH, pintLevel, PUB, pintMissMm, pintGrade, SEAMUS, SWARM, JUKEBOX } from "./arena.js";
 import { LobbySystem, type LobbyGame, type LobbyEvent } from "./props.js";
@@ -29,6 +29,8 @@ import { PoliceSystem, type PoliceEvent } from "./police.js";
 import type { LockRun } from "./lockpick.js";
 import { PubGames, PUBGAMES, type PubEvent, type PubAction, type StationGeom, type StationKind } from "./pubgames.js";
 import { hyp, hyp3 } from "./fmath.js";
+import { FortSystem } from "./loop/fort.js";
+import { AuraSystem, type LoopEvent } from "./loop/aura.js";
 
 /** C4a: how far away a pedestrian notices you breaking something (they also need a clear line of sight) */
 export const WITNESS_RANGE = 20;
@@ -189,6 +191,7 @@ export interface PlayerSim {
 
 export type WorldEvent =
   | PubEvent // R12.3: the pub's games (a shot, a dart, a message, a result)
+  | LoopEvent // R14: the game loop (banking, the van, upgrades, theft, aura, warnings)
   | { t: "grab"; p: string; item: string; to: "hand" | "pocket" | "carry" }
   | { t: "whiff"; p: string; reason: "taken" | "far" | "full" | "hands" | "cooldown" | "locked" | "tug" }
   | { t: "drop"; p: string; item: string }
@@ -287,7 +290,6 @@ export type WorldEvent =
   | { t: "swarm"; p: string }
   // Phase 3
   | { t: "round"; phase: MatchPhase | "hurry"; round: number }
-  | { t: "banked"; item: string; p: string; value: number }
   | { t: "lost"; p: string; count: number; value: number; unsold?: boolean }
   // Phase 5A
   | { t: "cash"; p: string; item: string; type: string; value: number }
@@ -333,6 +335,9 @@ export type WorldAction =
   | { a: "tug" } // mash E in a tug of war
   | { a: "arrest"; p: string } | { a: "struggle" } // C5c.1: pin a knocked-down wanted bandit for the cops / wriggle free
   | { a: "sell"; item: string } | { a: "haggle"; item: string } | { a: "sellAll" } // pawn shop
+  // R14: the game loop: PREP (sell to the van, the safe, upgrades, the workbench); night theft
+  | { a: "vanSell"; recs: string[] } | { a: "protect"; rec: string; on: boolean } | { a: "upgrade"; id: string } | { a: "craft"; id: string }
+  | { a: "steal"; owner: string; rec: string } | { a: "stealStop" }
   | { a: "ready" }; // done shopping / upgrading
 
 /** Small, fast, seedable random numbers (deterministic worlds for tests). */
@@ -380,6 +385,10 @@ export class World {
   readonly lobby: LobbySystem;
   /** R12.3: pool and darts upstairs at the Soggy Shamrock */
   readonly pubGames: PubGames;
+  /** R14: the game loop: forts (banking, storage, upgrades, theft), aura (with reasons), quests (stage 4) */
+  readonly fort: FortSystem;
+  readonly loopAura: AuraSystem;
+  loopQuests?: { phaseEnd(): void };
 
   constructor(opts: WorldOptions = {}) {
     this.arena = opts.arena ?? buildTrashington();
@@ -395,6 +404,8 @@ export class World {
     this.pawn = new PawnSystem(this);
     this.lobby = new LobbySystem(this);
     this.pubGames = this.makePubGames();
+    this.fort = new FortSystem(this);
+    this.loopAura = new AuraSystem(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
@@ -604,6 +615,27 @@ export class World {
   refreshCarry(p: PlayerSim) { this.updateCarry(p); }
   /** Drop everything a player carries (knockdowns, wipeouts). */
   dropAll(p: PlayerSim) { this.dropEverything(p); }
+  private loopCache = new Map<string, { k: string; json: string }>();
+  /** R14: a player's fort (and quests) for the client: JSON, rebuilt only when it changed */
+  loopJson(p: PlayerSim): string {
+    const f = this.fort.of(p), th = this.fort.thefts.get(p.id);
+    const k = `${f.v}|${this.match.phase}|${th ? th.t.toFixed(1) : ""}|${(this.loopQuests as any)?.version?.(p) ?? ""}`;
+    const c = this.loopCache.get(p.id);
+    if (c && c.k === k) return c.json;
+    const json = JSON.stringify({ ...this.fort.view(p), ...((this.loopQuests as any)?.view?.(p) ?? {}) });
+    this.loopCache.set(p.id, { k, json });
+    return json;
+  }
+  /** R14: PREP: everyone home, at their own fort's mat, facing the city (nothing carried: the deadline took it) */
+  prepHome() {
+    for (const p of this.players.values()) {
+      const sp = this.arena.spawns[p.colorIdx % this.arena.spawns.length];
+      p.move = { ...makeMoveState(sp.x, sp.z, sp.yaw) };
+      p.queue.length = 0; p.notoriety = 0; p.rob = null; p.pin = null; p.jailT = 0; p.respawnT = 0; p.hp = HEALTH.max;
+      this.updateCarry(p);
+    }
+    this.police.reset();
+  }
 
   /** Spawn a random ground item near a point (happy hour bonus). */
   spawnAt(x: number, z: number): string {
@@ -665,7 +697,8 @@ export class World {
       },
       npcDropLoot: (_npcId, type, x, y, z, ax, az) => { w.popLoot(type, x, y, z, ax, az); },
       shopAlarm: (shopId) => { const t = [...w.props.props.values()].find((x) => x.def.kind === "till" && x.def.shop === shopId); if (t) { t.alarmT = 6; w.emit({ t: "alarm", kind: "shop", prop: t.def.id, x: t.def.x, z: t.def.z }); } },
-      npcEvent: (e) => { if (e.t === "pubRowdy") { w.swarm(e.p); return; } w.emit(e); if (e.t === "louHit") { const p = w.players.get(e.p); if (p) w.pawn.trouble(p, "punch", e.shop ?? 0); } if (e.t === "donHit") w.npc.guardsAlert(e.p, "velvet_guard"); },
+      npcEvent: (e) => { if (e.t === "pubRowdy") { w.swarm(e.p); return; } w.emit(e); if (e.t === "louHit") { const p = w.players.get(e.p); if (p) w.pawn.trouble(p, "punch", e.shop ?? 0); } if (e.t === "donHit") w.npc.guardsAlert(e.p, "velvet_guard");
+        if (e.t === "npcKo" && e.by && w.npc.npcs.get(e.npc)?.kind === "cop") { const p = w.players.get(e.by); if (p) w.loopAura.cop(p, e.npc); } }, // (R14: +1 aura, each cop once a cycle, 3 a cycle)
       addNotoriety: (pid, n) => { const p = w.players.get(pid); if (p) w.addHeat(p, n); },
       mickeyShut: () => { w.mickeyShutT = w.time + MICKEY.sulk; },
       copBrain: (n, dt) => w.police.brain(n, dt),
@@ -678,10 +711,10 @@ export class World {
         if (effect === "flash") w.emit({ t: "flash", p: pid });
       },
       raccoonTarget: (slot) => {
-        // the most valuable thing lying in that fort yard (locked or not: raccoons don't care)
+        // the most valuable thing lying in that fort yard
         let best: ItemSim | null = null;
         for (const it of w.items.values()) {
-          if (it.mode !== "free" || lootDef(it.type).size === "giant" || it.fort !== slot) continue;
+          if (it.mode !== "free" || lootDef(it.type).size === "giant" || fortAt(w.arena, it.body.x, it.body.z) !== slot) continue; // (R14: loose in the yard or on the mat; never the shelves)
           if (!best || itemWorth(it) > itemWorth(best)) best = it;
         }
         return best ? { id: best.id, x: best.body.x, z: best.body.z } : null;
@@ -691,7 +724,7 @@ export class World {
         if (!it || it.mode !== "free") return false;
         it.mode = "held"; it.holder = npcId; it.holder2 = "";
         it.locked = false; it.bankT = 0;
-        const owner = w.match.ownerOf(it.fort);
+        const owner = w.match.ownerOf(fortAt(w.arena, it.body.x, it.body.z)); // (R14: whose yard it was in)
         it.fort = -1;
         w.emit({ t: "raccoonGrab", npc: npcId, item: itemId, p: owner?.id ?? "" });
         return true;
@@ -825,6 +858,13 @@ export class World {
     if (act.a === "haggle") { if (this.match.phase === "shop") this.pawn.haggle(p, String((act as any).item ?? "")); return; }
     if (act.a === "sellAll") { if (this.match.phase === "shop") this.pawn.sellAll(p); return; }
     if (act.a === "ready") { this.match.setReady(p); return; }
+    // R14: PREP's screen (the fort checks the phase), the safe (PREP, or by day at your fort)
+    if (act.a === "vanSell") { const r = (act as any).recs; if (Array.isArray(r)) this.fort.sell(p, r.slice(0, 32).map(String)); return; }
+    if (act.a === "protect") { this.fort.protect(p, String((act as any).rec ?? ""), !!(act as any).on); return; }
+    if (act.a === "upgrade") { this.fort.buyUpgrade(p, String((act as any).id ?? "") as never); return; }
+    if (act.a === "craft") { this.fort.craft(p, String((act as any).id ?? "") as never); return; }
+    if (act.a === "stealStop") { this.fort.theftStop(p); return; }
+    if (frozenPhase(this.match.phase)) return; // (R14: the countdown and PREP: nothing hostile, nothing in the street)
     if (act.a === "pg") { // (R12.3: the pub's games; the station checks turns, values and seats itself)
       const op = (act as any).op;
       if ((op === "shot" || op === "dart") && (p.jailT > 0 || p.move.knockT > 0 || p.move.stunT > 0 || p.respawnT > 0)) { this.emit({ t: "pgMsg", st: String((act as any).st ?? ""), msg: "You can't play from the floor.", to: p.id }); return; }
@@ -846,6 +886,7 @@ export class World {
     if (p.respawnT > 0) return; // wiped out: waiting to respawn
     if (p.move.stunT > 0) return; // tased
     if (act.a === "tug") { this.tugPress(p); return; }
+    if (act.a === "steal") { this.fort.theftStart(p, String((act as any).owner ?? ""), String((act as any).rec ?? "")); return; } // (R14: night)
     if (act.a === "gulp") { this.gulpPint(p, Number((act as any).hold)); return; } // (R12.1)
     if (act.a === "sip") { const cur = this.pints.get(p.id); if (cur && cur.sipAt < 0) cur.sipAt = this.time; return; } // (R12.6)
     if (act.a === "dance") { // (R11: B: start / stop dancing; only standing on the ground, hands free of big things)
@@ -1015,6 +1056,7 @@ export class World {
       if (slot < 0 || !this.match.night) continue;
       const owner = this.match.ownerOf(slot);
       if (!owner || owner.id === p.id || this.time - owner.raidEnterT < RAID_ENTER_CD) continue;
+      if (!this.fort.of(owner).ups.has("alarm1")) continue; // (R14, Blake: no alarm unless you've built one)
       owner.raidEnterT = this.time;
       this.emit({ t: "raidEnter", p: p.id, owner: owner.id, slot, x: p.move.x, z: p.move.z });
     }
@@ -1025,6 +1067,7 @@ export class World {
     if (!this.match.night) return;
     const owner = this.match.ownerOf(it.fort);
     if (!owner || owner.id === p.id) return;
+    if (!this.fort.of(owner).ups.has("alarm1")) return; // (R14: off the mat, at night: only with an alarm)
     if (this.time - owner.raidAlarmT < RAID_ALARM_CD) return;
     owner.raidAlarmT = this.time;
     this.emit({ t: "raid", p: p.id, owner: owner.id, item: it.id, x: it.body.x, z: it.body.z });
@@ -1602,7 +1645,7 @@ export class World {
     if (ph !== this.pubPhase) {
       const was = this.pubPhase; this.pubPhase = ph;
       if (ph === "intro") this.pubGames.newCycle();
-      else if (ph === "dawn" || ph === "over" || (ph === "lobby" && was && was !== "lobby")) this.pubGames.voidAll("Sunrise: game called off, stakes back.");
+      else if (ph === "dawn" || ph === "prep" || ph === "over" || (ph === "lobby" && was && was !== "lobby")) this.pubGames.voidAll("Sunrise: game called off, stakes back."); // (R14: PREP is the new sunrise)
     }
     this.pubGames.tick(dt);
     // the regulars walking over to play (and back): next waypoint when they get there
@@ -1966,7 +2009,7 @@ export class World {
       p.credit = Math.min(p.credit + 1, MAX_INPUTS_PER_TICK);
       while (p.credit >= 1 && p.queue.length) {
         const inp = p.queue.shift()!;
-        stepMovement(p.move, inp, this.arena);
+        stepMovement(p.move, frozenPhase(this.match.phase) ? freezeInput(inp) : inp, this.arena); // (R14: the countdown, PREP)
         p.lastSeq = inp.seq;
         p.credit -= 1;
       }
