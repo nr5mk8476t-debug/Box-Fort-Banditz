@@ -341,7 +341,7 @@ function updateMatchHud(a: ArenaScene) {
   if (tSig !== tallySig) {
     tallySig = tSig;
     show("tally", showTally);
-    if (showTally) renderTally(a, starter);
+    if (showTally) { renderTally(a, starter); clearTimeout(bannerTimer); $("big-banner").classList.add("hidden"); $("flash").classList.add("hidden"); } // (R14: the final card has the screen to itself)
   }
   document.body.classList.toggle("night", m.phase === "night" || (m.phase === "dusk" && m.timeLeft < DUSK_TIME / 2));
 

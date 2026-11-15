@@ -53,6 +53,11 @@ live in `shared/src/loop/` as data: a new upgrade, recipe, aura task or boss job
   - A cruiser no longer clips a car stopped part-way round the next turn.
   - The pool window steps you up for your turn even if the table's news arrived before it knew who you were.
   - Pedestrians who sidestep an obstacle no longer step off the kerb in front of a car.
+  - The e2e found four more, all fixed:
+    - you could aim at a thing on an outer shelf and be told "Too far" (the reach is now measured to the thing);
+    - a game that ended mid-PREP left the PREP screen over the title;
+    - DON BINNIE's job hint hid NEON FEVER's rope prompt (job and board hints now give way to E);
+    - old banners piled up behind the final card.
 
 ## R13.1: four bug fixes, a leaner frame, and CARAT & RUN replaces BONBON VIVANT (2026-11-14)
 
