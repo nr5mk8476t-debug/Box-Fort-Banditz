@@ -12,8 +12,11 @@ import { fortAt2, shelfSpot, FORT_SPOTS, type ArenaLayout, type FortLot } from "
 export interface LoopView {
   L: number; S: number; F: number; u: string[]; r: [string, string, number, number][]; g: Record<string, number>;
   w?: string[]; ws?: string[]; th?: [string, string, number, number];
+  /** R14 stage 4 (quests.ts view): my task/job [name, text, prog, need, secs, x, z, stage, megaphone], price, rep, jobs on offer, rivals' live attempts, van rate */
+  q?: { t: QuestRow | null; j: QuestRow | null; tp: number; rep: [number, number]; jo: [string, string, string][]; lv: [string, string, number, number][]; vr: number };
   [k: string]: unknown;
 }
+export type QuestRow = [string, string, number, number, number, number | null, number | null, number, number];
 export function parseLoop(json: string): LoopView | null { if (!json) return null; try { return JSON.parse(json) as LoopView; } catch { return null; } }
 
 interface FortVis {
@@ -101,6 +104,9 @@ export class FortRenderer {
     if (ups.has("workbench")) { const w = FORT_SPOTS.workbench; B(w.u, w.v, 0.85, 1.6, 0.08, 0.7, "#8a5a2b"); for (const du of [-0.7, 0.7]) for (const dv of [-0.28, 0.28]) B(w.u + du, w.v + dv, 0.42, 0.08, 0.84, 0.08, "#5a3a20"); B(w.u - 0.5, w.v, 0.97, 0.22, 0.16, 0.18, "#5a6070"); B(w.u + 0.3, w.v, 0.9, 0.5, 0.03, 0.06, "#c8ccd4", 0.4); }
     if (ups.has("alarm1")) { const a = FORT_SPOTS.alarm; C(a.u, a.v, 1.0, 0.06, 2.0, "#6a6a72"); for (let q = 0; q < 4; q++) { const can = C(a.u + 0.18, a.v, 1.75 - q * 0.22, 0.1, 0.14, "#c8ccd4"); can.position.x += 0; }
       if (ups.has("alarm2")) { const b = C(a.u, a.v, 2.12, 0.34, 0.26, "#d9b45a", 0.12); void b; C(a.u, a.v, 2.3, 0.1, 0.08, "#ff3b30"); } }
+    // R14 stage 4: the task board (E: buy an aura task): two posts, a cork board, a few pinned notes
+    { const b = FORT_SPOTS.board; for (const du of [-0.55, 0.55]) B(b.u + du, b.v, 0.7, 0.07, 1.4, 0.07, "#5a3a20"); B(b.u, b.v, 1.15, 1.3, 0.8, 0.06, "#b98a52");
+      [["#f4f1ea", -0.32, 1.28], ["#ffcf3a", 0.05, 1.2], ["#ff8fb0", 0.34, 1.32], ["#9fd8ff", -0.15, 0.98], ["#f4f1ea", 0.3, 0.98]].forEach(([c, du, y]) => B(b.u + (du as number), b.v + 0.04, y as number, 0.22, 0.17, 0.02, c as string)); }
     // the fort's level, round the cardboard box (it's 2.4 x 1.9 x 1.5 at (0, 0))
     if (L.L >= 2) { for (const y of [0.4, 1.05]) B(0, 0, y, 2.46, 0.12, 1.96, "#a8acb4"); C(-1.0, -0.6, 2.2, 0.05, 1.4, "#6a6a72"); B(-0.7, -0.6, 2.65, 0.55, 0.36, 0.03, ["#e14b4b", "#3d6fb5", "#6aa84f", "#ffcf3a"][lot.slot % 4]); }
     if (L.L >= 3) { B(0, 0, 1.2, 3.3, 2.4, 0.08, "#c8a46a"); for (const s2 of [-1, 1]) { B(s2 * 1.65, 0.0, 1.2, 0.08, 2.4, 2.7, "#c8a46a"); B(s2 * 0.82, 0, 2.62, 1.9, 0.08, 2.9, "#7a4a2a", 0).rotation.z = s2 * 0.45; }

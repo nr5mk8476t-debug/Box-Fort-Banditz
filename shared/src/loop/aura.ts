@@ -5,6 +5,7 @@
 //  - banking pays no aura at all; interruptions are once per pair a cycle (quests.ts)
 import type { World, PlayerSim } from "../world.js";
 import { LOOP } from "./catalog.js";
+import type { SecurityEvent } from "./security.js";
 
 export type LoopEvent =
   | { t: "storageFull"; p: string }
@@ -19,7 +20,15 @@ export type LoopEvent =
   | { t: "theftEnd"; p: string; ok: boolean; reason: string; item?: string; type?: string; owner?: string; value?: number }
   | { t: "loopWarn"; left: number; round: number }
   | { t: "aura"; p: string; n: number; why: string; total: number }
-  | { t: "moustache"; p: string };
+  | { t: "moustache"; p: string }
+  // (stage 4: quests.ts)
+  | { t: "questNo"; p: string; reason: string }
+  | { t: "questStart"; p: string; src: "task" | "job"; name: string; text: string; cost: number; boss?: string }
+  | { t: "questEnd"; p: string; src: "task" | "job"; name: string; ok: boolean; reason: string; aura: number; cash: number; rep?: number }
+  | { t: "questLive"; p: string; name: string; x: number; z: number }
+  | { t: "questInterrupt"; p: string; by: string; name: string; scored: boolean }
+  | { t: "bananaSlip"; p: string; owner: string }
+  | SecurityEvent;
 
 export class AuraSystem {
   private copsHit = new Map<string, Set<string>>();

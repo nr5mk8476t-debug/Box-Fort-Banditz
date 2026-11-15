@@ -167,7 +167,7 @@ export class MatchSystem {
     if (this.phase !== "lobby" && this.phase !== "over") return false;
     this.w.pubGames?.voidAll("The match is starting: game called off, stakes back."); // (R12.3: before the cash resets)
     for (const p of this.w.players.values()) { p.cash = 0; p.gear = { pick: 0, smoke: 0 }; } // (R12.6: and WEE MICKEY's gear)
-    this.w.fort.resetAll(); this.w.loopAura.resetMatch(); this.mayor = ""; this.paused = false; // (R14: a new match: box forts, nothing banked)
+    this.w.fort.resetAll(); this.w.loopAura.resetMatch(); this.w.loopQuests.resetMatch(); this.mayor = ""; this.paused = false; // (R14: a new match: box forts, nothing banked)
     this.w.lobby.matchStart(); // (C5a: off the roof; aura starts at 0)
     this.w.pubBoard.length = 0; // (R12.1: a clean chalkboard every match)
     this.w.gch = null; // (R12.6: and no challenge left over)
@@ -188,7 +188,7 @@ export class MatchSystem {
     this.ready.clear();
     this.lost.clear();
     this.w.resetCity(false); // (the city's loot, stock and cases back; everyone at their own fort's mat)
-    this.w.loopAura.newCycle();
+    this.w.loopAura.newCycle(); this.w.loopQuests.newCycle();
     this.w.emit({ t: "round", phase: "intro", round: this.round });
   }
 
@@ -278,7 +278,7 @@ export class MatchSystem {
     this.stopEvent();
     this.w.npc.clearRaccoons();
     for (const l of this.w.fort.deadline()) this.addLost(l.p, l.n, l.v);
-    this.w.loopQuests?.phaseEnd();
+    this.w.loopQuests.phaseEnd();
     this.results = this.lines();
     if (this.round >= CYCLES) return this.finish();
     this.w.prepHome();

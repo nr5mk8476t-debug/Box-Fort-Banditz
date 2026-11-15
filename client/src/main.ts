@@ -5,10 +5,11 @@ import { ArenaScene } from "./game/arenaScene.ts";
 import { LocalSession, SOLO_ID } from "./localSession.ts";
 import { HOST_LEFT } from "./p2p/peerRoom.ts";
 import { PrepScreen } from "./ui/prepScreen.ts";
+import { QuestHud } from "./ui/questHud.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
-import { STORE_TRADE, STORE_VOICE, STORES, STORE_SHELLS, storeFrame, lootDef as lootDefOf, type StoreId } from "@bfb/shared";
+import { STORE_TRADE, STORE_VOICE, STORES, STORE_SHELLS, storeFrame, lootDef as lootDefOf, LOOP, fortAt2, FORT_SPOTS, type StoreId } from "@bfb/shared";
 import { PLAYER_COLORS as MAP_COLORS, inLobby, ARREST, RESTO, CLUB, CLUB_SAFE, PAWN_SHOP, HOT_STUFF, NPC_DEFS, FEVER, DEAL, MICKEY, GCH, PUB, SEAMUS, JUKEBOX, DUSK_TIME, NIGHT_TIME } from "@bfb/shared";
 import { softwareRendering, gpuHelpHtml } from "./gpuCheck.ts";
 import { adaptStep } from "./game/adaptive.ts";
@@ -123,6 +124,7 @@ let settingsReturnTo: "title" | "pause" = "title";
 /** Phase 5A: shop / upgrades screen open (mouse released, no pause menu) */
 let overlayOpen = "";
 const prep = new PrepScreen();
+const questHud = new QuestHud();
 prep.send = (act) => arena?.onAction?.(act as never);
 
 // ---------------------------------------------------------------------------
@@ -360,6 +362,10 @@ function updateMatchHud(a: ArenaScene) {
   }
   const myCash = a.scores.find((x) => x.me)?.cash ?? 0;
   if (ov === "prep") prep.update(a.myLoop, myCash, a.myAura, m.timeLeft, m.round, m.rounds, a.ready);
+  // R14 stage 4: the quest tracker + the J panel
+  { const ph = m.phase, live = ph === "scavenge" || ph === "dusk" || ph === "night"; if (!live) questHud.open = false;
+    const names = new Map(a.scores.map((x) => [x.id, x.name] as [string, string]));
+    questHud.update(a.myLoop, live && ov !== "prep", { x: a.position.x, z: a.position.z, yaw: a.viewYaw }, names); }
   // R14: the purse: CASH and AURA, big, always (bumps when either changes)
   const showPurse = m.phase !== "lobby";
   $("purse").classList.toggle("hidden", !showPurse);
@@ -875,6 +881,15 @@ window.addEventListener("keydown", (e) => {
   if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA")) return;
   ctlHint(!ctlOpen);
 });
+// R14 stage 4: J: next to a boss with work, take it; anywhere else, the quests panel
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "KeyJ" || e.repeat || screen !== "playing" || !arena) return;
+  const tgt = e.target as HTMLElement | null;
+  if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA")) return;
+  const b = arena.nearBoss, offer = b && arena.myLoop?.q?.jo.some((j) => j[0] === b);
+  if (b && offer && !arena.myLoop?.q?.j) { arena.onAction?.({ a: "jobTake", boss: b } as never); questHud.open = false; return; }
+  questHud.open = !questHud.open;
+});
 window.addEventListener("keydown", (e) => {
   if (e.code !== "KeyM" || e.repeat || screen !== "playing" || !arena) return;
   const tgt = e.target as HTMLElement | null;
@@ -921,7 +936,8 @@ function updateHud(a: ArenaScene) {
   // R14: night theft: aiming at a rival's shelf thing / in the middle of taking it; home: the deposit mat
   const stl = a.stealTarget, thp = a.theftProgress;
   const atMat = (() => { const f = a.arenaLayout.forts?.find((q) => q.slot === a.myColorIdx); return !!f && Math.abs(a.position.x - f.padX) < 1.7 && Math.abs(a.position.z - f.padZ) < 1.7; })();
-  const loopSig = thp >= 0 ? "thief" : stl ? "steal" + stl.rec : atMat && (a.match.phase === "scavenge" || a.match.phase === "dusk" || a.match.phase === "night") ? "mat" + (a.inventory.hand || a.inventory.pockets.join("")) : "";
+  const qv = a.myLoop?.q, nb = a.nearBoss, nbJob = nb ? qv?.jo.find((j) => j[0] === nb) : undefined;
+  const loopSig = thp >= 0 ? "thief" : stl ? "steal" + stl.rec : a.atBoard && !t ? "board" + (qv?.tp ?? 0) + (qv?.t ? 1 : 0) : nb && !t ? "boss" + nb + (nbJob?.[1] ?? "") + (qv?.j ? 1 : 0) : atMat && (a.match.phase === "scavenge" || a.match.phase === "dusk" || a.match.phase === "night") ? "mat" + (a.inventory.hand || a.inventory.pockets.join("")) : "";
   const sig = loopSig ? loopSig : jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "mickey" || ut.kind === "mickgoods" || ut.kind === "storecounter" ? JSON.stringify(a.heldInfo()) + a.myGear : "") + (ut.kind === "pubboard" ? JSON.stringify(a.gch) : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
@@ -936,6 +952,8 @@ function updateHud(a: ArenaScene) {
     promptSig = sig;
     if (thp >= 0) simple("HOLD E", " STEALING... ", "", "don't move! Knocked down, moved, or sunrise = it's off");
     else if (stl) simple("HOLD E", " Steal ", `${lootDefOf(stl.type)?.name ?? stl.type} ($${stl.value})`, "5 s (10 if they've got a proper alarm). Then carry it home and bank it.");
+    else if (loopSig.startsWith("board")) { if (qv?.t) simple("", " YOUR TASK BOARD ", "", `one task at a time: finish ${qv.t[0]} first (J: details)`); else simple("E", " Buy an AURA TASK ", `$${qv?.tp ?? LOOP.taskPrice0}`, "a random task. It's LIVE: everyone sees you going for it, and a rival who knocks you down interrupts it."); }
+    else if (loopSig.startsWith("boss")) { const bn = nb === "seamus" ? "SEAMUS O'SHORTLY" : "DON BINNIE's man"; if (qv?.j) simple("", ` ${bn} `, "", `finish your job first: ${qv.j[0]}`); else if (nbJob) simple("J", " Take a job from ", bn, `${nbJob[1]}: ${nbJob[2]}`); else simple("", ` ${bn} `, "", "nothing more for you this cycle. Come back next cycle."); }
     else if (loopSig.startsWith("mat")) simple("", " YOUR DEPOSIT MAT ", "", "drop or throw loot here (G): 10 s on the mat and it's BANKED onto your shelves. Anyone can grab it till then.");
     else if (jailed && cellUse === "celldoor" && ut?.empty) simple("", " THE CELL'S OPEN ", "", "walk out: you're free (but wanted)");
     else if (jailed && cellUse === "toilet") simple("E", " Flush ", "the toilet", "everyone in the cell gets soaked and knocked flying");
@@ -1382,6 +1400,25 @@ enterTitle();
     /** (tests, solo) put `n` of an item straight on my shelves, banked */
     fortGive: (type: string, n = 1, value = 10) => { if (!local) return; const p = local.world.players.get(SOLO_ID)!, f = local.world.fort.of(p); for (let i = 0; i < n; i++) f.recs.push({ id: "dbg" + Math.random().toString(36).slice(2, 8), type, value, safe: false }); f.v++; },
     myLot: () => arena?.arenaLayout.forts?.find((f) => f.slot === arena!.myColorIdx) ?? null,
+    /** (tests, solo) R14 stage 4: the quest places, a given aura task straight away, rep with a boss, the panel */
+    questLocs: () => (local ? [...local.world.loopQuests.locs.values()] : []),
+    questForce: (id: string) => {
+      if (!local) return false;
+      const w = local.world, p = w.players.get(SOLO_ID)!, Q = w.loopQuests as any, lot = w.arena.forts!.find((f) => f.slot === p.colorIdx)!;
+      const b = fortAt2(lot, FORT_SPOTS.board.u, FORT_SPOTS.board.v), x0 = p.move.x, z0 = p.move.z;
+      for (let i = 0; i < 60; i++) {
+        const s = Q.of(p);
+        if (s.task?.def.id === id) break;
+        if (s.task) Q.drop(p, "task");
+        s.lastTask = ""; s.bought = 0; p.cash = Math.max(p.cash, 100); p.move.x = b.x; p.move.z = b.z; Q.buyTask(p);
+      }
+      p.move.x = x0; p.move.z = z0;
+      return Q.of(p).task?.def.id === id;
+    },
+    questRep: (boss: "seamus" | "binnie", n: number) => { if (!local) return; const p = local.world.players.get(SOLO_ID)!; (local.world.loopQuests as any).of(p).rep[boss] = n; (local.world.loopQuests as any).of(p).v++; },
+    questPanel: (on: boolean) => { questHud.open = on; },
+    myBoard: () => { const l = arena?.arenaLayout.forts?.find((f) => f.slot === arena!.myColorIdx); return l ? fortAt2(l, FORT_SPOTS.board.u, FORT_SPOTS.board.v) : null; },
+    heavies: () => (local ? [...local.world.npc.npcs.values()].filter((n) => n.kind === "store_heavy").map((n) => ({ id: n.id, x: n.move.x, z: n.move.z, yaw: n.move.yaw, state: n.state, shop: n.shop })) : []),
     shopAct: (act: any) => arena?.onAction?.(act),
     night: () => arena ? { level: arena.nightLevel, body: document.body.classList.contains("night") } : null,
     tug: () => arena?.tug ?? null,

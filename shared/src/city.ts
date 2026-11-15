@@ -23,7 +23,7 @@
 // Every block is lined with buildings wall to wall (a gap for the alley into the courtyard behind);
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
-import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS, STORE_BROWSE, STORE_FLOOR, storeUpperBoxes } from "./stores.js";
+import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS, STORE_BROWSE, STORE_FLOOR, storeUpperBoxes, HIGH_END_STORES } from "./stores.js";
 import { canonBoxes,
   box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind, type GearKind,
   CLUB, type Rect, type ShopDef, type ShopType, type UnitDef, type RoadNet, type RoadNode, type RoadEdge, type BlockDef, type LobbyDef, type HotShop, type StationDef,
@@ -1428,6 +1428,12 @@ export function buildTrashington(): ArenaLayout {
       const doorProp = "storedoor_" + st.id;
       props.push({ id: doorProp, kind: "door", x: sh.door.x, y: 1.3, z: sh.door.z, yaw: sh.door.yaw, hw: sh.door.hw, hd: sh.door.hd, box: boxes.length - 1, closer: 5 });
       stores.push({ id: st.id, name: st.name, tier: st.tier, door: { x: sh.door.x, z: sh.door.z }, doorProp, keeper: sh.keeper, counter: sh.counter, inside: sh.inside });
+      if (HIGH_END_STORES.has(st.id)) {
+        // R14: the security: just inside the door, to one side (it never stands in the doorway or the street)
+        const ic = { x: (sh.inside.minX + sh.inside.maxX) / 2, z: (sh.inside.minZ + sh.inside.maxZ) / 2 };
+        const dx = ic.x - sh.door.x, dz = ic.z - sh.door.z, l = Math.max(0.01, Math.hypot(dx, dz)), ux = dx / l, uz = dz / l;
+        posts.push({ kind: "store_heavy", x: sh.door.x + ux * 1.6 - uz * 1.3, z: sh.door.z + uz * 1.6 + ux * 1.3, yaw: Math.atan2(-ux, -uz), v: shops.length });
+      }
       // its trade: a ShopDef (the keeper, the till, the shelves' stock: shoplifting), the counter, a rummage spot, a case
       const tr = STORE_TRADE[st.id], fx = STORE_FIXTURES[st.id], fr = storeFrame(st), spc = STORE_SHELLS[st.id], sid = shops.length;
       const tw = fr.at(fx.till[0], fx.till[1]);

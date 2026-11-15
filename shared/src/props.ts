@@ -170,7 +170,7 @@ export type PropEvent =
   | { t: "robStart"; p: string; prop: string }
   | { t: "robCancel"; p: string; prop: string }
   | { t: "robDone"; p: string; prop: string; value: number }
-  | { t: "shoplift"; p: string; shop: number; npc: string }
+  | { t: "shoplift"; p: string; shop: number; npc: string; item?: string }
   | { t: "empty"; p: string; prop: string }
   | { t: "safeCracked"; p: string; prop: string; value: number };
 
@@ -643,7 +643,7 @@ export class PropSystem {
     if (!cashier || cashier.state === "ko" || !inRect(shop.rect, p.move.x, p.move.z, 0.5) || p.move.y > (shop.maxY ?? 99)) return;
     this.w.addHeat(p, Math.round(8 * (shop.heat ?? 1)));
     this.w.npc.cashierSay(cashier.id, "yell");
-    this.w.emit({ t: "shoplift", p: p.id, shop: shop.id, npc: cashier.id });
+    this.w.emit({ t: "shoplift", p: p.id, shop: shop.id, npc: cashier.id, item: it.id });
   }
 
   /** For syncing: which props are empty / alarmed right now. */

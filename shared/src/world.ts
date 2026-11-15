@@ -31,6 +31,8 @@ import { PubGames, PUBGAMES, type PubEvent, type PubAction, type StationGeom, ty
 import { hyp, hyp3 } from "./fmath.js";
 import { FortSystem } from "./loop/fort.js";
 import { AuraSystem, type LoopEvent } from "./loop/aura.js";
+import { QuestSystem } from "./loop/quests.js";
+import { ShopSecurity } from "./loop/security.js";
 
 /** C4a: how far away a pedestrian notices you breaking something (they also need a clear line of sight) */
 export const WITNESS_RANGE = 20;
@@ -337,7 +339,7 @@ export type WorldAction =
   | { a: "sell"; item: string } | { a: "haggle"; item: string } | { a: "sellAll" } // pawn shop
   // R14: the game loop: PREP (sell to the van, the safe, upgrades, the workbench); night theft
   | { a: "vanSell"; recs: string[] } | { a: "protect"; rec: string; on: boolean } | { a: "upgrade"; id: string } | { a: "craft"; id: string }
-  | { a: "steal"; owner: string; rec: string } | { a: "stealStop" }
+  | { a: "steal"; owner: string; rec: string } | { a: "stealStop" } | { a: "taskBuy" } | { a: "jobTake"; boss: string } | { a: "questDrop"; src: string }
   | { a: "ready" }; // done shopping / upgrading
 
 /** Small, fast, seedable random numbers (deterministic worlds for tests). */
@@ -388,7 +390,8 @@ export class World {
   /** R14: the game loop: forts (banking, storage, upgrades, theft), aura (with reasons), quests (stage 4) */
   readonly fort: FortSystem;
   readonly loopAura: AuraSystem;
-  loopQuests?: { phaseEnd(): void };
+  readonly loopQuests: QuestSystem;
+  readonly security: ShopSecurity;
 
   constructor(opts: WorldOptions = {}) {
     this.arena = opts.arena ?? buildTrashington();
@@ -406,6 +409,8 @@ export class World {
     this.pubGames = this.makePubGames();
     this.fort = new FortSystem(this);
     this.loopAura = new AuraSystem(this);
+    this.loopQuests = new QuestSystem(this);
+    this.security = new ShopSecurity(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
@@ -619,10 +624,10 @@ export class World {
   /** R14: a player's fort (and quests) for the client: JSON, rebuilt only when it changed */
   loopJson(p: PlayerSim): string {
     const f = this.fort.of(p), th = this.fort.thefts.get(p.id);
-    const k = `${f.v}|${this.match.phase}|${th ? th.t.toFixed(1) : ""}|${(this.loopQuests as any)?.version?.(p) ?? ""}`;
+    const k = `${f.v}|${this.match.phase}|${th ? th.t.toFixed(1) : ""}|${this.loopQuests.version(p)}`;
     const c = this.loopCache.get(p.id);
     if (c && c.k === k) return c.json;
-    const json = JSON.stringify({ ...this.fort.view(p), ...((this.loopQuests as any)?.view?.(p) ?? {}) });
+    const json = JSON.stringify({ ...this.fort.view(p), ...this.loopQuests.view(p) });
     this.loopCache.set(p.id, { k, json });
     return json;
   }
@@ -685,6 +690,12 @@ export class World {
             w.clubPass.delete(p.id);
             w.emit({ t: "donThrown", p: pid });
           }
+          return;
+        }
+        if (n?.kind === "store_heavy") {
+          // R14: STORE SECURITY's tackle: you're down, everything drops, and what you lifted goes back to the store
+          w.knockdown(p, npcId);
+          w.security.tackled(p, npcId);
           return;
         }
         if (n?.kind === "lep_buddy") {
@@ -864,6 +875,9 @@ export class World {
     if (act.a === "upgrade") { this.fort.buyUpgrade(p, String((act as any).id ?? "") as never); return; }
     if (act.a === "craft") { this.fort.craft(p, String((act as any).id ?? "") as never); return; }
     if (act.a === "stealStop") { this.fort.theftStop(p); return; }
+    if (act.a === "taskBuy") { this.loopQuests.buyTask(p); return; } // (R14 stage 4: at your fort's board)
+    if (act.a === "jobTake") { const b = String((act as any).boss ?? ""); if (b === "seamus" || b === "binnie") this.loopQuests.takeJob(p, b); return; }
+    if (act.a === "questDrop") { this.loopQuests.drop(p, (act as any).src === "job" ? "job" : "task"); return; }
     if (frozenPhase(this.match.phase)) return; // (R14: the countdown and PREP: nothing hostile, nothing in the street)
     if (act.a === "pg") { // (R12.3: the pub's games; the station checks turns, values and seats itself)
       const op = (act as any).op;
@@ -2024,6 +2038,8 @@ export class World {
     this.updateHeldItems();
     this.stepFreeItems(dt);
     this.match.tick(dt);
+    this.loopQuests.tick(dt);
+    this.security.tick();
     this.props.tick(dt);
     this.pawn.tick(dt);
     this.lobby.tick(dt);
@@ -2304,7 +2320,7 @@ export class World {
   }
 
   // ------------------------------------------------------------------ events
-  emit(e: WorldEvent) { this.events.push(e); }
+  emit(e: WorldEvent) { this.events.push(e); if (e.t === "knockdown" || e.t === "robDone") this.loopQuests?.onEvent(e); else if (e.t === "shoplift") this.security?.lifted(e.p, e.shop, e.item ?? ""); }
   takeEvents(): WorldEvent[] { const e = this.events; this.events = []; return e; }
 }
 

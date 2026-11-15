@@ -11,6 +11,8 @@
 import type { Box, Rect } from "./arena.js";
 
 export type StoreId = "rustbucket" | "plugpray" | "needledrop" | "peakfomo" | "maisonpong" | "caratrun";
+/** R14: the stores with STORE SECURITY inside the door (loop/security.ts) */
+export const HIGH_END_STORES = new Set<string>(["caratrun", "maisonpong"]);
 export type StoreTier = 0 | 1 | 2;
 
 export interface StoreDef {

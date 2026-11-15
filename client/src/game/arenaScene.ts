@@ -2,7 +2,7 @@
 // Your own movement is simulated immediately in the browser ("prediction") using the
 // exact same rules as the server. When the server's answer arrives we quietly correct
 // any difference ("reconciliation"), smoothing small corrections so you never feel a snap.
-import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput, shelfSpot, LOOP,
+import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput, shelfSpot, LOOP, fortAt2, FORT_SPOTS, QUEST, questLocs,
 } from "@bfb/shared";
 import {
   Scene, Engine, UniversalCamera, Camera, HemisphericLight, DirectionalLight, ShadowGenerator,
@@ -291,6 +291,21 @@ export class ArenaScene {
   private stealHeld = false;
   private loopCache: { json: string; v: LoopView | null } = { json: "", v: null };
   /** R14: my fort and quests (parsed once per change) */
+  /** R14 stage 4: standing at your own fort's task board (live phases) */
+  get atBoard(): boolean {
+    const ph = this.match.phase; if (ph !== "scavenge" && ph !== "dusk" && ph !== "night") return false;
+    const f = this.arena.forts?.find((q) => q.slot === this.myColorIdx); if (!f) return false;
+    const b = fortAt2(f, FORT_SPOTS.board.u, FORT_SPOTS.board.v);
+    return Math.hypot(this.cur.x - b.x, this.cur.z - b.z) < QUEST.boardReach;
+  }
+  private qlocs: Map<string, { x: number; z: number; r: number }> | null = null;
+  /** R14 stage 4: next to a boss with work (SEAMUS at his bar, DON BINNIE's man at NEON FEVER's door) */
+  get nearBoss(): "seamus" | "binnie" | null {
+    const ph = this.match.phase; if (ph !== "scavenge" && ph !== "dusk" && ph !== "night") return null;
+    this.qlocs ??= questLocs(this.arena);
+    for (const [b, k] of [["seamus", "seamus"], ["binnie", "fever"]] as const) { const l = this.qlocs.get(k); if (l && Math.hypot(this.cur.x - l.x, this.cur.z - l.z) < QUEST.bossReach) return b; }
+    return null;
+  }
   get myLoop(): LoopView | null { if (this.loopCache.json !== this.shopJson) this.loopCache = { json: this.shopJson, v: parseLoop(this.shopJson) }; return this.loopCache.v; }
   private cars: CarRenderer;
   private copCars: CopCarRenderer;
@@ -1157,6 +1172,32 @@ export class ArenaScene {
           else if (e.p === me && e.reason !== "let go") this.onFeedback?.(e.reason === "moved" ? "You moved: they'll keep it." : e.reason === "knocked" ? "Knocked off the job!" : e.reason === "time" ? "Too late: sunrise." : "The theft's off.", "bad");
           if (e.ok && e.owner === me) { sfx.raidAlarm(); const who = this.scores.find((x) => x.id === e.p)?.name ?? "Someone"; this.onBanner?.(`${who.toUpperCase()} STOLE YOUR ${lootDef(e.type!).name.toUpperCase()}!`, "Get it back before they bank it! (Your SAFE is never stolen from.)", "bad"); }
           break;
+        // ---- R14 stage 4: quests, interruptions, STORE SECURITY
+        case "questNo": if (e.p === me) { sfx.full(); this.onFeedback?.(e.reason.charAt(0).toUpperCase() + e.reason.slice(1) + ".", "bad"); } break;
+        case "questStart":
+          if (e.p === me) { sfx.checkpoint(); this.onBanner?.(e.src === "job" ? `JOB: ${e.name}` : `AURA TASK: ${e.name}`, e.text + (e.src === "task" ? "  ·  LIVE: everyone can see you going for it" : ""), "info"); }
+          break;
+        case "questEnd":
+          if (e.p === me && e.ok) { sfx.gameDone(); this.onBanner?.(`${e.name}: DONE!`, [e.cash ? `+$${e.cash}` : "", e.aura ? `+${e.aura} AURA` : "", e.rep !== undefined ? `REPUTATION ${e.rep}/5` : ""].filter(Boolean).join("  ·  "), "good"); }
+          else if (e.p === me && e.reason !== "dropped" && !e.reason.startsWith("interrupted")) this.onFeedback?.(`${e.name}: failed (${e.reason}).`, "bad");
+          break;
+        case "questLive":
+          if (e.p !== me) { const who = this.scores.find((x) => x.id === e.p)?.name ?? "A rival"; this.onFeedback?.(`${who} is going for ${e.name}: knock them down to interrupt it (+${LOOP.interruptGain} aura)`, "info"); }
+          break;
+        case "questInterrupt": {
+          const who = this.scores.find((x) => x.id === e.by)?.name ?? "A rival", them = this.scores.find((x) => x.id === e.p)?.name ?? "them";
+          if (e.p === me) { sfx.full(); this.onBanner?.("INTERRUPTED!", `${who} knocked you off ${e.name}${e.scored ? `  ·  -${LOOP.interruptLoss} AURA` : ""}`, "bad"); }
+          else if (e.by === me) this.onFeedback?.(e.scored ? `You interrupted ${them}'s ${e.name}!` : `You stopped ${them}'s ${e.name} (no more aura from them this cycle).`, "good");
+          break;
+        }
+        case "bananaSlip":
+          if (e.p === me) this.onFeedback?.("You slipped on their BANANA PEEL!", "bad");
+          else if (e.owner === me) this.onFeedback?.("They slipped on your BANANA PEEL: your task carries on!", "good");
+          break;
+        case "secWarn": if (e.p === me) this.onFeedback?.(`${e.store} SECURITY: "Pay for that." Walk out with it and they'll chase you.`, "bad"); break;
+        case "secShove": if (e.p === me) this.onFeedback?.("Shoved back in. Pay for it or put it down.", "bad"); break;
+        case "secChase": if (e.p === me) { sfx.raidAlarm(); this.onBanner?.("SECURITY'S AFTER YOU!", "Outrun them for 10 s or get 25 m clear of the store. Caught = it goes back.", "bad"); } break;
+        case "secRetrieve": if (e.p === me) this.onFeedback?.(e.types.length ? "TACKLED! Security took it back." : "TACKLED!", "bad"); break;
         case "fortAlarm":
           if (e.p === me) {
             sfx.raidAlarm(); sfx.raidSiren(1);
@@ -1408,6 +1449,7 @@ export class ArenaScene {
     if (a === "grab" && this.stealTarget && !this.lookTarget) { // (R14: night: hold E at a rival's shelves)
       this.stealHeld = true; this.onAction?.({ a: "steal", owner: this.stealTarget.owner, rec: this.stealTarget.rec }); sfx.uiClick(); return;
     }
+    if (a === "grab" && this.atBoard && !this.lookTarget && !this.useTarget && !this.stealTarget) { this.onAction?.({ a: "taskBuy" }); return; } // (R14: your fort's board: an aura task)
     if (a === "grab" && this.arrestTarget && !this.pinOn) { // (C5c.1: citizen's arrest: beats grabbing whatever's lying there)
       this.onAction?.({ a: "arrest", p: this.arrestTarget.id });
       return;
@@ -2009,6 +2051,8 @@ export class ArenaScene {
   }
 
   get position() { return { x: this.cur.x, y: this.cur.y, z: this.cur.z }; }
+  /** which way the camera faces (0 = +z) */
+  get viewYaw() { return this.input.yaw; }
 
   update(dt: number, now: number) {
     // ---- fixed-step simulation (60 Hz) ----

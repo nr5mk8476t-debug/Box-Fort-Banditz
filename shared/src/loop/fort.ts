@@ -118,9 +118,9 @@ export class FortSystem {
     for (const f of this.forts.values()) { f.wantedSold.clear(); f.v++; }
   }
   /** what Sal's van pays for a record now */
-  offer(f: FortState, r: Rec) {
+  offer(f: FortState, r: Rec, rate: number = LOOP.vanRate) {
     const hot = this.wanted.includes(r.type) && !f.wantedSold.has(r.type);
-    return Math.max(1, Math.round(r.value * LOOP.vanRate * (hot ? LOOP.wantedMult : 1)));
+    return Math.max(1, Math.round(r.value * rate * (hot ? LOOP.wantedMult : 1)));
   }
   sell(p: PlayerSim, recIds: string[]) {
     if (this.w.match.phase !== "prep") return;
@@ -129,7 +129,7 @@ export class FortSystem {
     for (const id of recIds) {
       const i = f.recs.findIndex((r) => r.id === id);
       if (i < 0) continue; // (already sold, stolen, used: one sale per record)
-      const r = f.recs[i], pay = this.offer(f, r);
+      const r = f.recs[i], pay = this.offer(f, r, this.w.loopQuests.vanRate(p));
       if (this.wanted.includes(r.type)) f.wantedSold.add(r.type);
       f.recs.splice(i, 1); cash += pay; sold.push(r.type);
     }

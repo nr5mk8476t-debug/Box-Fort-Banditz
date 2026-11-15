@@ -41,7 +41,9 @@ export type NpcKind = "tourist" | "businessman" | "influencer" | "jogger" | "gym
   // BIG DESSIE dancing (badly) in front of the band
   | "leprechaun" | "lep_buddy" | "drunk_dancer"
   // R13: customers browsing the six stores (they wander between a store's spots)
-  | "shopper";
+  | "shopper"
+  // R14: the high-end stores' security (CARAT & RUN, MAISON PONG): warns, shoves, chases 10 s, tackles, takes it back
+  | "store_heavy";
 
 export interface NpcDef {
   kind: NpcKind;
@@ -211,6 +213,19 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
       perfect: ["Ah, beautiful!", "Did you SEE that?!", "Slainte! Lovely!"],
       close: ["Not bad, not bad.", "Nearly had it!"],
       miss: ["Ah, unlucky.", "Back of the queue, you."],
+    },
+  },
+  store_heavy: {
+    kind: "store_heavy", name: "Store Security", walk: 1.3, flee: 3.0, fighter: true, hp: 30, dodge: 0, notoriety: 10, spawnWeight: 0, chase: 7.4,
+    loot: [["coin_pile", 1]],
+    lines: {
+      idle: ["Browsing is free. Touching is extra.", "*cracks knuckles politely*", "Lovely day for buying things.", "I'm watching. Respectfully.", "Hands where the price tags can see them."],
+      warn: ["Pay for that, please.", "Ah-ah. That goes to the till.", "Put it back or pay for it, friend.", "I saw that. Everyone saw that."],
+      hit: ["That's going in my report.", "Hm. Brave.", "Ow. Rude."],
+      fight: ["OI! Bring that back!", "STOP! Shoplifter!", "You've not paid for that!"],
+      win: ["I'll take that back, thank you.", "Returned to stock.", "Have a nice day. Elsewhere."],
+      lose: ["...it's not worth my wage."],
+      lost: ["Not my pavement. Not my problem.", "And STAY gone!"],
     },
   },
   shopper: {
@@ -487,13 +502,15 @@ export const NPC_DEFS: Record<NpcKind, NpcDef> = {
 /** Pedestrian types that wander the streets (raccoons and cashiers have their own jobs). */
 export const NPC_KINDS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => NPC_DEFS[k].spawnWeight > 0);
 /** Kinds that are never part of the everyday crowd (own jobs, own counts). */
-export const SPECIAL_KINDS = new Set<NpcKind>(["wee_mickey", "raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "lou", "meat_locker", "champ", "fran", "cold_cuts", "receptionist", "don", "velvet_guard", "sketchy_steve", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
+export const SPECIAL_KINDS = new Set<NpcKind>(["store_heavy", "wee_mickey", "raccoon", "cashier", "doorman", "fisherman", "old_lady", "uncle_dumpster", "bank_guard", "maitre_d", "bouncer", "vinnie", "lou", "meat_locker", "champ", "fran", "cold_cuts", "receptionist", "don", "velvet_guard", "sketchy_steve", "cop", "millionaire", "bodyguard", "courier", "celebrity", "fan", "crypto_bro"]);
 /** The four big shots. */
 export const BIG_SHOTS = (Object.keys(NPC_DEFS) as NpcKind[]).filter((k) => !!NPC_DEFS[k].bigShot);
 
 /** R5: Meat Locker: knocked out this long (the back room's unguarded), and what his one punch does to you */
 export const MEAT_LOCKER = { ko: 40, knock: 6, throw: 8.5, lift: 3.5, windup: 0.18, cooldown: 0.45 };
 /** R7: the two pawn shops' bouncers (Meat Locker and his twin Cold Cuts: the same in every way but the name) */
+/** R14: STORE SECURITY (loop/security.ts): chases 10 s, never more than 25 m from the store's door; the shove; the tackle */
+export const SECURITY = { chaseTime: 10, leash: 25, shoveReach: 1.9, shove: 6, warnings: 1 };
 export const BOUNCERS = new Set<NpcKind>(["meat_locker", "cold_cuts", "velvet_guard"]);
 /** R7: the two pawn shop owners (they never leave the till; they duck and holler for the bouncer) */
 export const SHOP_OWNERS = new Set<NpcKind>(["lou", "fran"]);

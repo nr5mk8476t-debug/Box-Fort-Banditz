@@ -32,7 +32,8 @@ export class PrepScreen {
     if (!L) return;
     const recs = L.r.map(([id, type, value, safe]) => ({ id, type, value, safe: !!safe, cat: itemCategory(type, lootDef(type)) as ItemCategory }));
     const wanted = L.w ?? [], wantedSold = new Set(L.ws ?? []);
-    const offer = (r: { type: string; value: number }) => Math.max(1, Math.round(r.value * LOOP.vanRate * (wanted.includes(r.type) && !wantedSold.has(r.type) ? LOOP.wantedMult : 1)));
+    const rate = L.q?.vr ?? LOOP.vanRate;
+    const offer = (r: { type: string; value: number }) => Math.max(1, Math.round(r.value * rate * (wanted.includes(r.type) && !wantedSold.has(r.type) ? LOOP.wantedMult : 1)));
     const nSafe = recs.filter((r) => r.safe).length, nShelf = recs.length - nSafe;
     $("prep-head").innerHTML = `<b>PREP</b> · CYCLE ${round}/${rounds} · <span class="pp-fort">${esc(FORT_LEVEL_NAMES[L.L] ?? "")}</span>
       <span class="pp-purse">$<b>${cash}</b></span><span class="pp-aura">AURA <b>${aura}</b></span>`;
@@ -47,7 +48,7 @@ export class PrepScreen {
     }).join("") || `<p class="small">Nothing banked yet. Drop loot on your DEPOSIT MAT (10 s) to bank it.</p>`;
     const unsafe = recs.filter((r) => !r.safe);
     $("prep-storage").innerHTML = `<h3>YOUR FORT: shelves ${nShelf}/${L.S} · safe ${nSafe}/${L.F}</h3>
-      <p class="small">Sal's van pays ${Math.round(LOOP.vanRate * 100)}%. ★ wanted today (x${LOOP.wantedMult}, first one): ${wanted.map((t) => esc(lootDef(t).name)).join(", ") || "-"}. The SAFE can't be stolen from at night; the shelves can.</p>
+      <p class="small">Sal's van pays ${Math.round(rate * 100)}%. ★ wanted today (x${LOOP.wantedMult}, first one): ${wanted.map((t) => esc(lootDef(t).name)).join(", ") || "-"}. The SAFE can't be stolen from at night; the shelves can.</p>
       <div class="pp-list">${rows}</div>
       ${unsafe.length ? `<button class="btn btn-small" data-sell="${unsafe.map((r) => r.id).join(",")}">SELL EVERYTHING NOT IN THE SAFE ($${unsafe.reduce((a, r) => a + offer(r), 0)})</button>` : ""}`;
     // ---- upgrades

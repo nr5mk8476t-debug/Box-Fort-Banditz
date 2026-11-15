@@ -3,7 +3,7 @@
 //   walk (route map) / idle -> [hit] -> stunned -> flee | chase -> windup -> strike -> gloat | ko -> flee
 import { makeMoveState, stepMovement, type MoveState, type MoveInput } from "./movement.js";
 import { PLAYER, SIM_DT } from "./constants.js";
-import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, MEAT_LOCKER, CHAMP, BOUNCERS, SHOP_OWNERS, BYSTANDER_SCREAMS, pickWeighted, pickLine, type NpcKind } from "./npc.js";
+import { NPC_DEFS, NPC_KINDS, SPECIAL_KINDS, BIG_SHOTS, KO_BONUS, MEAT_LOCKER, CHAMP, BOUNCERS, SECURITY, SHOP_OWNERS, BYSTANDER_SCREAMS, pickWeighted, pickLine, type NpcKind } from "./npc.js";
 import { buildNavGraph, type NavNode } from "./navgraph.js";
 import { nearBoxes, onRoadAt, inFoot, inRect, DEAL, SWARM, type ArenaLayout } from "./arena.js";
 import { hyp } from "./fmath.js";
@@ -176,8 +176,13 @@ export class NpcSystem {
       n.state = po.kind === "old_lady" ? "sleep" : "work";
       const hs = (host.arena.hotShops ?? []).find((h) => inRect(h.rect, po.x, po.z, 1.5)); // (R7: which pawn shop they work at)
       if (hs) n.shop = hs.idx;
+      if (po.kind === "store_heavy") n.shop = po.v ?? -1; // (R14: which store's security)
     }
   }
+  /** R14: STORE SECURITY (loop/security.ts): the heavy of shop `shop`, a line, after someone (10 s at most, 25 m from the door) */
+  heavyOf(shop: number) { for (const n of this.npcs.values()) if (n.kind === "store_heavy" && n.shop === shop && n.state !== "ko") return n; return undefined; }
+  heavySay(id: string, what: "warn" | "fight" | "win" | "lost") { const n = this.npcs.get(id); if (n) this.say(n, NPC_DEFS.store_heavy.lines[what], true); }
+  heavyChase(id: string, pid: string) { const n = this.npcs.get(id); if (!n || n.state === "ko" || n.state === "chase" || n.state === "windup") return; n.state = "chase"; n.target = pid; n.chaseT = 0; this.say(n, NPC_DEFS.store_heavy.lines.fight, true); }
 
   // ---------------------------------------------------------------- cashiers
   cashierOf(shop: number): NpcSimData | undefined {
@@ -822,6 +827,9 @@ export class NpcSystem {
         case "chase": {
           const p = pById.get(n.target);
           n.chaseT += dt;
+          if (n.kind === "store_heavy" && n.post && (n.chaseT > SECURITY.chaseTime || hyp(p ? p.x - n.post.x : 99, p ? p.z - n.post.z : 99) > SECURITY.leash)) {
+            n.state = "huff"; n.stateT = 1.5; n.target = ""; this.say(n, def.lines.lost, true); break; // (R14: never further than the store's own pavement)
+          }
           if (!p || !(p.connected || (n.kind === "champ" && p.inCell)) || p.knocked || n.chaseT > CHASE_GIVE_UP || hyp(p.x - n.move.x, p.z - n.move.z) > 20) {
             n.state = "huff"; n.stateT = 1.5; n.target = "";
             break;
