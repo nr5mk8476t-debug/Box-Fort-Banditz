@@ -2,7 +2,7 @@
 // Your own movement is simulated immediately in the browser ("prediction") using the
 // exact same rules as the server. When the server's answer arrives we quietly correct
 // any difference ("reconciliation"), smoothing small corrections so you never feel a snap.
-import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput, shelfSpot, LOOP, fortAt2, FORT_SPOTS, QUEST, questLocs, parseStockNote,
+import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput, shelfSpot, LOOP, fortAt2, FORT_SPOTS, QUEST, questLocs, parseStockNote, canReachSlot,
 } from "@bfb/shared";
 import {
   Scene, Engine, UniversalCamera, Camera, HemisphericLight, DirectionalLight, ShadowGenerator,
@@ -1697,6 +1697,7 @@ export class ArenaScene {
     for (const t of this.stockR.near(me.x, me.z, 3)) {
       const dx = t.x - eye.x, dy = t.y + 0.12 - eye.y, dz = t.z - eye.z, d = Math.hypot(dx, dy, dz);
       if (d > 2.6 || d < 0.2) continue;
+      if (!canReachSlot(this.arena, eye.x, eye.y, eye.z, { x: t.x, y: t.y, z: t.z, floor: false })) continue; // (not through a wall or a window: the host checks the same)
       const dot = (dx * fx + dy * fy + dz * fz) / d;
       if (dot > best) { best = dot; this.stockTarget = { store: t.store, slot: t.slot, type: t.type, value: t.value }; }
     }

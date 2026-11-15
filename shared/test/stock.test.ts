@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World, type WorldEvent } from "../src/world.js";
 import { buildTrashington } from "../src/city.js";
-import { setCityMap as useCity, lootDef, STORE_STOCK, parseStockNote, itemCategory, UPGRADES, RECIPES, BOSS_JOBS, type ItemCategory } from "../src/index.js";
+import { setCityMap as useCity, lootDef, STORE_STOCK, parseStockNote, canReachSlot, itemCategory, UPGRADES, RECIPES, BOSS_JOBS, type ItemCategory } from "../src/index.js";
 
 const ev = <T extends WorldEvent["t"]>(es: WorldEvent[], t: T) => es.filter((e) => e.t === t) as Extract<WorldEvent, { t: T }>[];
 const skip = (w: World) => { w.match.timeLeft = 0.001; w.tick(); };
@@ -19,7 +19,14 @@ function sWorld(map: "new" | "classic" = "new", seed = 4, n = 2) {
 }
 const loose = (w: World) => [...w.items.values()].filter((it) => it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk && !lootDef(it.type).npcOnly && it.type !== "cell_key");
 /** stand right in front of a slot */
-const atSlot = (w: World, p: any, store: string, i: number) => { const s = w.stock.of(store)!.slots[i]; p.move.x = s.x + 0.8; p.move.z = s.z; p.move.y = Math.max(0, s.y - 1.2); };
+const atSlot = (w: World, p: any, store: string, i: number) => {
+  const s = w.stock.of(store)!.slots[i];
+  for (const d of [0.9, 1.3, 1.8]) for (let a = 0; a < 16; a++) {
+    const x = s.x + Math.sin(a * Math.PI / 8) * d, z = s.z + Math.cos(a * Math.PI / 8) * d;
+    if (canReachSlot(w.arena, x, 1.6, z, s)) { p.move.x = x; p.move.z = z; p.move.y = 0; return; }
+  }
+  throw new Error(`no spot reaches ${store} slot ${i}`);
+};
 const firstStocked = (w: World, store: string, pred = (_t: string) => true) => w.stock.of(store)!.things.findIndex((t) => !!t && !t.taken && pred(t.type));
 
 test("R15 the new map: no street loot; tills stay; the classic map keeps its spawns", () => {
@@ -105,4 +112,40 @@ test("R15 every category the upgrades, recipes and boss jobs need is stocked som
   const hw = STORE_STOCK.lastscrew.stock.map(([t]) => itemCategory(t, lootDef(t)));
   assert.ok(hw.filter((c) => c === "construction").length >= 10, "LAST SCREW is the place for construction supplies");
   for (const [, tab] of Object.entries(STORE_STOCK)) for (const [type] of tab.stock) assert.ok(lootDef(type).type === type, `${type} is a real item`);
+});
+
+test("R15 taking needs a clear reach: never through a wall or a shop window", () => {
+  const { w, ps } = sWorld();
+  const p = ps[0], store = "plugpray", s = w.stock.of(store)!;
+  const st = w.arena.stores!.find((x) => x.id === store)!, r = st.inside;
+  let tried = 0;
+  for (let i = 0; i < s.slots.length && tried < 3; i++) {
+    if (!s.things[i]) continue;
+    const sl = s.slots[i];
+    // a point 1.4 m away that's OUTSIDE the store (a wall or window between)
+    for (let a = 0; a < 16; a++) {
+      const x = sl.x + Math.sin(a * Math.PI / 8) * 1.4, z = sl.z + Math.cos(a * Math.PI / 8) * 1.4;
+      if (x > r.minX - 0.3 && x < r.maxX + 0.3 && z > r.minZ - 0.3 && z < r.maxZ + 0.3) continue;
+      p.move.x = x; p.move.z = z; p.move.y = 0; w.takeEvents();
+      assert.equal(w.stock.take(p, store, i), "", `slot ${i} from outside (${x.toFixed(1)}, ${z.toFixed(1)}): refused`);
+      assert.equal(ev(w.takeEvents(), "stockNo")[0]?.reason, "far"); tried++; break;
+    }
+  }
+  assert.ok(tried > 0, "found shelf things next to a wall to test");
+});
+
+test("R15 no unreachable loot: every slot in every store can be reached from somewhere inside it", () => {
+  const { w } = sWorld();
+  for (const id of w.stock.storeIds()) {
+    const s = w.stock.of(id)!, r = w.arena.stores!.find((x) => x.id === id)!.inside;
+    s.slots.forEach((sl, i) => {
+      let ok = false;
+      for (let d = 0.6; d <= 2.2 && !ok; d += 0.4) for (let a = 0; a < 16 && !ok; a++) {
+        const x = sl.x + Math.sin(a * Math.PI / 8) * d, z = sl.z + Math.cos(a * Math.PI / 8) * d;
+        if (x < r.minX + 0.3 || x > r.maxX - 0.3 || z < r.minZ + 0.3 || z > r.maxZ - 0.3) continue;
+        if (canReachSlot(w.arena, x, 1.6, z, sl)) ok = true;
+      }
+      assert.ok(ok, `${id} slot ${i} (${sl.x.toFixed(1)}, ${sl.y.toFixed(1)}, ${sl.z.toFixed(1)}) can be reached`);
+    });
+  }
 });

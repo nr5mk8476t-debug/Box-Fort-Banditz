@@ -1435,6 +1435,8 @@ enterTitle();
     stockTarget: () => arena?.stockTarget ?? null,
     stockHost: (store: string) => { const s = local?.world.stock.of(store); return s ? { slots: s.slots, things: s.things, sale: s.sale } : null; },
     counterOpen: () => counterMenu.store,
+    storesLayout: () => arena?.arenaLayout.stores ?? null,
+    clearHands: () => { if (!local) return; const p = local.world.players.get(SOLO_ID)!; for (const it of local.world.carriedItems(p)) local.world.consumeItem(p, it.id); },
     /** (tests, solo) R14 stage 5: qualify for MAYOR; the campaign as the host has it; finish the goofy ones */
     mayorQualify: () => { if (!local) return; const w = local.world, p = w.players.get(SOLO_ID)!, f = w.fort.of(p); p.aura = Math.max(p.aura, 70); p.cash = Math.max(p.cash, 1000); for (const u of ["level2", "level3", "level4"]) f.ups.add(u as never); f.gear.posters = 1; f.gear.sash = 1; f.v++; },
     mayor: () => { const c = local?.world.mayor.c; if (!c) return null; const pn = local!.world.npc.npcs.get(c.presNpc); return { t: c.t, strikes: c.strikes, pres: pn ? { x: pn.move.x, z: pn.move.z, yaw: pn.move.yaw } : c.pres, presDone: c.presDone, posters: c.posters.map((x) => ({ x: x.loc.x, z: x.loc.z, done: x.done, name: x.loc.name })), podium: c.podium, speech: c.speech, goofy: c.goofy.map((g) => g.name) }; },

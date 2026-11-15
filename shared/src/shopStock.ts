@@ -13,6 +13,7 @@ import type { World, PlayerSim } from "./world.js";
 import { lootDef, rollValue, type LootDef } from "./loot.js";
 import { STORES, STORE_FIXTURES, storeFrame, STORE_FLOOR, type StoreId } from "./stores.js";
 import { hyp } from "./fmath.js";
+import { nearBoxes, inFoot, type ArenaLayout } from "./arena.js";
 
 export type StockEvent =
   | { t: "stockNo"; p: string; reason: string }
@@ -79,6 +80,17 @@ export function stockSlots(id: string): StockSlot[] {
 }
 
 const fits = (d: LootDef, s: StockSlot) => s.floor || d.size !== "giant";
+
+/** can someone whose eye is at (ex, ey, ez) reach the thing in slot `s`? Nothing solid on the line between: walls, glass
+ *  (a shop window), a closed door. The line stops 0.45 m short (the thing's own shelf). Host and client use the same. */
+export function canReachSlot(arena: ArenaLayout, ex: number, ey: number, ez: number, s: StockSlot): boolean {
+  const dx = s.x - ex, dz = s.z - ez, dy = s.y + 0.12 - ey, len = hyp(dx, dz);
+  for (let d = 0.2; d < len - 0.45; d += 0.2) {
+    const t = d / len, x = ex + dx * t, z = ez + dz * t, y = ey + dy * t;
+    for (const b of nearBoxes(arena, x, z, 0.3)) if (y > b.y - b.h / 2 && y < b.y + b.h / 2 && inFoot(b, x, z, 0)) return false;
+  }
+  return true;
+}
 const CARRY_REACH = 2.6;
 
 interface Placed { type: string; value: number; taken: boolean }
@@ -144,6 +156,7 @@ export class ShopStock {
     if (!t || t.taken) return no("gone"); // (two at once: the first one's)
     if (p.move.knockT > 0 || p.jailT > 0) return no("cant");
     if (hyp(p.move.x - slot.x, p.move.z - slot.z) > CARRY_REACH || Math.abs(p.move.y + 1.2 - slot.y) > 2.2) return no("far");
+    if (!canReachSlot(this.w.arena, p.move.x, p.move.y + 1.6, p.move.z, slot)) return no("far"); // (not through a wall or a window)
     const d = lootDef(t.type);
     const pocket = d.size === "small" && p.pockets.includes("");
     if (!pocket && p.hand) return no("hands");
