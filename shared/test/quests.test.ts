@@ -146,3 +146,21 @@ test("R14 quests: boss jobs: at the boss, one per boss per cycle, cash + aura + 
   toPhase(w, "prep"); toPhase(w, "scavenge");
   assert.equal(w.fort.of(p).gear.banana, 1); assert.equal(w.fort.of(p).gear.moustache, 1);
 });
+
+test("R14.1 banana peel (Blake's repro): decided BEFORE the knockdown: you keep your feet and what you carry; they go down", () => {
+  const { w, ps } = qWorld();
+  const [me, rival] = ps;
+  buy(w, me, "hangtime");
+  w.fort.of(me).gear.banana = 1;
+  const id = w.placeItem("lava_lamp", me.move.x, 1, me.move.z); const it = w.items.get(id)!; it.holder = me.id; it.mode = "held" as never; me.hand = id;
+  w.knockdown(me, rival.id);
+  assert.equal(me.move.knockT, 0, "I'm still up"); assert.equal(me.hand, id, "still holding it");
+  assert.ok(rival.move.knockT > 0, "they slipped"); assert.equal(w.fort.of(me).gear.banana, 0);
+  assert.ok((w.loopQuests as any).of(me).task, "the task carries on");
+  // a punch that would knock me out: same (the knockout blow never lands)
+  rival.move.knockT = 0; rival.move.immuneT = 0; w.fort.of(me).gear.banana = 1; me.hp = 5;
+  assert.equal(w.hurt(me, 50, rival.id), false); assert.equal(me.move.knockT, 0); assert.ok(me.hp > 0);
+  // no task, no campaign: the banana stays in your bag
+  (w.loopQuests as any).drop(me, "task"); rival.move.knockT = 0; rival.move.immuneT = 0; w.fort.of(me).gear.banana = 1;
+  w.knockdown(me, rival.id); assert.ok(me.move.knockT > 0); assert.equal(w.fort.of(me).gear.banana, 1);
+});

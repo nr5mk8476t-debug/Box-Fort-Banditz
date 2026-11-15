@@ -189,6 +189,8 @@ export class NpcSystem {
   /** R14: STORE SECURITY (loop/security.ts): the heavy of shop `shop`, a line, after someone (10 s at most, 25 m from the door) */
   heavyOf(shop: number) { for (const n of this.npcs.values()) if (n.kind === "store_heavy" && n.shop === shop && n.state !== "ko") return n; return undefined; }
   heavySay(id: string, what: "warn" | "fight" | "win" | "lost") { const n = this.npcs.get(id); if (n) this.say(n, NPC_DEFS.store_heavy.lines[what], true); }
+  /** the chase carries on after whoever has the stolen thing now */
+  heavyRetarget(id: string, pid: string) { const n = this.npcs.get(id); if (n && (n.state === "chase" || n.state === "windup")) n.target = pid; }
   heavyChase(id: string, pid: string) { const n = this.npcs.get(id); if (!n || n.state === "ko" || n.state === "chase" || n.state === "windup") return; n.state = "chase"; n.target = pid; n.chaseT = 0; this.say(n, NPC_DEFS.store_heavy.lines.fight, true); }
 
   // ---------------------------------------------------------------- cashiers

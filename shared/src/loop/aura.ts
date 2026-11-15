@@ -55,10 +55,11 @@ export class AuraSystem {
     s.add(copId);
     return this.grant(p, LOOP.copAura, "flattened a cop");
   }
-  /** a banked thing stolen from a rival's fort (each record once a cycle, whoever steals it) */
-  theft(p: PlayerSim, recId: string) {
-    if (this.stolen.has(recId)) return 0;
-    this.stolen.add(recId);
+  /** a banked thing stolen from a rival's fort: each LOOT once a cycle, whoever steals it, however often it's banked
+   *  again in between (`uid`: its permanent identity, Rec.uid) */
+  theft(p: PlayerSim, uid: string) {
+    if (this.stolen.has(uid)) return 0;
+    this.stolen.add(uid);
     return this.grant(p, LOOP.theftAura, "a night-time theft");
   }
 }

@@ -180,3 +180,34 @@ test("R14 gear: the HAND TRUCK and DRAG HARNESS speed carrying up; the FAKE MOUS
   w.police.bust(a, "test", false);
   assert.ok(a.jailT > 0, "the next time: arrested");
 });
+
+test("R14.1 aura farming (Blake's repro): the same loot stolen and banked again, back and forth, pays theft aura ONCE a cycle", () => {
+  const { w, ps } = loopWorld();
+  const [a, b] = ps;
+  toPhase(w, "scavenge"); toPhase(w, "dusk"); toPhase(w, "night"); w.takeEvents();
+  w.fort.of(b).recs.push({ id: "q1", type: "lava_lamp", value: 30, safe: false, uid: "loot-1" });
+  const stealFrom = (thief: typeof a, owner: typeof a) => {
+    const f = lot(w, owner.colorIdx), sp = shelfSpot(f, 0);
+    w.debugTeleport(thief.id, sp.x + Math.sin(f.yaw) * 1.3, sp.z + Math.cos(f.yaw) * 1.3, f.yaw + Math.PI, 0.2); settle(w, 0.3); w.takeEvents();
+    const rec = w.fort.of(owner).recs[0];
+    w.action(thief.id, { a: "steal", owner: owner.id, rec: rec.id }); settle(w, LOOP.theftTime + 0.3);
+    const done = ev(w.takeEvents(), "theftEnd").find((e) => e.ok)!;
+    assert.ok(done, `${thief.id} stole it`);
+    // bank it: straight onto the thief's mat (the same loot, a new record)
+    const held = w.items.get(done.item!)!;
+    assert.equal(held.uid, "loot-1", "the loot keeps its identity in your hands");
+    w.consumeItem(thief, held.id);
+    w.fort.of(thief).recs.push({ id: "re" + Math.random(), type: held.type, value: held.value, safe: false, uid: held.uid });
+  };
+  stealFrom(a, b); stealFrom(b, a); stealFrom(a, b);
+  assert.equal(a.aura + b.aura, LOOP.theftAura, `one theft's aura between them, not three (a ${a.aura}, b ${b.aura})`);
+});
+
+test("R14.1 banking keeps the loot's identity: a stolen thing banked again is the same loot", () => {
+  const { w, ps } = loopWorld();
+  toPhase(w, "scavenge"); w.takeEvents();
+  const id = onMat(w, ps[0].colorIdx, "lava_lamp", 30);
+  w.items.get(id)!.uid = "loot-7";
+  settle(w, LOOP.bankTime + 0.5);
+  assert.equal(w.fort.of(ps[0]).recs.find((r) => r.type === "lava_lamp")?.uid, "loot-7");
+});

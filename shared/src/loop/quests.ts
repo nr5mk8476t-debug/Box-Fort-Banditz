@@ -14,7 +14,7 @@
 import type { World, PlayerSim, WorldEvent } from "../world.js";
 import type { ArenaLayout } from "../arena.js";
 import { lootDef } from "../loot.js";
-import { LOOP, itemCategory, type ItemCategory, type GearId } from "./catalog.js";
+import { LOOP, itemCategory, type ItemCategory } from "./catalog.js";
 import { FORT_SPOTS, fortAt2 } from "./fort.js";
 
 /** a place a quest can point at */
@@ -296,11 +296,7 @@ export class QuestSystem {
     if (!p || !by || by === p) return;
     const s = this.of(p), a = s.task;
     if (!a) return;
-    if (this.w.fort.useGear(p, "banana" as GearId)) {
-      this.w.emit({ t: "bananaSlip", p: by.id, owner: p.id });
-      this.w.knockdown(by, "banana");
-      return;
-    }
+    // (a BANANA PEEL is decided before the knockdown: World.bananaSave; this only sees knockdowns that happened)
     const key = p.id + "|" + by.id;
     const scores = !this.pairs.has(key);
     if (scores) this.pairs.add(key);

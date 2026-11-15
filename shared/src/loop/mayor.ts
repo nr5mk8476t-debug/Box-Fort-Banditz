@@ -5,7 +5,7 @@
 //    1. shake hands with PRESIDENT MARMALADE (an orange-faced giant, at an announced spot)
 //    2. put up 5 of 8 posters (stand at a spot 1.5 s)
 //    3. two goofy objectives, picked at random (GOOFY)
-//    4. then the final SPEECH at the podium (10 s)
+//    4. then the final SPEECH at the podium (10 s, uninterrupted: walking off it or being knocked down starts it again)
 //  - STOPPING THEM: everyone sees the objectives, the President's spot and a ping of the candidate every 20 s.
 //    A rival knocking the candidate down = a STRIKE (-15 s; what they carry drops, as always). 3 strikes, an arrest,
 //    or the time running out = it FAILS: aura halved, the fort loses a level, no campaign again this cycle; nothing
@@ -172,9 +172,10 @@ export class MayorSystem {
   onEvent(e: WorldEvent) {
     const c = this.c;
     if (!c || e.t !== "knockdown" || e.p !== c.p) return;
+    // (R14.1, Blake: the speech is 10 UNINTERRUPTED seconds: any knockdown, by anyone, starts it again)
+    if (c.speech > 0) { c.speech = 0; c.v++; }
     const p = this.w.players.get(e.p), by = this.w.players.get(e.by);
     if (!p || !by || by === p) return;
-    if (this.w.fort.useGear(p, "banana")) { this.w.emit({ t: "bananaSlip", p: by.id, owner: p.id }); this.w.knockdown(by, "banana"); return; }
     c.strikes++; c.t = Math.max(0.01, c.t - LOOP.strikeTime); c.v++;
     this.w.emit({ t: "mayorStrike", p: p.id, by: by.id, strikes: c.strikes });
     if (c.strikes >= LOOP.campaignStrikes) this.end(false, "3 strikes");

@@ -101,6 +101,8 @@ export interface ItemSim {
   bankT: number; // seconds resting in that yard
   locked: boolean; // banked: can't be picked up by players any more (raccoons can still steal it)
   mult: number; // happy-hour bonus (1 or 2)
+  /** R14.1: the loot's permanent identity (its first item id), carried through banking and theft (Rec.uid) */
+  uid?: string;
   chute: boolean; // airdrop crate still under its parachute
   shop: number; // shop stock / register (-1 = not from a shop)
   /** R7: sitting in the station's evidence room (lift it: heat) */
@@ -776,9 +778,21 @@ export class World {
     return id;
   }
 
+  /** R14.1: a BANANA PEEL: a rival who'd knock you down mid-task or mid-campaign slips on it instead. Decided BEFORE
+   *  the knockdown, so you keep your feet and everything you carry; they go down. Used up. */
+  bananaSave(p: PlayerSim, by: string): boolean {
+    const rival = this.players.get(by);
+    if (!rival || rival === p) return false;
+    const busy = !!this.loopQuests?.of(p).task || this.mayor?.c?.p === p.id;
+    if (!busy || !this.fort.useGear(p, "banana")) return false;
+    this.emit({ t: "bananaSlip", p: rival.id, owner: p.id });
+    this.knockdown(rival, "banana");
+    return true;
+  }
   /** Knock a player down: they drop everything. Repeat knockdowns get shorter; immunity afterwards. */
   knockdown(p: PlayerSim, by: string) {
     if (p.move.knockT > 0 || p.move.immuneT > 0) return;
+    if (this.bananaSave(p, by)) return; // (R14.1: before anything drops)
     const time = KNOCK_TIMES[Math.min(p.knockCount, KNOCK_TIMES.length - 1)];
     p.knockCount += 1;
     p.knockWindowT = 12;
@@ -797,6 +811,7 @@ export class World {
    */
   hurt(p: PlayerSim, dmg: number, by: string, opts: { canKO?: boolean; dropHand?: boolean } = {}): boolean {
     if (p.jailT > 0 || p.respawnT > 0 || p.move.knockT > 0 || p.move.immuneT > 0 || dmg <= 0 || p.hp <= 0) return false;
+    if (opts.canKO !== false && p.hp - dmg <= 0 && this.bananaSave(p, by)) return false; // (R14.1: the knockout blow never lands)
     p.hp = Math.max(opts.canKO === false ? 1 : 0, p.hp - dmg);
     p.hurtT = this.time;
     this.emit({ t: "hurt", p: p.id, by, dmg, hp: Math.ceil(p.hp) });

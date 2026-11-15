@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { buildTrashington } from "../src/city.js";
 import { setCityMap as useCity, eUsable, STORES, type PropKind } from "../src/index.js";
 
-const src = readFileSync(fileURLToPath(new URL("../src/props.ts", import.meta.url)), "utf8");
+const src = readFileSync(fileURLToPath(new URL("../src/props.ts", import.meta.url)), "utf8").replace(/\r\n/g, "\n"); // (R14.1: a Windows checkout has CRLF line endings)
 const body = src.slice(src.indexOf("  use(p: PlayerSim, propId: string)"), src.indexOf("\n  }\n", src.indexOf("  use(p: PlayerSim, propId: string)")));
 const handled = new Set([...body.matchAll(/d\.kind === "(\w+)"/g)].map((m) => m[1] as PropKind));
 handled.delete("till" as PropKind);

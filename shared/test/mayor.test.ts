@@ -105,3 +105,17 @@ test("R14 mayor: an arrest or the time running out fails it; pings every 20 s", 
   w2.mayor.c!.t = 0.01; w2.tick();
   assert.equal(ev(w2.takeEvents(), "mayorEnd")[0]?.reason, "out of time");
 });
+
+test("R14.1 the speech is 10 UNINTERRUPTED seconds (Blake's repro): knocked down at 4 s, it starts again", () => {
+  const { w, ps } = mWorld();
+  const p = ps[0]; qualify(w, p); toBoard(w, p); w.action("p0", { a: "mayorRun" });
+  const c = w.mayor.c!;
+  c.presDone = true; for (const x of c.posters.slice(0, 5)) x.done = true; for (const g of c.goofy) g.prog = g.need;
+  at(w, p, c.podium.x, c.podium.z, 4.1);
+  assert.ok(c.speech > 3.5, `4 s in (${c.speech.toFixed(1)})`);
+  w.knockdown(p, "cop1");
+  assert.equal(c.speech, 0, "knocked down: from the start");
+  p.move.knockT = 0; p.move.immuneT = 0;
+  at(w, p, c.podium.x, c.podium.z, 1);
+  assert.ok(c.speech < 1.5 && w.match.phase !== "over", `starts again (${c.speech.toFixed(1)})`);
+});

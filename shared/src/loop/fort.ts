@@ -9,7 +9,9 @@ import { LOOP, UPGRADE, RECIPE, itemCategory, fortLevel, type UpgradeId, type Ge
 import { hyp } from "../fmath.js";
 
 /** one banked thing on a fort's shelves (or in its safe) */
-export interface Rec { id: string; type: string; value: number; safe: boolean }
+/** a banked thing. `uid`: the loot's permanent identity (its first item id), kept through banking, theft and banking
+ *  again (R14.1: the once-a-cycle theft aura keys on it; the record id is new every time it's banked) */
+export interface Rec { id: string; type: string; value: number; safe: boolean; uid?: string }
 export interface FortState {
   ups: Set<UpgradeId>;
   recs: Rec[];
@@ -80,7 +82,7 @@ export class FortSystem {
       it.bankT += dt;
       if (it.bankT < LOOP.bankTime) continue;
       const value = itemWorth(it);
-      f.recs.push({ id: "r" + this.nextRec++, type: it.type, value, safe: false });
+      f.recs.push({ id: "r" + this.nextRec++, type: it.type, value, safe: false, uid: it.uid ?? it.id });
       f.fullWarned = false; f.v++;
       this.w.items.delete(it.id);
       let l = done.get(owner); if (!l) done.set(owner, (l = []));
@@ -253,18 +255,18 @@ export class FortSystem {
       // done: off their shelves, into your hands (unbanked: carry it home and bank it)
       f.recs = f.recs.filter((x) => x !== r); f.v++;
       this.thefts.delete(pid);
-      const id = this.give(p, r.type, r.value);
+      const uid = r.uid ?? r.id, id = this.give(p, r.type, r.value, uid);
       this.w.emit({ t: "theftEnd", p: pid, ok: true, reason: "", item: id, type: r.type, owner: owner.id, value: r.value });
-      this.w.loopAura?.theft(p, r.id);
+      this.w.loopAura?.theft(p, uid); // (the loot's identity, not this record: banked again it's a new record, the same loot)
     }
   }
   cancelAllThefts(reason: string) { for (const pid of [...this.thefts.keys()]) { this.thefts.delete(pid); this.w.emit({ t: "theftEnd", p: pid, ok: false, reason }); } }
   /** a brand-new item straight into a player's pocket or hands (theft, rewards) */
-  give(p: PlayerSim, type: string, value: number): string {
+  give(p: PlayerSim, type: string, value: number, uid?: string): string {
     const d = lootDef(type), m = p.move;
     const id = this.w.placeItem(type, m.x, m.y + 0.6, m.z);
     const it = this.w.items.get(id)! as ItemSim;
-    it.value = value; it.mult = 1;
+    it.value = value; it.mult = 1; it.uid = uid ?? id;
     const slot = d.size === "small" ? p.pockets.indexOf("") : -1;
     if (slot >= 0) { p.pockets[slot] = id; it.mode = "pocket"; it.holder = p.id; }
     else if (!p.hand) { p.hand = id; it.mode = "held"; it.holder = p.id; it.holder2 = ""; }

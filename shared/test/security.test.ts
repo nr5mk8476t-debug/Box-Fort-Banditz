@@ -65,3 +65,26 @@ test("R14 security: lift = warning; at them with it = shove; out the door = chas
   for (let i = 0; i < 10; i++) w.tick();
   assert.equal(w.items.has(id), true, "it's yours now");
 });
+
+test("R14.1 security (Blake's repro): drop it inside, pick it up again, walk out: still chased; passed to a mate: they're chased", () => {
+  const { w, p } = sWorld();
+  const mate = w.addPlayer("p1", "P1");
+  const h = [...w.npc.npcs.values()].find((n) => n.kind === "store_heavy")!;
+  const shop = w.arena.shops!.find((s) => s.id === h.shop)!;
+  const st = w.arena.stores!.find((s) => s.name === shop.name)!;
+  const mid = { x: (shop.rect.minX + shop.rect.maxX) / 2, z: (shop.rect.minZ + shop.rect.maxZ) / 2 };
+  p.move.x = mid.x; p.move.z = mid.z;
+  const id = w.placeItem("gold_chain", p.move.x, 1, p.move.z); const it = w.items.get(id)!; it.holder = p.id; it.mode = "held" as never; p.hand = id;
+  w.security.lifted(p.id, shop.id, id); w.takeEvents();
+  // drop it inside, let it lie, pick it up again
+  w.dropHand(p); for (let i = 0; i < 90; i++) w.tick();
+  assert.equal(w.security.isHot(id), true, "dropping it inside doesn't wipe it");
+  const it2 = w.items.get(id)!; it2.holder = p.id; it2.mode = "held" as never; p.hand = id;
+  p.move.x = st.door.x + (st.door.x - h.move.x) * 2; p.move.z = st.door.z + (st.door.z - h.move.z) * 2; p.move.knockT = 0; p.move.immuneT = 0;
+  w.security.tick();
+  assert.equal(ev(w.takeEvents(), "secChase").length, 1, "walked out with it: chased"); assert.equal(h.target, p.id);
+  // a hand-off to a mate outside: the chase follows the thing
+  p.hand = ""; it2.holder = mate.id; mate.hand = id; mate.move.x = p.move.x + 3; mate.move.z = p.move.z;
+  w.security.tick();
+  assert.equal(h.target, mate.id, "after whoever has it now");
+});
