@@ -140,6 +140,8 @@ function enterTitle(message?: string, isError = false) {
   show("hud", false);
   show("pause", false);
   show("loading", false);
+  // (R14: PREP isn't part of the HUD: a game that ended mid-PREP (the host left) left it over the title, eating clicks)
+  show("prep", false); overlayOpen = ""; questHud.open = false;
   const code = roomCodeFromUrl();
   if (code) {
     $("invite-code").textContent = code;
