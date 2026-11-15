@@ -159,3 +159,20 @@ test("R14 two thieves, one item: the first one's on it, the second's refused; au
   for (const id of ["c1", "c1", "c2", "c3", "c4"]) w.loopAura.cop(b, id);
   assert.equal(b.aura, LOOP.copAuraMax, "each cop once, three a cycle");
 });
+
+test("R14 gear: the HAND TRUCK and DRAG HARNESS speed carrying up; the FAKE MOUSTACHE saves you from one arrest (used up)", () => {
+  const { w, ps } = loopWorld(1);
+  const [a] = ps, f = w.fort.of(a);
+  toPhase(w, "scavenge");
+  const tv = w.placeItem("crt_tv", a.move.x, a.move.y + 0.4, a.move.z + 0.8); settle(w, 0.5);
+  w.action("p0", { a: "grab", item: tv }); settle(w, 0.2);
+  const slow = a.move.carryMul; assert.ok(slow < 1, "a TV slows you");
+  f.ups.add("handtruck"); w.refreshCarry(a);
+  assert.ok(a.move.carryMul > slow && a.move.carryMul < 1, "the hand truck: half the slowdown");
+  w.action("p0", { a: "drop" }); settle(w, 0.5);
+  f.gear.moustache = 1; a.notoriety = 80;
+  w.police.bust(a, "test", false);
+  assert.equal(a.jailT, 0, "not arrested"); assert.equal(f.gear.moustache, 0, "used up"); assert.equal(a.notoriety, 0);
+  w.police.bust(a, "test", false);
+  assert.ok(a.jailT > 0, "the next time: arrested");
+});

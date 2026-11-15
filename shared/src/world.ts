@@ -1982,6 +1982,10 @@ export class World {
     const def = lootDef(it.type);
     const carriers = def.size === "giant" ? (it.holder && it.holder2 ? 2 : 1) : 1;
     m.carryMul = carrySpeedMul(def, carriers);
+    // R14: the fort's carry upgrades: the HAND TRUCK (big things: half the slowdown), the DRAG HARNESS (dragging alone)
+    const ups = this.fort.of(p).ups;
+    if (def.size === "big" && ups.has("handtruck")) m.carryMul = 1 - (1 - m.carryMul) * 0.5;
+    if (def.size === "giant" && carriers === 1 && ups.has("harness")) m.carryMul = 0.6;
     m.carryHeavy = !!def.heavy || def.size === "giant";
     m.handsFull = def.size !== "small";
   }

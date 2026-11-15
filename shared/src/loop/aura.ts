@@ -18,7 +18,8 @@ export type LoopEvent =
   | { t: "fortAlarm"; p: string; thief: string; x: number; z: number; type: string }
   | { t: "theftEnd"; p: string; ok: boolean; reason: string; item?: string; type?: string; owner?: string; value?: number }
   | { t: "loopWarn"; left: number; round: number }
-  | { t: "aura"; p: string; n: number; why: string; total: number };
+  | { t: "aura"; p: string; n: number; why: string; total: number }
+  | { t: "moustache"; p: string };
 
 export class AuraSystem {
   private copsHit = new Map<string, Set<string>>();

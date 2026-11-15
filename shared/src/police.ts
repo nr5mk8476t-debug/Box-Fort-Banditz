@@ -573,6 +573,8 @@ export class PoliceSystem {
   bust(p: PlayerSim, by: string, car: boolean) {
     const w = this.w;
     if (p.jailT > 0 || p.respawnT > 0) return;
+    // R14: the FAKE MOUSTACHE: the cop takes one look and loses all interest (used up; the heat drops off)
+    if (w.fort.useGear(p, "moustache")) { p.notoriety = 0; p.seenT = -99; w.emit({ t: "moustache", p: p.id }); return; }
     w.props.cancelRob(p);
     const { count, value } = w.confiscateAll(p);
     w.payBounty(p, value); // (C5c.1: somebody held them down for us)
