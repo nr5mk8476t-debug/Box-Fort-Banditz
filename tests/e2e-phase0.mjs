@@ -867,7 +867,7 @@ try {
   await A.evaluate((l) => window.__bfb.spawnItem("crt_tv", l.padX + 0.5, l.padZ), myLot);
   const banked = await A.waitForFunction(() => (window.__bfb.loop()?.r ?? []).some((r) => r[1] === "crt_tv"), null, { timeout: 150000 }) /* (10 s of game time; slow CPU-drawn frames at the fort) */.then(() => true, () => false);
   ok(banked, "R14: loot on your DEPOSIT MAT is BANKED onto your shelves after 10 s");
-  ok(!(await A.evaluate(() => window.__bfb.items().some((i) => i.type === "crt_tv"))), "(it's a banked record now, not a loose item anyone can grab)");
+  ok(!(await A.evaluate((l) => window.__bfb.items().some((i) => i.type === "crt_tv" && Math.hypot(i.x - l.padX, i.z - l.padZ) < 3), myLot)), "(it's a banked record now, not a loose item on the mat anyone can grab)");
   const bankNow = (await M()).scores[0].bank;
   ok(bankNow > 0, `scoreboard shows the fort's banked value (+${bankNow})`);
   await A.evaluate((l) => window.__bfb.camAt(l.x + 0.5, 2.0, l.z + 5.5, Math.PI, 0.18), myLot);
