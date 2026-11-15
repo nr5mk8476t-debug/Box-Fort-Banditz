@@ -221,7 +221,11 @@ export class FortSystem {
     if (r.safe) return no("safe");
     for (const th of this.thefts.values()) if (th.rec === recId && th.owner === ownerId) return no("taken"); // (someone else is on it)
     const lot = this.w.arena.forts?.find((q) => q.slot === owner.colorIdx);
-    if (!lot || hyp(p.move.x - lot.x, p.move.z - lot.z) > LOOP.theftReach + 3.5) return no("far");
+    if (!lot) return no("far");
+    // (R14: measured to the thing itself, where it's drawn: the client aims within theftReach of the same spot. The
+    //  fort's centre was 5.9 m at most, but the outer shelf spots stand 5.7 m out to the side: you could aim and be refused)
+    const exposed = f.recs.filter((x) => !x.safe), k = exposed.indexOf(r), at = shelfSpot(lot, k < this.shelfCap(f) ? k : 16 + (k - this.shelfCap(f)));
+    if (hyp(p.move.x - at.x, p.move.z - at.z) > LOOP.theftReach + 0.6) return no("far");
     if (!this.canCarry(p, r.type)) return no("hands");
     const need = f.ups.has("alarm2") ? LOOP.theftTimeAlarm : LOOP.theftTime;
     this.thefts.set(p.id, { owner: ownerId, rec: recId, t: 0, need, x: p.move.x, z: p.move.z });

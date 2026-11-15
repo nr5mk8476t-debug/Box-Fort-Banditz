@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World, type WorldEvent } from "../src/world.js";
 import { buildTrashington } from "../src/city.js";
-import { setCityMap as useCity, LOOP, UPGRADE, type MoveInput } from "../src/index.js";
+import { setCityMap as useCity, LOOP, UPGRADE, shelfSpot, type MoveInput } from "../src/index.js";
 
 const settle = (w: World, s = 1) => { for (let i = 0; i < Math.round(s * 60); i++) w.tick(); };
 const ev = <T extends WorldEvent["t"]>(es: WorldEvent[], t: T) => es.filter((e) => e.t === t) as Extract<WorldEvent, { t: T }>[];
@@ -109,13 +109,17 @@ test("R14 night theft: 5 s at a rival's shelves, into your hands; cancelled by m
   const { w, ps } = loopWorld();
   const [a, b] = ps, fb = w.fort.of(b);
   fb.recs.push({ id: "s1", type: "lava_lamp", value: 30, safe: false }, { id: "s2", type: "laptop", value: 80, safe: true });
-  const atB = () => { const f = lot(w, b.colorIdx); w.debugTeleport("p0", f.x, f.z + 2, Math.PI, 0.2); };
+  // (in front of the thing's shelf spot, where you'd stand to aim at it: the reach is measured to the spot)
+  const atB = () => { const f = lot(w, b.colorIdx), sp = shelfSpot(f, 0); w.debugTeleport("p0", sp.x + Math.sin(f.yaw) * 1.3, sp.z + Math.cos(f.yaw) * 1.3, f.yaw + Math.PI, 0.2); };
   toPhase(w, "scavenge"); atB(); settle(w, 0.3); w.takeEvents();
   w.action("p0", { a: "steal", owner: "p1", rec: "s1" });
   assert.ok(ev(w.takeEvents(), "theftNo").some((e) => e.reason === "day"), "only at night");
   toPhase(w, "dusk"); toPhase(w, "night"); atB(); settle(w, 0.3); w.takeEvents();
   w.action("p0", { a: "steal", owner: "p1", rec: "s2" });
   assert.ok(ev(w.takeEvents(), "theftNo").some((e) => e.reason === "safe"), "the safe's off limits");
+  // (R14: the reach is to the thing itself: from the fort's far side it's refused)
+  { const f = lot(w, b.colorIdx), sp = shelfSpot(f, 0); w.debugTeleport("p0", 2 * f.x - sp.x, sp.z + 1.3, Math.PI, 0.2); settle(w, 0.3); w.takeEvents();
+    w.action("p0", { a: "steal", owner: "p1", rec: "s1" }); assert.ok(ev(w.takeEvents(), "theftNo").some((e) => e.reason === "far"), "too far from it"); atB(); settle(w, 0.3); w.takeEvents(); }
   w.action("p0", { a: "steal", owner: "p1", rec: "s1" }); settle(w, 2);
   a.move.x += 3; settle(w, 0.1);
   assert.ok(ev(w.takeEvents(), "theftEnd").some((e) => !e.ok && e.reason === "moved"), "moved away: cancelled");
@@ -151,7 +155,7 @@ test("R14 two thieves, one item: the first one's on it, the second's refused; au
   fc.recs.push({ id: "z1", type: "lava_lamp", value: 30, safe: false });
   toPhase(w, "scavenge"); toPhase(w, "dusk"); toPhase(w, "night");
   const f = lot(w, c.colorIdx);
-  w.debugTeleport("p0", f.x - 1, f.z + 2, Math.PI, 0.2); w.debugTeleport("p1", f.x + 1, f.z + 2, Math.PI, 0.2); settle(w, 0.3); w.takeEvents();
+  { const sp = shelfSpot(f, 0), fx = Math.sin(f.yaw), fz = Math.cos(f.yaw); w.debugTeleport("p0", sp.x + fx * 1.3 - 0.5, sp.z + fz * 1.3, f.yaw + Math.PI, 0.2); w.debugTeleport("p1", sp.x + fx * 1.3 + 0.5, sp.z + fz * 1.3, f.yaw + Math.PI, 0.2); } settle(w, 0.3); w.takeEvents();
   w.action("p0", { a: "steal", owner: "p2", rec: "z1" }); w.action("p1", { a: "steal", owner: "p2", rec: "z1" });
   assert.ok(ev(w.takeEvents(), "theftNo").some((e) => e.p === "p1" && e.reason === "taken"));
   settle(w, LOOP.theftTime + 0.3);
