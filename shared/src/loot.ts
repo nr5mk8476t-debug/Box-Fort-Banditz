@@ -34,6 +34,8 @@ export interface LootDef {
   junk?: boolean;
   /** R6: only the black market will touch it (Lou, Sal and the shop round won't buy it) */
   blackMarket?: boolean;
+  /** R15: only ever on a shop's shelves (shopStock.ts): never a loose street spawn */
+  shopOnly?: boolean;
 }
 
 export const LOOT: LootDef[] = [
@@ -177,6 +179,52 @@ export const LOOT: LootDef[] = [
   { type: "golden_spoon", name: "The Spoon of Destiny", size: "small", rarity: "legendary", valueMin: 2500, valueMax: 4000, weight: 0, material: "metal", radius: 0.1, bounce: 0.3, spawnWeight: 0, npcOnly: true, blackMarket: true, blurb: "The Champ's golden spoon. Only the black market will take it. Nobody else dares." },
   { type: "cell_key", name: "The Holding Cell Key", size: "small", rarity: "rare", valueMin: 1, valueMax: 1, weight: 0, material: "metal", radius: 0.08, bounce: 0.3, spawnWeight: 0, npcOnly: true, blackMarket: true, blurb: "Off the chief's desk. E at the holding cell's door: it swings open for 20 s and everybody walks." },
   { type: "rolecks_watch", name: "Rolecks Watch", size: "small", rarity: "epic", valueMin: 150, valueMax: 300, weight: 0, material: "metal", radius: 0.09, bounce: 0.3, spawnWeight: 0, npcOnly: true, blurb: "Genuine imitation luxury." },
+  // ---- R15: shop goods (shopStock.ts): only ever on a shop's shelves ------------------------------
+  // LAST SCREW HARDWARE (construction)
+  { type: "liquid_nails", name: "Liquid Nails", size: "small", rarity: "common", valueMin: 4, valueMax: 9, weight: 0, material: "plastic", radius: 0.08, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Glue that thinks it's a nail. Construction supplies." },
+  { type: "nails_box", name: "Box of Nails", size: "small", rarity: "common", valueMin: 3, valueMax: 7, weight: 0, material: "cardboard", radius: 0.08, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Pointy end goes in. Construction supplies." },
+  { type: "hammer", name: "Claw Hammer", size: "small", rarity: "common", valueMin: 6, valueMax: 12, weight: 0, material: "metal", radius: 0.12, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Every problem looks like a nail now. Construction supplies." },
+  { type: "handsaw", name: "Handsaw", size: "big", rarity: "common", valueMin: 7, valueMax: 14, weight: 0.05, material: "metal", radius: 0.35, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Cuts wood. And corners. Construction supplies." },
+  { type: "pipe", name: "Length of Pipe", size: "big", rarity: "common", valueMin: 5, valueMax: 10, weight: 0.08, material: "metal", radius: 0.45, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Copper-ish. Construction supplies." },
+  { type: "timber_bundle", name: "Timber Bundle", size: "big", rarity: "uncommon", valueMin: 12, valueMax: 22, weight: 0.3, heavy: true, material: "cardboard", radius: 0.5, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Six planks, one string. Construction supplies." },
+  { type: "pipe_fittings", name: "Pipe Fittings", size: "small", rarity: "common", valueMin: 3, valueMax: 6, weight: 0, material: "metal", radius: 0.07, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Elbows, tees, a confused U-bend. Construction supplies." },
+  { type: "scrap_metal", name: "Scrap Metal", size: "big", rarity: "common", valueMin: 4, valueMax: 10, weight: 0.15, material: "metal", radius: 0.4, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Heavy, rusty, structural-adjacent. Construction supplies." },
+  { type: "paint_tin", name: "Tin of Paint", size: "small", rarity: "common", valueMin: 4, valueMax: 9, weight: 0, material: "metal", radius: 0.1, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Colour: MAGNOLIA (again). Construction supplies." },
+  { type: "toolbox", name: "Toolbox", size: "big", rarity: "uncommon", valueMin: 14, valueMax: 26, weight: 0.12, material: "metal", radius: 0.35, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Rattles with ambition. Construction supplies." },
+  // CRUMBS & CONSEQUENCES MINI-MART (food, household)
+  { type: "crisps", name: "Bag of Crisps", size: "small", rarity: "common", valueMin: 2, valueMax: 4, weight: 0, material: "plastic", radius: 0.09, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Mostly air. Food." },
+  { type: "bread_loaf", name: "Loaf of Bread", size: "small", rarity: "common", valueMin: 2, valueMax: 4, weight: 0, material: "cloth", radius: 0.12, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Sliced. Squashed. Food." },
+  { type: "milk_carton", name: "Carton of Milk", size: "small", rarity: "common", valueMin: 2, valueMax: 4, weight: 0, material: "cardboard", radius: 0.09, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Best before: optimistic. Food." },
+  { type: "instant_noodles", name: "Instant Noodles", size: "small", rarity: "common", valueMin: 1, valueMax: 3, weight: 0, material: "plastic", radius: 0.08, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Three minutes to happiness. Food." },
+  { type: "toilet_roll", name: "Toilet Roll (9-pack)", size: "big", rarity: "common", valueMin: 3, valueMax: 6, weight: 0, material: "cloth", radius: 0.3, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Currency in a crisis. Household junk." },
+  { type: "washing_up", name: "Washing-Up Liquid", size: "small", rarity: "common", valueMin: 2, valueMax: 4, weight: 0, material: "plastic", radius: 0.08, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Lemony. Household junk." },
+  { type: "lottery_scratch", name: "Lottery Scratchcard", size: "small", rarity: "uncommon", valueMin: 1, valueMax: 40, weight: 0, material: "cardboard", radius: 0.05, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Could be anything. Probably nothing." },
+  // SPIN CYCLE LAUNDRETTE (junk, the odd find)
+  { type: "laundry_bag", name: "Bag of Laundry", size: "big", rarity: "common", valueMin: 3, valueMax: 10, weight: 0.05, material: "cloth", radius: 0.38, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Someone else's socks. Junk, mostly." },
+  { type: "detergent", name: "Box of Detergent", size: "small", rarity: "common", valueMin: 2, valueMax: 5, weight: 0, material: "cardboard", radius: 0.1, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Removes stains and evidence. Junk." },
+  { type: "lost_ring", name: "Ring (Lost in a Pocket)", size: "small", rarity: "rare", valueMin: 40, valueMax: 110, weight: 0, material: "metal", radius: 0.05, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Found it in a jeans pocket. Specialist goods." },
+  { type: "abandoned_bag", name: "Abandoned Handbag", size: "small", rarity: "uncommon", valueMin: 10, valueMax: 45, weight: 0, material: "cloth", radius: 0.14, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Left on a dryer. Finders keepers. Specialist goods." },
+  // SECOND CHANCE HOMEWARES (furnishing, small appliances)
+  { type: "table_lamp", name: "Table Lamp", size: "small", rarity: "common", valueMin: 8, valueMax: 16, weight: 0, material: "glass", radius: 0.14, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Fringed shade. A furnishing." },
+  { type: "bar_stool", name: "Bar Stool", size: "big", rarity: "common", valueMin: 9, valueMax: 18, weight: 0.1, material: "metal", radius: 0.4, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Spins. A furnishing." },
+  { type: "cushion", name: "Cushion", size: "small", rarity: "common", valueMin: 4, valueMax: 9, weight: 0, material: "cloth", radius: 0.14, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "LIVE LAUGH LOOT. A furnishing." },
+  { type: "vase", name: "Vase", size: "small", rarity: "uncommon", valueMin: 8, valueMax: 20, weight: 0, material: "glass", radius: 0.12, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Second hand. First chip. A furnishing." },
+  { type: "rug", name: "Rolled Rug", size: "big", rarity: "uncommon", valueMin: 12, valueMax: 24, weight: 0.12, material: "cloth", radius: 0.5, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Ties the fort together. A furnishing." },
+  { type: "kettle", name: "Kettle", size: "small", rarity: "common", valueMin: 8, valueMax: 15, weight: 0, material: "plastic", radius: 0.12, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Boils. Mostly. Electronics." },
+  { type: "toaster", name: "Toaster", size: "small", rarity: "common", valueMin: 9, valueMax: 16, weight: 0, material: "metal", radius: 0.13, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Two slots, one works. Electronics." },
+  // OVERPRICED KITCHEN & LIVING (high end)
+  { type: "stand_mixer", name: "Stand Mixer", size: "big", rarity: "rare", valueMin: 60, valueMax: 120, weight: 0.15, heavy: true, material: "metal", radius: 0.35, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "It costs more than your fort. Electronics." },
+  { type: "espresso_machine", name: "Espresso Machine", size: "big", rarity: "rare", valueMin: 70, valueMax: 140, weight: 0.15, heavy: true, material: "metal", radius: 0.35, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Seven buttons, one coffee. Electronics." },
+  { type: "copper_pan", name: "Copper Pan", size: "small", rarity: "uncommon", valueMin: 25, valueMax: 50, weight: 0, material: "metal", radius: 0.14, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Never cooked in. Specialist goods." },
+  { type: "knife_block", name: "Chef's Knife Block", size: "small", rarity: "rare", valueMin: 35, valueMax: 70, weight: 0, material: "cardboard", radius: 0.13, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Japanese steel. Do NOT juggle. Specialist goods." },
+  { type: "designer_lamp", name: "Designer Floor Lamp", size: "big", rarity: "rare", valueMin: 50, valueMax: 95, weight: 0.1, material: "metal", radius: 0.4, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Bends at a meaningful angle. A furnishing." },
+  { type: "velvet_sofa", name: "Velvet Sofa", size: "giant", rarity: "epic", valueMin: 120, valueMax: 220, weight: 0.45, heavy: true, material: "cloth", radius: 0.75, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "A two-seater for one ego. A furnishing." },
+  // TICKED OFF WATCHES (high end)
+  { type: "pocket_watch", name: "Pocket Watch", size: "small", rarity: "rare", valueMin: 60, valueMax: 130, weight: 0, material: "metal", radius: 0.06, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Tick tock, stolen clock. Specialist goods." },
+  { type: "cufflinks", name: "Gold Cufflinks", size: "small", rarity: "uncommon", valueMin: 30, valueMax: 70, weight: 0, material: "metal", radius: 0.05, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "For shirts with ambitions. Specialist goods." },
+  { type: "smart_watch", name: "Smart Watch", size: "small", rarity: "uncommon", valueMin: 40, valueMax: 90, weight: 0, material: "plastic", radius: 0.06, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Counts your steps away from the crime. Electronics." },
+  { type: "grandfather_clock", name: "Grandfather Clock", size: "giant", rarity: "epic", valueMin: 140, valueMax: 260, weight: 0.45, heavy: true, material: "cardboard", radius: 0.7, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "Chimes at the worst moment. A trophy." },
+  { type: "watch_winder", name: "Watch Winder", size: "small", rarity: "rare", valueMin: 50, valueMax: 100, weight: 0, material: "glass", radius: 0.12, bounce: 0.2, spawnWeight: 0, shopOnly: true, blurb: "A tiny merry-go-round for watches. A trophy." },
 ];
 
 export const LOOT_BY_TYPE: Record<string, LootDef> = Object.fromEntries(LOOT.map((d) => [d.type, d]));

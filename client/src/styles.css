@@ -434,6 +434,10 @@ body.benching #hud > *:not(#pint) { visibility: hidden; }
 .quest .qrow.camp { border-left-color: #ff6a3c; background: rgba(60, 18, 24, 0.86); } .quest .qrow.camp.mine { border-left-color: #7fe07a; background: rgba(18, 40, 26, 0.86); }
 .quest ul.qc { list-style: none; margin: 3px 0 0; padding: 0; font-size: 12px; } .quest ul.qc li { display: flex; justify-content: space-between; gap: 6px; opacity: 0.95; } .quest ul.qc li.ok { opacity: 0.55; text-decoration: line-through; }
 .pp-mq { list-style: none; padding: 0; margin: 4px 0; } .pp-mq li.ok { color: #2f8f4e; font-weight: 800; } .pp-mq li.no { color: #b0442a; }
+.counter-menu { position: absolute; z-index: 45; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(560px, 92vw); max-height: 80vh; overflow: auto; padding: 14px 18px; pointer-events: auto; }
+.counter-menu h2 { margin: 0 0 4px; } .counter-menu .cm-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 10px; }
+.counter-menu .cm-row { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "b btn" "s btn" "e btn"; gap: 0 10px; padding: 6px 8px; border: 2px solid #1b1420; border-radius: 8px; background: #fff8e8; }
+.counter-menu .cm-row b { grid-area: b; } .counter-menu .cm-row span { grid-area: s; font-size: 12px; opacity: 0.85; } .counter-menu .cm-row em { grid-area: e; font-size: 12px; } .counter-menu .cm-row button { grid-area: btn; align-self: center; }
 .qpanel { position: absolute; z-index: 40; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(620px, 92vw); max-height: 80vh; overflow: auto; padding: 14px 18px; pointer-events: none; }
 .qpanel h2 { margin: 0 0 6px; } .qpanel h3 { margin: 10px 0 2px; } .qpanel .qp-rep { color: #d9a632; letter-spacing: 2px; }
 .qpanel ul { margin: 4px 0 0 18px; padding: 0; } .qpanel li { opacity: 0.55; } .qpanel li.on { opacity: 1; font-weight: 800; }

@@ -6,6 +6,7 @@ import { LocalSession, SOLO_ID } from "./localSession.ts";
 import { HOST_LEFT } from "./p2p/peerRoom.ts";
 import { PrepScreen } from "./ui/prepScreen.ts";
 import { QuestHud } from "./ui/questHud.ts";
+import { CounterMenu } from "./ui/counterMenu.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
@@ -125,6 +126,9 @@ let settingsReturnTo: "title" | "pause" = "title";
 let overlayOpen = "";
 const prep = new PrepScreen();
 const questHud = new QuestHud();
+const counterMenu = new CounterMenu();
+counterMenu.send = (act) => arena?.onAction?.(act as never);
+counterMenu.onClose = () => { if (screen !== "playing" || overlayOpen) return; input.enabled = true; if (!input.dragLook) void input.requestLock().then((ok) => { if (!ok) showPause(true); }); };
 prep.send = (act) => arena?.onAction?.(act as never);
 
 // ---------------------------------------------------------------------------
@@ -210,6 +214,7 @@ function wireArena(a: ArenaScene) {
   a.onFeedback = (text, kind) => flash(text, kind);
   a.onScreenFx = (fx, seconds) => screenFx(fx, seconds);
   a.onBanner = (title, sub, kind) => banner(title, sub, kind);
+  a.onCounterMenu = (store) => { counterMenu.open(store); input.clear(); input.enabled = false; input.releaseLock(); show("pause", false); }; // (R15: the counter's FOR SALE list)
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +369,8 @@ function updateMatchHud(a: ArenaScene) {
   }
   const myCash = a.scores.find((x) => x.me)?.cash ?? 0;
   if (ov === "prep") prep.update(a.myLoop, myCash, a.myAura, m.timeLeft, m.round, m.rounds, a.ready);
+  // R15: the counter's FOR SALE list (closes itself if you walk off or the phase changes)
+  if (counterMenu.isOpen) { const st = a.arenaLayout.stores?.find((x) => x.id === counterMenu.store), c = st?.counter; if (!c || Math.hypot(a.position.x - (c.minX + c.maxX) / 2, a.position.z - (c.minZ + c.maxZ) / 2) > 5 || ov) counterMenu.close(); else counterMenu.update(a.counterNotes.get(counterMenu.store) ?? "", myCash); }
   // R14 stage 4: the quest tracker + the J panel
   { const ph = m.phase, live = ph === "scavenge" || ph === "dusk" || ph === "night"; if (!live) questHud.open = false;
     const names = new Map(a.scores.map((x) => [x.id, x.name] as [string, string]));
@@ -938,8 +945,9 @@ function updateHud(a: ArenaScene) {
   // R14: night theft: aiming at a rival's shelf thing / in the middle of taking it; home: the deposit mat
   const stl = a.stealTarget, thp = a.theftProgress;
   const atMat = (() => { const f = a.arenaLayout.forts?.find((q) => q.slot === a.myColorIdx); return !!f && Math.abs(a.position.x - f.padX) < 1.7 && Math.abs(a.position.z - f.padZ) < 1.7; })();
+  const stk = a.stockTarget;
   const qv = a.myLoop?.q, nb = a.nearBoss, nbJob = nb ? qv?.jo.find((j) => j[0] === nb) : undefined;
-  const loopSig = thp >= 0 ? "thief" : stl ? "steal" + stl.rec : a.atBoard && !t && !ut ? "board" + (qv?.tp ?? 0) + (qv?.t ? 1 : 0) + JSON.stringify(a.myLoop?.mq ?? []) + (a.myLoop?.c ? 1 : 0) : nb && !t && !ut && !pt ? "boss" + nb + (nbJob?.[1] ?? "") + (qv?.j ? 1 : 0) : atMat && (a.match.phase === "scavenge" || a.match.phase === "dusk" || a.match.phase === "night") ? "mat" + (a.inventory.hand || a.inventory.pockets.join("")) : "";
+  const loopSig = thp >= 0 ? "thief" : stl ? "steal" + stl.rec : stk && !t ? "stock" + stk.store + stk.slot : a.atBoard && !t && !ut ? "board" + (qv?.tp ?? 0) + (qv?.t ? 1 : 0) + JSON.stringify(a.myLoop?.mq ?? []) + (a.myLoop?.c ? 1 : 0) : nb && !t && !ut && !pt ? "boss" + nb + (nbJob?.[1] ?? "") + (qv?.j ? 1 : 0) : atMat && (a.match.phase === "scavenge" || a.match.phase === "dusk" || a.match.phase === "night") ? "mat" + (a.inventory.hand || a.inventory.pockets.join("")) : "";
   const sig = loopSig ? loopSig : jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "mickey" || ut.kind === "mickgoods" || ut.kind === "storecounter" ? JSON.stringify(a.heldInfo()) + a.myGear : "") + (ut.kind === "pubboard" ? JSON.stringify(a.gch) : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
@@ -954,6 +962,7 @@ function updateHud(a: ArenaScene) {
     promptSig = sig;
     if (thp >= 0) simple("HOLD E", " STEALING... ", "", "don't move! Knocked down, moved, or sunrise = it's off");
     else if (stl) simple("HOLD E", " Steal ", `${lootDefOf(stl.type)?.name ?? stl.type} ($${stl.value})`, "5 s (10 if they've got a proper alarm). Then carry it home and bank it.");
+    else if (loopSig.startsWith("stock") && stk) { const d = lootDefOf(stk.type); simple("E", " Take ", `${d?.name ?? stk.type} ($${stk.value})`, `off the shelf: it's shoplifting if the staff see you. ${d?.blurb ?? ""}`); }
     else if (loopSig.startsWith("board") && a.myLoop?.mq?.every((x) => x[1]) && !qv?.t && !a.myLoop?.c) simple("E", " RUN FOR MAYOR ", `$${LOOP.mayorFee}`, "spends the fee, your posters and your sash. 4:00 to win it; the clock stops for everyone. 3 knockdowns and it's over.");
     else if (loopSig.startsWith("board")) { if (qv?.t) simple("", " YOUR TASK BOARD ", "", `one task at a time: finish ${qv.t[0]} first (J: details)`); else simple("E", " Buy an AURA TASK ", `$${qv?.tp ?? LOOP.taskPrice0}`, "a random task. It's LIVE: everyone sees you going for it, and a rival who knocks you down interrupts it."); }
     else if (loopSig.startsWith("boss")) { const bn = nb === "seamus" ? "SEAMUS O'SHORTLY" : "DON BINNIE's man"; if (qv?.j) simple("", ` ${bn} `, "", `finish your job first: ${qv.j[0]}`); else if (nbJob) simple("J", " Take a job from ", bn, `${nbJob[1]}: ${nbJob[2]}`); else simple("", ` ${bn} `, "", "nothing more for you this cycle. Come back next cycle."); }
@@ -980,7 +989,8 @@ function updateHud(a: ArenaScene) {
         const est = tr.buys?.types?.includes(held.type) ? `(about $${Math.max(1, Math.round(held.value * (tr.buys.mult ?? 0.5)))})` : tr.buys?.junk ? `($${tr.buys.junk[0]}-${tr.buys.junk[1]})` : "";
         if (buys) simple("E", ` Sell the ${(d?.name ?? held.type).toUpperCase()} to ${vo.keeper} `, est, "");
         else simple("", ` ${vo.keeper} `, "", tr.buys ? vo.wrong : vo.nobuy);
-      } else if (tr.sells) simple("E", " Buy " + tr.sells.name + ": ", `$${tr.sells.price}`, tr.sells.blurb);
+      } else if (a.stockSaleOf(ut.def.store)) simple("E", ` See what ${vo.keeper} is selling `, "", "a few things for sale this cycle (they change every cycle)"); // (R15)
+      else if (tr.sells) simple("E", " Buy " + tr.sells.name + ": ", `$${tr.sells.price}`, tr.sells.blurb);
       else simple("", ` ${vo.keeper} `, "", vo.hands);
     }
     else if (!t && ut && ut.kind === "storedig") simple(ut.empty ? "" : "E", ut.def?.store === "needledrop" ? " Dig through the crate " : " Rummage the scrap pile ", "", ut.empty ? "already turned over today" : "once a day: you never know");
@@ -1420,6 +1430,11 @@ enterTitle();
     },
     questRep: (boss: "seamus" | "binnie", n: number) => { if (!local) return; const p = local.world.players.get(SOLO_ID)!; (local.world.loopQuests as any).of(p).rep[boss] = n; (local.world.loopQuests as any).of(p).v++; },
     questPanel: (on: boolean) => { questHud.open = on; },
+    /** (tests) R15: the stores' stock as drawn, the aimed thing, the counter menu */
+    stockDrawn: () => arena?.stockR.count() ?? 0,
+    stockTarget: () => arena?.stockTarget ?? null,
+    stockHost: (store: string) => { const s = local?.world.stock.of(store); return s ? { slots: s.slots, things: s.things, sale: s.sale } : null; },
+    counterOpen: () => counterMenu.store,
     /** (tests, solo) R14 stage 5: qualify for MAYOR; the campaign as the host has it; finish the goofy ones */
     mayorQualify: () => { if (!local) return; const w = local.world, p = w.players.get(SOLO_ID)!, f = w.fort.of(p); p.aura = Math.max(p.aura, 70); p.cash = Math.max(p.cash, 1000); for (const u of ["level2", "level3", "level4"]) f.ups.add(u as never); f.gear.posters = 1; f.gear.sash = 1; f.v++; },
     mayor: () => { const c = local?.world.mayor.c; if (!c) return null; const pn = local!.world.npc.npcs.get(c.presNpc); return { t: c.t, strikes: c.strikes, pres: pn ? { x: pn.move.x, z: pn.move.z, yaw: pn.move.yaw } : c.pres, presDone: c.presDone, posters: c.posters.map((x) => ({ x: x.loc.x, z: x.loc.z, done: x.done, name: x.loc.name })), podium: c.podium, speech: c.speech, goofy: c.goofy.map((g) => g.name) }; },

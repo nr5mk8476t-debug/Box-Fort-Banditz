@@ -26,3 +26,4 @@ export * from "./loop/aura.js";
 export * from "./loop/quests.js";
 export * from "./loop/mayor.js";
 export * from "./loop/security.js";
+export * from "./shopStock.js";

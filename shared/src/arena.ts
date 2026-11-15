@@ -434,6 +434,8 @@ export interface ArenaLayout {
   /** R4: Little Italy (Chinatown's mirror on the new map): the street, its two arches, the rows of café lights over it */
   littleItaly?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
   /** named places, used by tests and tutorials */
+  /** R15: the shops ARE the loot (the new map): no street spawns; the stores' stock (shopStock.ts) */
+  shopLoot?: boolean;
   landmarks?: Record<string, { x: number; z: number; yaw: number; [extra: string]: number }>;
 }
 

@@ -652,7 +652,7 @@ export class PropSystem {
 
   stateOf(id: string): { ready: boolean; alarm: boolean; note: string } {
     const ps = this.props.get(id)!;
-    return { ready: ps.ready, alarm: ps.alarmT > 0, note: ps.def.kind === "pawncase" ? this.w.pawn.caseNote() : ps.def.kind === "pubboard" ? this.w.pubBoardNote() + "#" + this.w.gchNote() : ps.def.kind === "jukebox" ? this.w.jukeNote() : ps.def.kind === "pooltable" || ps.def.kind === "dartsoche" ? this.w.pubGames.note(ps.def.id) : "" };
+    return { ready: ps.ready, alarm: ps.alarmT > 0, note: ps.def.kind === "pawncase" ? this.w.pawn.caseNote() : ps.def.kind === "pubboard" ? this.w.pubBoardNote() + "#" + this.w.gchNote() : ps.def.kind === "jukebox" ? this.w.jukeNote() : ps.def.kind === "pooltable" || ps.def.kind === "dartsoche" ? this.w.pubGames.note(ps.def.id) : ps.def.kind === "storecounter" && this.w.stock?.active ? this.w.stock.note(String((ps.def as { store?: string }).store ?? "")) : "" };
   }
 }
 

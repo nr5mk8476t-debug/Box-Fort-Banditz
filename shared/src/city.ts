@@ -3378,7 +3378,7 @@ export function buildTrashington(): ArenaLayout {
   for (const pd of props) if (pd.id.startsWith("storedoor_")) pd.box = boxes.findIndex((b) => b.deco === "storedoor:" + pd.id.slice(10)); // (R13: the same for the stores' doors)
   for (const pd of props) if (pd.id.startsWith("storecase_")) pd.box = boxes.findIndex((b) => b.deco === "storecase:" + pd.id.slice(10)); // (and their cases)
   return {
-    halfSize: HALF, boxes: canonBoxes(boxes), spawns, ...(stores.length ? { stores } : {}), lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots } : {}), crosswalks, navLines, navLinesZ, props,
+    halfSize: HALF, boxes: canonBoxes(boxes), spawns, ...(stores.length ? { stores } : {}), lootSpawns: loot, forts, landmarks, roads, roadRings, ...(R2 ? { roadSegs, variant: "new", southZ, lots, shopLoot: true } : {}), crosswalks, navLines, navLinesZ, props,
     shops, truckRoutes, happyZones, airdropSpots, decor, station, roadGraph, water, navChains, units,
     roadNet, blocks, scenery, posts, deepWater, bushes, pondShape, junkSpots, lobby, chinatown, bank, statue, resto, club, pumpBoxes, pawnShop, littleItaly, stationUpper, hotShops: R2 ? hotShops : undefined, fever, pub,
   };

@@ -223,7 +223,7 @@ export const STORE_BUY_GAP = 1.0;
 
 /** where the fixtures go, in the store's frame (u, v): the till on the counter, the rummage spot, the display case, shelves
  *  (u0, u1, v0, v1, height) and the real stock spots on them (u, v, which shelf) */
-export interface StoreFixtures { till: [number, number]; dig?: [number, number]; case?: [number, number, number, number, number]; shelves: [number, number, number, number, number][]; stock: [number, number, number][];
+export interface StoreFixtures { /** R15: the stock slots, [u0, u1, v, height (0 = floor), n] rows (shopStock.ts); none = rows along the shelves */ racks?: [number, number, number, number, number][]; till: [number, number]; dig?: [number, number]; case?: [number, number, number, number, number]; shelves: [number, number, number, number, number][]; stock: [number, number, number][];
   /** R13b: the centrepiece's solid parts (u0, u1, v0, v1, height): you bump into them (drawn by the store's dressing) */
   solids?: [number, number, number, number, number][] }
 export const STORE_FIXTURES: Record<StoreId, StoreFixtures> = {

@@ -34,6 +34,7 @@ import { AuraSystem, type LoopEvent } from "./loop/aura.js";
 import { QuestSystem } from "./loop/quests.js";
 import { ShopSecurity } from "./loop/security.js";
 import { MayorSystem } from "./loop/mayor.js";
+import { ShopStock } from "./shopStock.js";
 
 /** C4a: how far away a pedestrian notices you breaking something (they also need a clear line of sight) */
 export const WITNESS_RANGE = 20;
@@ -103,6 +104,8 @@ export interface ItemSim {
   mult: number; // happy-hour bonus (1 or 2)
   /** R14.1: the loot's permanent identity (its first item id), carried through banking and theft (Rec.uid) */
   uid?: string;
+  /** R15: the store whose shelves it came off (that store's counter won't buy it back) */
+  from?: string;
   chute: boolean; // airdrop crate still under its parachute
   shop: number; // shop stock / register (-1 = not from a shop)
   /** R7: sitting in the station's evidence room (lift it: heat) */
@@ -220,7 +223,7 @@ export type WorldEvent =
   // R13: the stores' counters
   | { t: "storeSold"; p: string; store: string; type: string; cash: number }
   | { t: "storeBought"; p: string; store: string; what: string; cash: number }
-  | { t: "storeNo"; p: string; store: string; reason: "shut" | "wrong" | "nobuy" | "black" | "hands" | "broke" }
+  | { t: "storeNo"; p: string; store: string; reason: "shut" | "wrong" | "nobuy" | "black" | "hands" | "broke" | "ours" }
   | { t: "gearUsed"; p: string; gear: GearKind; x: number; z: number; by?: string }
   | { t: "dealNo"; p: string; reason: "broke" | "away" }
   // C5c.3: THE COMPACTOR: paid the cover / the VIP nod / couldn't pay; the floor's DROP launched people; somebody hijacked the decks
@@ -342,7 +345,7 @@ export type WorldAction =
   | { a: "sell"; item: string } | { a: "haggle"; item: string } | { a: "sellAll" } // pawn shop
   // R14: the game loop: PREP (sell to the van, the safe, upgrades, the workbench); night theft
   | { a: "vanSell"; recs: string[] } | { a: "protect"; rec: string; on: boolean } | { a: "upgrade"; id: string } | { a: "craft"; id: string }
-  | { a: "steal"; owner: string; rec: string } | { a: "stealStop" } | { a: "taskBuy" } | { a: "mayorRun" } | { a: "jobTake"; boss: string } | { a: "questDrop"; src: string }
+  | { a: "steal"; owner: string; rec: string } | { a: "stealStop" } | { a: "taskBuy" } | { a: "mayorRun" } | { a: "stockTake"; store: string; slot: number } | { a: "stockBuy"; store: string; type: string } | { a: "jobTake"; boss: string } | { a: "questDrop"; src: string }
   | { a: "ready" }; // done shopping / upgrading
 
 /** Small, fast, seedable random numbers (deterministic worlds for tests). */
@@ -396,6 +399,7 @@ export class World {
   readonly loopQuests: QuestSystem;
   readonly security: ShopSecurity;
   readonly mayor: MayorSystem;
+  readonly stock: ShopStock;
 
   constructor(opts: WorldOptions = {}) {
     this.arena = opts.arena ?? buildTrashington();
@@ -416,6 +420,7 @@ export class World {
     this.loopQuests = new QuestSystem(this);
     this.security = new ShopSecurity(this);
     this.mayor = new MayorSystem(this);
+    this.stock = new ShopStock(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
   }
 
@@ -531,7 +536,10 @@ export class World {
    * full=false: one random empty spot per shop (debug / tests).
    */
   stockShops(full: boolean) {
-    const spots = (this.arena.lootSpawns ?? []).filter((s) => s.pool && s.shop !== undefined);
+    // R15: the stores' shelves and counters (shopStock.ts): rolled fresh; their old shelf spots aren't used
+    const stocked = new Set<number>();
+    if (this.stock?.active) { if (full) this.stock.roll(); for (const id of this.stock.storeIds()) { const sh = this.stock.of(id)!.shop; if (sh >= 0) stocked.add(sh); } }
+    const spots = (this.arena.lootSpawns ?? []).filter((s) => s.pool && s.shop !== undefined && !stocked.has(s.shop));
     const empty = spots.filter((sp) => ![...this.items.values()].some((it) => it.mode === "free" && hyp(it.body.x - sp.x, it.body.z - sp.z) < 0.6 && Math.abs(it.body.y - sp.y) < 1));
     const pick = full ? empty.filter(() => this.rng() < STOCK_FILL) : (this.arena.shops ?? []).map((sh) => { const e = empty.filter((x) => x.shop === sh.id); return e[Math.floor(this.rng() * e.length)]; }).filter(Boolean);
     for (const sp of pick) {
@@ -893,6 +901,8 @@ export class World {
     if (act.a === "upgrade") { this.fort.buyUpgrade(p, String((act as any).id ?? "") as never); return; }
     if (act.a === "craft") { this.fort.craft(p, String((act as any).id ?? "") as never); return; }
     if (act.a === "stealStop") { this.fort.theftStop(p); return; }
+    if (act.a === "stockTake") { this.stock.take(p, String((act as any).store ?? ""), Number((act as any).slot) | 0); return; } // (R15: a thing off a store's shelf)
+    if (act.a === "stockBuy") { this.stock.buy(p, String((act as any).store ?? ""), String((act as any).type ?? "")); return; } // (R15: the counter sells)
     if (act.a === "mayorRun") { this.mayor.run(p); return; } // (R14 stage 5: at your fort's board)
     if (act.a === "taskBuy") { this.loopQuests.buyTask(p); return; } // (R14 stage 4: at your fort's board)
     if (act.a === "jobTake") { const b = String((act as any).boss ?? ""); if (b === "seamus" || b === "binnie") this.loopQuests.takeJob(p, b); return; }
@@ -1304,13 +1314,14 @@ export class World {
     if (!tr || !st) return;
     const shop = (this.arena.shops ?? []).find((s) => s.name === st.name);
     const keeper = shop ? this.npc.cashierOf(shop.id) : undefined;
-    const no = (reason: "shut" | "wrong" | "nobuy" | "black" | "hands" | "broke") => this.emit({ t: "storeNo", p: p.id, store: storeId, reason });
+    const no = (reason: "shut" | "wrong" | "nobuy" | "black" | "hands" | "broke" | "ours") => this.emit({ t: "storeNo", p: p.id, store: storeId, reason });
     if (!keeper || keeper.state === "ko" || keeper.state === "cower") return no("shut");
     const held = this.activeItem(p)?.item;
     if (held) {
       if (this.contested(p, held)) return;
       const def = lootDef(held.type);
       if (def.blackMarket) return no("black");
+      if (held.from === storeId) return no("ours"); // (R15, Blake: no counter buys back its own stolen stock)
       let offer = 0;
       if (tr.buys?.types?.includes(held.type)) offer = Math.max(1, Math.round(held.value * (tr.buys.mult ?? 0.5)));
       else if (tr.buys?.junk && def.junk) { const [a, b] = tr.buys.junk; offer = a + Math.floor(this.random() * (b - a + 1)); }
@@ -2225,7 +2236,7 @@ export class World {
 
   // ------------------------------------------------------------------ loot spawning
   private fillLoot(newDay: boolean) {
-    for (let i = 0; i < this.itemTarget; i++) this.spawnOne();
+    if (!this.arena.shopLoot) for (let i = 0; i < this.itemTarget; i++) this.spawnOne(); // (R15: on the new map the shops ARE the loot: no street spawns)
     // C5c: a new day: the bank's vault is restocked, and the manager has lost his keycard somewhere in Uptown again
     const bank = this.arena.bank;
     if (newDay && bank) {
@@ -2248,10 +2259,11 @@ export class World {
   nightFalls() {
     this.npc.nightMode = true; this.npc.bigShotT = Math.min(this.npc.bigShotT, 4 + this.rng() * 8);
     if (!this.spawnLoot) return;
-    for (let i = 0; i < NIGHT_TOPUP && this.looseCount() < ITEM_MAX; i++) this.spawnOne();
+    if (!this.arena.shopLoot) for (let i = 0; i < NIGHT_TOPUP && this.looseCount() < ITEM_MAX; i++) this.spawnOne();
   }
 
   private topUpLoot(n: number) {
+    if (this.arena.shopLoot) return; // (R15: the shops restock at the cycle's reset, nothing in between)
     let free = 0;
     for (const it of this.items.values()) if (it.mode === "free" && it.shop < 0 && !lootDef(it.type).junk) free++;
     for (let i = 0; i < n && free < this.itemTarget && this.looseCount() < ITEM_MAX; i++, free++) this.spawnOne();

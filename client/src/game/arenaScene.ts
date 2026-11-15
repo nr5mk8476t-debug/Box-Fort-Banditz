@@ -2,7 +2,7 @@
 // Your own movement is simulated immediately in the browser ("prediction") using the
 // exact same rules as the server. When the server's answer arrives we quietly correct
 // any difference ("reconciliation"), smoothing small corrections so you never feel a snap.
-import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput, shelfSpot, LOOP, fortAt2, FORT_SPOTS, QUEST, questLocs,
+import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput, shelfSpot, LOOP, fortAt2, FORT_SPOTS, QUEST, questLocs, parseStockNote,
 } from "@bfb/shared";
 import {
   Scene, Engine, UniversalCamera, Camera, HemisphericLight, DirectionalLight, ShadowGenerator,
@@ -18,6 +18,7 @@ import { RaidAlert } from "../ui/raidAlert.ts";
 import { ItemRenderer } from "./itemRenderer.ts";
 import { FortRenderer, parseLoop, type LoopView } from "./fortRenderer.ts";
 import { CampaignRenderer } from "./campaignRenderer.ts";
+import { StockRenderer } from "./stockRenderer.ts";
 import { NpcRenderer } from "./npcRenderer.ts";
 import { EventRenderer, DragonRenderer, FestaRenderer } from "./eventRenderer.ts";
 import { PropRenderer } from "./propRenderer.ts";
@@ -308,6 +309,14 @@ export class ArenaScene {
     return null;
   }
   readonly campaignR: CampaignRenderer;
+  /** R15: the stores' shelves (shopStock.ts), and the thing you're aiming at on them */
+  readonly stockR: StockRenderer;
+  stockTarget: { store: string; slot: number; type: string; value: number } | null = null;
+  /** R15: open a counter's FOR SALE list (main.ts) */
+  onCounterMenu: ((store: string) => void) | null = null;
+  /** R15: the counter notes as they arrived (the counter menu reads them) */
+  readonly counterNotes = new Map<string, string>();
+  stockSaleOf(store: string) { const n = parseStockNote(this.counterNotes.get(store) ?? ""); return (n?.sale.length ?? 0) > 0; }
   get myLoop(): LoopView | null { if (this.loopCache.json !== this.shopJson) this.loopCache = { json: this.shopJson, v: parseLoop(this.shopJson) }; return this.loopCache.v; }
   private cars: CarRenderer;
   private copCars: CopCarRenderer;
@@ -439,6 +448,7 @@ export class ArenaScene {
     this.propsR = new PropRenderer(scene, this.arena.props ?? []);
     this.fortsR = new FortRenderer(scene, this.arena);
     this.campaignR = new CampaignRenderer(scene);
+    this.stockR = new StockRenderer(scene, this.arena);
     for (const pd of this.arena.props ?? []) if (pd.box !== undefined) this.brkBox.set(pd.id, pd.box);
     this.propsR.wallArt(this.arena); // (C4b: graffiti round the lower city)
     this.cars = new CarRenderer(scene);
@@ -636,6 +646,7 @@ export class ArenaScene {
       if (pv.note !== undefined && id.startsWith("pubboard")) { const [board, g] = String(pv.note).split("#"); this.city.setPubBoard(board); this.gchFromNote(g ?? ""); } // (R12.6: + the challenge) // (R12.1: the chalkboard)
       if (pv.note !== undefined && id.startsWith("jukebox")) { const k = Number(pv.note) || 0; if (k !== this.jukeTune) { this.jukeTune = k; this.city.setJukebox(k); } } // (R12.2b)
       if (pv.note !== undefined && (id.startsWith("pooltable") || id.startsWith("dartsoche"))) this.pg.setNote(id, pv.note, this.match.lightT ?? 0); // (R12.3)
+      if (pv.note !== undefined && id.startsWith("storecounter_")) { this.counterNotes.set(id.slice(13), String(pv.note)); this.stockR.setNote(id.slice(13), String(pv.note)); } // (R15: the store's shelves + counter)
       if (pv.note !== undefined && id.startsWith("pawncase")) { try { this.pawnCase = pv.note ? JSON.parse(pv.note) : []; } catch { this.pawnCase = []; } } // (C5c.3)
       // C4a: smashed things vanish and stop blocking (repaired at dawn)
       const bd = this.brkBox.get(id);
@@ -1008,7 +1019,7 @@ export class ArenaScene {
         // R13: the stores
         case "storeSold": if (e.p === me) this.storeLog.push("sold:" + e.store); if (e.p === me) { sfx.cash(); const v = STORE_VOICE[e.store as StoreId]; this.onBanner?.(`+$${e.cash}`, `${v?.keeper ?? "The shop"} takes the ${(lootDef(e.type)?.name ?? e.type).toUpperCase()}. ${v?.sold ?? ""}`, "good"); } break;
         case "storeBought": if (e.p === me) this.storeLog.push("bought:" + e.store); if (e.p === me) { sfx.cash(); const tr = STORE_TRADE[e.store as StoreId], v = STORE_VOICE[e.store as StoreId]; this.onBanner?.((tr?.sells?.name ?? "BOUGHT") + "!", `${tr?.sells?.blurb ?? ""}. ${v?.bought ?? ""}`, "good"); } break;
-        case "storeNo": if (e.p === me) this.storeLog.push("no:" + e.store + ":" + e.reason); if (e.p === me) { const v = STORE_VOICE[e.store as StoreId]; if (v) this.onFeedback?.(v[e.reason] || v.hands || v.nobuy, "info"); } break;
+        case "storeNo": if (e.p === me) this.storeLog.push("no:" + e.store + ":" + e.reason); if (e.p === me) { const v = STORE_VOICE[e.store as StoreId]; if (v) this.onFeedback?.(e.reason === "ours" ? `${v.keeper}: "That came off OUR shelves. Nice try."` : v[e.reason] || v.hands || v.nobuy, "info"); } break;
         case "mickeyNo": if (e.p === me) this.onFeedback?.({ day: `"Not in the daylight, ya eejit. Come back when it's dark."`, hands: `"Got anything for me? Hold it up, then."`, junk: `"Rubbish. Literally."`, money: `"That's just money, pal. Spend it."`, broke: `"Come back with cash, sunshine."`, full: "You've already got one of those.", shut: `"Shop's SHUT. You know what you did."`, away: "Wee Mickey's not here." }[e.reason], "bad"); break;
         case "gearUsed": {
           if (e.gear === "smoke") { this.smokePuff(e.x, e.z); sfx.dodge(); }
@@ -1223,6 +1234,10 @@ export class ArenaScene {
           else this.onBanner?.(`${who.toUpperCase()}'S CAMPAIGN IS OVER`, `${e.reason}. The clock's running again.`, "info");
           break;
         }
+        // ---- R15: the stores' stock
+        case "stockNo": if (e.p === me) { sfx.full(); this.onFeedback?.({ gone: "Someone beat you to it.", far: "Too far.", hands: "Your hands are full.", cash: "Not enough cash.", soldout: "Sold out.", cant: "Not now." }[e.reason] ?? "Can't.", "bad"); } break;
+        case "stockTaken": if (e.p === me) sfx.grab?.(); break;
+        case "stockBought": if (e.p === me) { sfx.cash(); this.onFeedback?.(`Bought: ${lootDef(e.type).name} ($${e.price})`, "good"); } break;
         case "secWarn": if (e.p === me) this.onFeedback?.(`${e.store} SECURITY: "Pay for that." Walk out with it and they'll chase you.`, "bad"); break;
         case "secShove": if (e.p === me) this.onFeedback?.("Shoved back in. Pay for it or put it down.", "bad"); break;
         case "secChase": if (e.p === me) { sfx.raidAlarm(); this.onBanner?.("SECURITY'S AFTER YOU!", "Outrun them for 10 s or get 25 m clear of the store. Caught = it goes back.", "bad"); } break;
@@ -1478,6 +1493,7 @@ export class ArenaScene {
     if (a === "grab" && this.stealTarget && !this.lookTarget) { // (R14: night: hold E at a rival's shelves)
       this.stealHeld = true; this.onAction?.({ a: "steal", owner: this.stealTarget.owner, rec: this.stealTarget.rec }); sfx.uiClick(); return;
     }
+    if (a === "grab" && this.stockTarget && !this.lookTarget) { const t = this.stockTarget; this.onAction?.({ a: "stockTake", store: t.store, slot: t.slot }); return; } // (R15: off a store's shelf)
     if (a === "grab" && this.atBoard && !this.lookTarget && !this.useTarget && !this.stealTarget) { const L = this.myLoop; this.onAction?.(L?.mq?.every((x) => x[1]) && !L.q?.t && !L.c ? { a: "mayorRun" } : { a: "taskBuy" }); return; } // (R14: your fort's board: an aura task)
     if (a === "grab" && this.arrestTarget && !this.pinOn) { // (C5c.1: citizen's arrest: beats grabbing whatever's lying there)
       this.onAction?.({ a: "arrest", p: this.arrestTarget.id });
@@ -1507,6 +1523,9 @@ export class ArenaScene {
     if (a === "grab" && !this.lookTarget && this.useTarget && (this.useTarget.kind === "pooltable" || this.useTarget.kind === "dartsoche")) { this.pg.use(this.useTarget.id); this.input.game = this.pg.active ? this.pg.input : null; return; } // (R12.3: its menu, or your shot; the keys are the menu's at once, not next frame: at a low frame rate a quick "1" would slip through)
     if (a === "grab" && !this.lookTarget && this.useTarget) {
       const u = this.useTarget;
+      // R15: a store counter with something for sale and your hands empty: its FOR SALE list (it never buys; holding
+      // something, E still offers it to the stores that buy, as before)
+      if (u.kind === "storecounter" && u.def?.store && !this.heldInfo() && this.onCounterMenu && this.stockSaleOf(u.def.store)) { this.onCounterMenu(u.def.store); return; }
       if (u.empty && u.kind !== "door") { sfx.full(); /* (R9: an open door is "empty" but E shuts it) */ this.onFeedback?.(u.kind === "washer" || u.kind === "dryer" ? "Already emptied today." : u.kind === "djdecks" ? "The decks are still warm. Give DJ Crunch a minute." : u.kind === "pawncase" ? "The case is smashed. Sal's boarding it up till dawn." : u.kind === "clubsafe" ? "Cleaned out. The takings start again tomorrow." : "Already searched. It'll refill later.", "info"); return; }
       this.openingMachine = u.kind === "washer" || u.kind === "dryer";
       const ht = HOLD_TIME[u.kind as keyof typeof HOLD_TIME];
@@ -1666,6 +1685,22 @@ export class ArenaScene {
   }
 
   /** R14: at night, in a rival's yard: the exposed thing on their shelves you're looking at (in reach) */
+  /** R15: the thing on a store's shelf you're looking at (in reach, near the middle of the view, nothing closer in hand) */
+  private updateStockTarget() {
+    const me = this.cur;
+    this.stockR.update(me.x, me.z);
+    this.stockTarget = null;
+    if (me.knockT > 0 || this.lookTarget || this.jailT > 0) return;
+    const eye = { x: me.x, y: me.y + 1.6, z: me.z }, yaw = this.input.yaw, pitch = this.input.pitch;
+    const fx = Math.sin(yaw) * Math.cos(pitch), fy = -Math.sin(pitch), fz = Math.cos(yaw) * Math.cos(pitch);
+    let best = 0.93;
+    for (const t of this.stockR.near(me.x, me.z, 3)) {
+      const dx = t.x - eye.x, dy = t.y + 0.12 - eye.y, dz = t.z - eye.z, d = Math.hypot(dx, dy, dz);
+      if (d > 2.6 || d < 0.2) continue;
+      const dot = (dx * fx + dy * fy + dz * fz) / d;
+      if (dot > best) { best = dot; this.stockTarget = { store: t.store, slot: t.slot, type: t.type, value: t.value }; }
+    }
+  }
   private updateStealTarget() {
     const was = this.stealTarget;
     this.stealTarget = null;
@@ -2271,6 +2306,7 @@ export class ArenaScene {
     this.updateLookTarget();
     this.updateUseTarget();
     this.updateStealTarget();
+    this.updateStockTarget();
     this.updateArrest(dt);
     this.updatePunchTarget(this.activeItem(inv)?.id ?? ""); // (a pocket item out in your hand = a click throws it, no punch prompt)
     this.updateTagging(inv);
