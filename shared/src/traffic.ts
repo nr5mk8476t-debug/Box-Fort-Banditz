@@ -522,7 +522,10 @@ export class TrafficSystem {
           const cop = o.lane === -1, ux = cop ? Math.sin(o.yaw) : 0, uz = cop ? Math.cos(o.yaw) : 0;
           // (R13b: a car part-way round a turn sits at an angle to its line, so its corners reach further: a cruiser on the
           //  sibling turn from the same road drove through one stopped for a walker. 2.3 m for those, 1.7 for the rest)
-          const rr = !cop && this.lanes[o.lane]?.conn ? 2.3 : 1.7;
+          //  (R14: a cruiser's longer (2.2 m half length): on the sibling turn its corner clipped one stopped part-way round
+          //  by 0.27 m while its path stayed 2.9 m from the car's middle. Its corner reaches its half length plus the car's
+          //  half width: 3.4 m)
+          const rr = !cop && this.lanes[o.lane]?.conn ? (car.cop ? 3.4 : 2.3) : 1.7;
           for (let k = 0; k < ns; k++) {
             const qx = WAY_X[k] - o.x, qz = WAY_Z[k] - o.z;
             // (a car in a lane sits on its lane's line: 1.7 m; a cop car out of the lanes can be anywhere: its own half

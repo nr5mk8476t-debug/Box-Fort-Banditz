@@ -282,10 +282,7 @@ export class PubGamesView {
     }
     if (PG_DEBUG && s.feed.log?.length) console.log("[pg]", id, s.feed.log[s.feed.log.length - 1]);
     // my turn just started: step up to the table / the oche (once this window's finished showing the last shot)
-    const mine = n.ph === "play" && s.seatOf(this.ctx.me) >= 0 && s.turn === s.seatOf(this.ctx.me) && !n.shot;
-    const before = this.lastTurnMine.get(id) ?? false; this.lastTurnMine.set(id, mine);
-    if (mine && !before && !this.quiet && Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < 7) this.pendingEnter = id;
-    if (!mine && this.pendingEnter === id) this.pendingEnter = "";
+    const mine = this.turnCheck(id, s, n);
     // (only what's going on HERE moves you: another table or board finishing never touches your aim, your throw or a
     //  menu you've got open elsewhere)
     if (this.at !== id) return;
@@ -385,8 +382,20 @@ export class PubGamesView {
   }
 
   // ---------------------------------------------------------------- the frame
+  /** has my turn just started at `id`? (step up once this window's finished showing the last shot) */
+  private turnCheck(id: string, s: Station, n: Note) {
+    const mine = n.ph === "play" && s.seatOf(this.ctx.me) >= 0 && s.turn === s.seatOf(this.ctx.me) && !n.shot;
+    const before = this.lastTurnMine.get(id) ?? false; this.lastTurnMine.set(id, mine);
+    if (mine && !before && !this.quiet && Math.hypot(this.ctx.x - s.g.x, this.ctx.z - s.g.z) < 7) this.pendingEnter = id;
+    if (!mine && this.pendingEnter === id) this.pendingEnter = "";
+    return mine;
+  }
   update(dt: number, ctx: PgCtx) {
+    // (R14: a note that arrived before this window knew who it is ("me" unset) judged the turn for nobody: once it
+    //  knows, look again, or your turn waits for the next change at the table: the 40 s turn clock)
+    const meChanged = ctx.me !== this.ctx.me;
     this.ctx = ctx;
+    if (meChanged) for (const [id, st] of this.st) if (st.note) this.turnCheck(id, st, st.note as Note);
     for (const s of this.st.values()) {
       if (s.kind === "pool") this.tickPool(s, dt); else this.tickDarts(s, dt);
       this.drawBoard(s, dt);

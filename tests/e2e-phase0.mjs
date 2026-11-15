@@ -845,7 +845,8 @@ try {
   await shot(A, "36-bigshot.png");
   await A.evaluate(() => { window.__bfb.clearCops(); window.__bfb.setHeat(0); window.__bfb.clearNpcs(window.__bfb.T.x + (-16), window.__bfb.T.z + (-8), 20); });
 
-  // ---- Phase 5A: the cycle loop (solo, real keys) ----
+  // ---- Phase 5A / R14: the cycle loop (solo, real keys): scavenge 8:00 (day, sunset, night), the DEPOSIT MAT, the
+  //      deadline (unbanked = gone), PREP (Sal's van, READY), 8 cycles, the most aura wins ----
   console.log("\n# Phase 5A cycle (solo)");
   const M = () => A.evaluate(() => window.__bfb.match());
   const waitPhase = (ph, ms = 60000) => A.waitForFunction((x) => window.__bfb.match().phase === x, ph, { timeout: ms }).then(() => true, () => false);
@@ -853,24 +854,26 @@ try {
   ok(/ENTER/.test(await A.textContent("#mh-sub")), `lobby hint: "${await A.textContent("#mh-sub")}"`);
   await A.keyboard.press("Enter");
   ok(await A.waitForFunction(() => window.__bfb.match().phase !== "lobby", null, { timeout: 60000 }).then(() => true, () => false), "ENTER starts the match (intro countdown)");
-  ok(/CYCLE 1 OF 3/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
+  ok(/CYCLE 1 OF 8/.test(await A.textContent("#bb-title")), `banner: "${await A.textContent("#bb-title")}"`);
   ok((await M()).home.inside, "a cycle starts at home");
   ok(await waitPhase("scavenge", 90000), "intro -> scavenge"); // (C3: 5 s of game time; the heavier city draws slower on this CPU-only box)
   await A.evaluate(() => window.__bfb.noEvents());
   ok(/^[78]:\d\d$/.test(await A.textContent("#mh-time")) && /DAY 1/.test(await A.textContent("#mh-round")), `day timer shows ${await A.textContent("#mh-round")} ${await A.textContent("#mh-time")}`);
   ok(await A.isVisible("#scores"), "scoreboard shows during the round");
-  // bank a TV: drop it in the yard and wait 10 s
+  ok(await A.isVisible("#purse"), "R14: the purse (CASH + AURA) shows");
+  // R14: bank a TV: drop it on your DEPOSIT MAT and wait 10 s: it goes onto your shelves (a record, not a loose item)
+  const myLot = await A.evaluate(() => window.__bfb.myLot());
   const yardPos = await A.evaluate(() => { const m = window.__bfb.move(); return { x: m.x, z: m.z, yaw: m.yaw }; });
-  const fwd = { x: Math.sin(yardPos.yaw), z: Math.cos(yardPos.yaw) };
-  await A.evaluate(([x, z]) => window.__bfb.spawnItem("crt_tv", x, z), [yardPos.x + fwd.x * 2, yardPos.z + fwd.z * 2]);
-  const banked = await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "crt_tv" && i.lock === 100), null, { timeout: 150000 }) /* (C3: 10 s of game time; slow CPU-drawn frames at the fort) */.then(() => true, () => false);
-  ok(banked, "loot resting in your yard locks in (banked) after 10 s");
+  await A.evaluate((l) => window.__bfb.spawnItem("crt_tv", l.padX + 0.5, l.padZ), myLot);
+  const banked = await A.waitForFunction(() => (window.__bfb.loop()?.r ?? []).some((r) => r[1] === "crt_tv"), null, { timeout: 150000 }) /* (10 s of game time; slow CPU-drawn frames at the fort) */.then(() => true, () => false);
+  ok(banked, "R14: loot on your DEPOSIT MAT is BANKED onto your shelves after 10 s");
+  ok(!(await A.evaluate(() => window.__bfb.items().some((i) => i.type === "crt_tv"))), "(it's a banked record now, not a loose item anyone can grab)");
   const bankNow = (await M()).scores[0].bank;
-  ok(bankNow > 0 && /\+\d+/.test(await A.textContent("#scores")), `scoreboard shows the fort loot value (+${bankNow})`);
-  await A.evaluate(() => window.__bfb.setPitch(0.35));
-  await sleep(600);
-  await hide();
+  ok(bankNow > 0, `scoreboard shows the fort's banked value (+${bankNow})`);
+  await A.evaluate((l) => window.__bfb.camAt(l.x + 0.5, 2.0, l.z + 5.5, Math.PI, 0.18), myLot);
+  await sleep(1500); await hide();
   await shot(A, "24-banked-loot.png");
+  await A.evaluate(() => window.__bfb.camFree());
   // events: each one shows up
   for (const [kind, rx] of [["happyhour", /HAPPY HOUR/], ["truck", /GARBAGE TRUCK/], ["airdrop", /AIRDROP/], ["raccoons", /RACCOON/]]) {
     await A.evaluate((k) => window.__bfb.triggerEvent(k), kind);
@@ -909,51 +912,31 @@ try {
   ok(await waitPhase("night", 150000), "sunset -> night"); // (C5c.2: game time can run up to ~10x slower on this box)
   ok(await A.waitForFunction(() => window.__bfb.night().level > 0.9 && window.__bfb.night().body, null, { timeout: 20000 }).then(() => true, () => false), "the city goes dark (night visuals)");
   ok(/NIGHT 1/.test(await A.textContent("#mh-round")) && /^[0-2]:\d\d$/.test(await A.textContent("#mh-time")), `night timer: ${await A.textContent("#mh-time")}`);
-  // (R12.3: nobody's sent home at sunset any more: walk back to the fort to look at what's banked there)
-  await A.evaluate(([x, z]) => window.__bfb.teleport(x, z, 0), [yardPos.x, yardPos.z]);
-  await A.waitForFunction(() => window.__bfb.items().some((i) => i.type === "crt_tv" && i.lock === 100), null, { timeout: 30000 }).catch(() => {});
-  const nightItems = await A.evaluate(() => window.__bfb.items().filter((i) => i.mode === "free"));
-  const tvStill = nightItems.find((i) => i.type === "crt_tv" && i.lock === 100);
-  ok(!!tvStill, "your banked TV is still in the fort at night");
-  ok(nightItems.some((i) => i.mult === 2), `fresh x2 loot appears as night falls (${nightItems.filter((i) => i.mult === 2).length})`);
+  ok((await A.evaluate(() => window.__bfb.loop()?.r ?? [])).some((r) => r[1] === "crt_tv"), "your banked TV is still on your shelves at night");
   await A.evaluate(() => { const l = window.__bfb.landmarks().martDoor; window.__bfb.teleport(l.x - Math.sin(l.yaw) * 9, l.z - Math.cos(l.yaw) * 9, l.yaw); window.__bfb.setPitch(0.05); }); // (C1: the Yards shops at night)
   await sleep(1500); await hide();
   await shot(A, "37-night.png");
   await A.evaluate(() => window.__bfb.setTimeLeft(1));
-  ok(await waitPhase("dawn", 30000), "night -> sunrise");
-  ok(await waitInv("v.pockets.every((x) => !x)", 5000), "the chicken is gone (lost: still out in the city at sunrise)");
-  ok(await A.isVisible("#tally") && /SUNRISE/.test(await A.textContent("#tally")), "sunrise results card");
-  const res = JSON.parse((await M()).results)[0];
-  ok(res.lost >= 1 && res.banked >= 1, `results: fort loot ${res.banked} ($${res.bankedValue}), lost ${res.lost}`);
-  await A.evaluate(() => window.__bfb.setTimeLeft(0.5));
-  ok(await waitPhase("shop", 30000), "sunrise -> pawn shop");
-  ok(await A.waitForFunction(() => window.__bfb.shop().open && !document.getElementById("shop").classList.contains("hidden"), null, { timeout: 10000 }).then(() => true, () => false), "the pawn shop screen opens (mouse released)");
-  const offers = (await A.evaluate(() => window.__bfb.shop())).offers;
-  const tvOffer = offers.find((o) => o.type === "crt_tv");
-  ok(tvOffer && tvOffer.offer < tvOffer.value, `Sal lowballs the TV: $${tvOffer?.offer} for a $${tvOffer?.value} TV (${tvOffer?.mood})`);
-  await A.click(`.offer button[data-act=haggle][data-id=${tvOffer.id}]`);
-  await A.waitForFunction(([id, v]) => window.__bfb.shop().offers.find((o) => o.id === id)?.offer !== v, [tvOffer.id, tvOffer.offer], { timeout: 15000 }).catch(() => {});
-  const tvNow = (await A.evaluate(() => window.__bfb.shop())).offers.find((o) => o.id === tvOffer.id);
-  ok(tvNow && tvNow.offer !== tvOffer.offer, `haggled: $${tvOffer.offer} -> $${tvNow?.offer} (${tvNow?.mood}: "${tvNow?.line}")`);
-  await sleep(200);
-  await shot(A, "38-pawn-shop.png");
+  // R14: the deadline: anything not banked is gone; everyone goes home for PREP (2:00)
+  ok(await waitPhase("prep", 30000), "R14: night -> PREP");
+  ok(await waitInv("v.pockets.every((x) => !x)", 5000), "R14: the chicken is gone (not banked at the deadline)");
+  ok(await A.waitForFunction(() => window.__bfb.prepOpen() && !document.getElementById("prep").classList.contains("hidden"), null, { timeout: 15000 }).then(() => true, () => false), "R14: the PREP screen opens (mouse released)");
+  const res = JSON.parse((await M()).results || "[]")[0];
+  void res;
+  const tvRec = (await A.evaluate(() => window.__bfb.loop().r)).find((r) => r[1] === "crt_tv");
+  await sleep(600);
+  await shot(A, "38-prep.png");
   const cashBefore = (await M()).scores[0].cash;
-  const price = (await A.evaluate((id) => window.__bfb.shop().offers.find((o) => o.id === id).offer, tvOffer.id));
-  await A.click(`.offer button[data-act=sell][data-id=${tvOffer.id}]`);
-  ok(await A.waitForFunction(([c, v]) => window.__bfb.match().scores[0].cash === c + v, [cashBefore, price], { timeout: 15000 }).then(() => true, () => false), `SELL: +$${price} cash`);
-  ok(await A.waitForFunction((id) => window.__bfb.shop().offers.find((o) => o.id === id)?.state === "sold", tvOffer.id, { timeout: 10000 }).then(() => true, () => false), "the TV shows as SOLD");
-  await A.click("#btn-shop-done");
-  ok(await waitPhase("upgrades", 15000), "DONE (everyone ready) skips to the upgrades round");
-  ok(await A.waitForFunction(() => window.__bfb.overlay() === "upgrades" && window.__bfb.fortView(), null, { timeout: 10000 }).then(() => true, () => false), "upgrades screen over a view of your fort ('coming soon')");
-  await sleep(1200);
-  await shot(A, "39-upgrades.png");
-  await A.click("#btn-upg-done");
-  ok(await waitPhase("intro", 15000) && (await M()).round === 2, "READY -> cycle 2");
-  ok(await A.waitForFunction(() => window.__bfb.overlay() === "" && !window.__bfb.fortView(), null, { timeout: 5000 }).then(() => true, () => false), "screens close for the next cycle");
-  // fast-forward to the end of the match
-  for (let k = 0; k < 300 && (await M()).phase !== "over"; k++) { await A.evaluate(() => window.__bfb.setTimeLeft(0.2)); await sleep(600); } // (D1: up to 3 min: each phase change takes a few frames, and frames are slow on this box)
-  ok((await M()).phase === "over", "after 3 cycles: match over");
-  ok(/RICHEST BANDIT/.test(await A.textContent("#tally")), `final card: "${(await A.textContent("#tally-title"))}"`);
+  if (tvRec) await A.click(`button[data-sell="${tvRec[0]}"]`);
+  ok(!!tvRec && await A.waitForFunction((c) => window.__bfb.match().scores[0].cash > c, cashBefore, { timeout: 15000 }).then(() => true, () => false), "R14: SELL the TV to Sal's van: cash goes up");
+  ok(!(await A.evaluate(() => window.__bfb.loop().r)).some((r) => r[1] === "crt_tv"), "(it's off your shelves)");
+  await A.click("#btn-prep-ready");
+  ok(await waitPhase("intro", 15000) && (await M()).round === 2, "READY (everyone ready) -> cycle 2");
+  ok(await A.waitForFunction(() => !window.__bfb.prepOpen(), null, { timeout: 5000 }).then(() => true, () => false), "the PREP screen closes for the next cycle");
+  // fast-forward to the end of the match (8 cycles)
+  for (let k = 0; k < 400 && (await M()).phase !== "over"; k++) { await A.evaluate(() => window.__bfb.setTimeLeft(0.2)); await sleep(600); } // (each phase change takes a few frames, and frames are slow on this box)
+  ok((await M()).phase === "over" && (await M()).round === 8, `after 8 cycles: match over (cycle ${(await M()).round})`);
+  ok(/MOST AURA/.test(await A.textContent("#tally")), `final card: "${(await A.textContent("#tally-title"))}"`);
   await hide();
   await shot(A, "26-final-results.png");
   await A.keyboard.press("Enter");
