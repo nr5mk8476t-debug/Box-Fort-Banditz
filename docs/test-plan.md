@@ -546,6 +546,17 @@ Note on the browser test for 2A: earlier runs failed on test problems (not game 
 - [ ] Have a different friend host once too.
 - [ ] Anyone who can't connect at all? (tell me their network type: mobile hotspot / school / home)
 
+## R14.1: Blake's review fixes (2026-11-15)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| Security | drop it inside, pick it up again, walk out: still chased; passed to a mate outside: the chase follows the thing | unit `security.test.ts` (3) | pass |
+| Aura farming | the same loot stolen 3 times between two players, re-banked each time: theft aura once a cycle; banking keeps the loot's identity | unit `loop.test.ts` (9) | pass |
+| Banana | decided before the knockdown (and before a KO punch): the victim stays up holding their thing, the rival goes down; not used without a task or campaign | unit `quests.test.ts` (7) | pass |
+| Speech | knocked down at 4 s: the speech starts again | unit `mayor.test.ts` (6) | pass |
+| CRLF | the source-reading test passes on a CRLF copy of props.ts | unit `use-targets.test.ts` | pass |
+| Totals | shared 353/353, client 40/40, typecheck; signal + server smoke (the server smoke flaked once on "Bob sees Alice crouching" right after a cold start, then passed); draw budget; e2e 464/464 normal, 464/464 at 110 ms | as CLAUDE.md | pass |
+
 ## R14: the first complete game loop (2026-11-15)
 
 | Area | Check | How | Result |

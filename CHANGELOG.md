@@ -2,6 +2,24 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## R14.1: fixes from Blake's review of R14 (2026-11-15)
+
+Blake reproduced four problems in the new loop. Each is fixed, with a regression test that runs his reproduction:
+- **Store security can't be dodged by dropping the loot.** Stealing at CARAT & RUN or MAISON PONG, dropping the thing
+  inside and picking it up again used to wipe security's memory of it.
+  - The history now belongs to the thing: dropped, picked up again or passed to a mate, it's still stolen.
+  - Security chases whoever has it now.
+  - It ends only when security takes it back (the tackle) or gives up (you got away with it).
+- **No more farming theft aura.** Two players stealing the same loot back and forth (re-banking it in between) used to
+  earn aura every time.
+  - Every loot now keeps a permanent identity through banking, theft and banking again.
+  - The +2 theft aura is once per loot per cycle.
+- **The banana peel works as advertised.** It's decided before the knockdown, including a punch that would knock you
+  out: you keep your feet and everything you carry, and the rival goes down instead. It's used only during a task or a
+  campaign.
+- **The speech is 10 uninterrupted seconds.** Being knocked down (by anyone) starts it again, as walking off did.
+- A source-reading test assumed Unix line endings and failed on Windows (CRLF) checkouts; fixed.
+
 ## R14: the first complete game loop: scavenge, bank, steal, build, quests, and RUN FOR MAYOR (2026-11-15)
 
 The whole match is now one loop, built from Blake's brief and his answers (all in `docs/game-loop-plan.md`). The rules

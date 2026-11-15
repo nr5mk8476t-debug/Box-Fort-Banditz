@@ -2328,3 +2328,13 @@ The plan and every one of Blake's answers are in `docs/game-loop-plan.md`. How i
   - A cruiser on a sibling turn kept 2.3 m from a car stopped part-way round, but its corner reaches 3.4 m.
   - The pool window judged "is it my turn?" only when the table's news changed. News that arrived before the window
     knew who it was meant the turn waited for the 40 s clock.
+
+## R14.1: Blake's review of R14 (2026-11-15)
+- **A stolen thing's history belongs to the thing** (`loop/security.ts`). It survives drops, pick-ups and hand-offs.
+  It ends only by recovery (the tackle) or escape (security gives up). Putting it down inside the store doesn't end it:
+  that was the exploit (drop, wait, pick up: no new shoplift is seen).
+- **Loot identity:** `ItemSim.uid` and `Rec.uid` are the loot's first item id, kept through banking and theft. Once-a-
+  cycle rewards key on that identity, never on a record or item id that changes when it's banked.
+- **The banana peel is a pre-check** (`World.bananaSave`), run in `knockdown()` and in `hurt()` before a KO blow lands.
+  It applies only when the victim is mid-task or mid-campaign.
+- **The speech** must be 10 uninterrupted seconds (Blake's recommendation): any knockdown resets it.
