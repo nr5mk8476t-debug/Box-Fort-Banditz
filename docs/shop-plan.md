@@ -79,3 +79,47 @@ the street").
   restocks. Online: two players take the same item and hold up the same till.
 - The usual slice: unit tests, smokes (NPC count), the draw budget (new views for each shop), e2e at normal and 110 ms,
   screenshots, docs.
+
+## Blake's design requirements for the six (2026-11-15, verbatim intent)
+Thoughtfully designed, detailed, believable businesses with character, attractive architecture, and interiors that
+clearly reflect what they sell. A plain rectangular shell with a sign and some shelves is not enough.
+
+- **About TWICE the usable floor area of the existing shops.** Measure the current shops first. That's double the
+  AREA (not double the width and the depth). Use the extra space for interesting layouts and robbery gameplay.
+- **Plan each store before building it:** footprint, architectural style, interior arrangement, entrances, loot
+  locations, escape routes, and how it fits its street and neighbours.
+- **The city's scale:** no tiny standalone shops beside massive buildings. Where it fits, the shop is the ground floor
+  of a taller building with convincing upper façades (those can stay cheap exterior shells).
+- **Distinctive architecture:** recessed entrances, deep shopfront windows, columns, awnings, cornices, rooflines,
+  varied shapes. Features have believable thickness and support. No random protruding blocks or purposeless decoration.
+- **The district shows:**
+  - low-end: worn, patched, full of personality;
+  - mid-range: established and maintained;
+  - high-end: elegant proportions, refined materials, polished displays.
+- **Real interiors:**
+  - an entrance area, a counter, product sections, shelving, and a stockroom where it suits;
+  - layouts that differ from shop to shop;
+  - aisles wide enough for bulky loot, NPCs and multiplayer chases.
+- **The bigger footprint is for gameplay:**
+  - sneak behind displays, reach the valuable stock, get spotted, escape;
+  - rear or side exits where the streets allow;
+  - no empty oversized rooms, no confusing mazes.
+- **The merchandise sells the theme:**
+  - hardware: timber racks, tools, fittings;
+  - homewares: furniture displays;
+  - watches: refined cases, secure stock.
+  - Mix cheap decorative stock with clearly recognisable stealable items.
+- **The goofy BFB personality:** funny product labels, questionable adverts, small visual jokes. The architecture stays
+  convincing.
+- **Good at night:** readable illuminated signs, warm windows, carefully limited lighting within the budgets.
+- **Efficient detail:**
+  - reuse materials and atlases, instance repeated products, merge static decoration, interior culling;
+  - simple collision; no decorative product as its own physics object;
+  - meshes, draws and frame times measured before and after; never paid for by lowering the whole game's quality.
+- **Work with Blake visually:**
+  1. an initial layout plan;
+  2. in-game screenshots of the FIRST finished shop: from the street, inside, at night, plus a wider street view for
+     scale;
+  3. Blake's feedback on that shop, before the approach is copied to all six.
+- **Finally, walk every store.** Check for flicker, missing floors, floating details, clipping, blocked doors,
+  unreachable loot and stuck NPCs. Every shop supports robbery → escape → fort banking → selling or crafting.

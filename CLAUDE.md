@@ -13,6 +13,17 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 - No real-money monetization; in-game cash only. No realistic drug presentation.
 - Don't add landmarks unless Blake asks.
 - The old 100-file cap is lifted (Blake, R12.5: "if you need to add more files more than 100, do so, and add accordingly to github"). Add files where they make the code clearer, commit them, and don't pad the repo.
+- **New stores (Blake, R15):** proper businesses with character, not a shell with a sign and shelves.
+  - About 2x the existing shops' usable floor AREA.
+  - Planned first: footprint, style, interior, entrances, loot, escape routes, fit with the street.
+  - The ground floor of a taller building where it suits the street.
+  - Real interiors: entrance, counter, sections, stockroom; varied layouts; aisles wide enough for bulky loot and
+    chases.
+  - The district shows (low worn, mid established, high refined); goofy labels and jokes; good at night.
+  - Efficient: atlases, instancing, merged static decoration, culling, simple collision.
+  - Show Blake the first finished shop (street, inside, night, wide street view) before copying the approach.
+  - Finish with a walk-through of every store.
+  - Full brief: `docs/shop-plan.md`.
 - New content follows `docs/content-guide.md` and stays inside `docs/perf-budget.md` (check with the BENCHMARK and `tests/perf-compare.mjs`).
 
 ## Every update ("slice")
