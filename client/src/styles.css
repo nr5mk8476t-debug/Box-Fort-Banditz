@@ -413,3 +413,29 @@ body.benching #hud > *:not(#pint) { visibility: hidden; }
 .gpu-warn b { color: #b3261e; }
 .gpu-warn ol { margin: 6px 0 8px 18px; padding: 0; }
 .gpu-warn li { margin: 2px 0; }
+
+/* ---- R14: the game loop: the purse (cash + aura), PREP ---- */
+.purse { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; font: 800 20px/1 var(--font-chunky, "Arial Black", sans-serif); pointer-events: none; }
+.purse span { background: rgba(27, 20, 32, 0.78); border: 2px solid #1b1420; border-radius: 10px; padding: 5px 12px; color: #fff; text-shadow: 0 2px 0 #1b1420; }
+.purse .pu-cash b { color: #7fe07a; } .purse .pu-aura b { color: #d9a6ff; }
+.purse .bump { animation: purseBump 0.5s ease-out; }
+@keyframes purseBump { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+.overlay.prep { display: flex; align-items: center; justify-content: center; }
+.prep-card { width: min(1180px, 96vw); max-height: 92vh; overflow: auto; padding: 14px 18px; }
+.prep-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.prep-head { font: 800 22px/1.2 var(--font-chunky, "Arial Black", sans-serif); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.prep-head .pp-purse b { color: #2f8f4e; } .prep-head .pp-aura b { color: #7a3fa0; } .prep-head .pp-fort { color: #a8743f; }
+.prep-cols { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 14px; margin-top: 8px; }
+@media (max-width: 900px) { .prep-cols { grid-template-columns: 1fr; } }
+.prep-col h3 { margin: 6px 0; font-size: 16px; }
+.pp-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow: auto; margin-bottom: 6px; }
+.pp-row { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 6px; background: rgba(0,0,0,0.05); font-size: 14px; }
+.pp-row.safe { background: rgba(217, 180, 90, 0.25); }
+.pp-cat { font-size: 11px; opacity: 0.7; } .pp-val { font-weight: 700; }
+.btn.on { background: #d9b45a; }
+.pp-card { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 8px; margin-bottom: 5px; border-radius: 8px; background: rgba(0,0,0,0.05); font-size: 13px; }
+.pp-card b { grid-column: 1; } .pp-card span { grid-column: 1; opacity: 0.8; } .pp-card em { grid-column: 1; font-style: normal; font-size: 12px; }
+.pp-card button { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+.pp-card.own { background: rgba(47, 143, 78, 0.18); }
+.pp-card i.ok { color: #2f8f4e; font-style: normal; } .pp-card i.no { color: #c0392b; font-style: normal; }
+.prep-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; }

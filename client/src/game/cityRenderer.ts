@@ -7,7 +7,8 @@ import {
   type ShadowGenerator, type CellMaterial,
 } from "./babylon.ts";
 import { toon, ink, bakeGroup, PALETTE, textTexture, unlitTextured, drawCityMap } from "./look.ts";
-import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, storeById, storeFrame, STORE_SHELLS, type ArenaLayout, type Box, type Rect, type StoreDef } from "@bfb/shared";
+import { PLAYER_COLORS, PLAYER_COLOR_NAMES, lightState, tierAt, TIER_WALLS, TIER_TOWERS, CLUB, clubFloorY, clubStage, feverAt, footFaces, HOT_PLOT, JUKEBOX, POOL, POOL_SEGS, POOL_HOLES, POOL_HOLE, storeById, storeFrame, STORE_SHELLS, type ArenaLayout, type Box, type Rect, type StoreDef, LOOP,
+} from "@bfb/shared";
 import { DynamicTexture } from "./babylon.ts";
 import { areaZone, areaGroupId, floorVisible, checkAreaLights, LIGHT_BUDGET, type InteriorArea } from "./areas.ts";
 import { drawDartboard, drawChalkDoor, drawCloth, drawHouseRules, drawLeaguePhoto, notice, wornFloor } from "./pubGames.ts";
@@ -1657,13 +1658,15 @@ export class CityRenderer {
       pole.position.set(0.9, 2.2, -0.3);
       const flag = part(MeshBuilder.CreateBox("flag", { width: 0.7, height: 0.45, depth: 0.03 }, this.scene), color, 0.015);
       flag.position.set(1.25, 2.65, -0.3);
-      // drop pad marking in front (Phase 3 uses it for returning loot)
-      const pad = MeshBuilder.CreateGround("pad", { width: 5, height: 4 }, this.scene);
-      pad.position.set(f.padX, 0.02, f.padZ);
-      pad.rotation.y = f.yaw;
-      pad.material = toon(this.scene, color, "pad");
-      pad.visibility = 0.5;
+      // R14: the DEPOSIT MAT in front (exactly the mat: loot resting on it 10 s is banked onto the shelves)
+      const mh = LOOP.matHalf * 2;
+      const pad = MeshBuilder.CreateGround("pad", { width: mh, height: mh }, this.scene);
+      pad.position.set(f.padX, 0.03, f.padZ);
+      pad.rotation.y = f.yaw + Math.PI;
+      pad.material = unlitTextured(this.scene, textTexture(this.scene, "DEPOSIT", { w: 512, h: 512, bg: "#3a2a1a", fg: color, stroke: "#1b1420" }), "depositMat");
       pad.parent = this.root;
+      const rim = MeshBuilder.CreateBox("padRim", { width: mh + 0.16, height: 0.04, depth: mh + 0.16 }, this.scene);
+      rim.position.set(f.padX, 0.01, f.padZ); rim.rotation.y = f.yaw; rim.material = toon(this.scene, color, "pad"); rim.parent = this.root; rim.isPickable = false;
       const label = MeshBuilder.CreatePlane("fortlabel", { width: 3.2, height: 0.7 }, this.scene);
       label.parent = node;
       label.position.set(0, 2.2, 1.0);

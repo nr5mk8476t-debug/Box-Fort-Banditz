@@ -77,6 +77,7 @@
     <div id="event-hud" class="event-hud hidden"></div>
     <div id="home-arrow" class="home-arrow hidden"><div id="ha-arrow" class="ha-arrow"></div><span id="ha-text"></span></div>
     <ol id="scores" class="scores" aria-label="Scores"></ol>
+    <div id="purse" class="purse hidden" aria-label="Cash and aura"><span class="pu-cash">$<b id="pu-cash">0</b></span><span class="pu-aura">AURA <b id="pu-aura">0</b></span></div>
     <div id="big-banner" class="big-banner hidden" aria-live="assertive"><div id="bb-title"></div><div id="bb-sub"></div></div>
     <div id="wipeout" class="wipeout hidden"><div class="wo-ring"><div id="wipeout-sub"></div></div><div class="wo-title">SPLAT!</div><div class="wo-hint">seeing stars... your loot is all over the road</div></div>
     <div id="tally" class="tally card hidden"><h2 id="tally-title"></h2><table id="tally-table"></table><p id="tally-foot"></p></div>
@@ -127,41 +128,16 @@
     <div id="controls-hint" class="controls-hint">WASD move / SHIFT sprint / SPACE jump + climb / C crouch / Q dodge / E grab + search (mash E in a tug of war) / HOLD R rob a till / G drop / WHEEL or 1-4 choose item / CLICK punch (fists) or HOLD CLICK throw / ESC menu</div>
   </section>
 
-  <!-- PHASE 5A: PAWN SHOP (shop round) -->
-  <section id="shop" class="overlay hidden" aria-label="Pawn shop">
-    <div class="card shop-card">
-      <div class="shop-head">
-        <div id="sal-face" class="sal-face" aria-hidden="true"></div>
-        <div class="shop-title">
-          <h2>PAWN-O-RAMA</h2>
-          <div class="sal-name">"Honest" Sal</div>
-          <div id="sal-line" class="sal-line">Whaddaya got for me?</div>
-        </div>
-        <div id="shop-timer" class="shop-timer">1:00</div>
+  <!-- R14: PREP (2:00 at home between scavenges): sell to Sal's van, the safe, build, craft, READY -->
+  <section id="prep" class="overlay prep hidden" aria-label="Prep">
+    <div class="card prep-card">
+      <div class="prep-top"><div id="prep-head" class="prep-head"></div><div id="prep-timer" class="shop-timer">2:00</div></div>
+      <div class="prep-cols">
+        <div id="prep-storage" class="prep-col"></div>
+        <div id="prep-upgrades" class="prep-col"></div>
+        <div id="prep-craft" class="prep-col"></div>
       </div>
-      <div id="shop-list" class="shop-list"></div>
-      <div class="shop-foot">
-        <span class="shop-cash">CASH <b id="shop-cash">$0</b></span>
-        <button id="btn-sell-all" class="btn btn-small">SELL ALL</button>
-        <button id="btn-shop-done" class="btn btn-go btn-small">DONE</button>
-      </div>
-      <p class="small shop-note">Read Sal's face: the happier he looks, the more room to haggle. Push too far and he gets offended. Anything you don't sell goes in the dumpster when the shop closes.</p>
-    </div>
-  </section>
-
-  <!-- PHASE 5A: UPGRADES (placeholder until 5B) -->
-  <section id="upgrades" class="overlay side hidden" aria-label="Upgrades">
-    <div class="card upg-card">
-      <h2>UPGRADES</h2>
-      <p class="small">Coming in the next update! Soon you'll spend your cash here, watching your fort transform.</p>
-      <div class="upg-grid">
-        <div class="upg"><b>BANDIT GEAR</b><span>bigger pockets, stamina, sprint, lockpick kit, taser-proof jacket</span></div>
-        <div class="upg"><b>FORT DEFENCES</b><span>guard dog, tin-can tripwire, spring boxing glove, a lock</span></div>
-        <div class="upg"><b>FORT PRESTIGE</b><span>cardboard, plywood, tin mansion, gold palace</span></div>
-        <div class="upg"><b>DIRTY TRICKS</b><span>banana peel, fake siren, smoke bomb, bribe a cop</span></div>
-      </div>
-      <div class="upg-foot"><span id="upg-timer" class="shop-timer">1:00</span><button id="btn-upg-done" class="btn btn-go btn-small">READY</button></div>
-      <p id="upg-wait" class="small"></p>
+      <div class="prep-foot"><span class="small">Carried loot that wasn't banked is gone. Next: a 5 s countdown at your fort, then 8 minutes in the city.</span><button id="btn-prep-ready" class="btn btn-go btn-small">READY</button></div>
     </div>
   </section>
 

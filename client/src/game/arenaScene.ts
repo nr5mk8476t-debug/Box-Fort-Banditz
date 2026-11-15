@@ -2,7 +2,7 @@
 // Your own movement is simulated immediately in the browser ("prediction") using the
 // exact same rules as the server. When the server's answer arrives we quietly correct
 // any difference ("reconciliation"), smoothing small corrections so you never feel a snap.
-import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput,
+import { STORE_TRADE, STORE_VOICE, type StoreId, frozenPhase, freezeInput, shelfSpot, LOOP,
 } from "@bfb/shared";
 import {
   Scene, Engine, UniversalCamera, Camera, HemisphericLight, DirectionalLight, ShadowGenerator,
@@ -16,6 +16,7 @@ import { Spring } from "./spring.ts";
 import { CityRenderer } from "./cityRenderer.ts";
 import { RaidAlert } from "../ui/raidAlert.ts";
 import { ItemRenderer } from "./itemRenderer.ts";
+import { FortRenderer, parseLoop, type LoopView } from "./fortRenderer.ts";
 import { NpcRenderer } from "./npcRenderer.ts";
 import { EventRenderer, DragonRenderer, FestaRenderer } from "./eventRenderer.ts";
 import { PropRenderer } from "./propRenderer.ts";
@@ -281,6 +282,16 @@ export class ArenaScene {
   private rumbleT = 0;
   // Phase 3.5: props, traffic, hold-ups, wipeouts
   private propsR: PropRenderer;
+  /** R14: the forts as built (shelves with the banked things, the safe, upgrades) */
+  readonly fortsR: FortRenderer;
+  /** R14: the slot -> player id of every fort that's owned */
+  private fortOwner = new Map<number, string>();
+  /** R14: a rival's shelf thing in reach at night: HOLD E to steal it */
+  stealTarget: { owner: string; slot: number; rec: string; type: string; value: number } | null = null;
+  private stealHeld = false;
+  private loopCache: { json: string; v: LoopView | null } = { json: "", v: null };
+  /** R14: my fort and quests (parsed once per change) */
+  get myLoop(): LoopView | null { if (this.loopCache.json !== this.shopJson) this.loopCache = { json: this.shopJson, v: parseLoop(this.shopJson) }; return this.loopCache.v; }
   private cars: CarRenderer;
   private copCars: CopCarRenderer;
   /** Phase 4 jail: the lock-picking screen (shown while you're locked up) */
@@ -409,6 +420,7 @@ export class ArenaScene {
     if (this.arena.chinatown) this.dragon = new DragonRenderer(scene, this.arena.chinatown.route, { n: PARADE.segments, gap: PARADE.gap });
     if (this.arena.littleItaly) this.festa = new FestaRenderer(scene, this.arena.littleItaly.route, { gap: FESTA.gap, segments: FESTA.segments });
     this.propsR = new PropRenderer(scene, this.arena.props ?? []);
+    this.fortsR = new FortRenderer(scene, this.arena);
     for (const pd of this.arena.props ?? []) if (pd.box !== undefined) this.brkBox.set(pd.id, pd.box);
     this.propsR.wallArt(this.arena); // (C4b: graffiti round the lower city)
     this.cars = new CarRenderer(scene);
@@ -554,6 +566,11 @@ export class ArenaScene {
       if (id === myId) this.myColorIdx = p.colorIdx;
     });
     this.scores = scores.sort((a, b) => b.cash + b.bank - (a.cash + a.bank));
+    { // R14: every fort as its owner has built it
+      this.fortOwner.clear();
+      view.players.forEach((p, id) => { this.fortOwner.set(p.colorIdx, id); this.fortsR.update(p.colorIdx, (p as any).shop ?? ""); });
+      this.fortsR.retain(new Set(this.fortOwner.keys()));
+    }
     { // C5c.1: everyone else's heat (the M map's WANTED pins) and who's lying flat nearby (citizen's arrest)
       this.others.clear();
       view.players.forEach((p, id) => {
@@ -1119,6 +1136,36 @@ export class ArenaScene {
           sfx.splash(gainAt(e.x, 0.3, e.z));
           if (e.p === me) { const t = this.itemTypes.get(e.item); this.onFeedback?.(`SPLASH! Your ${t ? lootDef(t).name : "loot"} floats off. Climb out at a ladder.`, "bad"); }
           break;
+        // ---- R14: the game loop
+        case "loopWarn":
+          if (e.left === 150) this.onBanner?.("NIGHT FALLS IN 30 s", "Then rivals can steal what's on your shelves. Anything in your SAFE is protected.", "info");
+          else if (e.left === 60) { sfx.hurry(); this.onBanner?.("1:00 LEFT", "Bank it or lose it: anything not banked when time's up is GONE.", "bad"); }
+          else { sfx.hurry(); this.onFeedback?.("10 SECONDS! Anything not banked is gone at 0.", "bad"); }
+          break;
+        case "aura":
+          if (e.p === me) { if (e.n > 0) sfx.checkpoint(); this.onFeedback?.(`${e.n > 0 ? "+" : ""}${e.n} AURA: ${e.why}`, e.n > 0 ? "good" : "bad"); }
+          break;
+        case "storageFull": if (e.p === me) { sfx.full(); this.onFeedback?.("STORAGE FULL: it waits on the mat. Sell or use things in PREP, or buy SHELVES.", "bad"); } break;
+        case "vanSold": if (e.p === me) { sfx.cash(); this.onFeedback?.(`Sal's van: +$${e.cash} for ${e.types.length} thing${e.types.length > 1 ? "s" : ""}`, "good"); } break;
+        case "upgraded": if (e.p === me) { sfx.gameDone(); this.onFeedback?.(`BUILT: ${e.id === "level4" ? "THE MAYOR'S FORT" : e.id.toUpperCase()}`, "good"); } break;
+        case "crafted": if (e.p === me) { sfx.checkpoint(); this.onFeedback?.(`Crafted: ${e.id.toUpperCase()}`, "good"); } break;
+        case "fortNo": if (e.p === me) { sfx.full(); this.onFeedback?.({ safeNight: "Not at night: the safe's shut till morning.", safeFull: "The safe's full. Take something out, or buy SAFE II.", needs: "Build what it needs first.", cost: "Not enough cash or materials.", workbench: "You need a WORKBENCH for that." }[e.reason] ?? "Can't do that.", "bad"); } break;
+        case "theftStart": if (e.p === me) { sfx.robStart(); this.onFeedback?.(`Stealing their ${lootDef(e.type).name}... ${e.need} s. Don't move!`, "info"); } break;
+        case "theftNo": if (e.p === me) { sfx.full(); this.onFeedback?.({ day: "Only at night.", safe: "That's in their safe.", taken: "Someone's already nicking that one.", far: "Too far.", hands: "Your hands are full.", gone: "It's gone.", cant: "Not now." }[e.reason] ?? "Can't.", "bad"); } break;
+        case "theftEnd":
+          if (e.p === me && e.ok) { sfx.gameDone(); this.onBanner?.("STOLEN!", `${lootDef(e.type!).name} ($${e.value}). Carry it HOME and bank it before time's up!`, "good"); }
+          else if (e.p === me && e.reason !== "let go") this.onFeedback?.(e.reason === "moved" ? "You moved: they'll keep it." : e.reason === "knocked" ? "Knocked off the job!" : e.reason === "time" ? "Too late: sunrise." : "The theft's off.", "bad");
+          if (e.ok && e.owner === me) { sfx.raidAlarm(); const who = this.scores.find((x) => x.id === e.p)?.name ?? "Someone"; this.onBanner?.(`${who.toUpperCase()} STOLE YOUR ${lootDef(e.type!).name.toUpperCase()}!`, "Get it back before they bank it! (Your SAFE is never stolen from.)", "bad"); }
+          break;
+        case "fortAlarm":
+          if (e.p === me) {
+            sfx.raidAlarm(); sfx.raidSiren(1);
+            const who = e.thief ? this.scores.find((x) => x.id === e.thief)?.name ?? "A thief" : "";
+            const f = this.arena.forts?.find((x) => x.slot === this.myColorIdx);
+            if (f) this.raidAlert.start(e.thief ? e.x : f.x, e.thief ? e.z : f.z, 12);
+            this.onBanner?.(who ? `${who.toUpperCase()} IS ROBBING YOUR FORT!` : "THIEF AT YOUR FORT!", e.thief ? `They're after your ${lootDef(e.type).name}: 10 s to stop them. Follow the arrow!` : "The tin cans are rattling! Get home!", "bad");
+          }
+          break;
         case "raidEnter": {
           // C1: the loud, direct raid alert (the owner), and a siren everyone in Tent Town hears
           const f = this.arena.forts?.find((x) => x.slot === e.slot);
@@ -1189,7 +1236,7 @@ export class ArenaScene {
 
   private onRound(phase: string, round: number) {
     switch (phase) {
-      case "intro": sfx.roundIntro(); this.onBanner?.(`CYCLE ${round} OF ${this.match.rounds}`, "8 minutes: scavenge by day, raid by night, sell at the pawn shop", "info"); break;
+      case "intro": sfx.roundIntro(); this.onBanner?.(`CYCLE ${round} OF ${this.match.rounds}`, "8 minutes in the city: bank loot on your DEPOSIT MAT; at night, steal from rival shelves. Unbanked loot is gone at the end.", "info"); break;
       case "scavenge": sfx.roundStart(); this.onBanner?.("SCAVENGE!", "Bring loot home: it banks in your fort after 10 s. Night falls in 6 minutes.", "good"); break;
       case "hurry":
         sfx.hurry();
@@ -1357,7 +1404,10 @@ export class ArenaScene {
     if (a === "special") return; // right mouse: reserved for special items (5A.1)
     if (a === "dance") { this.onAction?.({ a: "dance" }); return; } // (R11: B: dance / stop dancing)
     const hold = 600; // ms the optimistic guess is trusted before the server must confirm
-    if (a === "grabEnd") { if (this.tagHold) { this.tagHold = null; sfx.sprayStop(); } return; }
+    if (a === "grabEnd") { if (this.tagHold) { this.tagHold = null; sfx.sprayStop(); } if (this.stealHeld) { this.stealHeld = false; this.onAction?.({ a: "stealStop" }); } return; }
+    if (a === "grab" && this.stealTarget && !this.lookTarget) { // (R14: night: hold E at a rival's shelves)
+      this.stealHeld = true; this.onAction?.({ a: "steal", owner: this.stealTarget.owner, rec: this.stealTarget.rec }); sfx.uiClick(); return;
+    }
     if (a === "grab" && this.arrestTarget && !this.pinOn) { // (C5c.1: citizen's arrest: beats grabbing whatever's lying there)
       this.onAction?.({ a: "arrest", p: this.arrestTarget.id });
       return;
@@ -1543,6 +1593,34 @@ export class ArenaScene {
     this.lookTarget = best;
     this.items.highlight(best?.id ?? null);
   }
+
+  /** R14: at night, in a rival's yard: the exposed thing on their shelves you're looking at (in reach) */
+  private updateStealTarget() {
+    const was = this.stealTarget;
+    this.stealTarget = null;
+    if (this.match.phase === "night" && !this.lookTarget && this.cur.knockT <= 0 && this.jailT <= 0) {
+      const slot = fortAt(this.arena, this.cur.x, this.cur.z), owner = this.fortOwner.get(slot);
+      const lot = this.arena.forts?.find((f) => f.slot === slot), L = slot >= 0 ? this.fortsR.loopOf(slot) : null;
+      if (owner && owner !== this.myId && lot && L) {
+        const cam = this.camera.position, yaw = this.input.yaw, pitch = this.input.pitch;
+        const dx0 = Math.sin(yaw) * Math.cos(pitch), dy0 = -Math.sin(pitch), dz0 = Math.cos(yaw) * Math.cos(pitch);
+        let best = Infinity, i = 0;
+        for (const [id, type, value, safe] of L.r) {
+          if (safe) continue;
+          const spot = i < L.S ? i : 16 + (i - L.S); i++;
+          const p = shelfSpot(lot, spot), vx = p.x - cam.x, vy = p.y + 0.15 - cam.y, vz = p.z - cam.z, d = Math.hypot(vx, vy, vz);
+          if (Math.hypot(p.x - this.cur.x, p.z - this.cur.z) > LOOP.theftReach) continue;
+          const ang = Math.acos(Math.max(-1, Math.min(1, (vx * dx0 + vy * dy0 + vz * dz0) / Math.max(1e-6, d))));
+          if (ang > 0.35 || ang >= best) continue;
+          best = ang; this.stealTarget = { owner, slot, rec: id, type, value };
+        }
+      }
+    }
+    const t = this.stealTarget;
+    if (t?.rec !== was?.rec) this.fortsR.highlight(t?.slot ?? -1, t?.rec ?? null);
+  }
+  /** R14: my theft in progress (0..1), or -1 */
+  get theftProgress(): number { const th = this.myLoop?.th; return th ? Math.min(1, th[2] / th[3]) : -1; }
 
   /** Pedestrian you'd hit if you punched now (only when your hands are empty). */
   /** Dumpster / bin / till in reach in front of you. */
@@ -2119,6 +2197,7 @@ export class ArenaScene {
     this.matchSounds(dt);
     this.updateLookTarget();
     this.updateUseTarget();
+    this.updateStealTarget();
     this.updateArrest(dt);
     this.updatePunchTarget(this.activeItem(inv)?.id ?? ""); // (a pocket item out in your hand = a click throws it, no punch prompt)
     this.updateTagging(inv);
@@ -2129,6 +2208,7 @@ export class ArenaScene {
   /** Throw power 0..1 while winding up (for the HUD), else -1. */
   get throwCharge(): number {
     if (this.robT >= 0) return Math.min(1, this.robT / (this.holdKind ? this.holdTime : this.openingMachine ? OPEN_TIME : ROB_TIME));
+    if (this.theftProgress >= 0) return this.theftProgress; // (R14: night theft)
     if (this.tagHold) return Math.min(1, (performance.now() - this.tagHold.t0) / 1000 / TAG.hold);
     if (!this.chargeStart) return -1;
     const a = this.activeItem(this.inventory), t = a ? this.itemTypes.get(a.id) : undefined;
@@ -2267,6 +2347,7 @@ export class ArenaScene {
     this.npcs.dispose();
     this.events.dispose();
     this.propsR.dispose();
+    this.fortsR.dispose();
     this.cars.dispose();
     this.remotes.dispose();
     this.scene.dispose();

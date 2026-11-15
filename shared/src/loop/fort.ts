@@ -282,3 +282,27 @@ export class FortSystem {
     };
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// WHERE THINGS ARE IN A FORT (shared by the renderer and the thief's aim). In the fort's own frame: u to the right as
+// you face the fort from the city, v toward the city; the fort box is at (0, 0). Two shelf units
+// (8 spots each, two tiers) either side of its front, the safe by the door, the workbench and the job board in the back
+// corners, the "lawn" (over capacity) in front.
+export interface FortLotLike { x: number; z: number; yaw: number; padX: number; padZ: number }
+export const FORT_SPOTS = {
+  shelfUnits: [{ u: -4.4, v: 1.2 }, { u: 4.4, v: 1.2 }], // (either side of the fort's front, facing the mat: you see what you've banked)
+  shelfTiers: [0.62, 1.32], shelfCols: [-0.93, -0.31, 0.31, 0.93],
+  safe: { u: 1.9, v: 0.7 }, workbench: { u: 5.4, v: -2.2 }, board: { u: -5.4, v: -2.2 }, alarm: { u: -1.9, v: 1.3 },
+} as const;
+/** a point in a fort's frame → world (x, z) */
+export function fortAt2(lot: FortLotLike, u: number, v: number) {
+  const s = Math.sin(lot.yaw), c = Math.cos(lot.yaw);
+  return { x: lot.x + u * c + v * s, z: lot.z - u * s + v * c };
+}
+/** the i-th shelf spot (0-15: the left unit's lower tier, its upper, then the right unit's) or, past 16, the lawn */
+export function shelfSpot(lot: FortLotLike, i: number): { x: number; y: number; z: number } {
+  if (i >= 16) { const k = i - 16, p = fortAt2(lot, -2.4 + (k % 6) * 0.95, 2.2 + Math.floor(k / 6) * 0.9); return { x: p.x, y: 0.15, z: p.z }; }
+  const unit = FORT_SPOTS.shelfUnits[Math.floor(i / 8)], tier = Math.floor((i % 8) / 4), col = i % 4;
+  const p = fortAt2(lot, unit.u + FORT_SPOTS.shelfCols[col], unit.v);
+  return { x: p.x, y: FORT_SPOTS.shelfTiers[tier], z: p.z };
+}

@@ -4,7 +4,7 @@ import { TitleScene } from "./game/titleScene.ts";
 import { ArenaScene } from "./game/arenaScene.ts";
 import { LocalSession, SOLO_ID } from "./localSession.ts";
 import { HOST_LEFT } from "./p2p/peerRoom.ts";
-import { ShopScreen } from "./ui/shopScreen.ts";
+import { PrepScreen } from "./ui/prepScreen.ts";
 import { FpInput } from "./game/input.ts";
 import { settings, updateSettings, onSettingsChange, type Settings } from "./settings.ts";
 import { drawCityMap, type MapMarker } from "./game/look.ts";
@@ -122,8 +122,8 @@ let lobbySig = "";
 let settingsReturnTo: "title" | "pause" = "title";
 /** Phase 5A: shop / upgrades screen open (mouse released, no pause menu) */
 let overlayOpen = "";
-const shop = new ShopScreen();
-shop.send = (act) => arena?.onAction?.(act);
+const prep = new PrepScreen();
+prep.send = (act) => arena?.onAction?.(act as never);
 
 // ---------------------------------------------------------------------------
 // Title
@@ -206,7 +206,6 @@ function wireArena(a: ArenaScene) {
   a.onFeedback = (text, kind) => flash(text, kind);
   a.onScreenFx = (fx, seconds) => screenFx(fx, seconds);
   a.onBanner = (title, sub, kind) => banner(title, sub, kind);
-  a.onPawn = (e) => shop.onPawn(e);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,11 +260,9 @@ function updateMatchHud(a: ArenaScene) {
     time = fmtTime(left);
     if (m.phase === "scavenge") { round = `DAY ${m.round}/${m.rounds}`; if (m.timeLeft <= 30) sub = `Sunset in ${Math.max(1, Math.ceil(m.timeLeft))}`; }
     else if (m.phase === "dusk") { round = `SUNSET ${m.round}/${m.rounds}`; sub = `Night falls in ${Math.max(1, Math.ceil(m.timeLeft))}`; }
-    else { round = `NIGHT ${m.round}/${m.rounds}`; sub = "x2 loot / forts can be raided"; }
+    else { round = `NIGHT ${m.round}/${m.rounds}`; sub = "x2 loot / steal from rival shelves (HOLD E)"; }
     if (m.phase === "night" && m.timeLeft <= 10) cls += " danger"; else if (m.phase === "night" && m.timeLeft <= 30) cls += " warn";
-  } else if (m.phase === "dawn") { round = `CYCLE ${m.round}/${m.rounds}`; time = "SUNRISE"; sub = "The pawn shop opens soon"; }
-  else if (m.phase === "shop") { round = `CYCLE ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "PAWN SHOP"; }
-  else if (m.phase === "upgrades") { round = `CYCLE ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "UPGRADES"; }
+  } else if (m.phase === "prep") { round = `PREP ${m.round}/${m.rounds}`; time = fmtTime(m.timeLeft); sub = "sell / build / craft at home"; }
   else if (m.phase === "over") { time = "MATCH OVER"; sub = starter ? "Press ENTER to play again" : "Waiting for the host"; }
   const sig = round + time + sub + cls;
   if (sig !== matchSig) {
@@ -335,7 +332,7 @@ function updateMatchHud(a: ArenaScene) {
   }
 
   // tally / final results card
-  const showTally = m.phase === "dawn" || m.phase === "over";
+  const showTally = m.phase === "over"; // (R14: between cycles PREP shows your fort instead)
   const tSig = showTally ? m.phase + m.round + m.results + Math.ceil(m.timeLeft) + starter : "";
   if (tSig !== tallySig) {
     tallySig = tSig;
@@ -344,14 +341,13 @@ function updateMatchHud(a: ArenaScene) {
   }
   document.body.classList.toggle("night", m.phase === "night" || (m.phase === "dusk" && m.timeLeft < DUSK_TIME / 2));
 
-  // Phase 5A: pawn shop + upgrades screens (the mouse is released while they're open)
-  const ov = m.phase === "shop" ? "shop" : m.phase === "upgrades" ? "upgrades" : "";
+  // R14: PREP at home (the mouse is released while it's open)
+  const ov = m.phase === "prep" ? "prep" : "";
   if (ov !== overlayOpen) {
     const was = overlayOpen;
     overlayOpen = ov;
-    show("shop", ov === "shop");
-    show("upgrades", ov === "upgrades");
-    a.fortView = ov === "upgrades";
+    show("prep", ov === "prep");
+    a.fortView = ov === "prep";
     if (ov) {
       input.clear();
       input.enabled = false;
@@ -363,16 +359,25 @@ function updateMatchHud(a: ArenaScene) {
     }
   }
   const myCash = a.scores.find((x) => x.me)?.cash ?? 0;
-  if (ov === "shop") shop.update(a.shopJson, m.timeLeft, myCash, a.ready);
-  if (ov === "upgrades") shop.updateUpgrades(m.timeLeft, a.ready);
+  if (ov === "prep") prep.update(a.myLoop, myCash, a.myAura, m.timeLeft, m.round, m.rounds, a.ready);
+  // R14: the purse: CASH and AURA, big, always (bumps when either changes)
+  const showPurse = m.phase !== "lobby";
+  $("purse").classList.toggle("hidden", !showPurse);
+  if (showPurse) {
+    const pc = $("pu-cash"), pa = $("pu-aura");
+    if (pc.textContent !== String(myCash)) { pc.textContent = String(myCash); bump(pc.parentElement!); }
+    if (pa.textContent !== String(a.myAura)) { pa.textContent = String(a.myAura); bump(pa.parentElement!); }
+  }
 }
+
+function bump(el: HTMLElement) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
 
 function renderTally(a: ArenaScene, starter: boolean) {
   const m = a.match;
   let lines: { id: string; name: string; colorIdx: number; banked: number; bankedValue: number; lost: number; lostValue: number; stolen: number; cash: number; aura?: number }[] = [];
   try { lines = JSON.parse(m.results || "[]"); } catch { /* keep empty */ }
   const over = m.phase === "over";
-  $("tally-title").textContent = over ? `RICHEST BANDIT: ${lines[0]?.name ?? "?"}` : `CYCLE ${m.round}: SUNRISE`;
+  $("tally-title").textContent = (lines[0] as { mayor?: boolean } | undefined)?.mayor ? `ALL HAIL MAYOR ${(lines[0]?.name ?? "?").toUpperCase()}!` : over ? `MOST AURA: ${lines[0]?.name ?? "?"}` : `CYCLE ${m.round}`;
   const table = $("tally-table") as HTMLTableElement;
   table.innerHTML = "";
   const head = table.insertRow();
@@ -389,9 +394,7 @@ function renderTally(a: ArenaScene, starter: boolean) {
     const au = tr.insertCell(); au.className = "aura"; au.textContent = l.aura ? `${l.aura}` : "-"; // (C4b: tags sprayed; the race for Mayor uses these later)
     const tot = tr.insertCell(); tot.className = "money"; tot.textContent = "$" + l.cash;
   });
-  $("tally-foot").textContent = over
-    ? (starter ? "The race for Mayor comes in a later phase. Press ENTER to play again." : "The race for Mayor comes in a later phase. Waiting for the host...")
-    : `Fort loot goes to the pawn shop in ${Math.max(1, Math.ceil(m.timeLeft))}... (sell it or lose it)`;
+  $("tally-foot").textContent = starter ? "Press ENTER to play again." : "Waiting for the host...";
 }
 
 const fxTimers: Record<string, number> = {};
@@ -531,7 +534,7 @@ function onRoomState(state: any) {
     const isOwner = state.ownerId === room.sessionId;
     $("lp-hint").textContent = state.phase === "lobby"
       ? (isOwner ? `${state.players.size}/4 bandits. Press ENTER (or ESC > START MATCH) when everyone's here.${room.isHost ? " You're hosting: the game runs in this tab, so keep it open!" : ""}` : "Waiting for the host to start. Explore meanwhile!")
-      : "Scavenge, get home before time's up, sell at the pawn shop. Richest after 3 cycles wins!";
+      : "Scavenge, bank it on your mat, sell and build between rounds, earn AURA. Become MAYOR (or have the most aura after 8 cycles) to win!";
   }
 }
 
@@ -915,7 +918,11 @@ function updateHud(a: ArenaScene) {
   const tagT = a.tagTarget, tagHolding = a.throwCharge >= 0 && !!tagT && a.canUses > 0;
   const at = a.arrestTarget;
   const cellUse = jailed && !a.lock.open && ut && (ut.kind === "toilet" || ut.kind === "celldoor") ? ut.kind : ""; // (R6: the holding cell)
-  const sig = jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "mickey" || ut.kind === "mickgoods" || ut.kind === "storecounter" ? JSON.stringify(a.heldInfo()) + a.myGear : "") + (ut.kind === "pubboard" ? JSON.stringify(a.gch) : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
+  // R14: night theft: aiming at a rival's shelf thing / in the middle of taking it; home: the deposit mat
+  const stl = a.stealTarget, thp = a.theftProgress;
+  const atMat = (() => { const f = a.arenaLayout.forts?.find((q) => q.slot === a.myColorIdx); return !!f && Math.abs(a.position.x - f.padX) < 1.7 && Math.abs(a.position.z - f.padZ) < 1.7; })();
+  const loopSig = thp >= 0 ? "thief" : stl ? "steal" + stl.rec : atMat && (a.match.phase === "scavenge" || a.match.phase === "dusk" || a.match.phase === "night") ? "mat" + (a.inventory.hand || a.inventory.pockets.join("")) : "";
+  const sig = loopSig ? loopSig : jailed ? "jail" + cellUse + (a.lock.open ? "L" : "") + Math.ceil(a.jailT) : a.pinBy ? "pinned" + a.pinS : a.pinOn ? "pinning" : at ? "arrest" + at.id + at.bounty : robbing ? "rob" + a.openingMachine + a.holdKind : t ? t.id + t.note + t.value + (rt ? "R" : "") : ut ? "use" + ut.id + ut.empty + a.match.phase + (ut.def?.oneWay && a.outsideOf(ut.def) ? "out" : "") + (ut.kind.startsWith("pawn") || ut.kind === "clubrope" ? JSON.stringify(a.heldInfo()) + a.pawnCase.length + JSON.stringify(a.pawnPick()) + a.myAura : "") + (ut.kind === "jukebox" ? a.jukeTune : "") + (ut.kind === "mickey" || ut.kind === "mickgoods" || ut.kind === "storecounter" ? JSON.stringify(a.heldInfo()) + a.myGear : "") + (ut.kind === "pubboard" ? JSON.stringify(a.gch) : "") + (ut.kind === "pooltable" || ut.kind === "dartsoche" ? a.pg.prompt(ut.id).join("|") + a.pg.active : "") : rt ? "till" + rt.id + rt.empty : pt ? "npc" + pt.id + pt.empty : tagT ? "tag" + a.canUses + tagHolding : a.inFever ? "fv" + (a.dancing ? 1 : 0) : "";
   const simple = (keyText: string, verbText: string, nameText: string, metaText: string) => {
     prompt.innerHTML = "";
     const key = document.createElement("span"); key.className = "key"; key.textContent = keyText; if (!keyText) key.style.display = "none";
@@ -927,7 +934,10 @@ function updateHud(a: ArenaScene) {
   };
   if (sig !== promptSig) {
     promptSig = sig;
-    if (jailed && cellUse === "celldoor" && ut?.empty) simple("", " THE CELL'S OPEN ", "", "walk out: you're free (but wanted)");
+    if (thp >= 0) simple("HOLD E", " STEALING... ", "", "don't move! Knocked down, moved, or sunrise = it's off");
+    else if (stl) simple("HOLD E", " Steal ", `${lootDefOf(stl.type)?.name ?? stl.type} ($${stl.value})`, "5 s (10 if they've got a proper alarm). Then carry it home and bank it.");
+    else if (loopSig.startsWith("mat")) simple("", " YOUR DEPOSIT MAT ", "", "drop or throw loot here (G): 10 s on the mat and it's BANKED onto your shelves. Anyone can grab it till then.");
+    else if (jailed && cellUse === "celldoor" && ut?.empty) simple("", " THE CELL'S OPEN ", "", "walk out: you're free (but wanted)");
     else if (jailed && cellUse === "toilet") simple("E", " Flush ", "the toilet", "everyone in the cell gets soaked and knocked flying");
     else if (jailed && cellUse === "celldoor") simple("E", " Pick the lock ", "", `S or Esc to step away from it. Or just wait: out in ${Math.ceil(a.jailT)} s`);
     else if (jailed && a.arenaLayout.station?.holding && !a.lock.open) simple("", " THE HOLDING CELL ", "", `out in ${Math.ceil(a.jailT)} s - or E at the cell door to pick the lock (don't wake the Champ)`);
@@ -1363,7 +1373,15 @@ enterTitle();
     clearNpcs: (x: number, z: number, r: number) => { if (local) local.world.npc.removeNear(x, z, r); else room?.send("dbg", { op: "clearNpcs", x, z, r }); },
     match: () => arena ? { ...arena.match, scores: arena.scores, home: arena.home() } : null,
     // Phase 5A
-    shop: () => arena ? { open: overlayOpen === "shop", offers: shop.list, json: arena.shopJson, ready: arena.ready } : null,
+    shop: () => arena ? { open: overlayOpen === "prep", json: arena.shopJson, ready: arena.ready } : null,
+    // R14: the loop for tests: my fort/quests, everybody's forts, the theft target
+    loop: () => arena?.myLoop ?? null,
+    fortOf: (slot: number) => arena?.fortsR.loopOf(slot) ?? null,
+    stealTarget: () => arena?.stealTarget ?? null,
+    prepOpen: () => overlayOpen === "prep",
+    /** (tests, solo) put `n` of an item straight on my shelves, banked */
+    fortGive: (type: string, n = 1, value = 10) => { if (!local) return; const p = local.world.players.get(SOLO_ID)!, f = local.world.fort.of(p); for (let i = 0; i < n; i++) f.recs.push({ id: "dbg" + Math.random().toString(36).slice(2, 8), type, value, safe: false }); f.v++; },
+    myLot: () => arena?.arenaLayout.forts?.find((f) => f.slot === arena!.myColorIdx) ?? null,
     shopAct: (act: any) => arena?.onAction?.(act),
     night: () => arena ? { level: arena.nightLevel, body: document.body.classList.contains("night") } : null,
     tug: () => arena?.tug ?? null,
