@@ -1,0 +1,1446 @@
+{
+ "issues": [],
+ "rail": {
+  "columns": [
+   [
+    195.15325301120666,
+    325.67530120797505
+   ],
+   [
+    203.39845782913727,
+    294.75578314073516
+   ],
+   [
+    211.6436626470679,
+    263.8362650734953
+   ],
+   [
+    215.76626505603323,
+    248.37650603987538
+   ],
+   [
+    224.01146987396388,
+    217.4569879726355
+   ],
+   [
+    232.25667469189452,
+    186.5374699053956
+   ],
+   [
+    240.50187950982513,
+    155.6179518381557
+   ],
+   [
+    244.62448191879045,
+    140.15819280453576
+   ],
+   [
+    250.51984861582213,
+    109.01229062012342
+   ],
+   [
+    252.03213549821373,
+    77.04804515139153
+   ],
+   [
+    253.54442238060534,
+    45.08379968265966
+   ],
+   [
+    255.05670926299697,
+    13.119554213927785
+   ],
+   [
+    256.56899614538855,
+    -18.844691254804076
+   ],
+   [
+    258.0812830277802,
+    -50.808936723535965
+   ],
+   [
+    259.40453404987284,
+    -78.77765150867634
+   ],
+   [
+    260.9168209322645,
+    -110.74189697740823
+   ],
+   [
+    262.4291078146561,
+    -142.70614244614012
+   ],
+   [
+    263.9413946970477,
+    -174.67038791487198
+   ],
+   [
+    265.4536815794393,
+    -206.63463338360384
+   ],
+   [
+    266.6351557063078,
+    -231.60670015605064
+   ],
+   [
+    268.1474425886994,
+    -263.5709456247825
+   ],
+   [
+    269.659729471091,
+    -295.5351910935144
+   ],
+   [
+    271.07749842333317,
+    -325.50167122045053
+   ]
+  ],
+  "crossings": [
+   {
+    "road": "QUEASY BLVD (EAST)",
+    "span": 32,
+    "ok": true
+   },
+   {
+    "road": "ROOSTER VELT AVE",
+    "span": 31.86262044390034,
+    "ok": true
+   },
+   {
+    "road": "GNOME AVE",
+    "span": 32,
+    "ok": true
+   },
+   {
+    "road": "ASTORIAL ST (EAST)",
+    "span": 32,
+    "ok": true
+   },
+   {
+    "road": "JAMAKER AVE",
+    "span": 32,
+    "ok": true
+   },
+   {
+    "road": "NORTH SHORE RD",
+    "span": 20,
+    "ok": true
+   },
+   {
+    "road": "SOUTH SHORE RD",
+    "span": 19.5201391991543,
+    "ok": true
+   }
+  ]
+ },
+ "routes": [
+  {
+   "fort": "F1",
+   "to": "SCREW LOOSE HARDWARE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 45.81137630088068,
+   "out": 4.86450696803166,
+   "heavy": 10.653808442065275,
+   "giant": 17.287311811653087
+  },
+  {
+   "fort": "F1",
+   "to": "CRUMBS & CONSEQUENCES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 68.21264740358227,
+   "out": 7.2431986418236844,
+   "heavy": 15.863406372926109,
+   "giant": 25.740621661729158
+  },
+  {
+   "fort": "F1",
+   "to": "RUST BUCKET SALVAGE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 124.21264540358227,
+   "out": 13.189590182029871,
+   "heavy": 28.88666172176332,
+   "giant": 46.872696378710295
+  },
+  {
+   "fort": "F1",
+   "to": "PLUG & PRAY REPAIRS",
+   "kind": "store",
+   "tier": "low",
+   "dist": 102.81140030088068,
+   "out": 10.917086836072897,
+   "heavy": 23.909627976948997,
+   "giant": 38.79675483052101
+  },
+  {
+   "fort": "F1",
+   "to": "WHEELIE DODGY CYCLES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 98.21269540358794,
+   "out": 10.428770749040781,
+   "heavy": 22.840161721764638,
+   "giant": 37.06139449191998
+  },
+  {
+   "fort": "F1",
+   "to": "POT LUCK GARDEN CENTRE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 153.21263440362853,
+   "out": 16.26897045729251,
+   "heavy": 35.63084521014617,
+   "giant": 57.816088454199445
+  },
+  {
+   "fort": "F1",
+   "to": "SECOND CHANCE HOMEWARES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 214.31119380255168,
+   "out": 22.75675563058023,
+   "heavy": 49.83981251222132,
+   "giant": 80.87214860473648
+  },
+  {
+   "fort": "F1",
+   "to": "SPIN & SIN LAUNDRETTE",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 268.71249690505914,
+   "out": 28.53338884661968,
+   "heavy": 62.49127835001376,
+   "giant": 101.40094222832421
+  },
+  {
+   "fort": "F1",
+   "to": "NEEDLE DROP RECORDS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 192.71231141117548,
+   "out": 20.463266057062963,
+   "heavy": 44.81681660725011,
+   "giant": 72.72162694761339
+  },
+  {
+   "fort": "F1",
+   "to": "PEAK FOMO OUTDOORS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 283.71298940957547,
+   "out": 30.126224648645646,
+   "heavy": 65.97976497897105,
+   "giant": 107.06150543757565
+  },
+  {
+   "fort": "F1",
+   "to": "PAST ITS PRIME ANTIQUES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 339.8111988023642,
+   "out": 36.1736574929827,
+   "heavy": 79.02586018659632,
+   "giant": 128.23064105749592
+  },
+  {
+   "fort": "F1",
+   "to": "CARAT & RUN",
+   "kind": "store",
+   "tier": "high",
+   "dist": 457.768329159157,
+   "out": 48.99187543531638,
+   "heavy": 106.45775096724583,
+   "giant": 172.7427657204366
+  },
+  {
+   "fort": "F1",
+   "to": "TICKED OFF WATCHES",
+   "kind": "store",
+   "tier": "high",
+   "dist": 441.712681404021,
+   "out": 47.207272861094424,
+   "heavy": 102.72387939628396,
+   "giant": 166.6840307184985
+  },
+  {
+   "fort": "F1",
+   "to": "MAISON PONG",
+   "kind": "store",
+   "tier": "high",
+   "dist": 353.3115183010184,
+   "out": 37.63225844580933,
+   "heavy": 82.16546937232987,
+   "giant": 133.32510124566733
+  },
+  {
+   "fort": "F1",
+   "to": "GUCCIO GARBAGE",
+   "kind": "store",
+   "tier": "high",
+   "dist": 417.712852403831,
+   "out": 44.590304682791526,
+   "heavy": 97.14252381484442,
+   "giant": 157.62749147314378
+  },
+  {
+   "fort": "F1",
+   "to": "THE UPPER CRUST",
+   "kind": "store",
+   "tier": "high",
+   "dist": 357.712309412192,
+   "out": 38.10772853439417,
+   "heavy": 83.18890916562604,
+   "giant": 134.98577713667623
+  },
+  {
+   "fort": "F1",
+   "to": "FIRST NATIONAL BANK OF BOXES",
+   "kind": "landmark",
+   "dist": 602.7681291586238,
+   "out": 64.97184548621198,
+   "heavy": 140.17863468805206,
+   "giant": 227.45967138061275
+  },
+  {
+   "fort": "F1",
+   "to": "THE LUCKY LOSER CASINO",
+   "kind": "landmark",
+   "dist": 616.7125214040151,
+   "out": 66.45764452201402,
+   "heavy": 143.4215166055849,
+   "giant": 232.7217061901944
+  },
+  {
+   "fort": "F1",
+   "to": "THE MUSEUM OF QUESTIONABLE HISTORY",
+   "kind": "landmark",
+   "dist": 618.3114388062284,
+   "out": 66.62801192797399,
+   "heavy": 143.79335786191356,
+   "giant": 233.32507124763336
+  },
+  {
+   "fort": "F1",
+   "to": "THE GRAND OVERLOOK-ISH HOTEL",
+   "kind": "landmark",
+   "dist": 672.7126669090228,
+   "out": 72.4245565775476,
+   "heavy": 156.4448062579123,
+   "giant": 253.85383656944256
+  },
+  {
+   "fort": "F1",
+   "to": "THE 1-1-4th PRECINCT (police)",
+   "kind": "facility",
+   "dist": 132.71267140355195,
+   "out": 14.092170262439023,
+   "heavy": 30.863411954314408,
+   "giant": 50.08025335983093
+  },
+  {
+   "fort": "F1",
+   "to": "SOGGY SHAMROCK (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 641.811558804677,
+   "out": 69.13199023125696,
+   "heavy": 149.2585020475993,
+   "giant": 242.1930410583687
+  },
+  {
+   "fort": "F1",
+   "to": "NEON FEVER (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 640.2129114074907,
+   "out": 68.96165159479814,
+   "heavy": 148.88672358313735,
+   "giant": 241.5897778896191
+  },
+  {
+   "fort": "F1",
+   "to": "N border",
+   "kind": "border",
+   "dist": 629.2125714035853,
+   "out": 67.78954640127857,
+   "heavy": 146.328504977578,
+   "giant": 237.4387061900322
+  },
+  {
+   "fort": "F1",
+   "to": "S border",
+   "kind": "border",
+   "dist": 505.2126694035519,
+   "out": 54.26536505240919,
+   "heavy": 117.49131846594231,
+   "giant": 190.646290340963
+  },
+  {
+   "fort": "F1",
+   "to": "E border",
+   "kind": "border",
+   "dist": 510.21266940355196,
+   "out": 54.82112044809265,
+   "heavy": 118.65410916361674,
+   "giant": 192.5330827937932
+  },
+  {
+   "fort": "F1",
+   "to": "W border",
+   "kind": "border",
+   "dist": 455.8113763008504,
+   "out": 48.77435801329596,
+   "heavy": 106.00264565136055,
+   "giant": 172.00429294371713
+  },
+  {
+   "fort": "F1",
+   "to": "F2's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  },
+  {
+   "fort": "F1",
+   "to": "F3's mat",
+   "kind": "fort",
+   "dist": 100.42533880710391,
+   "out": 10.663721543434747,
+   "heavy": 23.354729955140446,
+   "giant": 37.896354266831665
+  },
+  {
+   "fort": "F1",
+   "to": "F4's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  },
+  {
+   "fort": "F2",
+   "to": "SCREW LOOSE HARDWARE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 102.81140030088068,
+   "out": 10.917086836072897,
+   "heavy": 23.909627976948997,
+   "giant": 38.79675483052101
+  },
+  {
+   "fort": "F2",
+   "to": "CRUMBS & CONSEQUENCES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 45.81137630088068,
+   "out": 4.86450696803166,
+   "heavy": 10.653808442065275,
+   "giant": 17.287311811653087
+  },
+  {
+   "fort": "F2",
+   "to": "RUST BUCKET SALVAGE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 68.21264740358227,
+   "out": 7.2431986418236844,
+   "heavy": 15.863406372926109,
+   "giant": 25.740621661729158
+  },
+  {
+   "fort": "F2",
+   "to": "PLUG & PRAY REPAIRS",
+   "kind": "store",
+   "tier": "low",
+   "dist": 124.21264540358227,
+   "out": 13.189590182029871,
+   "heavy": 28.88666172176332,
+   "giant": 46.872696378710295
+  },
+  {
+   "fort": "F2",
+   "to": "WHEELIE DODGY CYCLES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 99.81140030088636,
+   "out": 10.598530135042573,
+   "heavy": 23.211953558345666,
+   "giant": 37.66467935882504
+  },
+  {
+   "fort": "F2",
+   "to": "POT LUCK GARDEN CENTRE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 153.21263440362853,
+   "out": 16.26897045729251,
+   "heavy": 35.63084521014617,
+   "giant": 57.816088454199445
+  },
+  {
+   "fort": "F2",
+   "to": "SECOND CHANCE HOMEWARES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 268.7124869052533,
+   "out": 28.53338778478463,
+   "heavy": 62.491276024477514,
+   "giant": 101.40093845481256
+  },
+  {
+   "fort": "F2",
+   "to": "SPIN & SIN LAUNDRETTE",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 212.71249890505914,
+   "out": 22.586997306413497,
+   "heavy": 49.46802300117655,
+   "giant": 80.26886751134307
+  },
+  {
+   "fort": "F2",
+   "to": "NEEDLE DROP RECORDS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 194.3110163084739,
+   "out": 20.633025443064756,
+   "heavy": 45.18860844383114,
+   "giant": 73.32491181451846
+  },
+  {
+   "fort": "F2",
+   "to": "PEAK FOMO OUTDOORS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 283.71298940957547,
+   "out": 30.126224648645646,
+   "heavy": 65.97976497897105,
+   "giant": 107.06150543757565
+  },
+  {
+   "fort": "F2",
+   "to": "PAST ITS PRIME ANTIQUES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 394.2124919050657,
+   "out": 42.051279719813046,
+   "heavy": 91.67732369885249,
+   "giant": 148.75943090757195
+  },
+  {
+   "fort": "F2",
+   "to": "CARAT & RUN",
+   "kind": "store",
+   "tier": "high",
+   "dist": 459.3670340564555,
+   "out": 49.16957320987221,
+   "heavy": 106.82954280382687,
+   "giant": 173.3460505873417
+  },
+  {
+   "fort": "F2",
+   "to": "TICKED OFF WATCHES",
+   "kind": "store",
+   "tier": "high",
+   "dist": 441.7127689039888,
+   "out": 47.20728258681026,
+   "heavy": 102.72389974511367,
+   "giant": 166.68406373735425
+  },
+  {
+   "fort": "F2",
+   "to": "MAISON PONG",
+   "kind": "store",
+   "tier": "high",
+   "dist": 407.71281140371997,
+   "out": 43.509880672639675,
+   "heavy": 94.81693288458604,
+   "giant": 153.8538910957434
+  },
+  {
+   "fort": "F2",
+   "to": "GUCCIO GARBAGE",
+   "kind": "store",
+   "tier": "high",
+   "dist": 361.712854403831,
+   "out": 38.53995524852579,
+   "heavy": 84.11926846600721,
+   "giant": 136.49541675616265
+  },
+  {
+   "fort": "F2",
+   "to": "THE UPPER CRUST",
+   "kind": "store",
+   "tier": "high",
+   "dist": 357.712309412192,
+   "out": 38.10772853439417,
+   "heavy": 83.18890916562604,
+   "giant": 134.98577713667623
+  },
+  {
+   "fort": "F2",
+   "to": "FIRST NATIONAL BANK OF BOXES",
+   "kind": "landmark",
+   "dist": 604.3668340559221,
+   "out": 65.14219024940688,
+   "heavy": 140.55042652463305,
+   "giant": 228.0629562475178
+  },
+  {
+   "fort": "F2",
+   "to": "THE LUCKY LOSER CASINO",
+   "kind": "landmark",
+   "dist": 616.7126089039829,
+   "out": 66.45765384528646,
+   "heavy": 143.42153695441462,
+   "giant": 232.72173920905016
+  },
+  {
+   "fort": "F2",
+   "to": "THE MUSEUM OF QUESTIONABLE HISTORY",
+   "kind": "landmark",
+   "dist": 672.7127319089299,
+   "out": 72.42456350339977,
+   "heavy": 156.44482137416975,
+   "giant": 253.8538610977094
+  },
+  {
+   "fort": "F2",
+   "to": "THE GRAND OVERLOOK-ISH HOTEL",
+   "kind": "landmark",
+   "dist": 616.7126689090228,
+   "out": 66.45766023892692,
+   "heavy": 143.42155090907508,
+   "giant": 232.72176185246144
+  },
+  {
+   "fort": "F2",
+   "to": "THE 1-1-4th PRECINCT (police)",
+   "kind": "facility",
+   "dist": 134.31137630085038,
+   "out": 14.261929648440814,
+   "heavy": 31.23520379089544,
+   "giant": 50.683538226736
+  },
+  {
+   "fort": "F2",
+   "to": "SOGGY SHAMROCK (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 696.2128519073785,
+   "out": 74.92854180668274,
+   "heavy": 161.9099655598555,
+   "giant": 262.72183090844476
+  },
+  {
+   "fort": "F2",
+   "to": "NEON FEVER (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 640.2129114071519,
+   "out": 68.96165159476205,
+   "heavy": 148.88672358305857,
+   "giant": 241.58977788949127
+  },
+  {
+   "fort": "F2",
+   "to": "N border",
+   "kind": "border",
+   "dist": 629.2126589035531,
+   "out": 67.78955572455101,
+   "heavy": 146.3285253264077,
+   "giant": 237.43873920888797
+  },
+  {
+   "fort": "F2",
+   "to": "S border",
+   "kind": "border",
+   "dist": 505.2126694035519,
+   "out": 54.26536505240919,
+   "heavy": 117.49131846594231,
+   "giant": 190.646290340963
+  },
+  {
+   "fort": "F2",
+   "to": "E border",
+   "kind": "border",
+   "dist": 454.21267140355195,
+   "out": 48.59666023874013,
+   "heavy": 105.63085381477953,
+   "giant": 171.40100807681208
+  },
+  {
+   "fort": "F2",
+   "to": "W border",
+   "kind": "border",
+   "dist": 510.21266940355196,
+   "out": 54.82112044809265,
+   "heavy": 118.65410916361674,
+   "giant": 192.5330827937932
+  },
+  {
+   "fort": "F2",
+   "to": "F1's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  },
+  {
+   "fort": "F2",
+   "to": "F3's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  },
+  {
+   "fort": "F2",
+   "to": "F4's mat",
+   "kind": "fort",
+   "dist": 100.42533880710391,
+   "out": 10.663721543434747,
+   "heavy": 23.354729955140446,
+   "giant": 37.896354266831665
+  },
+  {
+   "fort": "F3",
+   "to": "SCREW LOOSE HARDWARE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 124.21264540358227,
+   "out": 13.189590182029871,
+   "heavy": 28.88666172176332,
+   "giant": 46.872696378710295
+  },
+  {
+   "fort": "F3",
+   "to": "CRUMBS & CONSEQUENCES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 102.81140030088068,
+   "out": 10.917086836072897,
+   "heavy": 23.909627976948997,
+   "giant": 38.79675483052101
+  },
+  {
+   "fort": "F3",
+   "to": "RUST BUCKET SALVAGE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 45.81137630088068,
+   "out": 4.86450696803166,
+   "heavy": 10.653808442065275,
+   "giant": 17.287311811653087
+  },
+  {
+   "fort": "F3",
+   "to": "PLUG & PRAY REPAIRS",
+   "kind": "store",
+   "tier": "low",
+   "dist": 68.21264740358228,
+   "out": 7.243198641823685,
+   "heavy": 15.863406372926113,
+   "giant": 25.740621661729165
+  },
+  {
+   "fort": "F3",
+   "to": "WHEELIE DODGY CYCLES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 154.21269340358796,
+   "out": 16.37516228924697,
+   "heavy": 35.863417070601855,
+   "giant": 58.19346920890112
+  },
+  {
+   "fort": "F3",
+   "to": "POT LUCK GARDEN CENTRE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 97.21263640362854,
+   "out": 10.322578917086329,
+   "heavy": 22.607589861308963,
+   "giant": 36.684013737218315
+  },
+  {
+   "fort": "F3",
+   "to": "SECOND CHANCE HOMEWARES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 268.7124869052533,
+   "out": 28.53338778478463,
+   "heavy": 62.491276024477514,
+   "giant": 101.40093845481256
+  },
+  {
+   "fort": "F3",
+   "to": "SPIN & SIN LAUNDRETTE",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 214.31120380235757,
+   "out": 22.75675669241529,
+   "heavy": 49.83981483775758,
+   "giant": 80.87215237824815
+  },
+  {
+   "fort": "F3",
+   "to": "NEEDLE DROP RECORDS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 248.71230941117548,
+   "out": 26.40965759726915,
+   "heavy": 57.84007195608732,
+   "giant": 93.85370166459452
+  },
+  {
+   "fort": "F3",
+   "to": "PEAK FOMO OUTDOORS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 227.71299140957547,
+   "out": 24.179833108439457,
+   "heavy": 52.95650963013383,
+   "giant": 85.92943072059452
+  },
+  {
+   "fort": "F3",
+   "to": "PAST ITS PRIME ANTIQUES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 338.2125514050757,
+   "out": 36.00093649796098,
+   "heavy": 78.65408172211063,
+   "giant": 127.62737788870783
+  },
+  {
+   "fort": "F3",
+   "to": "CARAT & RUN",
+   "kind": "store",
+   "tier": "high",
+   "dist": 513.7683146591584,
+   "out": 55.21633425528055,
+   "heavy": 119.4810034091066,
+   "giant": 193.87483572043712
+  },
+  {
+   "fort": "F3",
+   "to": "TICKED OFF WATCHES",
+   "kind": "store",
+   "tier": "high",
+   "dist": 443.3114738012872,
+   "out": 47.3849803613661,
+   "heavy": 103.09569158169471,
+   "giant": 167.28734860425934
+  },
+  {
+   "fort": "F3",
+   "to": "MAISON PONG",
+   "kind": "store",
+   "tier": "high",
+   "dist": 407.71281140371997,
+   "out": 43.509880672639675,
+   "heavy": 94.81693288458604,
+   "giant": 153.8538910957434
+  },
+  {
+   "fort": "F3",
+   "to": "GUCCIO GARBAGE",
+   "kind": "store",
+   "tier": "high",
+   "dist": 363.3115593011295,
+   "out": 38.71268245596119,
+   "heavy": 84.49106030258825,
+   "giant": 137.09870162306774
+  },
+  {
+   "fort": "F3",
+   "to": "THE UPPER CRUST",
+   "kind": "store",
+   "tier": "high",
+   "dist": 301.712311412192,
+   "out": 32.057379100128436,
+   "heavy": 70.16565381678883,
+   "giant": 113.8537024196951
+  },
+  {
+   "fort": "F3",
+   "to": "FIRST NATIONAL BANK OF BOXES",
+   "kind": "landmark",
+   "dist": 658.768114658625,
+   "out": 70.93874049293626,
+   "heavy": 153.2018871299128,
+   "giant": 248.5917413806132
+  },
+  {
+   "fort": "F3",
+   "to": "THE LUCKY LOSER CASINO",
+   "kind": "landmark",
+   "dist": 618.3113138012812,
+   "out": 66.62799860848135,
+   "heavy": 143.79332879099564,
+   "giant": 233.32502407595518
+  },
+  {
+   "fort": "F3",
+   "to": "THE MUSEUM OF QUESTIONABLE HISTORY",
+   "kind": "landmark",
+   "dist": 616.7127914089399,
+   "out": 66.45767329150429,
+   "heavy": 143.42157939742788,
+   "giant": 232.72180807884524
+  },
+  {
+   "fort": "F3",
+   "to": "THE GRAND OVERLOOK-ISH HOTEL",
+   "kind": "landmark",
+   "dist": 616.7127914091426,
+   "out": 66.45767329152588,
+   "heavy": 143.42157939747503,
+   "giant": 232.72180807892175
+  },
+  {
+   "fort": "F3",
+   "to": "THE 1-1-4th PRECINCT (police)",
+   "kind": "facility",
+   "dist": 188.71266940355196,
+   "out": 20.03856180264521,
+   "heavy": 43.88666730315162,
+   "giant": 71.21232807681206
+  },
+  {
+   "fort": "F3",
+   "to": "SOGGY SHAMROCK (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 640.2129114073886,
+   "out": 68.96165159478727,
+   "heavy": 148.88672358311362,
+   "giant": 241.5897778895806
+  },
+  {
+   "fort": "F3",
+   "to": "NEON FEVER (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 641.8116163044504,
+   "out": 69.13199635795696,
+   "heavy": 149.25851541963962,
+   "giant": 242.19306275639636
+  },
+  {
+   "fort": "F3",
+   "to": "N border",
+   "kind": "border",
+   "dist": 630.8113638008515,
+   "out": 67.95990048774591,
+   "heavy": 146.70031716298874,
+   "giant": 238.04202407579302
+  },
+  {
+   "fort": "F3",
+   "to": "S border",
+   "kind": "border",
+   "dist": 449.2126714035519,
+   "out": 48.040904843056666,
+   "heavy": 104.46806311710509,
+   "giant": 169.51421562398184
+  },
+  {
+   "fort": "F3",
+   "to": "E border",
+   "kind": "border",
+   "dist": 455.8113763008504,
+   "out": 48.77435801329596,
+   "heavy": 106.00264565136055,
+   "giant": 172.00429294371713
+  },
+  {
+   "fort": "F3",
+   "to": "W border",
+   "kind": "border",
+   "dist": 510.21266940355196,
+   "out": 54.82112044809265,
+   "heavy": 118.65410916361674,
+   "giant": 192.5330827937932
+  },
+  {
+   "fort": "F3",
+   "to": "F1's mat",
+   "kind": "fort",
+   "dist": 100.42533880710391,
+   "out": 10.663721543434747,
+   "heavy": 23.354729955140446,
+   "giant": 37.896354266831665
+  },
+  {
+   "fort": "F3",
+   "to": "F2's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  },
+  {
+   "fort": "F3",
+   "to": "F4's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  },
+  {
+   "fort": "F4",
+   "to": "SCREW LOOSE HARDWARE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 68.21264740358228,
+   "out": 7.243198641823685,
+   "heavy": 15.863406372926113,
+   "giant": 25.740621661729165
+  },
+  {
+   "fort": "F4",
+   "to": "CRUMBS & CONSEQUENCES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 124.21264540358227,
+   "out": 13.189590182029871,
+   "heavy": 28.88666172176332,
+   "giant": 46.872696378710295
+  },
+  {
+   "fort": "F4",
+   "to": "RUST BUCKET SALVAGE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 102.81140030088068,
+   "out": 10.917086836072897,
+   "heavy": 23.909627976948997,
+   "giant": 38.79675483052101
+  },
+  {
+   "fort": "F4",
+   "to": "PLUG & PRAY REPAIRS",
+   "kind": "store",
+   "tier": "low",
+   "dist": 45.81137630088068,
+   "out": 4.86450696803166,
+   "heavy": 10.653808442065275,
+   "giant": 17.287311811653087
+  },
+  {
+   "fort": "F4",
+   "to": "WHEELIE DODGY CYCLES",
+   "kind": "store",
+   "tier": "low",
+   "dist": 154.21269340358796,
+   "out": 16.37516228924697,
+   "heavy": 35.863417070601855,
+   "giant": 58.19346920890112
+  },
+  {
+   "fort": "F4",
+   "to": "POT LUCK GARDEN CENTRE",
+   "kind": "store",
+   "tier": "low",
+   "dist": 98.81134130092694,
+   "out": 10.49233830308812,
+   "heavy": 22.979381697889988,
+   "giant": 37.28729860412337
+  },
+  {
+   "fort": "F4",
+   "to": "SECOND CHANCE HOMEWARES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 212.7124889052533,
+   "out": 22.586996244578444,
+   "heavy": 49.468020675640304,
+   "giant": 80.26886373783144
+  },
+  {
+   "fort": "F4",
+   "to": "SPIN & SIN LAUNDRETTE",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 268.71249690505914,
+   "out": 28.53338884661968,
+   "heavy": 62.49127835001376,
+   "giant": 101.40094222832421
+  },
+  {
+   "fort": "F4",
+   "to": "NEEDLE DROP RECORDS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 248.71230941117548,
+   "out": 26.40965759726915,
+   "heavy": 57.84007195608732,
+   "giant": 93.85370166459452
+  },
+  {
+   "fort": "F4",
+   "to": "PEAK FOMO OUTDOORS",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 229.3116963068739,
+   "out": 24.34959249444125,
+   "heavy": 53.32830146671486,
+   "giant": 86.53271558749958
+  },
+  {
+   "fort": "F4",
+   "to": "PAST ITS PRIME ANTIQUES",
+   "kind": "store",
+   "tier": "mid",
+   "dist": 338.2124939050658,
+   "out": 36.00093028554732,
+   "heavy": 78.65406835001531,
+   "giant": 127.62735619059087
+  },
+  {
+   "fort": "F4",
+   "to": "CARAT & RUN",
+   "kind": "store",
+   "tier": "high",
+   "dist": 457.76831665915836,
+   "out": 48.991874045928036,
+   "heavy": 106.4577480602694,
+   "giant": 172.742761003456
+  },
+  {
+   "fort": "F4",
+   "to": "TICKED OFF WATCHES",
+   "kind": "store",
+   "tier": "high",
+   "dist": 497.712679404021,
+   "out": 53.431733070446946,
+   "heavy": 115.74713474512117,
+   "giant": 187.81610543547964
+  },
+  {
+   "fort": "F4",
+   "to": "MAISON PONG",
+   "kind": "store",
+   "tier": "high",
+   "dist": 351.71281340372,
+   "out": 37.45953123837395,
+   "heavy": 81.79367753574884,
+   "giant": 132.72181637876227
+  },
+  {
+   "fort": "F4",
+   "to": "GUCCIO GARBAGE",
+   "kind": "store",
+   "tier": "high",
+   "dist": 417.712852403831,
+   "out": 44.590304682791526,
+   "heavy": 97.14252381484442,
+   "giant": 157.62749147314378
+  },
+  {
+   "fort": "F4",
+   "to": "THE UPPER CRUST",
+   "kind": "store",
+   "tier": "high",
+   "dist": 303.31101630949036,
+   "out": 32.230106307563815,
+   "heavy": 70.53744565336986,
+   "giant": 114.45698728660014
+  },
+  {
+   "fort": "F4",
+   "to": "FIRST NATIONAL BANK OF BOXES",
+   "kind": "landmark",
+   "dist": 602.768116658625,
+   "out": 64.97184415431556,
+   "heavy": 140.17863178107558,
+   "giant": 227.45966666363208
+  },
+  {
+   "fort": "F4",
+   "to": "THE LUCKY LOSER CASINO",
+   "kind": "landmark",
+   "dist": 672.7125194040151,
+   "out": 72.4245408606347,
+   "heavy": 156.44477195442212,
+   "giant": 253.85378090717552
+  },
+  {
+   "fort": "F4",
+   "to": "THE MUSEUM OF QUESTIONABLE HISTORY",
+   "kind": "landmark",
+   "dist": 616.71273390893,
+   "out": 66.4576671647791,
+   "heavy": 143.42156602533257,
+   "giant": 232.7217863807283
+  },
+  {
+   "fort": "F4",
+   "to": "THE GRAND OVERLOOK-ISH HOTEL",
+   "kind": "landmark",
+   "dist": 618.311496306441,
+   "out": 66.62801805472078,
+   "heavy": 143.79337123405605,
+   "giant": 233.32509294582678
+  },
+  {
+   "fort": "F4",
+   "to": "THE 1-1-4th PRECINCT (police)",
+   "kind": "facility",
+   "dist": 188.71266940355196,
+   "out": 20.03856180264521,
+   "heavy": 43.88666730315162,
+   "giant": 71.21232807681206
+  },
+  {
+   "fort": "F4",
+   "to": "SOGGY SHAMROCK (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 640.2128539073786,
+   "out": 68.96164546806207,
+   "heavy": 148.88671021101828,
+   "giant": 241.58975619146364
+  },
+  {
+   "fort": "F4",
+   "to": "NEON FEVER (reserved: moves here later)",
+   "kind": "reserved",
+   "dist": 696.2129094071519,
+   "out": 74.92854793338275,
+   "heavy": 161.90997893189578,
+   "giant": 262.7218526064724
+  },
+  {
+   "fort": "F4",
+   "to": "N border",
+   "kind": "border",
+   "dist": 655.2681716581932,
+   "out": 70.56581553185576,
+   "heavy": 152.38794689725424,
+   "giant": 247.2710081729031
+  },
+  {
+   "fort": "F4",
+   "to": "S border",
+   "kind": "border",
+   "dist": 450.8113763008504,
+   "out": 48.21860261761251,
+   "heavy": 104.83985495368614,
+   "giant": 170.11750049088695
+  },
+  {
+   "fort": "F4",
+   "to": "E border",
+   "kind": "border",
+   "dist": 510.21266940355196,
+   "out": 54.82112044809265,
+   "heavy": 118.65410916361674,
+   "giant": 192.5330827937932
+  },
+  {
+   "fort": "F4",
+   "to": "W border",
+   "kind": "border",
+   "dist": 454.212671403552,
+   "out": 48.596660238740135,
+   "heavy": 105.63085381477954,
+   "giant": 171.40100807681208
+  },
+  {
+   "fort": "F4",
+   "to": "F1's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  },
+  {
+   "fort": "F4",
+   "to": "F2's mat",
+   "kind": "fort",
+   "dist": 100.42533880710391,
+   "out": 10.663721543434747,
+   "heavy": 23.354729955140446,
+   "giant": 37.896354266831665
+  },
+  {
+   "fort": "F4",
+   "to": "F3's mat",
+   "kind": "fort",
+   "dist": 71.02404770440234,
+   "out": 7.541728776859217,
+   "heavy": 16.517220396372636,
+   "giant": 26.801527435623523
+  }
+ ],
+ "areas": [
+  {
+   "id": "screwloose",
+   "name": "SCREW LOOSE HARDWARE",
+   "tier": "low",
+   "w": 15,
+   "d": 16,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "crumbs",
+   "name": "CRUMBS & CONSEQUENCES",
+   "tier": "low",
+   "w": 16,
+   "d": 15,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "rustbucket",
+   "name": "RUST BUCKET SALVAGE",
+   "tier": "low",
+   "w": 22,
+   "d": 20,
+   "footprint": 440,
+   "usable": 415.15999999999997,
+   "ratio": 4.0506799956842405,
+   "flag": "specialist: a scrap yard (22 x 20) beside a small office"
+  },
+  {
+   "id": "plugpray",
+   "name": "PLUG & PRAY REPAIRS",
+   "tier": "low",
+   "w": 16,
+   "d": 15,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "wheelie",
+   "name": "WHEELIE DODGY CYCLES",
+   "tier": "low",
+   "w": 15,
+   "d": 16,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "potluck",
+   "name": "POT LUCK GARDEN CENTRE",
+   "tier": "low",
+   "w": 20,
+   "d": 18,
+   "footprint": 360,
+   "usable": 337.55999999999995,
+   "ratio": 3.2935435478927935,
+   "flag": "specialist: half of it is an outdoor plant yard"
+  },
+  {
+   "id": "secondchance",
+   "name": "SECOND CHANCE HOMEWARES",
+   "tier": "mid",
+   "w": 15,
+   "d": 16,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "spinsin",
+   "name": "SPIN & SIN LAUNDRETTE",
+   "tier": "mid",
+   "w": 15,
+   "d": 16,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "needledrop",
+   "name": "NEEDLE DROP RECORDS",
+   "tier": "mid",
+   "w": 15,
+   "d": 16,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "peakfomo",
+   "name": "PEAK FOMO OUTDOORS",
+   "tier": "mid",
+   "w": 15,
+   "d": 16,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "pastprime",
+   "name": "PAST ITS PRIME ANTIQUES",
+   "tier": "mid",
+   "w": 15,
+   "d": 16,
+   "footprint": 240,
+   "usable": 221.76000000000002,
+   "ratio": 2.163693023997826
+  },
+  {
+   "id": "caratrun",
+   "name": "CARAT & RUN",
+   "tier": "high",
+   "w": 16,
+   "d": 16,
+   "footprint": 256,
+   "usable": 237.16000000000003,
+   "ratio": 2.313949483997675
+  },
+  {
+   "id": "tickedoff",
+   "name": "TICKED OFF WATCHES",
+   "tier": "high",
+   "w": 16,
+   "d": 16,
+   "footprint": 256,
+   "usable": 237.16000000000003,
+   "ratio": 2.313949483997675
+  },
+  {
+   "id": "maisonpong",
+   "name": "MAISON PONG",
+   "tier": "high",
+   "w": 16,
+   "d": 16,
+   "footprint": 256,
+   "usable": 237.16000000000003,
+   "ratio": 2.313949483997675
+  },
+  {
+   "id": "guccio",
+   "name": "GUCCIO GARBAGE",
+   "tier": "high",
+   "w": 16,
+   "d": 16,
+   "footprint": 256,
+   "usable": 237.16000000000003,
+   "ratio": 2.313949483997675
+  },
+  {
+   "id": "uppercrust",
+   "name": "THE UPPER CRUST",
+   "tier": "high",
+   "w": 16,
+   "d": 16,
+   "footprint": 256,
+   "usable": 237.16000000000003,
+   "ratio": 2.313949483997675
+  }
+ ]
+}

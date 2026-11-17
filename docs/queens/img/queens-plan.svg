@@ -1,0 +1,312 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1564" height="1284" font-family="DejaVu Sans, Arial, sans-serif">
+<rect width="1564" height="1284" fill="#f4efe4"/>
+<rect x="30" y="30" width="1504" height="1104" fill="#d9cfbf"/>
+<rect x="703.6" y="503.6" width="156.8" height="156.8" fill="#e7d3a8" fill-opacity="0.38"/>
+<rect x="542" y="374" width="480" height="129.6" fill="#f3b442" fill-opacity="0.38"/>
+<rect x="542" y="660.4000000000001" width="480" height="121.60000000000001" fill="#f3b442" fill-opacity="0.38"/>
+<rect x="542" y="503.6" width="161.60000000000002" height="156.8" fill="#f3b442" fill-opacity="0.38"/>
+<rect x="860.4000000000001" y="503.6" width="161.60000000000002" height="156.8" fill="#f3b442" fill-opacity="0.38"/>
+<rect x="318" y="374" width="224" height="408" fill="#8fc86e" fill-opacity="0.38"/>
+<rect x="1022" y="374" width="240" height="408" fill="#8fc86e" fill-opacity="0.38"/>
+<rect x="542" y="198" width="480" height="176" fill="#8fc86e" fill-opacity="0.38"/>
+<rect x="542" y="782" width="480" height="184" fill="#8fc86e" fill-opacity="0.38"/>
+<rect x="46" y="198" width="496" height="176" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="1022" y="198" width="496" height="176" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="46" y="374" width="272" height="408" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="1262" y="374" width="256" height="408" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="46" y="782" width="496" height="184" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="1022" y="782" width="496" height="184" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="542" y="46" width="480" height="152" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="542" y="966" width="480" height="152" fill="#9b7fd4" fill-opacity="0.38"/>
+<rect x="46" y="46" width="496" height="152" fill="#e98a8a" fill-opacity="0.38"/>
+<rect x="1022" y="46" width="496" height="152" fill="#e98a8a" fill-opacity="0.38"/>
+<rect x="46" y="966" width="496" height="152" fill="#e98a8a" fill-opacity="0.38"/>
+<rect x="1022" y="966" width="496" height="152" fill="#e98a8a" fill-opacity="0.38"/>
+<polyline points="782,646.8000000000001 782,517.2" fill="none" stroke="#efe3c4" stroke-width="25.6"/>
+<polyline points="717.2,582 846.8000000000001,582" fill="none" stroke="#efe3c4" stroke-width="25.6"/>
+<polygon points="717.2,646.8000000000001 846.8000000000001,646.8000000000001 846.8000000000001,517.2 717.2,517.2 717.2,646.8000000000001" fill="none" stroke="#b9b2a4" stroke-width="27.200000000000003" stroke-linejoin="round"/>
+<polyline points="782,517.2 782,374" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="782,646.8000000000001 782,782" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="878,782 878,1118" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="717.2,582 46,582" fill="none" stroke="#b9b2a4" stroke-width="28.8" stroke-linejoin="round"/>
+<polyline points="846.8000000000001,582 1518,582" fill="none" stroke="#b9b2a4" stroke-width="28.8" stroke-linejoin="round"/>
+<polyline points="542,1118 542,374 510,326 510,46" fill="none" stroke="#b9b2a4" stroke-width="27.200000000000003" stroke-linejoin="round"/>
+<polyline points="1022,1118 1022,46" fill="none" stroke="#b9b2a4" stroke-width="27.200000000000003" stroke-linejoin="round"/>
+<polyline points="318,966 318,198" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="1262,966 1262,198" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="46,374 1518,374" fill="none" stroke="#b9b2a4" stroke-width="27.200000000000003" stroke-linejoin="round"/>
+<polyline points="46,782 1518,782" fill="none" stroke="#b9b2a4" stroke-width="27.200000000000003" stroke-linejoin="round"/>
+<polyline points="46,198 750,198" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="814,198 1518,198" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="46,966 1518,966" fill="none" stroke="#b9b2a4" stroke-width="22.400000000000002" stroke-linejoin="round"/>
+<polyline points="46,46 1518,46" fill="none" stroke="#b9b2a4" stroke-width="24" stroke-linejoin="round"/>
+<polyline points="46,1118 1518,1118" fill="none" stroke="#b9b2a4" stroke-width="24" stroke-linejoin="round"/>
+<polyline points="46,1118 46,46" fill="none" stroke="#b9b2a4" stroke-width="24" stroke-linejoin="round"/>
+<polyline points="1518,1118 1518,46" fill="none" stroke="#b9b2a4" stroke-width="24" stroke-linejoin="round"/>
+<polygon points="717.2,646.8000000000001 846.8000000000001,646.8000000000001 846.8000000000001,517.2 717.2,517.2 717.2,646.8000000000001" fill="none" stroke="#56524c" stroke-width="14.4" stroke-linejoin="round"/>
+<polyline points="782,517.2 782,374" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="782,646.8000000000001 782,782" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="878,782 878,1118" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="717.2,582 46,582" fill="none" stroke="#56524c" stroke-width="16" stroke-linejoin="round"/>
+<polyline points="846.8000000000001,582 1518,582" fill="none" stroke="#56524c" stroke-width="16" stroke-linejoin="round"/>
+<polyline points="542,1118 542,374 510,326 510,46" fill="none" stroke="#56524c" stroke-width="14.4" stroke-linejoin="round"/>
+<polyline points="1022,1118 1022,46" fill="none" stroke="#56524c" stroke-width="14.4" stroke-linejoin="round"/>
+<polyline points="318,966 318,198" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="1262,966 1262,198" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="46,374 1518,374" fill="none" stroke="#56524c" stroke-width="14.4" stroke-linejoin="round"/>
+<polyline points="46,782 1518,782" fill="none" stroke="#56524c" stroke-width="14.4" stroke-linejoin="round"/>
+<polyline points="46,198 750,198" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="814,198 1518,198" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="46,966 1518,966" fill="none" stroke="#56524c" stroke-width="11.200000000000001" stroke-linejoin="round"/>
+<polyline points="46,46 1518,46" fill="none" stroke="#56524c" stroke-width="12.8" stroke-linejoin="round"/>
+<polyline points="46,1118 1518,1118" fill="none" stroke="#56524c" stroke-width="12.8" stroke-linejoin="round"/>
+<polyline points="46,1118 46,46" fill="none" stroke="#56524c" stroke-width="12.8" stroke-linejoin="round"/>
+<polyline points="1518,1118 1518,46" fill="none" stroke="#56524c" stroke-width="12.8" stroke-linejoin="round"/>
+<polygon points="717.2,646.8000000000001 846.8000000000001,646.8000000000001 846.8000000000001,517.2 717.2,517.2 717.2,646.8000000000001" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="782,517.2 782,374" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="782,646.8000000000001 782,782" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="878,782 878,1118" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="717.2,582 46,582" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="846.8000000000001,582 1518,582" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="542,1118 542,374 510,326 510,46" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="1022,1118 1022,46" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="318,966 318,198" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="1262,966 1262,198" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="46,374 1518,374" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="46,782 1518,782" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="46,198 750,198" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="814,198 1518,198" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="46,966 1518,966" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="46,46 1518,46" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="46,1118 1518,1118" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="46,1118 46,46" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="1518,1118 1518,46" fill="none" stroke="#e8d36a" stroke-width="1" stroke-dasharray="6 6"/>
+<polyline points="542,457.20000000000005 318,457.20000000000005" fill="none" stroke="#26c6da" stroke-width="6.4" stroke-dasharray="5 4"/>
+<polyline points="1022,470 1262,470" fill="none" stroke="#26c6da" stroke-width="6.4" stroke-dasharray="5 4"/>
+<polyline points="542,678 318,678" fill="none" stroke="#26c6da" stroke-width="6.4" stroke-dasharray="5 4"/>
+<polyline points="1022,713.2 1262,713.2" fill="none" stroke="#26c6da" stroke-width="6.4" stroke-dasharray="5 4"/>
+<polyline points="654,374 654,198" fill="none" stroke="#26c6da" stroke-width="6.4" stroke-dasharray="5 4"/>
+<polyline points="686,782 686,966" fill="none" stroke="#26c6da" stroke-width="6.4" stroke-dasharray="5 4"/>
+<polyline points="750,198 814,198" fill="none" stroke="#7fd8e4" stroke-width="8" stroke-dasharray="5 4"/>
+<polyline points="318,198 318,118 293.2,118" fill="none" stroke="#7fd8e4" stroke-width="8" stroke-dasharray="5 4"/>
+<polyline points="1262,198 1262,118 1270.8000000000002,118" fill="none" stroke="#7fd8e4" stroke-width="8" stroke-dasharray="5 4"/>
+<polyline points="318,966 318,1046 293.2,1046" fill="none" stroke="#7fd8e4" stroke-width="8" stroke-dasharray="5 4"/>
+<polyline points="1262,966 1262,1046 1270.8000000000002,1046" fill="none" stroke="#7fd8e4" stroke-width="8" stroke-dasharray="5 4"/>
+<rect x="762.8000000000001" y="54" width="38.400000000000006" height="304" fill="none" stroke="#d62828" stroke-width="2" stroke-dasharray="8 5"/><text x="805.2" y="206" font-size="11" fill="#d62828">road removed</text>
+<rect x="865.2" y="665.2" width="140.8" height="105.60000000000001" fill="none" stroke="#d62828" stroke-width="2" stroke-dasharray="8 5"/><text x="1010" y="718" font-size="11" fill="#d62828">road removed</text>
+<rect x="676.4000000000001" y="530.8" width="24" height="25.6" fill="#f3b442" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="702" cy="543.6" r="3.2" fill="#1b1420"/>
+<circle cx="688.4000000000001" cy="530" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="688.4000000000001" y="536.6" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">SCREW LOOSE</text>
+<text x="688.4000000000001" y="547.6" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">HARDWARE</text>
+<text x="688.4000000000001" y="558.6" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">5-13 s</text>
+<rect x="807.6" y="476.40000000000003" width="25.6" height="24" fill="#f3b442" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="820.4000000000001" cy="502" r="3.2" fill="#1b1420"/>
+<circle cx="834" cy="488.40000000000003" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="820.4000000000001" y="481.40000000000003" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">CRUMBS &amp;</text>
+<text x="820.4000000000001" y="492.40000000000003" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">CONSEQUENCES</text>
+<text x="820.4000000000001" y="503.40000000000003" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">5-13 s</text>
+<rect x="863.6" y="604.4" width="35.2" height="32" fill="#f3b442" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="862" cy="620.4" r="3.2" fill="#1b1420"/>
+<circle cx="881.2" cy="637.2" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="881.2" y="613.4" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">RUST BUCKET</text>
+<text x="881.2" y="624.4" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">SALVAGE</text>
+<text x="881.2" y="635.4" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">5-13 s</text>
+<rect x="730.8000000000001" y="663.6" width="25.6" height="24" fill="#f3b442" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="743.6" cy="662" r="3.2" fill="#1b1420"/>
+<circle cx="730" cy="675.6" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="743.6" y="668.6" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">PLUG &amp; PRAY</text>
+<text x="743.6" y="679.6" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">REPAIRS</text>
+<text x="743.6" y="690.6" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">5-13 s</text>
+<rect x="743.6" y="415.6" width="24" height="25.6" fill="#f3b442" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="769.2" cy="428.40000000000003" r="3.2" fill="#1b1420"/>
+<circle cx="755.6" cy="414.8" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="755.6" y="421.40000000000003" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">WHEELIE DODGY</text>
+<text x="755.6" y="432.40000000000003" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">CYCLES</text>
+<text x="755.6" y="443.40000000000003" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">10-16 s</text>
+<rect x="796.4000000000001" y="719.6" width="32" height="28.8" fill="#f3b442" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="794.8000000000001" cy="734" r="3.2" fill="#1b1420"/>
+<circle cx="812.4000000000001" cy="749.2" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="812.4000000000001" y="727" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">POT LUCK</text>
+<text x="812.4000000000001" y="738" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">GARDEN CENTRE</text>
+<text x="812.4000000000001" y="749" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">10-16 s</text>
+<rect x="503.6" y="473.20000000000005" width="24" height="25.6" fill="#8fc86e" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="528.4000000000001" cy="486" r="3.2" fill="#1b1420"/>
+<circle cx="515.6" cy="472.40000000000003" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="515.6" y="479" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">SECOND CHANCE</text>
+<text x="515.6" y="490" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">HOMEWARES</text>
+<text x="515.6" y="501" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">23-29 s</text>
+<rect x="1036.4" y="665.2" width="24" height="25.6" fill="#8fc86e" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="1035.6" cy="678" r="3.2" fill="#1b1420"/>
+<circle cx="1048.4" cy="691.6" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="1048.4" y="671" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">SPIN &amp; SIN</text>
+<text x="1048.4" y="682" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">LAUNDRETTE</text>
+<text x="1048.4" y="693" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">23-29 s</text>
+<rect x="674" y="334" width="24" height="25.6" fill="#8fc86e" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="686" cy="360.40000000000003" r="3.2" fill="#1b1420"/>
+<circle cx="686" cy="333.2" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="686" y="339.8" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">NEEDLE DROP</text>
+<text x="686" y="350.8" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">RECORDS</text>
+<text x="686" y="361.8" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">20-26 s</text>
+<rect x="930" y="796.4000000000001" width="24" height="25.6" fill="#8fc86e" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="942" cy="795.6" r="3.2" fill="#1b1420"/>
+<circle cx="942" cy="822.8000000000001" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="942" y="802.2" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">PEAK FOMO</text>
+<text x="942" y="813.2" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">OUTDOORS</text>
+<text x="942" y="824.2" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">24-30 s</text>
+<rect x="556.4" y="865.2" width="24" height="25.6" fill="#8fc86e" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="556.4" cy="878" r="3.2" fill="#1b1420"/>
+<circle cx="581.2" cy="878" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="568.4" y="865.5" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">PAST ITS</text>
+<text x="568.4" y="876.5" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">PRIME</text>
+<text x="568.4" y="887.5" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">ANTIQUES</text>
+<text x="568.4" y="898.5" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">36-42 s</text>
+<rect x="401.20000000000005" y="158" width="25.6" height="25.6" fill="#9b7fd4" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="414" cy="186" r="3.2" fill="#1b1420"/>
+<circle cx="414" cy="157.2" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="414" y="169.3" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">CARAT &amp; RUN</text>
+<text x="414" y="180.3" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">49-55 s</text>
+<rect x="929.2" y="158" width="25.6" height="25.6" fill="#9b7fd4" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="942" cy="186" r="3.2" fill="#1b1420"/>
+<circle cx="942" cy="157.2" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="942" y="163.8" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">TICKED OFF</text>
+<text x="942" y="174.8" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">WATCHES</text>
+<text x="942" y="185.8" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">47-53 s</text>
+<rect x="279.6" y="473.20000000000005" width="25.6" height="25.6" fill="#9b7fd4" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="306" cy="486" r="3.2" fill="#1b1420"/>
+<circle cx="278.8" cy="486" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="292.40000000000003" y="484.5" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">MAISON PONG</text>
+<text x="292.40000000000003" y="495.5" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">37-44 s</text>
+<rect x="1274.8000000000002" y="665.2" width="25.6" height="25.6" fill="#9b7fd4" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="1274" cy="678" r="3.2" fill="#1b1420"/>
+<circle cx="1301.2" cy="678" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="1287.6000000000001" y="671" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">GUCCIO</text>
+<text x="1287.6000000000001" y="682" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">GARBAGE</text>
+<text x="1287.6000000000001" y="693" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">39-45 s</text>
+<rect x="673.2" y="980.4000000000001" width="25.6" height="25.6" fill="#9b7fd4" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="686" cy="978" r="3.2" fill="#1b1420"/>
+<circle cx="686" cy="1006.8000000000001" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="686" y="986.2" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">THE UPPER</text>
+<text x="686" y="997.2" font-size="9" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">CRUST</text>
+<text x="686" y="1008.2" font-size="9" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">32-38 s</text>
+<rect x="70" y="66.80000000000001" width="222.4" height="116.80000000000001" fill="#e05c5c" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="182" cy="186" r="3.2" fill="#1b1420"/>
+<circle cx="293.2" cy="118" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="181.20000000000002" y="123.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">FIRST NATIONAL BANK OF BOXES</text>
+<text x="181.20000000000002" y="134.7" font-size="12" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">65-71 s</text>
+<rect x="1271.6000000000001" y="66.80000000000001" width="222.4" height="116.80000000000001" fill="#e05c5c" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="1382" cy="186" r="3.2" fill="#1b1420"/>
+<circle cx="1270.8000000000002" cy="118" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="1382.8000000000002" y="123.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">THE LUCKY LOSER CASINO</text>
+<text x="1382.8000000000002" y="134.7" font-size="12" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">66-72 s</text>
+<rect x="70" y="980.4000000000001" width="222.4" height="116.80000000000001" fill="#e05c5c" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="182" cy="978" r="3.2" fill="#1b1420"/>
+<circle cx="293.2" cy="1046" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="181.20000000000002" y="1037.3000000000002" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">THE MUSEUM OF QUESTIONABLE HISTORY</text>
+<text x="181.20000000000002" y="1048.3000000000002" font-size="12" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">66-72 s</text>
+<rect x="1271.6000000000001" y="980.4000000000001" width="222.4" height="116.80000000000001" fill="#e05c5c" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="1382" cy="978" r="3.2" fill="#1b1420"/>
+<circle cx="1270.8000000000002" cy="1046" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="1382.8000000000002" y="1037.3000000000002" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">THE GRAND OVERLOOK-ISH HOTEL</text>
+<text x="1382.8000000000002" y="1048.3000000000002" font-size="12" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">66-72 s</text>
+<rect x="718" y="214" width="128" height="144" fill="#4a78c8" stroke="#1b1420" stroke-width="1.2" />
+<circle cx="782" cy="360.40000000000003" r="3.2" fill="#1b1420"/>
+<circle cx="782" cy="213.20000000000002" r="2.4" fill="none" stroke="#1b1420" stroke-width="1.2"/>
+<text x="782" y="284.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">THE 1-1-4th PRECINCT</text>
+<text x="782" y="295.5" font-size="12" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">14-20 s</text>
+<rect x="60.400000000000006" y="822" width="105.60000000000001" height="88" fill="#bbbbbb" stroke="#1b1420" stroke-width="1.2" stroke-dasharray="4 3"/>
+<circle cx="58.8" cy="866.8000000000001" r="3.2" fill="#1b1420"/>
+<text x="113.2" y="864.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">SOGGY SHAMROCK</text>
+<text x="113.2" y="875.5" font-size="12" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">(reserved: later)</text>
+<rect x="1398" y="254" width="105.60000000000001" height="88" fill="#bbbbbb" stroke="#1b1420" stroke-width="1.2" stroke-dasharray="4 3"/>
+<circle cx="1505.2" cy="297.2" r="3.2" fill="#1b1420"/>
+<text x="1450.8000000000002" y="296.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">NEON FEVER</text>
+<text x="1450.8000000000002" y="307.5" font-size="12" font-weight="400" text-anchor="middle" fill="#1b1420" paint-order="stroke" stroke="#ffffffcc" stroke-width="3">(reserved: later)</text>
+<rect x="777.2" y="503.6" width="9.600000000000001" height="27.200000000000003" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="777.2" y="633.2" width="9.600000000000001" height="27.200000000000003" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="833.2" y="577.2" width="27.200000000000003" height="9.600000000000001" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="703.6" y="577.2" width="27.200000000000003" height="9.600000000000001" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="703.6" y="546" width="27.200000000000003" height="8" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="810" y="503.6" width="8" height="27.200000000000003" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="833.2" y="610" width="27.200000000000003" height="8" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="746" y="633.2" width="8" height="27.200000000000003" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+<rect x="730.8000000000001" y="530.8" width="38.400000000000006" height="38.400000000000006" fill="#c8a165" stroke="#e74c3c" stroke-width="2.5"/>
+<rect x="752.24" y="552.24" width="5.120000000000001" height="5.120000000000001" fill="#e74c3c"/>
+<circle cx="769.2" cy="537.2" r="3.4" fill="#2a8a40"/>
+<circle cx="730.8000000000001" cy="562.8000000000001" r="3.4" fill="#3070d0"/>
+<text x="750" y="544" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420">F1</text>
+<rect x="794.8000000000001" y="530.8" width="38.400000000000006" height="38.400000000000006" fill="#c8a165" stroke="#3498db" stroke-width="2.5"/>
+<rect x="806.64" y="552.24" width="5.120000000000001" height="5.120000000000001" fill="#3498db"/>
+<circle cx="826.8000000000001" cy="569.2" r="3.4" fill="#2a8a40"/>
+<circle cx="801.2" cy="530.8" r="3.4" fill="#3070d0"/>
+<text x="814" y="544" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420">F2</text>
+<rect x="794.8000000000001" y="594.8000000000001" width="38.400000000000006" height="38.400000000000006" fill="#c8a165" stroke="#2ecc71" stroke-width="2.5"/>
+<rect x="806.64" y="606.64" width="5.120000000000001" height="5.120000000000001" fill="#2ecc71"/>
+<circle cx="794.8000000000001" cy="626.8000000000001" r="3.4" fill="#2a8a40"/>
+<circle cx="833.2" cy="601.2" r="3.4" fill="#3070d0"/>
+<text x="814" y="608" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420">F3</text>
+<rect x="730.8000000000001" y="594.8000000000001" width="38.400000000000006" height="38.400000000000006" fill="#c8a165" stroke="#f1c40f" stroke-width="2.5"/>
+<rect x="752.24" y="606.64" width="5.120000000000001" height="5.120000000000001" fill="#f1c40f"/>
+<circle cx="737.2" cy="594.8000000000001" r="3.4" fill="#2a8a40"/>
+<circle cx="762.8000000000001" cy="633.2" r="3.4" fill="#3070d0"/>
+<text x="750" y="608" font-size="12" font-weight="700" text-anchor="middle" fill="#1b1420">F4</text>
+<text x="782" y="586" font-size="10" font-weight="700" text-anchor="middle" fill="#5a3a10">MARKET</text>
+<polyline points="1086,30 1182,390 1217.2,1134" fill="none" stroke="#3a3a3a" stroke-width="12.8" stroke-opacity="0.55"/>
+<polyline points="1086,30 1182,390 1217.2,1134" fill="none" stroke="#f4efe4" stroke-width="1.2" stroke-dasharray="3 5"/>
+<rect x="1091.2452048179307" y="57.91951806723992" width="6" height="6" fill="#1b1420"/>
+<rect x="1104.4375325266196" y="107.39074697482374" width="6" height="6" fill="#1b1420"/>
+<rect x="1117.6298602353088" y="156.86197588240748" width="6" height="6" fill="#1b1420"/>
+<rect x="1124.2260240896533" y="181.5975903361994" width="6" height="6" fill="#1b1420"/>
+<rect x="1137.4183517983422" y="231.06881924378322" width="6" height="6" fill="#1b1420"/>
+<rect x="1150.6106795070314" y="280.54004815136705" width="6" height="6" fill="#1b1420"/>
+<rect x="1163.8030072157203" y="330.0112770589509" width="6" height="6" fill="#1b1420"/>
+<rect x="1170.3991710700648" y="354.7468915127428" width="6" height="6" fill="#1b1420"/>
+<rect x="1179.8317577853156" y="404.58033500780255" width="6" height="6" fill="#1b1420"/>
+<rect x="1182.251416797142" y="455.72312775777357" width="6" height="6" fill="#1b1420"/>
+<rect x="1184.6710758089685" y="506.86592050774453" width="6" height="6" fill="#1b1420"/>
+<rect x="1187.0907348207952" y="558.0087132577155" width="6" height="6" fill="#1b1420"/>
+<rect x="1189.5103938326217" y="609.1515060076865" width="6" height="6" fill="#1b1420"/>
+<rect x="1191.9300528444485" y="660.2942987576575" width="6" height="6" fill="#1b1420"/>
+<rect x="1194.0472544797965" y="705.0442424138822" width="6" height="6" fill="#1b1420"/>
+<rect x="1196.4669134916232" y="756.1870351638532" width="6" height="6" fill="#1b1420"/>
+<rect x="1198.88657250345" y="807.3298279138243" width="6" height="6" fill="#1b1420"/>
+<rect x="1201.3062315152763" y="858.4726206637952" width="6" height="6" fill="#1b1420"/>
+<rect x="1203.7258905271028" y="909.6154134137662" width="6" height="6" fill="#1b1420"/>
+<rect x="1205.6162491300927" y="949.5707202496811" width="6" height="6" fill="#1b1420"/>
+<rect x="1208.035908141919" y="1000.7135129996522" width="6" height="6" fill="#1b1420"/>
+<rect x="1210.4555671537455" y="1051.856305749623" width="6" height="6" fill="#1b1420"/>
+<rect x="1212.7239974773331" y="1099.802673952721" width="6" height="6" fill="#1b1420"/>
+<text x="1194" y="390" font-size="12" font-weight="700" fill="#1b1420" transform="rotate(-75 1194 390)">THE QUEENS ELEVATED LINE</text>
+<circle cx="782" cy="46" r="7" fill="#fff" stroke="#d62828" stroke-width="2.5"/><text x="782" y="50" font-size="9" font-weight="700" text-anchor="middle" fill="#d62828">N</text><text x="782" y="66" font-size="10" text-anchor="middle" fill="#d62828">68-71 s</text>
+<circle cx="782" cy="1118" r="7" fill="#fff" stroke="#d62828" stroke-width="2.5"/><text x="782" y="1122" font-size="9" font-weight="700" text-anchor="middle" fill="#d62828">S</text><text x="782" y="1106" font-size="10" text-anchor="middle" fill="#d62828">48-54 s</text>
+<circle cx="1518" cy="582" r="7" fill="#fff" stroke="#d62828" stroke-width="2.5"/><text x="1518" y="586" font-size="9" font-weight="700" text-anchor="middle" fill="#d62828">E</text><text x="1506" y="570" font-size="10" text-anchor="end" fill="#d62828">49-55 s</text>
+<circle cx="46" cy="582" r="7" fill="#fff" stroke="#d62828" stroke-width="2.5"/><text x="46" y="586" font-size="9" font-weight="700" text-anchor="middle" fill="#d62828">W</text><text x="58" y="570" font-size="10" text-anchor="start" fill="#d62828">49-55 s</text>
+<text x="782" y="491.424" font-size="9" fill="#fff" text-anchor="middle" transform="rotate(-90 782 491.424)" dy="3">MARKET ST NORTH</text>
+<text x="782" y="671.136" font-size="9" fill="#fff" text-anchor="middle" transform="rotate(-90 782 671.136)" dy="3">MARKET ST SOUTH</text>
+<text x="878" y="842.48" font-size="9" fill="#fff" text-anchor="middle" transform="rotate(-90 878 842.48)" dy="3">LOW ROAD</text>
+<text x="596.384" y="582" font-size="9" fill="#fff" text-anchor="middle"  dy="3">QUEASY BLVD (WEST)</text>
+<text x="967.616" y="582" font-size="9" fill="#fff" text-anchor="middle"  dy="3">QUEASY BLVD (EAST)</text>
+<text x="542" y="984.0799999999999" font-size="9" fill="#fff" text-anchor="middle" transform="rotate(-90 542 984.0799999999999)" dy="3">STAIN WAY</text>
+<text x="1022" y="925.04" font-size="9" fill="#fff" text-anchor="middle" transform="rotate(-90 1022 925.04)" dy="3">DIT MARSH BLVD</text>
+<text x="318" y="827.7600000000001" font-size="9" fill="#fff" text-anchor="middle" transform="rotate(-90 318 827.7600000000001)" dy="3">WOOD HAVOC AVE</text>
+<text x="1262" y="827.7600000000001" font-size="9" fill="#fff" text-anchor="middle" transform="rotate(-90 1262 827.7600000000001)" dy="3">FLUSHED AVE</text>
+<text x="310.96000000000004" y="374" font-size="9" fill="#fff" text-anchor="middle"  dy="3">ROOSTER VELT AVE</text>
+<text x="310.96000000000004" y="782" font-size="9" fill="#fff" text-anchor="middle"  dy="3">GNOME AVE</text>
+<text x="172.72" y="198" font-size="9" fill="#fff" text-anchor="middle"  dy="3">ASTORIAL ST</text>
+<text x="940.7200000000001" y="198" font-size="9" fill="#fff" text-anchor="middle"  dy="3">ASTORIAL ST (EAST)</text>
+<text x="310.96000000000004" y="966" font-size="9" fill="#fff" text-anchor="middle"  dy="3">JAMAKER AVE</text>
+<text x="30" y="1172" font-size="22" font-weight="700" fill="#1b1420">QUEENS: THE CITY PLAN (Stage 1)</text>
+<text x="30" y="1194" font-size="13" font-weight="700" fill="#a02020">DIAGRAM FROM THE PLAN DATA (shared/src/queens/plan.ts): not a screenshot, not built yet</text>
+<text x="30" y="1214" font-size="12" fill="#1b1420">940 x 690 m. Under each place: the fastest and slowest fort's time to its door, empty-handed and sprinting (ESTIMATED from measured speeds; Stage 2 walks it for real).</text>
+<text x="30" y="1232" font-size="12" fill="#1b1420">Rules checked: all pass (roads connected, none in the block or the removed zones, nothing on a road, doors on pavements, equal forts, rail columns clear, roster 6/5/5 + 4).</text>
+<rect x="30" y="1246" width="16" height="12" fill="#f3b442" stroke="#1b1420"/><text x="52" y="1257" font-size="12" fill="#1b1420">low</text>
+<rect x="180" y="1246" width="16" height="12" fill="#8fc86e" stroke="#1b1420"/><text x="202" y="1257" font-size="12" fill="#1b1420">medium</text>
+<rect x="330" y="1246" width="16" height="12" fill="#9b7fd4" stroke="#1b1420"/><text x="352" y="1257" font-size="12" fill="#1b1420">high</text>
+<rect x="480" y="1246" width="16" height="12" fill="#e05c5c" stroke="#1b1420"/><text x="502" y="1257" font-size="12" fill="#1b1420">landmark</text>
+<rect x="630" y="1246" width="16" height="12" fill="#4a78c8" stroke="#1b1420"/><text x="652" y="1257" font-size="12" fill="#1b1420">police</text>
+<rect x="780" y="1246" width="16" height="12" fill="#bbbbbb" stroke="#1b1420"/><text x="802" y="1257" font-size="12" fill="#1b1420">pub/club (reserved)</text>
+<rect x="930" y="1246" width="16" height="12" fill="#26c6da" stroke="#1b1420"/><text x="952" y="1257" font-size="12" fill="#1b1420">alley / service</text>
+<rect x="1080" y="1246" width="16" height="12" fill="#2a8a40" stroke="#1b1420"/><text x="1102" y="1257" font-size="12" fill="#1b1420">fort front gate</text>
+<rect x="1230" y="1246" width="16" height="12" fill="#3070d0" stroke="#1b1420"/><text x="1252" y="1257" font-size="12" fill="#1b1420">fort rear gate</text>
+<text x="30" y="1276" font-size="11" fill="#1b1420">● door   ○ second way out   ■ railway column   dashed red: Blake's removed roads   N/E/S/W: border points</text>
+</svg>

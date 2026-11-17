@@ -2,6 +2,35 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## Q1: the Queens overhaul, Stages 0 and 1: measured baseline and the city plan (2026-11-17)
+
+Planning only: **the playable game is unchanged.** Blake's Queens brief (a central home block, a bigger city, landmarks
+at the corners, an elevated line) is now a staged plan, with the city drawn up as checked data. Blake chose 6 low,
+5 mid and 5 high stores plus the four landmarks; the pub and the club move later. Everything is in `docs/queens/`.
+
+- **Stage 0, measured with the game's own code:**
+  - 60 s of running, real stamina rules: 573 m sprinting, 400 m walking (`tests/sustained-run.ts`).
+  - Today's travel from all four forts with the real movement (`tests/route-matrix.ts`). Today's map is unfair by
+    fort: the same low store is 4 s from one fort and 19 s from another.
+  - The host's simulation vs NPC count (`tests/tick-scale.ts`): about +0.2 ms a tick for twice the live NPCs.
+  - What depends on map positions: almost everything reads the map's data, so moving things is a data change.
+- **Stage 1, the city plan** (`shared/src/queens/plan.ts`, checked by `check.ts`):
+  - 940 x 690 m. Four equal 24 x 24 m yards round the market, inside a ring road with eight crossings.
+  - Each fort's rear gate faces its own low store across the road: 5 s for all four forts.
+  - The 16 stores and 4 landmarks, the police, and reserved plots for the pub and the club.
+  - An elevated line on the casino side: 23 columns, all clear of every lane, pavement and path.
+  - Blake's two removed roads are gone; the police yard has a footpath where the north spur was.
+- **The plan's estimates** (from measured speeds; Stage 2 walks it in the game):
+  - Every border is 48-71 s from every fort.
+  - The average trip to the 20 businesses is within 0.3 s across the forts.
+  - Two high-end heavy runs fit in a scavenge. A landmark giant dragged home alone takes about 85% of one
+    (decision D-12).
+- **10 new tests** (`shared/test/queens-plan.test.ts`), including proof that the checker catches a broken plan.
+- **The map and the home block**, drawn from the data: `docs/queens/img/`.
+- **Checks:** unit tests (363 shared + 40 client), typecheck and both smokes pass; e2e 465/465 at normal speed and at
+  LATENCY=110. Draw budget: one view over (CARAT & RUN looking out, 135 draws against 129). It's the view whose people
+  and cars have made it read 119-134 before, and no rendering code changed.
+
 ## R14.1: fixes from Blake's review of R14 (2026-11-15)
 
 Blake reproduced four problems in the new loop. Each is fixed, with a regression test that runs his reproduction:

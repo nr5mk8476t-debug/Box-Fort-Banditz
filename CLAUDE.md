@@ -62,7 +62,18 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of R14)
+## Next up (as of Q1: the Queens overhaul)
+- Blake's Queens brief is a staged plan in `docs/queens/`. Read `plan.md` first, then `decisions.md` (D-01..D-18).
+  Stages 0 and 1 are done.
+- The city is checked DATA: `shared/src/queens/plan.ts`, validated by `check.ts`. Change the plan there, then run
+  `npx tsx tests/queens-plan-report.ts` to redraw the map and tables. It is not wired into the game until the Stage 2
+  blockout is accepted.
+- The roster (Blake): 6 low / 5 mid / 5 high + 4 landmarks; the pub and the club later (plots reserved).
+- Measure travel with the REAL movement: `tests/route-matrix.ts`, `tests/sustained-run.ts`, `tests/tick-scale.ts`.
+- Next: Stage 0b (validate and merge R15's shop stock from `claude/new-session-wsgpbp`), then Stage 2 (the `queens`
+  blockout map: grey boxes, measured travel, fog culling, draw budgets).
+
+## Earlier: Next up (as of R14)
 - R14: the first complete loop. The rules are in `shared/src/loop/` (catalog, fort, aura, quests, security, mayor), all
   data-driven; Blake's answers are in `docs/game-loop-plan.md`.
   - Banked things are RECORDS, not world items.

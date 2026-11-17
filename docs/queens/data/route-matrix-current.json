@@ -1,0 +1,526 @@
+{
+ "map": "new",
+ "measured": "2026-11-17",
+ "rows": [
+  {
+   "fort": 0,
+   "dest": "RUST BUCKET SALVAGE",
+   "kind": "low",
+   "path": 64,
+   "out": null,
+   "heavy": null,
+   "giant": null,
+   "notes": "stuck at (-60, -80); stuck at (-59, -81)"
+  },
+  {
+   "fort": 0,
+   "dest": "PLUG & PRAY REPAIRS",
+   "kind": "low",
+   "path": 185,
+   "out": null,
+   "heavy": null,
+   "giant": null,
+   "notes": "stuck at (60, -80); stuck at (59, -81)"
+  },
+  {
+   "fort": 0,
+   "dest": "NEEDLE DROP RECORDS",
+   "kind": "mid",
+   "path": 251,
+   "out": 25.34999999999984,
+   "heavy": 57.549999999998015,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "PEAK FOMO OUTFITTERS",
+   "kind": "mid",
+   "path": 395,
+   "out": 40.43333333333232,
+   "heavy": 91.91666666666273,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "MAISON PONG",
+   "kind": "high",
+   "path": 314,
+   "out": 32.21666666666612,
+   "heavy": 71.78333333333055,
+   "giant": 119.61666666666116,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "CARAT & RUN",
+   "kind": "high",
+   "path": 442,
+   "out": 45.61666666666536,
+   "heavy": 100.91666666666222,
+   "giant": 166.90000000002496,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "SOGGY SHAMROCK (pub door)",
+   "kind": "nightlife",
+   "path": 195,
+   "out": 19.616666666666834,
+   "heavy": 45.79999999999868,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "NEON FEVER (club door)",
+   "kind": "nightlife",
+   "path": 339,
+   "out": 34.78333333333264,
+   "heavy": 78.98333333333014,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "POLICE STATION",
+   "kind": "facility",
+   "path": 109,
+   "out": 10.583333333333439,
+   "heavy": 24.366666666666564,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "N edge",
+   "kind": "border",
+   "path": 362,
+   "out": 37.149999999999174,
+   "heavy": 83.36666666666322,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "E edge",
+   "kind": "border",
+   "path": 296,
+   "out": 30.09999999999957,
+   "heavy": 68.71666666666405,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "S edge",
+   "kind": "border",
+   "path": 98,
+   "out": 9.566666666666721,
+   "heavy": 22.31666666666668,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 0,
+   "dest": "W edge",
+   "kind": "border",
+   "path": 152,
+   "out": 15.133333333333665,
+   "heavy": 35.549999999999265,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "RUST BUCKET SALVAGE",
+   "kind": "low",
+   "path": 185,
+   "out": 18.666666666666888,
+   "heavy": 41.91666666666557,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "PLUG & PRAY REPAIRS",
+   "kind": "low",
+   "path": 64,
+   "out": 5.8499999999999845,
+   "heavy": 13.90000000000027,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "NEEDLE DROP RECORDS",
+   "kind": "mid",
+   "path": 395,
+   "out": 40.44999999999899,
+   "heavy": 90.74999999999613,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "PEAK FOMO OUTFITTERS",
+   "kind": "mid",
+   "path": 251,
+   "out": 25.366666666666507,
+   "heavy": 58.74999999999795,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "MAISON PONG",
+   "kind": "high",
+   "path": 442,
+   "out": 45.64999999999869,
+   "heavy": 102.04999999999549,
+   "giant": 167.51666666669212,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "CARAT & RUN",
+   "kind": "high",
+   "path": 314,
+   "out": 32.23333333333279,
+   "heavy": 72.93333333333048,
+   "giant": 120.24999999999446,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "SOGGY SHAMROCK (pub door)",
+   "kind": "nightlife",
+   "path": 339,
+   "out": 34.63333333333265,
+   "heavy": 78.98333333333014,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "NEON FEVER (club door)",
+   "kind": "nightlife",
+   "path": 195,
+   "out": 19.616666666666834,
+   "heavy": 45.79999999999868,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "POLICE STATION",
+   "kind": "facility",
+   "path": 120,
+   "out": 11.600000000000156,
+   "heavy": 26.91666666666642,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "N edge",
+   "kind": "border",
+   "path": 373,
+   "out": 38.349999999999106,
+   "heavy": 86.06666666666307,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "E edge",
+   "kind": "border",
+   "path": 152,
+   "out": 15.133333333333665,
+   "heavy": 35.549999999999265,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "S edge",
+   "kind": "border",
+   "path": 109,
+   "out": 10.583333333333439,
+   "heavy": 24.84999999999987,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 1,
+   "dest": "W edge",
+   "kind": "border",
+   "path": 296,
+   "out": 30.133333333332903,
+   "heavy": 68.73333333333072,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "RUST BUCKET SALVAGE",
+   "kind": "low",
+   "path": 45,
+   "out": 4.183333333333324,
+   "heavy": 9.700000000000061,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "PLUG & PRAY REPAIRS",
+   "kind": "low",
+   "path": 118,
+   "out": 11.333333333333476,
+   "heavy": 26.399999999999782,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "NEEDLE DROP RECORDS",
+   "kind": "mid",
+   "path": 255,
+   "out": 25.78333333333315,
+   "heavy": 58.51666666666463,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "PEAK FOMO OUTFITTERS",
+   "kind": "mid",
+   "path": 327,
+   "out": 33.43333333333272,
+   "heavy": 76.41666666666362,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "MAISON PONG",
+   "kind": "high",
+   "path": 318,
+   "out": 32.433333333332776,
+   "heavy": 72.74999999999716,
+   "giant": 121.21666666666107,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "CARAT & RUN",
+   "kind": "high",
+   "path": 390,
+   "out": 40.21666666666567,
+   "heavy": 90.59999999999614,
+   "giant": 148.98333333334404,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "SOGGY SHAMROCK (pub door)",
+   "kind": "nightlife",
+   "path": 199,
+   "out": 20.000000000000146,
+   "heavy": 46.766666666665294,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "NEON FEVER (club door)",
+   "kind": "nightlife",
+   "path": 271,
+   "out": 27.683333333333042,
+   "heavy": 63.48333333333101,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "POLICE STATION",
+   "kind": "facility",
+   "path": 91,
+   "out": 8.45,
+   "heavy": 20.150000000000137,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "N edge",
+   "kind": "border",
+   "path": 366,
+   "out": 37.48333333333249,
+   "heavy": 84.33333333332983,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "E edge",
+   "kind": "border",
+   "path": 229,
+   "out": 23.199999999999964,
+   "heavy": 53.21666666666493,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "S edge",
+   "kind": "border",
+   "path": 31,
+   "out": 2.8166666666666615,
+   "heavy": 6.799999999999981,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 2,
+   "dest": "W edge",
+   "kind": "border",
+   "path": 156,
+   "out": 15.516666666667017,
+   "heavy": 36.51666666666588,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "RUST BUCKET SALVAGE",
+   "kind": "low",
+   "path": 118,
+   "out": 11.333333333333476,
+   "heavy": 26.399999999999782,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "PLUG & PRAY REPAIRS",
+   "kind": "low",
+   "path": 45,
+   "out": 4.183333333333324,
+   "heavy": 9.700000000000061,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "NEEDLE DROP RECORDS",
+   "kind": "mid",
+   "path": 327,
+   "out": 33.46666666666605,
+   "heavy": 75.21666666666368,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "PEAK FOMO OUTFITTERS",
+   "kind": "mid",
+   "path": 255,
+   "out": 25.81666666666648,
+   "heavy": 59.71666666666456,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "MAISON PONG",
+   "kind": "high",
+   "path": 390,
+   "out": 40.33333333333233,
+   "heavy": 89.44999999999621,
+   "giant": 148.3500000000102,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "CARAT & RUN",
+   "kind": "high",
+   "path": 318,
+   "out": 32.49999999999944,
+   "heavy": 73.89999999999709,
+   "giant": 121.84999999999437,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "SOGGY SHAMROCK (pub door)",
+   "kind": "nightlife",
+   "path": 271,
+   "out": 27.73333333333304,
+   "heavy": 63.466666666664345,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "NEON FEVER (club door)",
+   "kind": "nightlife",
+   "path": 199,
+   "out": 19.98333333333348,
+   "heavy": 46.78333333333196,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "POLICE STATION",
+   "kind": "facility",
+   "path": 102,
+   "out": 9.933333333333406,
+   "heavy": 22.699999999999992,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "N edge",
+   "kind": "border",
+   "path": 377,
+   "out": 38.74999999999908,
+   "heavy": 87.03333333332968,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "E edge",
+   "kind": "border",
+   "path": 156,
+   "out": 15.50000000000035,
+   "heavy": 36.51666666666588,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "S edge",
+   "kind": "border",
+   "path": 42,
+   "out": 3.8333333333333246,
+   "heavy": 9.333333333333377,
+   "giant": null,
+   "notes": ""
+  },
+  {
+   "fort": 3,
+   "dest": "W edge",
+   "kind": "border",
+   "path": 229,
+   "out": 23.24999999999996,
+   "heavy": 53.21666666666493,
+   "giant": null,
+   "notes": ""
+  }
+ ]
+}

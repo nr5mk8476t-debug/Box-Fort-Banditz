@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1116" height="1186" font-family="DejaVu Sans, Arial, sans-serif"><rect width="1116" height="1186" fill="#d9cfbf"/>
+<polyline points="558,922.5 558,193.5" fill="none" stroke="#efe3c4" stroke-width="144"/>
+<polyline points="193.5,558 922.5,558" fill="none" stroke="#efe3c4" stroke-width="144"/>
+<polygon points="193.5,922.5 922.5,922.5 922.5,193.5 193.5,193.5 193.5,922.5" fill="none" stroke="#b9b2a4" stroke-width="153"/><polygon points="193.5,922.5 922.5,922.5 922.5,193.5 193.5,193.5 193.5,922.5" fill="none" stroke="#56524c" stroke-width="81"/>
+<polyline points="558,193.5 558,-612" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="558,922.5 558,1683" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="1098,1683 1098,3573" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="193.5,558 -3582,558" fill="none" stroke="#56524c" stroke-width="90"/>
+<polyline points="922.5,558 4698,558" fill="none" stroke="#56524c" stroke-width="90"/>
+<polyline points="-792,3573 -792,-612 -972,-882 -972,-2457" fill="none" stroke="#56524c" stroke-width="81"/>
+<polyline points="1908,3573 1908,-2457" fill="none" stroke="#56524c" stroke-width="81"/>
+<polyline points="-2052,2718 -2052,-1602" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="3258,2718 3258,-1602" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="-3582,-612 4698,-612" fill="none" stroke="#56524c" stroke-width="81"/>
+<polyline points="-3582,1683 4698,1683" fill="none" stroke="#56524c" stroke-width="81"/>
+<polyline points="-3582,-1602 378,-1602" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="738,-1602 4698,-1602" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="-3582,2718 4698,2718" fill="none" stroke="#56524c" stroke-width="63"/>
+<polyline points="-3582,-2457 4698,-2457" fill="none" stroke="#56524c" stroke-width="72"/>
+<polyline points="-3582,3573 4698,3573" fill="none" stroke="#56524c" stroke-width="72"/>
+<polyline points="-3582,3573 -3582,-2457" fill="none" stroke="#56524c" stroke-width="72"/>
+<polyline points="4698,3573 4698,-2457" fill="none" stroke="#56524c" stroke-width="72"/>
+<rect x="234" y="234" width="648" height="648" fill="#b9b2a4"/>
+<rect x="486" y="234" width="144" height="648" fill="#efe3c4"/>
+<rect x="234" y="486" width="648" height="144" fill="#efe3c4"/>
+<rect x="532.8000000000001" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="543.6" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="554.4" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="565.1999999999999" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="576" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="532.8000000000001" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="543.6" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="554.4" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="565.1999999999999" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="576" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="882" y="576" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="882" y="565.1999999999999" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="882" y="554.4" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="882" y="543.6" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="882" y="532.8000000000001" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="576" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="565.1999999999999" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="554.4" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="543.6" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="532.8000000000001" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="391.5" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="380.7" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="369.90000000000003" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="153" y="359.1" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="717.3000000000001" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="728.1" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="738.9" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="749.6999999999999" y="153" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="882" y="751.5" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="882" y="740.6999999999999" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="882" y="729.9" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="882" y="719.1" width="81" height="7.2" fill="#f4f1ea"/>
+<rect x="357.3" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="368.1" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="378.90000000000003" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="389.7" y="882" width="7.2" height="81" fill="#f4f1ea"/>
+<rect x="0" y="270" width="99" height="144" fill="#f3b442" stroke="#1b1420"/><text x="49.5" y="342" font-size="13" font-weight="700" text-anchor="middle">SCREW LOOSE</text><circle cx="108" cy="342" r="6" fill="#1b1420"/>
+<rect x="702" y="0" width="144" height="99" fill="#f3b442" stroke="#1b1420"/><text x="774" y="49.5" font-size="13" font-weight="700" text-anchor="middle">CRUMBS</text><circle cx="774" cy="108" r="6" fill="#1b1420"/>
+<rect x="1017" y="684" width="99" height="180" fill="#f3b442" stroke="#1b1420"/><text x="1066.5" y="774" font-size="13" font-weight="700" text-anchor="middle">RUST BUCKET</text><circle cx="1008" cy="774" r="6" fill="#1b1420"/>
+<rect x="270" y="1017" width="144" height="99" fill="#f3b442" stroke="#1b1420"/><text x="342" y="1066.5" font-size="13" font-weight="700" text-anchor="middle">PLUG</text><circle cx="342" cy="1008" r="6" fill="#1b1420"/>
+<rect x="270" y="270" width="216" height="216" fill="#c8a165" stroke="#e74c3c" stroke-width="5"/>
+<rect x="390.59999999999997" y="390.59999999999997" width="28.8" height="28.8" fill="#e74c3c" stroke="#1b1420"/><text x="405" y="431" font-size="12" text-anchor="middle">mat</text>
+<circle cx="486" cy="306" r="9" fill="#2a8a40"/><circle cx="270" cy="450" r="9" fill="#3070d0"/>
+<text x="378" y="292" font-size="18" font-weight="700" text-anchor="middle">F1 (NW)</text>
+<rect x="630" y="270" width="216" height="216" fill="#c8a165" stroke="#3498db" stroke-width="5"/>
+<rect x="696.6" y="390.59999999999997" width="28.8" height="28.8" fill="#3498db" stroke="#1b1420"/><text x="711" y="431" font-size="12" text-anchor="middle">mat</text>
+<circle cx="810" cy="486" r="9" fill="#2a8a40"/><circle cx="666" cy="270" r="9" fill="#3070d0"/>
+<text x="738" y="292" font-size="18" font-weight="700" text-anchor="middle">F2 (NE)</text>
+<rect x="630" y="630" width="216" height="216" fill="#c8a165" stroke="#2ecc71" stroke-width="5"/>
+<rect x="696.6" y="696.6" width="28.8" height="28.8" fill="#2ecc71" stroke="#1b1420"/><text x="711" y="737" font-size="12" text-anchor="middle">mat</text>
+<circle cx="630" cy="810" r="9" fill="#2a8a40"/><circle cx="846" cy="666" r="9" fill="#3070d0"/>
+<text x="738" y="652" font-size="18" font-weight="700" text-anchor="middle">F3 (SE)</text>
+<rect x="270" y="630" width="216" height="216" fill="#c8a165" stroke="#f1c40f" stroke-width="5"/>
+<rect x="390.59999999999997" y="696.6" width="28.8" height="28.8" fill="#f1c40f" stroke="#1b1420"/><text x="405" y="737" font-size="12" text-anchor="middle">mat</text>
+<circle cx="306" cy="630" r="9" fill="#2a8a40"/><circle cx="450" cy="846" r="9" fill="#3070d0"/>
+<text x="378" y="652" font-size="18" font-weight="700" text-anchor="middle">F4 (SW)</text>
+<rect x="495" y="508.5" width="54" height="27" fill="#fff" stroke="#c0392b" stroke-width="2"/><text x="522" y="527" font-size="13" font-weight="700" text-anchor="middle">SELL</text>
+<rect x="567" y="508.5" width="54" height="27" fill="#fff" stroke="#c0392b" stroke-width="2"/><text x="594" y="527" font-size="13" font-weight="700" text-anchor="middle">BUY</text>
+<rect x="495" y="580.5" width="54" height="27" fill="#fff" stroke="#c0392b" stroke-width="2"/><text x="522" y="599" font-size="13" font-weight="700" text-anchor="middle">CRAFT</text>
+<rect x="567" y="580.5" width="54" height="27" fill="#fff" stroke="#c0392b" stroke-width="2"/><text x="594" y="599" font-size="13" font-weight="700" text-anchor="middle">UPGRADE</text>
+<text x="558" y="634.5" font-size="12" text-anchor="middle">the task board</text>
+<text x="12" y="1140" font-size="16" font-weight="700">THE HOME BLOCK (124 m across): four equal 24 x 24 m yards round the market; the ring road outside it</text>
+<text x="12" y="1164" font-size="13" fill="#a02020" font-weight="700">DIAGRAM FROM THE PLAN DATA: green = front gate (market), blue = rear gate (pavement), striped = crossings. Stall layout is a proposal.</text></svg>
