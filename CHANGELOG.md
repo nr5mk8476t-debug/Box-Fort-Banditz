@@ -2,6 +2,43 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## Q1.1: Queens layout v2, after Blake's review (2026-11-17)
+
+Still planning only: **the playable game is unchanged.** Blake's review: v1 read as a big grid round a tiny fort
+island, with coloured zones instead of neighbourhoods. v2 corrects the layout, still as checked data. What changed
+and why is in `docs/queens/layout-v2.md`; the diagrams are in `docs/queens/img/`.
+
+- **The home block is sized from the largest planned fort:**
+  - four equal 36 x 36 m yards; the Mayor's Boxfort (house, shelves, safe, workbench, board, traps, mat) is laid out
+    in each and checked to fit;
+  - 28 m market lanes and a 28 m square;
+  - 140 m kerb to kerb, the ring road round the outside.
+- **Real neighbourhoods:** about 1,400 building footprints generated from five reusable block types:
+  - a row with a rear service alley;
+  - a corner building;
+  - a courtyard block;
+  - a workshop with garages;
+  - a destination or landmark with its neighbours.
+  Shops are units in the rows, with back doors on the alleys.
+- **Room for the full roster:** 16 stores playable first (6/5/5) and 10 more reserved as real shopfronts
+  (12/8/6 in all), plus the 4 landmarks, each with its own shape and approach.
+- **Varied streets:**
+  - Queasy Blvd is offset at the home block;
+  - Rooster Velt Ave bends;
+  - Stain Way jogs;
+  - Astorial St and Low Road are T-streets.
+- **A smaller police station**, with a footpath where the north spur was.
+- **The pub and the club have their own streets.** The club faces the casino across Rooster Velt Ave: the nightlife
+  strip.
+- **The elevated line is a real diagonal** (the casino east of it, the club and the hotel west of it), with 23 columns
+  clear of everything.
+- **Borders are 39-61 s from the forts** (sprinting, estimated; average about 50 s). No empty land was added to reach 60.
+- **Performance planning:** budgets, and a planning proxy for how much city is in view (2.3-4x today's). That makes
+  fog culling, per-tile merging, instancing and simple shells requirements for Stage 2 (`docs/queens/perf.md`).
+- **12 plan tests**, including proof that the checker catches a broken plan.
+- **Tests:** unit (365 shared + 40 client) and typecheck pass; smokes, draw budget and e2e pass (normal 465/465,
+  110 ms 464/464 on a rerun; the first runs hit two known flakes, recorded in the test plan).
+
 ## Q1: the Queens overhaul, Stages 0 and 1: measured baseline and the city plan (2026-11-17)
 
 Planning only: **the playable game is unchanged.** Blake's Queens brief (a central home block, a bigger city, landmarks

@@ -2,6 +2,15 @@
 
 _Last updated: 2026-09-25 (Phase 1 started)._
 
+## Q1.1: Queens layout v2 (2026-11-17)
+After Blake's review of v1 (`docs/queens/decisions.md` D-19 to D-28; `docs/queens/layout-v2.md`):
+- the home block sized from the largest fort (36 m yards, 140 m block);
+- neighbourhoods generated from five block types, with shops as units in rows;
+- room for the full 12/8/6 roster (10 reserved shopfronts);
+- varied but few streets; a modest police station;
+- the pub and the club in their own streets; the line as a real diagonal;
+- the city's size kept, with borders 39-61 s from the forts.
+
 ## Q1: the Queens overhaul (2026-11-17)
 The full decision log for the overhaul is `docs/queens/decisions.md` (D-01 to D-18). In short:
 - **The 60 s target** is sprinting under the real stamina rules, from each fort, along the walking network (D-01). It

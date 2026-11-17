@@ -11,6 +11,17 @@ Every phase adds to this plan. Nothing is reported as working unless one of thes
 
 Note on the automated browser test: it renders 3D on the CPU, so it runs at single-digit FPS with several windows open. Distance checks therefore compare movement against the number of simulation steps actually run, not wall-clock time. Frame rate and feel must be judged on a real machine.
 
+## Q1.1 checks: Queens layout v2 (2026-11-17)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| The plan's rules | as Q1, plus: nothing built on a road, path or another building; every block built up (30%+; workshops and precincts 20%+); back doors within 30 m of an alley or pavement; the largest fort fits every yard; doors on their buildings | unit (`shared/test/queens-plan.test.ts`, 12 tests) | pass |
+| The checker | catches a road in a removed zone, a store on a road, unequal yards, a fort too big for its yard, a cut-off road | unit | pass |
+| Neighbourhoods | every shop has a neighbour wall to wall; 15+ service alleys | unit | pass |
+| Fairness | nearest playable low/mid/high/landmark within 7 s across forts; average trip within 5% | unit | pass (0.8 / 3.7 / 6.0 / 1.6 s; 0.4 s) |
+| Outskirts | every border 35-75 s from every fort; average 45-60 s | unit | pass (39-61 s, average ~50 s) |
+| No game change | unit (365 shared + 40 client), typecheck, signal + server smokes, draw budget, e2e x2 | as every round | unit, typecheck, signal smoke, draw budget (every view within budget) pass; e2e normal 465/465. First attempts: the server smoke failed once on "pedestrians are walking around" (the known flake, Q1 row above) and e2e at LATENCY=110 was 462/464 on THE DROP's two clock-timed checks (known flake, R13.1); both reran clean: server smoke 24/24, e2e at 110 ms 464/464. No game code changed this round |
+
 ## Q1 checks: Queens Stages 0-1 (2026-11-17)
 
 | Area | Check | How | Result |

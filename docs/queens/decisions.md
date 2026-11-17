@@ -84,3 +84,46 @@ yard, 3.3x).
 
 **D-18 Money.** Each cycle's shelf value is split by tier (proposed: low 22%, mid 28%, high 30%, landmarks 20%). More
 stores share the same budget; they don't add money.
+
+## 2026-11-17: layout v2 (Blake's review of v1)
+
+**D-19 The home block is sized from the largest fort.** Yards 36 x 36 m (5.4x today's 16 x 15 lot), holding the
+MAYOR'S BOXFORT: house + porch 18 x 14 m, three shelf units, the safe, the workbench, the board, two trap sockets,
+the mat behind a return wall, and usable outdoor space (`FORT_MAX`, checked to fit). Market lanes 28 m, a 28 x 28 m
+square, a 5 m block pavement, the 10 m ring road: 140 m kerb to kerb. Not the reference's ~320 m: that would leave
+huge empty yards and push the low shops ~17 s further out.
+
+**D-20 Neighbourhoods are generated from five typologies** (row with a service alley, corner, courtyard, workshop,
+destination/precinct), seeded per block so the city is the same every time; shops are units IN the rows, wall to
+wall with neighbours, front door on the pavement, back door on the alley. Ordinary buildings are closed shells.
+
+**D-21 The city's size stays 940 x 690 m.** On the v2 plan the borders are 39-61 s from the forts (sprinting,
+estimated; average ~50 s). No empty land is added to reach 60 s; if Blake wants every border ~60 s, that's another
+row of blocks north and south (~+60 m each), not stretching.
+
+**D-22 Streets: few, clear, varied where it earns its place.** Queasy Blvd offset 15 m at the home block (no
+sightline across the city), Rooster Velt's bend into the nightlife quarter, Stain Way's jog, Astorial St as two
+T-streets with small squares, Low Road and Flushed Ave as T-streets. Straight segments otherwise (cheaper kerbs,
+fronts, collision, nav).
+
+**D-23 The full roster has room now.** 26 shop units: 16 playable first (6/5/5), 10 reserved as closed shopfronts in
+the rows (6 low, 3 mid, 1 high) until their turn. WASH YOUR PROBLEM? is a drive-through bay in a row, not a detached box.
+
+**D-24 The police are a modest corner station** (36 x 28 m + impound yard) facing down Market St North; the rest of
+that ground is Spur Court (flats round a courtyard).
+
+**D-25 The north spur is a footpath.** Past the police and through Spur Court to the north shore (pedestrians only).
+It makes the north border 39-49 s; without it, 67-76 s.
+
+**D-26 The pub and the club in their own streets.** THE SOGGY SHAMROCK on the corner of Gnome Ave and Wood Havoc
+(today's 29 x 26 m interior, its balcony street, WEE MICKEY's yard on a back alley from West End Rd). NEON FEVER on
+the corner of Dit Marsh and Rooster Velt (door on the junction, the club lane behind for the fire exit and DON
+BINNIE's stairs), facing the casino's marquee across Rooster Velt: the nightlife strip.
+
+**D-27 The line is a real diagonal** ((220, 345) -> (360, 40) -> (445, -345)): the casino east of it, the club and the
+hotel west of it. A 7 m strip under it stays free of buildings; 23 columns, spans of 32 m or less over every road
+and alley; a cosmetic train first.
+
+**D-28 The landmarks differ in shape and approach.** Bank: an L-shaped corner banking hall + a gated van dock. Casino:
+a marquee forecourt + a cash-office door on the edge road. Museum: a forecourt with steps + a goods yard. Hotel: a
+canopy drop-off + a loading bay, an L of guest floors.

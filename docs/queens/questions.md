@@ -1,5 +1,18 @@
 # Queens: open questions for Blake
 
+## After layout v2 (2026-11-17): the ones that change the next step
+
+1. **The border times.** At this size the borders are 39-61 s from the forts (average ~50 s, sprinting,
+   estimated). Is that close enough to "about 60", or should I add a row of blocks north and south (+60 m each)?
+2. **The home block.** 36 x 36 m yards, 140 m kerb to kerb (dimensioned, with the largest fort in each yard). Big
+   enough for how you picture the Mayor's Boxfort?
+3. **The north footpath** through Spur Court: keep it (a shorter trip north, more meetings) or end it at Astorial St?
+4. **Curves.** One gentle bend and a few jogs (cheap, readable), or more curving streets like the reference (each
+   curve costs kit work)?
+5. **Approval:** with these answered, may I build the Stage 2 grey-box blockout of v2 (a third map, `queens`)?
+
+## Earlier (layout v1)
+
 None of these blocks the next stage; each has a default in [decisions.md](decisions.md) that I'm following until you
 say otherwise.
 

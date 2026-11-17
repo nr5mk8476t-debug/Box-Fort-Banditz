@@ -74,3 +74,36 @@ proportion (read in `arena.ts`; measured again on the blockout).
 ## Stage 1: the plan's estimates
 Generated: [city-plan.md](city-plan.md) (travel matrix, fairness, scavenge fit). Plan estimates only; Stage 2 walks
 the blockout with `tests/route-matrix.ts` and puts measured and estimated side by side here.
+
+## Layout v2: performance planning (2026-11-17)
+
+### How much city is in view: a planning PROXY (not a rendering measurement)
+Buildings whose centre is within the fog's reach of points every 25 m along every street (`visibilityProxy()` in
+`check.ts`; today's map counted the same way from its own data):
+
+| | buildings in the city | in view by day, 240 m (worst / average) | at night, 150 m (worst / average) |
+|---|---|---|---|
+| today's new map | 131 | 131 / 131 (the whole city) | 131 / 103 |
+| Queens v2 | 1,452 (1,419 ordinary, 419 of them lock-up garages, + 33 units) | 541 / 307 | 240 / 131 |
+
+So a Queens street sees about 2.3x (on average) to 4x (at worst, beside the home block) as many buildings as today's
+city has at all. Today's statics are merged per map tile, so a view's draws and meshes scale with tiles x
+materials, not with buildings; but triangles, shadows and silhouettes do grow. The things that make it affordable
+are therefore requirements of Stage 2, measured before/after:
+1. **Nothing drawn beyond the fog** (today the camera draws to 500 m; the fog ends at 240 m by day, 150 m at night).
+2. **Merged per tile, per kit material**, a few kits shared by the whole city; repeated details (windows, fire
+   escapes, AC units, awnings, garage doors) instanced.
+3. **Simple shells** for the ~1,400 closed buildings (419 of them single-storey lock-ups): a box + a façade texture from the kit's sheet, one collision box
+   each; interiors only for the units you can enter, drawn only near/inside.
+4. **A budget for distant tiles:** a cheaper merged version beyond ~120 m (fewer triangles, no outlines on the
+   backs of rows).
+
+### Budgets (proposed; the test box's numbers are relative only)
+- Any street view: no worse than today's worst outdoor view + 15% (the park's wide view: 317 draws / 227 meshes).
+- The hub view (the home block with four full forts and the market): inside the same budget.
+- Interiors: today's budgets (`tests/draw-budgets.json`).
+- Blake's BENCHMARK on the blockout vs today's map: median +10%, 99th +20%, no new frames over 50 ms.
+- Host: tick time with the Queens NPC/traffic counts within 2x today's (today ~0.47 ms on the test box).
+
+### Still not measurable until the blockout
+Draws, meshes, triangles, frame times, load time, memory, network: Stage 2.

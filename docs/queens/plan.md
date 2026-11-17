@@ -5,8 +5,8 @@ before the next stage starts) and what Blake sees. Ticks mean done AND verified;
 game stays as it is until the Stage 2 blockout is accepted, and the old maps stay selectable for comparison until the
 Queens city replaces them.
 
-**Where we are (2026-11-17):** Stage 0 and Stage 1 done. Next: Stage 0b (merge R15's shop stock), then Stage 2 (the
-blockout).
+**Where we are (2026-11-17):** Stages 0 and 1 done; layout v2 (Stage 1.1) drawn after Blake's review and waiting for
+his answers ([questions.md](questions.md)). Next: Stage 0b (merge R15's shop stock), then Stage 2 (the blockout of v2).
 
 ## The first playable release (the scope Stage 2-7 builds toward)
 
@@ -59,12 +59,23 @@ Exit: R15 stock on main, every test green, the six-store builds marked frozen in
 Result: borders 48-71 s from every fort (average 55-56 s); each fort's own low store 5 s; nearest mid 20-23 s, high
 32-38 s, landmark 65-67 s; average trip to all 20 businesses within 0.3 s across the forts.
 
+## Stage 1.1: layout v2 after Blake's review -- DONE, awaiting Blake (2026-11-17)
+- [x] The differences from the reference and from v1, and which were constraints or choices ([layout-v2.md](layout-v2.md)).
+- [x] The home block sized from the largest planned fort (36 m yards, 140 m kerb to kerb), dimensioned, the fort's
+      fittings laid out in every yard and checked to fit.
+- [x] Building footprints for the whole city from five typologies; shops as units in rows with back doors on alleys;
+      10 reserved shop units for the full 12/8/6 roster.
+- [x] Varied streets (offset, bend, jogs, T-streets), a modest police station, the pub and the club in their streets,
+      the line as a real diagonal, the landmarks each different.
+- [x] 12 plan tests (incl. the checker catching a broken plan); three diagrams; the city-plan tables regenerated.
+Exit: Blake's answers to questions.md.
+
 ## Stage 2: the playable blockout (grey boxes, the real game code)
 Goal: walk, drive and chase round the Queens city in the game, measured, before any art.
 - [ ] A third map choice, `queens` (the `new` and `classic` maps stay; the default stays `new` until accepted).
-- [ ] `buildQueens()`: an `ArenaLayout` made FROM `plan.ts`: roads + kerbs + pavements + crossings, grey shells on
-      every plot (doors and back doors open), the ordinary city as simple massing along every street front (3-5 storey
-      shells with back yards, so the blocks are believable, not empty), the home block (four fort yards using the
+- [ ] `buildQueens()`: an `ArenaLayout` made FROM `plan.ts` + `layout.ts`: roads + kerbs + pavements + crossings, grey
+      shells for every generated building at its storey count, the units with open doors and back doors, the alleys,
+      yards, garages and courtyards, the home block (four fort yards using the
       existing fort system at the four slots, the market's stalls as placeholders), the line's deck and columns.
 - [ ] The nav graph, the traffic lanes and the police patrols from the plan's roads (one connected network; cars
       never through the block; the ring's crossings).
