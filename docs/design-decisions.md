@@ -2,6 +2,32 @@
 
 _Last updated: 2026-09-25 (Phase 1 started)._
 
+## Q1.1: Queens layout v2 (2026-11-17)
+After Blake's review of v1 (`docs/queens/decisions.md` D-19 to D-28; `docs/queens/layout-v2.md`):
+- the home block sized from the largest fort (36 m yards, 140 m block);
+- neighbourhoods generated from five block types, with shops as units in rows;
+- room for the full 12/8/6 roster (10 reserved shopfronts);
+- varied but few streets; a modest police station;
+- the pub and the club in their own streets; the line as a real diagonal;
+- the city's size kept, with borders 39-61 s from the forts.
+
+## Q1: the Queens overhaul (2026-11-17)
+The full decision log for the overhaul is `docs/queens/decisions.md` (D-01 to D-18). In short:
+- **The 60 s target** is sprinting under the real stamina rules, from each fort, along the walking network (D-01). It
+  sets the city at 940 x 690 m (D-13).
+- **The roster** (Blake): 6 low, 5 mid, 5 high stores and 4 landmarks (D-09). The pub and the club come later, on
+  reserved plots (D-10).
+- **Fairness:** four equal forts round one market; a pinwheel of low stores, one per fort across the ring road (D-14);
+  eight crossings (D-15).
+- **Defaults adopted** (Blake: "do accordingly to what you think is right"):
+  - 7 fort stages (D-02);
+  - the mayor race reachable around cycles 5-6, with phase lengths unchanged (D-03);
+  - the market in PREP only, selling banked records only (D-04);
+  - whole-object recipes first (D-05);
+  - the bank working first (D-06);
+  - the railway as scenery (D-08);
+  - R15's shop stock merged as the base (D-11).
+
 ## Locked by Blake
 - Title: **Box Fort Banditz**. City: **Trashington**.
 - **3D** browser game, desktop keyboard + mouse, every player on own device, 2–4 players + solo mode.
