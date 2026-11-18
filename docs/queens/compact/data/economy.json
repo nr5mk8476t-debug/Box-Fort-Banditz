@@ -1,0 +1,668 @@
+[
+ {
+  "plan": "v2",
+  "players": 1,
+  "cap": 8,
+  "supply": 11896.101867581161,
+  "perPlayer": 1600,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 1600,
+    "trips": 2,
+    "items": 8,
+    "time": 271.8400263699689,
+    "route": [
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 1,
+  "cap": 8,
+  "supply": 13809.062185097322,
+  "perPlayer": 1600,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 1600,
+    "trips": 2,
+    "items": 8,
+    "time": 206.4665561891898,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 2,
+  "cap": 8,
+  "supply": 11896.101867581161,
+  "perPlayer": 1500,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 1600,
+    "trips": 2,
+    "items": 8,
+    "time": 271.8400263699689,
+    "route": [
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 1400,
+    "trips": 2,
+    "items": 8,
+    "time": 347.6209170426885,
+    "route": [
+     "maisonpong(4, $700, 174 s)",
+     "maisonpong(4, $700, 174 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 2,
+  "cap": 8,
+  "supply": 13809.062185097322,
+  "perPlayer": 1500,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 1600,
+    "trips": 2,
+    "items": 8,
+    "time": 206.4665561891898,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 1400,
+    "trips": 2,
+    "items": 8,
+    "time": 234.1995909915323,
+    "route": [
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 4,
+  "cap": 8,
+  "supply": 11896.101867581161,
+  "perPlayer": 1393.75,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 1600,
+    "trips": 2,
+    "items": 8,
+    "time": 271.8400263699689,
+    "route": [
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 1400,
+    "trips": 2,
+    "items": 8,
+    "time": 347.6209170426885,
+    "route": [
+     "maisonpong(4, $700, 174 s)",
+     "maisonpong(4, $700, 174 s)"
+    ]
+   },
+   {
+    "fort": "F3",
+    "value": 1360,
+    "trips": 2,
+    "items": 8,
+    "time": 200.6948088127165,
+    "route": [
+     "peakfomo(4, $680, 100 s)",
+     "peakfomo(4, $680, 100 s)"
+    ]
+   },
+   {
+    "fort": "F4",
+    "value": 1215,
+    "trips": 2,
+    "items": 8,
+    "time": 459.9127772611081,
+    "route": [
+     "needledrop(4, $560, 167 s)",
+     "tickedoff(4, $655, 293 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 4,
+  "cap": 8,
+  "supply": 13809.062185097322,
+  "perPlayer": 1417.5,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 1600,
+    "trips": 2,
+    "items": 8,
+    "time": 206.4665561891898,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 1400,
+    "trips": 2,
+    "items": 8,
+    "time": 234.1995909915323,
+    "route": [
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)"
+    ]
+   },
+   {
+    "fort": "F3",
+    "value": 1360,
+    "trips": 2,
+    "items": 8,
+    "time": 155.6666774749093,
+    "route": [
+     "peakfomo(4, $680, 78 s)",
+     "peakfomo(4, $680, 78 s)"
+    ]
+   },
+   {
+    "fort": "F4",
+    "value": 1310,
+    "trips": 2,
+    "items": 8,
+    "time": 333.51403122103227,
+    "route": [
+     "tickedoff(4, $655, 167 s)",
+     "tickedoff(4, $655, 167 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 1,
+  "cap": 12,
+  "supply": 11896.101867581161,
+  "perPlayer": 2400,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2400,
+    "trips": 3,
+    "items": 12,
+    "time": 407.7600395549533,
+    "route": [
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 1,
+  "cap": 12,
+  "supply": 13809.062185097322,
+  "perPlayer": 2400,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2400,
+    "trips": 3,
+    "items": 12,
+    "time": 309.6998342837847,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 2,
+  "cap": 12,
+  "supply": 11896.101867581161,
+  "perPlayer": 2240,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2400,
+    "trips": 3,
+    "items": 12,
+    "time": 407.7600395549533,
+    "route": [
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2080,
+    "trips": 3,
+    "items": 12,
+    "time": 452.24407393908996,
+    "route": [
+     "peakfomo(4, $680, 105 s)",
+     "maisonpong(4, $700, 174 s)",
+     "maisonpong(4, $700, 174 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 2,
+  "cap": 12,
+  "supply": 13809.062185097322,
+  "perPlayer": 2250,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2400,
+    "trips": 3,
+    "items": 12,
+    "time": 309.6998342837847,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2100,
+    "trips": 3,
+    "items": 12,
+    "time": 351.2993864872984,
+    "route": [
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 4,
+  "cap": 12,
+  "supply": 11896.101867581161,
+  "perPlayer": 1851,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2400,
+    "trips": 3,
+    "items": 12,
+    "time": 407.7600395549533,
+    "route": [
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2080,
+    "trips": 3,
+    "items": 12,
+    "time": 452.24407393908996,
+    "route": [
+     "peakfomo(4, $680, 105 s)",
+     "maisonpong(4, $700, 174 s)",
+     "maisonpong(4, $700, 174 s)"
+    ]
+   },
+   {
+    "fort": "F3",
+    "value": 1599,
+    "trips": 3,
+    "items": 12,
+    "time": 434.11779213426144,
+    "route": [
+     "needledrop(4, $560, 167 s)",
+     "needledrop(4, $560, 167 s)",
+     "peakfomo(4, $479, 100 s)"
+    ]
+   },
+   {
+    "fort": "F4",
+    "value": 1325,
+    "trips": 3,
+    "items": 12,
+    "time": 442.07337636394726,
+    "route": [
+     "pastprime(4, $225, 103 s)",
+     "tickedoff(4, $550, 170 s)",
+     "tickedoff(4, $550, 170 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 4,
+  "cap": 12,
+  "supply": 13809.062185097322,
+  "perPlayer": 2102.5,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2400,
+    "trips": 3,
+    "items": 12,
+    "time": 309.6998342837847,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2100,
+    "trips": 3,
+    "items": 12,
+    "time": 351.2993864872984,
+    "route": [
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)"
+    ]
+   },
+   {
+    "fort": "F3",
+    "value": 2040,
+    "trips": 3,
+    "items": 12,
+    "time": 233.50001621236396,
+    "route": [
+     "peakfomo(4, $680, 78 s)",
+     "peakfomo(4, $680, 78 s)",
+     "peakfomo(4, $680, 78 s)"
+    ]
+   },
+   {
+    "fort": "F4",
+    "value": 1870,
+    "trips": 3,
+    "items": 12,
+    "time": 455.8696556721321,
+    "route": [
+     "needledrop(4, $560, 122 s)",
+     "tickedoff(4, $655, 167 s)",
+     "tickedoff(4, $655, 167 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 1,
+  "cap": 16,
+  "supply": 11896.101867581161,
+  "perPlayer": 2574.5,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2574.5,
+    "trips": 4,
+    "items": 16,
+    "time": 473.70369552979514,
+    "route": [
+     "plugpray(4, $175, 66 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 1,
+  "cap": 16,
+  "supply": 13809.062185097322,
+  "perPlayer": 3200,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 3200,
+    "trips": 4,
+    "items": 16,
+    "time": 412.9331123783796,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 2,
+  "cap": 16,
+  "supply": 11896.101867581161,
+  "perPlayer": 2647.25,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2574.5,
+    "trips": 4,
+    "items": 16,
+    "time": 473.70369552979514,
+    "route": [
+     "plugpray(4, $175, 66 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2720,
+    "trips": 4,
+    "items": 16,
+    "time": 418.492627585606,
+    "route": [
+     "peakfomo(4, $680, 105 s)",
+     "peakfomo(4, $680, 105 s)",
+     "peakfomo(4, $680, 105 s)",
+     "peakfomo(4, $680, 105 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 2,
+  "cap": 16,
+  "supply": 13809.062185097322,
+  "perPlayer": 3000,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 3200,
+    "trips": 4,
+    "items": 16,
+    "time": 412.9331123783796,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2800,
+    "trips": 4,
+    "items": 16,
+    "time": 468.3991819830646,
+    "route": [
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "v2",
+  "players": 4,
+  "cap": 16,
+  "supply": 11896.101867581161,
+  "perPlayer": 2268.875,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 2574.5,
+    "trips": 4,
+    "items": 16,
+    "time": 473.70369552979514,
+    "route": [
+     "plugpray(4, $175, 66 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)",
+     "caratrun(4, $800, 136 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2720,
+    "trips": 4,
+    "items": 16,
+    "time": 418.492627585606,
+    "route": [
+     "peakfomo(4, $680, 105 s)",
+     "peakfomo(4, $680, 105 s)",
+     "peakfomo(4, $680, 105 s)",
+     "peakfomo(4, $680, 105 s)"
+    ]
+   },
+   {
+    "fort": "F3",
+    "value": 2137,
+    "trips": 4,
+    "items": 16,
+    "time": 474.85267174041905,
+    "route": [
+     "peakfomo(4, $479, 100 s)",
+     "peakfomo(4, $479, 100 s)",
+     "peakfomo(4, $479, 100 s)",
+     "maisonpong(4, $700, 174 s)"
+    ]
+   },
+   {
+    "fort": "F4",
+    "value": 1644,
+    "trips": 4,
+    "items": 16,
+    "time": 461.7382927122909,
+    "route": [
+     "plugpray(4, $139, 41 s)",
+     "needledrop(4, $560, 167 s)",
+     "needledrop(4, $473, 127 s)",
+     "needledrop(4, $473, 127 s)"
+    ]
+   }
+  ]
+ },
+ {
+  "plan": "compact",
+  "players": 4,
+  "cap": 16,
+  "supply": 13809.062185097322,
+  "perPlayer": 2738.5,
+  "players_": [
+   {
+    "fort": "F1",
+    "value": 3200,
+    "trips": 4,
+    "items": 16,
+    "time": 412.9331123783796,
+    "route": [
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)",
+     "caratrun(4, $800, 103 s)"
+    ]
+   },
+   {
+    "fort": "F2",
+    "value": 2800,
+    "trips": 4,
+    "items": 16,
+    "time": 468.3991819830646,
+    "route": [
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)",
+     "maisonpong(4, $700, 117 s)"
+    ]
+   },
+   {
+    "fort": "F3",
+    "value": 2720,
+    "trips": 4,
+    "items": 16,
+    "time": 311.3333549498186,
+    "route": [
+     "peakfomo(4, $680, 78 s)",
+     "peakfomo(4, $680, 78 s)",
+     "peakfomo(4, $680, 78 s)",
+     "peakfomo(4, $680, 78 s)"
+    ]
+   },
+   {
+    "fort": "F4",
+    "value": 2234,
+    "trips": 4,
+    "items": 16,
+    "time": 481.8529981103303,
+    "route": [
+     "tickedoff(4, $655, 167 s)",
+     "tickedoff(4, $550, 108 s)",
+     "tickedoff(4, $550, 108 s)",
+     "peakfomo(4, $479, 98 s)"
+    ]
+   }
+  ]
+ }
+]

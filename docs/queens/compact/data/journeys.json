@@ -1,0 +1,256 @@
+{
+ "journeys": [
+  {
+   "id": "1a",
+   "who": "Blake (F1) to MAISON PONG",
+   "m": 197
+  },
+  {
+   "id": "1b",
+   "who": "Tyson (F4) to SECOND CHANCE",
+   "m": 172
+  },
+  {
+   "id": "2in",
+   "who": "Blake (F1) to the museum",
+   "m": 259
+  },
+  {
+   "id": "2q",
+   "who": "quick and exposed: along Gnome Ave, up Stain Way past the pub",
+   "m": 297
+  },
+  {
+   "id": "2c",
+   "who": "covered: across Gnome into Wood Havoc Lane behind the pub",
+   "m": 313
+  },
+  {
+   "id": "3",
+   "who": "F3 to the casino (by the El and NEON FEVER)",
+   "m": 259
+  },
+  {
+   "id": "4u",
+   "who": "home from SECOND CHANCE by the rear gate (the usual way)",
+   "m": 164
+  },
+  {
+   "id": "4r",
+   "who": "round by Stain Way, Rooster Velt and Market St to the FRONT gate",
+   "m": 312
+  }
+ ],
+ "sightings": {
+  "j1": [
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 0,
+    "t1": 18,
+    "atA": [
+     -57.88448562325595,
+     12.000017410347752
+    ],
+    "atB": [
+     -54,
+     7.4668392888833885
+    ],
+    "minD": 5.969835210305669,
+    "loadA": "empty",
+    "loadB": "empty",
+    "recognise": true
+   },
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 51,
+    "t1": 59,
+    "atA": [
+     -118,
+     52.82216291733414
+    ],
+    "atB": [
+     -110.1603282330298,
+     11.999951037960038
+    ],
+    "minD": 41.568178167179056,
+    "loadA": "big",
+    "loadB": "big",
+    "recognise": true
+   },
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 64.5,
+    "t1": 69.5,
+    "atA": [
+     -118,
+     19.82216291733414
+    ],
+    "atB": [
+     -77.1603282331782,
+     12.00000455981
+    ],
+    "minD": 41.5820267831178,
+    "loadA": "big",
+    "loadB": "big",
+    "recognise": true
+   },
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 71.5,
+    "t1": 83.5,
+    "atA": [
+     -65.82225891762619,
+     12.000012118508767
+    ],
+    "atB": [
+     -39.35499237419257,
+     -10.537506354839529
+    ],
+    "minD": 34.76285283485341,
+    "loadA": "big",
+    "loadB": "big",
+    "recognise": true
+   }
+  ],
+  "museumQuick": [
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 125,
+    "t1": 125,
+    "atA": [
+     -117.99984097008347,
+     -117.79688824232394
+    ],
+    "atB": [
+     -111.28306028582628,
+     -51.999997494207086
+    ],
+    "minD": 66.13883862663477,
+    "loadA": "giant",
+    "loadB": "big",
+    "recognise": false
+   },
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 126,
+    "t1": 134,
+    "atA": [
+     -117.99985362676664,
+     -115.14688824235417
+    ],
+    "atB": [
+     -117.28306028579556,
+     -51.99997829420709
+    ],
+    "minD": 63.15097805017002,
+    "loadA": "giant",
+    "loadB": "big",
+    "recognise": false
+   },
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 191,
+    "t1": 214,
+    "atA": [
+     -54.34679224299825,
+     12.000019768805602
+    ],
+    "atB": [
+     -28,
+     -20
+    ],
+    "minD": 41.45062999158954,
+    "loadA": "giant",
+    "loadB": "big",
+    "recognise": true
+   }
+  ],
+  "museumCovered": [
+   {
+    "a": "Blake",
+    "b": "Tyson",
+    "t0": 197,
+    "t1": 220,
+    "atA": [
+     -54.44691024307056,
+     12.000019702060394
+    ],
+    "atB": [
+     -28,
+     -20
+    ],
+    "minD": 41.514338755871854,
+    "loadA": "giant",
+    "loadB": "big",
+    "recognise": true
+   }
+  ]
+ },
+ "j4": {
+  "firstSeen": {
+   "d": 48,
+   "p": [
+    -118,
+    20.499912000455524
+   ]
+  },
+  "roundSeenMetres": 59,
+  "usual": 163.7029010182701,
+  "round": 312.1203913531768
+ },
+ "shared": [
+  {
+   "mark": "A",
+   "at": [
+    -74.37944064810216,
+    12.000006413731596
+   ],
+   "between": [
+    "1b",
+    "2in"
+   ]
+  },
+  {
+   "mark": "B",
+   "at": [
+    -106.3794406480212,
+    11.999973723251523
+   ],
+   "between": [
+    "1b",
+    "2in"
+   ]
+  },
+  {
+   "mark": "C",
+   "at": [
+    -118,
+    40.379344647812005
+   ],
+   "between": [
+    "1b",
+    "4u"
+   ]
+  }
+ ],
+ "camp": {
+  "best": [
+   -114,
+   12
+  ],
+  "sees": 414,
+  "second": [
+   118,
+   -4
+  ],
+  "secondSees": 375,
+  "of": 1643
+ }
+}

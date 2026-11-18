@@ -290,3 +290,26 @@ export const Q_DISTRICTS: { id: string; style: Style; label: string; rect: QRect
 export const Q_MATERIALS: Material[] = ["timber", "metal", "fabric", "fasteners", "electronics", "rubber", "chemicals", "luxury", "food"];
 /** each cycle's shelf value split by tier (PROPOSED; Stage 3 tunes): more stores split it, they don't add money */
 export const Q_VALUE_SHARE = { low: 0.22, mid: 0.28, high: 0.3, landmark: 0.2 } as const;
+
+// ---- the plan as ONE object (Compact Queens, 2026-11-17): the checker and the generator read whichever plan is
+// active (active.ts), so v2 and Compact Queens are checked by exactly the same rules ------------------------------------
+export interface QHome { readonly yard: number; readonly lane: number; readonly half: number; readonly pave: number; readonly ringW: number; readonly ringPave: number }
+export interface QPlan {
+  id: string; name: string;
+  extent: QRect; border: Record<"N" | "S" | "E" | "W", XZ>;
+  home: QHome; ring: number; fortMax: typeof FORT_MAX; forts: QFort[]; stalls: typeof Q_STALLS;
+  roads: QRoad[]; crossings: typeof Q_CROSSINGS; removed: typeof Q_REMOVED; paths: QPath[]; blocks: QBlock[]; units: QUnit[];
+  rail: typeof Q_RAIL; materials: Material[]; valueShare: Record<"low" | "mid" | "high" | "landmark", number>;
+  /** where the market's lanes meet the ring road (a crossing must be at each) */
+  marketExits: XZ[];
+  /** shops by tier [low, mid, high]: playable first, and planned in all */
+  roster: { first: [number, number, number]; planned: [number, number, number] };
+  /** the frontage depth (m) of ordinary buildings by style, when the plan wants other than the defaults */
+  depth?: Partial<Record<Style, number>>;
+}
+export const V2_PLAN: QPlan = {
+  id: "v2", name: "Queens v2", extent: Q_EXTENT, border: Q_BORDER, home: HOME, ring: RING, fortMax: FORT_MAX, forts: Q_FORTS, stalls: Q_STALLS,
+  roads: Q_ROADS, crossings: Q_CROSSINGS, removed: Q_REMOVED, paths: Q_PATHS, blocks: Q_BLOCKS, units: Q_UNITS, rail: Q_RAIL,
+  materials: Q_MATERIALS, valueShare: Q_VALUE_SHARE, marketExits: [[0, RING], [0, -RING], [RING, -6], [-RING, 0]],
+  roster: { first: [6, 5, 5], planned: [12, 8, 6] },
+};

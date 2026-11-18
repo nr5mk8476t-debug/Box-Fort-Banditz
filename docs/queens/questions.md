@@ -1,5 +1,18 @@
 # Queens: open questions for Blake
 
+## Compact Queens (2026-11-18): the ones that decide the next step
+
+1. The landmarks are close together (your own 24 s, the next two 25 and 27 s, the far one 33 s). Accept it, or push the
+   far ones out to make the choice bigger?
+2. Is 408 m across too small for "Queens"? (Fallback: a second band of buildings outside the avenues, +60 m each way.)
+3. The four shops brought forward (FISHY BUSINESS, THE FINAL PRINT, BATTER DAYS, LORD OF THE STRINGS) and FRAME & FORTUNE
+   instead of THE UPPER CRUST: right picks?
+4. Market lanes at 20 m (v2: 28 m)?
+5. Starter yards dressed as junk lots until upgraded, or smaller yards that grow?
+6. Sal's WANTED list on the board at the start of the scavenge as the first fix if players don't meet enough?
+7. Approval to build the smallest playable test (the home block, Stain Way south, the museum, both ways home)?
+
+
 ## After layout v2 (2026-11-17): the ones that change the next step
 
 1. **The border times.** At this size the borders are 39-61 s from the forts (average ~50 s, sprinting,

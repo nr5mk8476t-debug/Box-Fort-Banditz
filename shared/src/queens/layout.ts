@@ -10,7 +10,8 @@
 //   destination  a big building (the pub, the club) with smaller neighbours along the rest of the frontage
 //   civic        the police and the courtyard behind it
 //   precinct     a landmark with its forecourt / drop-off / service yard, neighbours along the remaining frontage
-import { Q_BLOCKS, Q_UNITS, Q_PATHS, Q_RAIL, Q_ROADS, type QRect, type Side, type QBlock, type Style, type XZ, type QPath, R } from "./plan.js";
+import { P } from "./active.js";
+import { type QRect, type Side, type QBlock, type Style, type XZ, type QPath, R } from "./plan.js";
 
 export type Use = "mixed" | "apartment" | "corner" | "garage" | "office";
 export interface QBuilding { id: string; block: string; rect: QRect; floors: number; use: Use; face: Side; style: Style }
@@ -32,7 +33,7 @@ function pathRects(p: QPath): QRect[] {
 }
 /** the strip under the elevated line, as a test */
 function underRail(r: QRect) {
-  const pts = Q_RAIL.pts, half = Q_RAIL.clear + Q_RAIL.deckW / 2 - 1;
+  const pts = P.rail.pts, half = P.rail.clear + P.rail.deckW / 2 - 1;
   for (let i = 1; i < pts.length; i++) {
     const [a, b] = [pts[i - 1], pts[i]];
     // sample the rectangle's edges and centre against the segment
@@ -50,16 +51,16 @@ function underRail(r: QRect) {
 export function generate(): QLayout {
   const buildings: QBuilding[] = [], alleys: QPath[] = [], grounds: QGround[] = [];
   const fixed: QRect[] = [];
-  for (const u of Q_UNITS) { fixed.push(...u.parts); for (const g of u.grounds ?? []) fixed.push(g.rect); }
-  for (const p of Q_PATHS) fixed.push(...pathRects(p));
-  for (const b of Q_BLOCKS) blockLayout(b, fixed, buildings, alleys, grounds);
+  for (const u of P.units) { fixed.push(...u.parts); for (const g of u.grounds ?? []) fixed.push(g.rect); }
+  for (const p of P.paths) fixed.push(...pathRects(p));
+  for (const b of P.blocks) blockLayout(b, fixed, buildings, alleys, grounds);
   // nothing under the elevated line (that strip is columns, parking and garages' yards)
   const keep = buildings.filter((x) => !underRail(x.rect));
   return { buildings: keep, alleys, grounds };
 }
 
 function blockLayout(b: QBlock, fixed: QRect[], out: QBuilding[], alleys: QPath[], grounds: QGround[]) {
-  const rand = rng(b.id), D = b.depth ?? DEPTH[b.style], [f0, f1] = b.floors ?? FLOORS[b.style], widths = WIDTHS[b.style];
+  const rand = rng(b.id), D = b.depth ?? P.depth?.[b.style] ?? DEPTH[b.style], [f0, f1] = b.floors ?? FLOORS[b.style], widths = WIDTHS[b.style];
   const floors = () => f0 + Math.floor(rand() * (f1 - f0 + 1));
   let n = 0;
   const gapRects: QRect[] = []; // (shared by the block's parts: an alley in one part keeps the next part's buildings off it)
@@ -164,21 +165,21 @@ function blockLayout(b: QBlock, fixed: QRect[], out: QBuilding[], alleys: QPath[
 function roadHalfAt(s: Side, r: QRect, along?: number): number {
   const edge: XZ = s === "N" ? [along ?? (r.minX + r.maxX) / 2, r.maxZ] : s === "S" ? [along ?? (r.minX + r.maxX) / 2, r.minZ] : s === "E" ? [r.maxX, along ?? (r.minZ + r.maxZ) / 2] : [r.minX, along ?? (r.minZ + r.maxZ) / 2];
   let best = 0, bd = 1e9;
-  for (const rd of Q_ROADS) for (let i = 1; i < rd.pts.length; i++) {
+  for (const rd of P.roads) for (let i = 1; i < rd.pts.length; i++) {
     const [a, b] = [rd.pts[i - 1], rd.pts[i]], ab = [b[0] - a[0], b[1] - a[1]], l2 = ab[0] ** 2 + ab[1] ** 2;
     const t = Math.max(0, Math.min(1, ((edge[0] - a[0]) * ab[0] + (edge[1] - a[1]) * ab[1]) / l2));
     const d = Math.hypot(edge[0] - a[0] - ab[0] * t, edge[1] - a[1] - ab[1] * t);
     if (d < bd) { bd = d; best = d; }
   }
-  const half = Q_ROADS.reduce((h, rd) => Math.max(h, rd.w / 2 + rd.sw), 0);
+  const half = P.roads.reduce((h, rd) => Math.max(h, rd.w / 2 + rd.sw), 0);
   return bd <= half + 0.6 ? best : 0;
 }
 
 /** the share of each block's land covered by buildings (units included) */
 export function coverage(lay: QLayout) {
-  return Q_BLOCKS.map((b) => {
+  return P.blocks.map((b) => {
     const land = b.rects.reduce((s, p) => s + area(p.r), 0);
-    const built = lay.buildings.filter((x) => x.block === b.id).reduce((s, x) => s + area(x.rect), 0) + Q_UNITS.filter((u) => u.block === b.id).reduce((s, u) => s + u.parts.reduce((t, p) => t + area(p), 0), 0);
+    const built = lay.buildings.filter((x) => x.block === b.id).reduce((s, x) => s + area(x.rect), 0) + P.units.filter((u) => u.block === b.id).reduce((s, u) => s + u.parts.reduce((t, p) => t + area(p), 0), 0);
     return { id: b.id, style: b.style, type: b.type, land, built, share: built / land };
   });
 }

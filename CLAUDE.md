@@ -62,7 +62,16 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of Q1: the Queens overhaul)
+## Next up (as of CQ1: Compact Queens, a proposal)
+- Blake asked for a smaller, denser Queens sized by the trip to the nearest landmark (~25 s). The proposal:
+  `docs/queens/compact/proposal.md`; the plan `shared/src/queens/compact.ts`, checked by the same `check.ts`
+  (`usePlan(COMPACT)`; `active.ts` holds the plan being checked). Decisions D-29 to D-36 in `docs/queens/decisions.md`.
+- Its tools: `net.ts` (routes), `sight.ts` (line of sight, encounters over time), `dressing.ts`; the report, the walk with
+  the real movement code, the encounter simulation, the economy estimate and the mock-ups are `tests/compact-*.ts`.
+- Waiting on Blake: his review of the pictures and `docs/queens/questions.md` (the Compact questions). Don't build the
+  playable test until he approves it.
+
+## Earlier: Next up (as of Q1: the Queens overhaul)
 - Blake's Queens brief is a staged plan in `docs/queens/`. Read `plan.md` first, then `decisions.md` (D-01..D-18).
   Stages 0 and 1 are done.
 - The city is checked DATA: `shared/src/queens/plan.ts`, validated by `check.ts`. Change the plan there, then run

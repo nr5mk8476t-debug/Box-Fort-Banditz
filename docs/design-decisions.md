@@ -2,6 +2,13 @@
 
 _Last updated: 2026-09-25 (Phase 1 started)._
 
+## CQ1: Compact Queens, a proposal (2026-11-18)
+Blake's brief: smaller and denser, sized by the trip to the nearest landmark (~25 s), more shops where players go, more
+chances to see each other. Proposed (`docs/queens/compact/proposal.md`; `docs/queens/decisions.md` D-29 to D-36): a
+408 m city of four shopping avenues in a loop with a landmark outside each corner; the home block unchanged except 20 m
+market lanes; pinwheel spokes; back lanes and the pub's lane as hidden ways home that cost a little; 20 playable shops.
+The economy estimate found the fort's shelves, not the distance, cap a scavenge's earnings. Waiting on Blake.
+
 ## Q1.1: Queens layout v2 (2026-11-17)
 After Blake's review of v1 (`docs/queens/decisions.md` D-19 to D-28; `docs/queens/layout-v2.md`):
 - the home block sized from the largest fort (36 m yards, 140 m block);

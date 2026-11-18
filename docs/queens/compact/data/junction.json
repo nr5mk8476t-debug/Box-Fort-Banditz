@@ -1,0 +1,30 @@
+{
+ "A": {
+  "rules": 0,
+  "camp": [
+   -113,
+   5
+  ],
+  "campSees": 0.25380401704199634,
+  "quick": 296.7027730204537,
+  "cover": 312.702927020526,
+  "coverSeenM": 157,
+  "quickSeenM": 198,
+  "quickTyson": 120,
+  "coverTyson": 14
+ },
+ "B": {
+  "rules": 0,
+  "camp": [
+   -113,
+   5
+  ],
+  "campSees": 0.25380401704199634,
+  "quick": 296.7027730204537,
+  "cover": 296.7029590204327,
+  "coverSeenM": 157,
+  "quickSeenM": 198,
+  "quickTyson": 120,
+  "coverTyson": 14
+ }
+}

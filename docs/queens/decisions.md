@@ -127,3 +127,41 @@ and alley; a cosmetic train first.
 **D-28 The landmarks differ in shape and approach.** Bank: an L-shaped corner banking hall + a gated van dock. Casino:
 a marquee forecourt + a cash-office door on the edge road. Museum: a forecourt with steps + a goods yard. Hotel: a
 canopy drop-off + a loading bay, an L of guest floors.
+
+## 2026-11-18: Compact Queens (a proposal: Blake's brief "a substantially smaller, denser version of Queens v2")
+
+All PROPOSED, waiting on Blake. v2 stays the reference until he chooses. Full reasoning: `compact/proposal.md`.
+
+**D-29 The size is set by one trip.** Each fort's mat to its nearest major landmark's public door, empty-handed, sprint
+held, real stamina, a legal walking route: ~25 s (22-28 s). The loop of avenues sits at 118 m from the middle (the trip is
+2A - 0.5 m: 235 m is 25 s on the measured curve); one band of buildings outside it to an edge road at 196 m: 408 x 408 m.
+Walked with the game's movement code: 24.0 s from every fort. Replaces D-01/D-21 (the ~60 s border) for this proposal.
+
+**D-30 Four shopping avenues in a loop, a landmark outside each corner** (bank NW, casino NE, museum SW, hotel SE). Every
+landmark run uses two avenues; runs to different places share strips, corners and crossings. Spokes from the ring to
+the loop, offset 12 m from the market's lanes in one turning sense (a pinwheel: no sightline across the market, every
+fort's trips the same shape). The north spur and the south-east connector stay removed.
+
+**D-31 The inner blocks are one L-shaped block turned four times:** a starter row facing the ring (each fort's own
+starter shop, 5 s), mid shops facing the avenue, a 5 m BACK LANE between with yards and garages. The lanes kink round the
+yards so the hidden way costs ~16 m more than the avenue (about 2 s empty, 6 s with a giant): cover is a choice. The
+avenues are the quick way.
+
+**D-32 The home block keeps v2's 36 m yards; the market lanes are 20 m** (v2: 28 m), the stalls on the square's corners,
+the board in the middle. Starter yards dressed as junk lots until the upgrades fill them.
+
+**D-33 Landmarks: the public door near the corner, the loading side 38 m on along the same avenue** (the bank's van dock,
+the casino's cash-office yard, the hotel's loading bay, the museum's goods gate). Giants leave by the loading side;
+heavy loot by either. The museum's goods gate faces the end of the Shamrock's back lane across Gnome Ave.
+
+**D-34 20 playable shops (8 / 7 / 5)**, v2's 16 plus FISHY BUSINESS, THE FINAL PRINT, BATTER DAYS and LORD OF THE STRINGS;
+FRAME & FORTUNE (playable) swaps with THE UPPER CRUST (reserved) so the museum corner has a high-end shop. 26 planned.
+Stain Way and Rooster Velt Ave are the two proper shopping streets. SPIN & SIN is the one shop off its quadrant's slot
+(the El crosses Dit Marsh there).
+
+**D-35 The El crosses the NE corner diagonally** ((20, 214) -> (194, -70)): the casino east of it; a 36 m truss where it
+crosses Dit Marsh on the skew (the only span over 32 m).
+
+**D-36 No economy change before a playtest.** The fort's shelves cap what a scavenge banks (8 / 12 / 16), not the
+distance; Compact frees 1-4 minutes a scavenge and adds 11-25% only with bigger shelves. The first fix if players still
+don't meet: Sal's WANTED list on the board at the START of the scavenge (simulated: 51% -> 62% of two-player scavenges).

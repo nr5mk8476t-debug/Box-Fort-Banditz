@@ -2,6 +2,30 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## CQ1: Compact Queens, a proposal (2026-11-18)
+
+Planning only: **the playable game is unchanged.** Blake asked for a substantially smaller, denser Queens, sized by one
+trip (each fort's mat to its nearest major landmark in ~25 s), with more shops on the streets players use and more
+chances to see another bandit. The proposal, its pictures and its evidence are in `docs/queens/compact/proposal.md`.
+
+- **408 x 408 m** (v2: 940 x 690 m). Four shopping avenues in a loop round the home block; a landmark outside each
+  corner; four spokes, offset in a pinwheel so every fort's trips have the same shape.
+- **Nearest landmark 24.0 s from every fort** (the game's own movement code walking the route; the estimate is 24.9 s);
+  the others 24.8 / 26.7 / 33.2 s. v2: 54-56 s.
+- **20 playable shops** (8 / 7 / 5): v2's 16 plus FISHY BUSINESS, THE FINAL PRINT, BATTER DAYS and LORD OF THE STRINGS,
+  each placed on a street that needed it (FRAME & FORTUNE swaps with THE UPPER CRUST). Two proper shopping streets:
+  Stain Way and Rooster Velt Ave.
+- **Back lanes and Wood Havoc Lane behind the pub**: giant-wide hidden ways home that cost a few seconds more than the
+  avenues (the one hard choice, shown both ways).
+- **Measured in a planning simulation (sight.ts):** two players see each other away from home in 51% of scavenges (v2:
+  35%); four players 98%. The strongest camping spot is a shopping-street corner, not a fort gate.
+- **Earnings:** the shelves cap them, not the distance: the same at 8 shelves, +20-25% at 16; 1-4 minutes of every
+  scavenge freed. No price changes proposed before a playtest.
+- **New tools:** the checker reads any plan (`active.ts`, `usePlan`); the walking network gives routes (`net.ts`);
+  line-of-sight and encounters (`sight.ts`); the planned dressing (`dressing.ts`); the report, the walk with the real
+  movement code, the encounter simulation, the economy estimate and the player-height mock-ups (`tests/compact-*.ts`).
+- **Tests:** 8 new plan tests (`shared/test/compact-plan.test.ts`); the v2 tests unchanged and passing.
+
 ## Q1.1: Queens layout v2, after Blake's review (2026-11-17)
 
 Still planning only: **the playable game is unchanged.** Blake's review: v1 read as a big grid round a tiny fort
