@@ -1,0 +1,1046 @@
+{
+ "source": "claude/new-session-wsgpbp (R15, not on main yet): shared/src/shopStock.ts STORE_STOCK + shared/src/loot.ts",
+ "stores": {
+  "rustbucket": {
+   "n": [
+    16,
+    22
+   ],
+   "stock": [
+    {
+     "type": "scrap_metal",
+     "w": 5,
+     "max": 4,
+     "size": "big",
+     "heavy": false,
+     "min": 4,
+     "maxV": 10
+    },
+    {
+     "type": "pipe",
+     "w": 3,
+     "max": 3,
+     "size": "big",
+     "heavy": false,
+     "min": 5,
+     "maxV": 10
+    },
+    {
+     "type": "pipe_fittings",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 3,
+     "maxV": 6
+    },
+    {
+     "type": "brick",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 0,
+     "maxV": 1
+    },
+    {
+     "type": "plank",
+     "w": 3,
+     "max": 3,
+     "size": "big",
+     "heavy": false,
+     "min": 4,
+     "maxV": 9
+    },
+    {
+     "type": "bin_lid",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 0,
+     "maxV": 2
+    },
+    {
+     "type": "traffic_cone",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 8,
+     "maxV": 16
+    },
+    {
+     "type": "oil_barrel",
+     "w": 1,
+     "max": 1,
+     "size": "giant",
+     "heavy": true,
+     "min": 3,
+     "maxV": 5
+    },
+    {
+     "type": "toolbox",
+     "w": 1,
+     "max": 1,
+     "size": "big",
+     "heavy": false,
+     "min": 14,
+     "maxV": 26
+    },
+    {
+     "type": "hammer",
+     "w": 1,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 6,
+     "maxV": 12
+    }
+   ]
+  },
+  "plugpray": {
+   "n": [
+    15,
+    20
+   ],
+   "stock": [
+    {
+     "type": "crt_tv",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": true,
+     "min": 30,
+     "maxV": 60
+    },
+    {
+     "type": "laptop",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 60,
+     "maxV": 140
+    },
+    {
+     "type": "phone_handset",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 12,
+     "maxV": 30
+    },
+    {
+     "type": "disposable_camera",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 8,
+     "maxV": 20
+    },
+    {
+     "type": "fancy_earbuds",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 20,
+     "maxV": 45
+    },
+    {
+     "type": "kettle",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 8,
+     "maxV": 15
+    },
+    {
+     "type": "toaster",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 9,
+     "maxV": 16
+    },
+    {
+     "type": "dj_headphones",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 30,
+     "maxV": 70
+    },
+    {
+     "type": "smart_watch",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 40,
+     "maxV": 90
+    }
+   ]
+  },
+  "needledrop": {
+   "n": [
+    15,
+    22
+   ],
+   "stock": [
+    {
+     "type": "vinyl_record",
+     "w": 8,
+     "max": 8,
+     "size": "small",
+     "heavy": false,
+     "min": 10,
+     "maxV": 35
+    },
+    {
+     "type": "mixtape",
+     "w": 5,
+     "max": 5,
+     "size": "small",
+     "heavy": false,
+     "min": 6,
+     "maxV": 14
+    },
+    {
+     "type": "golden_record",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 240,
+     "maxV": 460
+    },
+    {
+     "type": "dj_headphones",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 30,
+     "maxV": 70
+    },
+    {
+     "type": "guitar",
+     "w": 1,
+     "max": 1,
+     "size": "big",
+     "heavy": false,
+     "min": 30,
+     "maxV": 70
+    },
+    {
+     "type": "mirror_ball",
+     "w": 1,
+     "max": 1,
+     "size": "big",
+     "heavy": true,
+     "min": 70,
+     "maxV": 150
+    }
+   ]
+  },
+  "peakfomo": {
+   "n": [
+    15,
+    22
+   ],
+   "stock": [
+    {
+     "type": "designer_hoodie",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 120,
+     "maxV": 220
+    },
+    {
+     "type": "sunglasses",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 10,
+     "maxV": 25
+    },
+    {
+     "type": "cursed_sneakers",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 18,
+     "maxV": 40
+    },
+    {
+     "type": "designer_scarf",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 100,
+     "maxV": 200
+    },
+    {
+     "type": "energy_drink",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 4,
+     "maxV": 8
+    },
+    {
+     "type": "glow_stick",
+     "w": 2,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 1,
+     "maxV": 3
+    }
+   ]
+  },
+  "maisonpong": {
+   "n": [
+    12,
+    16
+   ],
+   "stock": [
+    {
+     "type": "fancy_fizz",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 18,
+     "maxV": 40
+    },
+    {
+     "type": "designer_scarf",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 100,
+     "maxV": 200
+    },
+    {
+     "type": "gold_nose",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 180,
+     "maxV": 320
+    },
+    {
+     "type": "silver_cutlery",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 15,
+     "maxV": 35
+    },
+    {
+     "type": "macaron_box",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 8,
+     "maxV": 20
+    }
+   ]
+  },
+  "caratrun": {
+   "n": [
+    12,
+    16
+   ],
+   "stock": [
+    {
+     "type": "diamond_ring",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 140,
+     "maxV": 300
+    },
+    {
+     "type": "gold_chain",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 90,
+     "maxV": 180
+    },
+    {
+     "type": "pearl_necklace",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 60,
+     "maxV": 140
+    },
+    {
+     "type": "rolecks_watch",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 150,
+     "maxV": 300
+    },
+    {
+     "type": "cufflinks",
+     "w": 2,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 30,
+     "maxV": 70
+    }
+   ]
+  },
+  "lastscrew": {
+   "n": [
+    18,
+    25
+   ],
+   "stock": [
+    {
+     "type": "duct_tape",
+     "w": 5,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 3,
+     "maxV": 7
+    },
+    {
+     "type": "liquid_nails",
+     "w": 5,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 4,
+     "maxV": 9
+    },
+    {
+     "type": "nails_box",
+     "w": 5,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 3,
+     "maxV": 7
+    },
+    {
+     "type": "hammer",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 6,
+     "maxV": 12
+    },
+    {
+     "type": "handsaw",
+     "w": 3,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 7,
+     "maxV": 14
+    },
+    {
+     "type": "pipe",
+     "w": 3,
+     "max": 3,
+     "size": "big",
+     "heavy": false,
+     "min": 5,
+     "maxV": 10
+    },
+    {
+     "type": "timber_bundle",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": true,
+     "min": 12,
+     "maxV": 22
+    },
+    {
+     "type": "pipe_fittings",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 3,
+     "maxV": 6
+    },
+    {
+     "type": "scrap_metal",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 4,
+     "maxV": 10
+    },
+    {
+     "type": "paint_tin",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 4,
+     "maxV": 9
+    },
+    {
+     "type": "toolbox",
+     "w": 1,
+     "max": 1,
+     "size": "big",
+     "heavy": false,
+     "min": 14,
+     "maxV": 26
+    },
+    {
+     "type": "plank",
+     "w": 3,
+     "max": 3,
+     "size": "big",
+     "heavy": false,
+     "min": 4,
+     "maxV": 9
+    },
+    {
+     "type": "bag_of_screws",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 3,
+     "maxV": 8
+    },
+    {
+     "type": "brick",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 0,
+     "maxV": 1
+    }
+   ]
+  },
+  "crumbs": {
+   "n": [
+    20,
+    25
+   ],
+   "stock": [
+    {
+     "type": "crisps",
+     "w": 5,
+     "max": 5,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 4
+    },
+    {
+     "type": "bread_loaf",
+     "w": 4,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 4
+    },
+    {
+     "type": "milk_carton",
+     "w": 4,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 4
+    },
+    {
+     "type": "instant_noodles",
+     "w": 5,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 1,
+     "maxV": 3
+    },
+    {
+     "type": "soda_can",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 4
+    },
+    {
+     "type": "energy_drink",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 4,
+     "maxV": 8
+    },
+    {
+     "type": "candy_bar",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 5
+    },
+    {
+     "type": "canned_beans",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 3,
+     "maxV": 6
+    },
+    {
+     "type": "donut",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 12,
+     "maxV": 25
+    },
+    {
+     "type": "toilet_roll",
+     "w": 3,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 3,
+     "maxV": 6
+    },
+    {
+     "type": "washing_up",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 4
+    },
+    {
+     "type": "lottery_scratch",
+     "w": 1,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 1,
+     "maxV": 40
+    }
+   ]
+  },
+  "spincycle": {
+   "n": [
+    16,
+    22
+   ],
+   "stock": [
+    {
+     "type": "laundry_bag",
+     "w": 5,
+     "max": 4,
+     "size": "big",
+     "heavy": false,
+     "min": 3,
+     "maxV": 10
+    },
+    {
+     "type": "detergent",
+     "w": 5,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 5
+    },
+    {
+     "type": "odd_sock",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 1,
+     "maxV": 3
+    },
+    {
+     "type": "single_shoe",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 6
+    },
+    {
+     "type": "designer_hoodie",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 120,
+     "maxV": 220
+    },
+    {
+     "type": "abandoned_bag",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 10,
+     "maxV": 45
+    },
+    {
+     "type": "lost_ring",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 40,
+     "maxV": 110
+    },
+    {
+     "type": "washing_up",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 4
+    },
+    {
+     "type": "novelty_undies",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 2,
+     "maxV": 7
+    },
+    {
+     "type": "family_photo",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 0,
+     "maxV": 2
+    }
+   ]
+  },
+  "secondchance": {
+   "n": [
+    16,
+    22
+   ],
+   "stock": [
+    {
+     "type": "table_lamp",
+     "w": 4,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 8,
+     "maxV": 16
+    },
+    {
+     "type": "bar_stool",
+     "w": 3,
+     "max": 3,
+     "size": "big",
+     "heavy": false,
+     "min": 9,
+     "maxV": 18
+    },
+    {
+     "type": "cushion",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 4,
+     "maxV": 9
+    },
+    {
+     "type": "vase",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 8,
+     "maxV": 20
+    },
+    {
+     "type": "rug",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 12,
+     "maxV": 24
+    },
+    {
+     "type": "kettle",
+     "w": 3,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 8,
+     "maxV": 15
+    },
+    {
+     "type": "toaster",
+     "w": 3,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 9,
+     "maxV": 16
+    },
+    {
+     "type": "armchair",
+     "w": 1,
+     "max": 1,
+     "size": "big",
+     "heavy": true,
+     "min": 20,
+     "maxV": 45
+    },
+    {
+     "type": "cafe_chair",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 1,
+     "maxV": 4
+    },
+    {
+     "type": "lava_lamp",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 15,
+     "maxV": 35
+    },
+    {
+     "type": "snow_globe",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 45,
+     "maxV": 90
+    },
+    {
+     "type": "mirror_ball",
+     "w": 1,
+     "max": 1,
+     "size": "big",
+     "heavy": true,
+     "min": 70,
+     "maxV": 150
+    }
+   ]
+  },
+  "overpriced": {
+   "n": [
+    14,
+    18
+   ],
+   "stock": [
+    {
+     "type": "stand_mixer",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": true,
+     "min": 60,
+     "maxV": 120
+    },
+    {
+     "type": "espresso_machine",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": true,
+     "min": 70,
+     "maxV": 140
+    },
+    {
+     "type": "copper_pan",
+     "w": 4,
+     "max": 4,
+     "size": "small",
+     "heavy": false,
+     "min": 25,
+     "maxV": 50
+    },
+    {
+     "type": "knife_block",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 35,
+     "maxV": 70
+    },
+    {
+     "type": "designer_lamp",
+     "w": 2,
+     "max": 2,
+     "size": "big",
+     "heavy": false,
+     "min": 50,
+     "maxV": 95
+    },
+    {
+     "type": "velvet_sofa",
+     "w": 1,
+     "max": 1,
+     "size": "giant",
+     "heavy": true,
+     "min": 120,
+     "maxV": 220
+    },
+    {
+     "type": "silver_cutlery",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 15,
+     "maxV": 35
+    },
+    {
+     "type": "fancy_cheese",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 25,
+     "maxV": 60
+    }
+   ]
+  },
+  "tickedoff": {
+   "n": [
+    14,
+    18
+   ],
+   "stock": [
+    {
+     "type": "pocket_watch",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 60,
+     "maxV": 130
+    },
+    {
+     "type": "cufflinks",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 30,
+     "maxV": 70
+    },
+    {
+     "type": "smart_watch",
+     "w": 3,
+     "max": 3,
+     "size": "small",
+     "heavy": false,
+     "min": 40,
+     "maxV": 90
+    },
+    {
+     "type": "rolecks_watch",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 150,
+     "maxV": 300
+    },
+    {
+     "type": "gold_chain",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 90,
+     "maxV": 180
+    },
+    {
+     "type": "watch_winder",
+     "w": 2,
+     "max": 2,
+     "size": "small",
+     "heavy": false,
+     "min": 50,
+     "maxV": 100
+    },
+    {
+     "type": "grandfather_clock",
+     "w": 1,
+     "max": 1,
+     "size": "giant",
+     "heavy": true,
+     "min": 140,
+     "maxV": 260
+    },
+    {
+     "type": "diamond_ring",
+     "w": 1,
+     "max": 1,
+     "size": "small",
+     "heavy": false,
+     "min": 140,
+     "maxV": 300
+    }
+   ]
+  }
+ }
+}

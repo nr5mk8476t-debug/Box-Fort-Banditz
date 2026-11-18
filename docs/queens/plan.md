@@ -5,8 +5,10 @@ before the next stage starts) and what Blake sees. Ticks mean done AND verified;
 game stays as it is until the Stage 2 blockout is accepted, and the old maps stay selectable for comparison until the
 Queens city replaces them.
 
-**Where we are (2026-11-17):** Stages 0 and 1 done; layout v2 (Stage 1.1) drawn after Blake's review and waiting for
-his answers ([questions.md](questions.md)). Next: Stage 0b (merge R15's shop stock), then Stage 2 (the blockout of v2).
+**Where we are (2026-11-18):** Stages 0 and 1 done; layout v2 (Stage 1.1) drawn; then Blake asked for a smaller, denser
+city: **Compact Queens** (Stage 1.2, a proposal: [compact/proposal.md](compact/proposal.md)), waiting for his review
+([questions.md](questions.md)). Next, if approved: the smallest playable test (the home block, Stain Way south, the
+museum, both ways home), then Stage 0b and Stage 2 on whichever plan he picks.
 
 ## The first playable release (the scope Stage 2-7 builds toward)
 
@@ -69,6 +71,14 @@ Result: borders 48-71 s from every fort (average 55-56 s); each fort's own low s
       the line as a real diagonal, the landmarks each different.
 - [x] 12 plan tests (incl. the checker catching a broken plan); three diagrams; the city-plan tables regenerated.
 Exit: Blake's answers to questions.md.
+
+## Stage 1.2: Compact Queens (a proposal) -- DONE, awaiting Blake (2026-11-18)
+- [x] The plan as data (`compact.ts`), checked by the same rules as v2; 8 plan tests.
+- [x] Sized by the 25 s landmark trip: 24.0 s from every fort, walked with the game's movement code.
+- [x] Routes, sightlines and encounters (net.ts, sight.ts, `tests/compact-encounters.ts`), v2 vs Compact, 2 and 4 players.
+- [x] The economy estimate (`tests/compact-economy.ts`), the planned street dressing, the one hard choice both ways.
+- [x] Ten pictures: the side-by-side, the plan, the routes, the close-up, the home block, the choice, four mock-ups.
+Exit: Blake's review of the layout and his answers; then the smallest playable test (proposal section 12).
 
 ## Stage 2: the playable blockout (grey boxes, the real game code)
 Goal: walk, drive and chase round the Queens city in the game, measured, before any art.

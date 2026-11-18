@@ -11,6 +11,21 @@ Every phase adds to this plan. Nothing is reported as working unless one of thes
 
 Note on the automated browser test: it renders 3D on the CPU, so it runs at single-digit FPS with several windows open. Distance checks therefore compare movement against the number of simulation steps actually run, not wall-clock time. Frame rate and feel must be judged on a real machine.
 
+## CQ1 checks: Compact Queens proposal (2026-11-18)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| The plan's rules | every v2 rule, on the compact plan (the same checker) | unit (`shared/test/compact-plan.test.ts`) | pass |
+| Blake's benchmark | every fort's nearest landmark 22-28 s (estimate), the far corner 6 s+ longer, the same for every fort | unit; walked with the real movement code (`tests/compact-walk.ts`) | pass: 24.9 s estimated, 24.0 s walked (no collisions) |
+| Fairness | nearest starter / mid / high within 6 s across forts; starter shop within 7 s | unit | pass (5.0; 15.3-16.4; 14.3-19.4 s walked) |
+| Roster | 8 / 7 / 5 first, 12 / 8 / 6 planned, 4 landmarks; pub west, club east, both fit today's interiors | unit | pass |
+| Floor areas | every standard shop 1.9-2.5x today's | unit | pass (after widening the spoke shops 14 -> 16 m and three 14 x 15 units to 14 x 16) |
+| Hidden ways | the pub's lane 10-25 m longer than Stain Way; the bank run uses Stain Way | unit | pass (+16 m) |
+| Sight | PLUG & PRAY's door sees down Stain Way, not past the parcel van, not the lane | unit | pass |
+| The El | columns clear, every crossing spanned (36 m max: one skew crossing of Dit Marsh), the casino east of it | unit | pass |
+| Encounters | 300 simulated scavenges per case, v2 vs Compact, 2 and 4 players | `tests/compact-encounters.ts` | recorded (proposal section 1, 7, 11) |
+| No game change | unit (373 shared + 40 client), typecheck, signal + server smokes, draw budget, e2e x2 | as every round | all pass first time: unit 373 + 40, typecheck, signal smoke, server smoke, draw budget (every view within budget), e2e normal 464/464, e2e at LATENCY=110 464/464. No game code changed this round (the plan code is not wired into the game) |
+
 ## Q1.1 checks: Queens layout v2 (2026-11-17)
 
 | Area | Check | How | Result |
