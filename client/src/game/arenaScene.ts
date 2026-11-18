@@ -944,6 +944,7 @@ export class ArenaScene {
           break;
         }
         case "bounced":
+          if (e.p === me && e.reason === "giant") { sfx.offended(); this.onFeedback?.("It won't fit through the front door. Giants go out the GOODS IN door, through the goods yard.", "info"); break; }
           if (e.p === me && e.reason === "exit") { sfx.offended(); this.onFeedback?.("It's an EXIT. Out only. The front door's round the corner (and the rope).", "info"); break; }
           if (e.p === me && e.reason === "don") { sfx.offended(); this.onFeedback?.(`"Mr Binnie is not seeing visitors." Be somebody first (${FEVER.donAura}+ aura).`, "bad"); break; } // (R11.4: it used to fall through to the restaurant's line)
           if (e.p === me && e.reason === "cover" && this.arena.fever) { sfx.offended(); this.onFeedback?.(`"Rope. Cover. Twenty." Pay at the rope ($${FEVER.cover}) or be a VIP (${FEVER.vipAura}+ aura).`, "bad"); break; }

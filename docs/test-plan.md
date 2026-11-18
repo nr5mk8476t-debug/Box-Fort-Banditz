@@ -11,6 +11,20 @@ Every phase adds to this plan. Nothing is reported as working unless one of thes
 
 Note on the automated browser test: it renders 3D on the CPU, so it runs at single-digit FPS with several windows open. Distance checks therefore compare movement against the number of simulation steps actually run, not wall-clock time. Frame rate and feel must be judged on a real machine.
 
+## TR1 checks: Trashington 500, the smallest playable test (2026-11-18)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| The plan | every rule; 500 x 500 m; nearest landmark 30-36 s from every fort (estimate), the same for all four; the nearest shop of each tier within 22 s; shop floor areas 1.9-2.5x | unit (`shared/test/testmap.test.ts`) | pass (32.6 s estimated; 31.6 s walked by `tests/trash500-report.ts`) |
+| The test map | four equal 36 m yards with rotated forts and mats; no passers-by; the other maps untouched | unit | pass |
+| Stock | PLUG & PRAY and FISHY BUSINESS stocked; the museum has a giant and heavies | unit | pass |
+| The museum's doors | a giant is turned back at the public door (told 1-3 times in 8 s, not spammed); a giant leaves by the goods door; a heavy leaves by the public door | unit (the real drag, the movement code) | pass |
+| The recorder | a sighting on Stain Way (where, what each did next); none through the inner block; Tyson's trip home up Stain Way and Blake's by Wood Havoc Lane classified right | unit | pass |
+| In the browser | the views, no errors; draws and meshes per view | `tests/testmap-shots.mjs` | pass, no errors. Draws / meshes (software renderer, relative only): market 184/102, leaving home 60/31, Stain Way 78/41, PLUG & PRAY 100/53, museum front 38/19, gallery 342/195, goods yard 36/18, Wood Havoc Lane 102/54, overview 88/48. The real city's budgeted views run up to 1,321 draws / 1,197 meshes. A first run showed the garbage truck's banner on the test map (the city events fell back to the old city's truck routes): city events are now off on the test map (a unit check) |
+| Online | the host on `?map=test`; a joiner typing the code on a plain page moved onto the test map (no ghost seat); both in the game; the host records a sighting on Stain Way; the joiner records nothing; the report is saved at the end of the scavenge | `tests/testmap-2p.mjs` | 9/9 pass. The first attempt found a ghost "Tyson (away)": the map was checked at the welcome, after he had a seat; now checked at the hello, before (rerun: 9/9) |
+| Two full cycles | every phase on the test map (intro, scavenge, dusk, night, PREP, next cycle), no errors | a World script (2 players, 2 cycles) | pass |
+| No change to the normal game | unit (shared + client), typecheck, signal + server smokes, draw budget, e2e x2 | as every round | unit 378 shared + 40 client, typecheck, signal smoke, server smoke pass. Draw budget: one view over on the first run (crossroads 1,047 meshes against 1,001: +151 city single meshes, every other view within a few of the last run); measured again alone 890, within budget; nothing in this round draws the normal city. e2e at LATENCY=110: 464/464. e2e normal: 463/464 on the first run ("B aims at A's TV on the shelf": the theft itself passed, a camera-aim timing check on this slow box); rerun 464/464 |
+
 ## CQ1 checks: Compact Queens proposal (2026-11-18)
 
 | Area | Check | How | Result |

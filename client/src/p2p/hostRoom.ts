@@ -3,7 +3,7 @@ import { benchHostTick } from "../game/bench.ts";
 // the server used to run) right here in their browser, and friends connect straight to them.
 // This class looks like a Colyseus Room to the rest of the game, so main.ts barely changes.
 import type { Client, Room } from "@colyseus/sdk";
-import { MSG, MAX_PLAYERS, SIM_DT, SIGNAL_ROOM, applyDebug, type WorldEvent } from "@bfb/shared";
+import { MSG, MAX_PLAYERS, SIM_DT, SIGNAL_ROOM, applyDebug, cityMap, type WorldEvent } from "@bfb/shared";
 import { LocalSession } from "../localSession";
 import { PeerLink, type SignalData } from "./channel";
 import { Snapshotter } from "./sync";
@@ -122,6 +122,13 @@ export class HostRoom {
 
   private onHello(peer: Peer, m: any) {
     if (peer.id) return;
+    // a joiner on another city (a code typed into a page without the host's ?map=): turned away BEFORE they get a seat,
+    // told which city to load (their page reloads onto it and joins again)
+    if (typeof m.map === "string" && m.map !== cityMap()) {
+      peer.link.send({ t: "reject", reason: "map", map: cityMap() });
+      setTimeout(() => peer.link.close(), 1000);
+      return;
+    }
     const name = String(m.name ?? "").slice(0, 40);
     const token = typeof m.token === "string" ? m.token : "";
     let id = "";

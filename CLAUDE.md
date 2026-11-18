@@ -62,7 +62,20 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of CQ1: Compact Queens, a proposal)
+## Next up (as of TR1: Trashington 500, the smallest playable test)
+- Blake (2026-11-18): "500 x 500 m, landmarks out"; keep the original look and DON'T SAY "QUEENS" (in messages, docs,
+  names: it's Trashington); grey boxes first; 20 m market lanes; junk-lot starter yards; no WANTED list yet.
+- The plan: `shared/src/queens/trashington.ts` (`TRASH500`; the folder keeps its old name for now), checked by
+  `check.ts` (`usePlan(TRASH500)`). Pictures and the walked table: `npx tsx tests/trash500-report.ts` ->
+  `docs/trashington500/`.
+- The playable test: `?map=test` (`shared/src/testmap.ts`). The whole city as grey boxes; PLUG & PRAY, FISHY BUSINESS
+  and the museum open; giants leave the museum by the goods yard only (`arena.giantDoors`); two players start west
+  (`TEST_SLOT`). The recorder `shared/src/playtest.ts` (host only) saves a report at each PREP. How to play it:
+  `docs/trashington500/README.md`.
+- Waiting on Blake: a play with Tyson, the saved reports, and both answers to "did spotting the other player change
+  what you decided to do?" Then his calls on the size (500 m), the landmark distance (31.6 s) and what to open next.
+
+## Earlier: Next up (as of CQ1: Compact Queens, a proposal)
 - Blake asked for a smaller, denser Queens sized by the trip to the nearest landmark (~25 s). The proposal:
   `docs/queens/compact/proposal.md`; the plan `shared/src/queens/compact.ts`, checked by the same `check.ts`
   (`usePlan(COMPACT)`; `active.ts` holds the plan being checked). Decisions D-29 to D-36 in `docs/queens/decisions.md`.

@@ -23,6 +23,7 @@
 // Every block is lined with buildings wall to wall (a gap for the alley into the courtyard behind);
 // landmarks take at most half a block. The 20 street-level units from Slice 2A (14 walk-in shops,
 // 2 lobbies, the bank, two clubs and the bar) are placed along the new streets.
+import { buildTestMap } from "./testmap.js";
 import { STORES, storeShell, storeFrame, STORE_TRADE, STORE_FIXTURES, STORE_SHELLS, STORE_BROWSE, STORE_FLOOR, storeUpperBoxes, HIGH_END_STORES } from "./stores.js";
 import { canonBoxes,
   box, polyBox, footSd, inFoot, tierAt, inRect, segDist, type Box, type ArenaLayout, type FeverDef, type FeverArc, type SpawnPoint, type FortLot, type LootZone, type PropDef, type PropKind, type DealKind, type GearKind,
@@ -55,7 +56,7 @@ type Dir = "N" | "S" | "E" | "W";
  * are the same walk from the town centre, the top road gone for big landmark lots, angled buildings along the
  * diagonals and round the roundabout, every road named. Set it before building.
  */
-export type CityMap = "classic" | "new";
+export type CityMap = "classic" | "new" | "test";
 let CITY_MAP: CityMap = "new"; // (R3: the new city is the real one now; the classic city stays for its tests)
 export function setCityMap(m: CityMap) { CITY_MAP = m; }
 export function cityMap(): CityMap { return CITY_MAP; }
@@ -212,6 +213,7 @@ interface BlockSpec {
 }
 
 export function buildTrashington(): ArenaLayout {
+  if (CITY_MAP === "test") return buildTestMap(); // (Trashington 500's grey-box playable test: testmap.ts)
   const R2 = CITY_MAP === "new"; // (R3: the new city; "R2" named it while it was the road test)
   const boxes: Box[] = [];
   const loot: SpawnPoint[] = [];

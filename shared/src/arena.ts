@@ -433,6 +433,8 @@ export interface ArenaLayout {
   chinatown?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
   /** R4: Little Italy (Chinatown's mirror on the new map): the street, its two arches, the rows of café lights over it */
   littleItaly?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
+  /** Trashington 500's test map: doorways a dragged GIANT can't go through (you're put back at \`out\`, inside) */
+  giantDoors?: { rect: Rect; out: { x: number; z: number; yaw: number } }[];
   /** named places, used by tests and tutorials */
   landmarks?: Record<string, { x: number; z: number; yaw: number; [extra: string]: number }>;
 }

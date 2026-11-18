@@ -2,6 +2,36 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## TR1: Trashington 500, the smallest playable test (2026-11-18)
+
+Blake's answers to the Compact questions: "500 x 500 m, landmarks out"; keep the original look and stop calling it
+Queens; grey boxes first; 20 m market lanes; starter yards are junk lots that get upgraded; no WANTED list yet; "yes,
+build the smallest playable test". The normal game is unchanged: the test is its own map, `?map=test`.
+
+- **The 500 x 500 m plan** (`shared/src/queens/trashington.ts`): the same shape as the last proposal, with the loop of
+  shopping avenues at +-146 m (was 118), the edge roads at +-242 m (was 196) and bigger landmark corner plots. Each
+  landmark's public door is 30 m past its corner and its goods gate 34 m further on. Every rule passes (the same checker).
+  - Walked with the real movement code, each fort's nearest landmark is **31.6 s** away; the others 32.5 / 34.0 / 40.9 s.
+  - The nearest starter shop is 5 s away, the nearest mid 18-19 s, the nearest high-end 18-19 s (FRAME & FORTUNE and
+    GUCCIO GARBAGE moved nearer their spokes so all four forts match).
+- **The grey-box test map** (`shared/src/testmap.ts`, `?map=test`): the whole city as grey blocks with names, coloured
+  door bands and street signs.
+  - Open: PLUG & PRAY and FISHY BUSINESS on Stain Way, with shelves and stock, and the museum (forecourt, public door,
+    one gallery, giants and heavies, the goods yard).
+  - Both ways home: Stain Way, and Wood Havoc Lane behind the pub.
+  - The home block: four junk-lot yards, rotated forts and the market.
+  - No traffic, police, passers-by or city events. Two players start on the west side (F1 and F4).
+- **Giants can't leave the museum by its public door** (`World.giantDoors`). Held giants don't collide with walls, so
+  a doorway's width can't stop them: you're put back inside and told to use the goods yard.
+- **The playtest recorder** (`shared/src/playtest.ts`): the host's game writes down every sighting (where, when, what
+  each carried, what each did next), every trip (where, what came back, which way home, seen or unseen) and what was
+  banked. The host's browser saves it to Downloads (JSON + a plain-English .txt) at the end of each scavenge.
+- **Joining the host's map:** a player who types the room code into a page on a different map is turned away before
+  getting a seat, and their page reloads onto the host's map (no ghost player left behind).
+- **Tests:** 5 new unit tests (`shared/test/testmap.test.ts`); `tests/testmap-shots.mjs` (the views, with draws and
+  meshes); `tests/testmap-2p.mjs` (online: host, join by code from a plain page, sighting recorded, report saved);
+  `tests/trash500-report.ts` (the plan images and the walked table).
+
 ## CQ1: Compact Queens, a proposal (2026-11-18)
 
 Planning only: **the playable game is unchanged.** Blake asked for a substantially smaller, denser Queens, sized by one

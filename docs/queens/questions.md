@@ -1,5 +1,15 @@
 # Queens: open questions for Blake
 
+## Answered (2026-11-18): Blake's answers to the Compact questions
+1. "Let's go for a 500 x 500 m map" (asked what the x2 meant, he picked "500 x 500 m, landmarks out").
+2. "Can't tell until I play test it myself. Also stop saying Queens. I still want the original look of Box Fort
+   Banditz." (Grey boxes first; the map is Trashington.)
+3. Not sure until a playtest is available.
+4. (Explained: the market's cross-shaped walkways between the yards.) 20 m.
+5. Just junk lots that eventually get upgraded over time.
+6. Don't add that just yet.
+7. Yes, build the smallest playable test: TR1, `docs/trashington500/README.md`.
+
 ## Compact Queens (2026-11-18): the ones that decide the next step
 
 1. The landmarks are close together (your own 24 s, the next two 25 and 27 s, the far one 33 s). Accept it, or push the
