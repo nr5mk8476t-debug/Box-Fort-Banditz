@@ -311,6 +311,7 @@ export class MatchSystem {
   // ---------------------------------------------------------------- events
   /** Escalation: round 1 gets 1 event, round 2 gets 2, round 3+ gets 3, all different kinds. */
   private planEvents() {
+    if (this.w.arena.variant === "test") { this.plan = []; return; } // (Trashington 500's grey-box test: no city events: the truck, airdrops and raccoons have no routes or spots there)
     const kinds: CityEventKind[] = ["airdrop", "truck", "happyhour", "raccoons", ...(this.w.arena.chinatown ? ["parade" as const] : []), ...(this.w.arena.littleItaly ? ["festa" as const] : [])];
     for (let i = kinds.length - 1; i > 0; i--) { const j = Math.floor(this.w.random() * (i + 1)); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
     const n = Math.min(3, this.round);

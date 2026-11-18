@@ -5,6 +5,8 @@
 //
 // Phase 2 contents: players (movement + inventory), loot items (spawning, physics,
 // grab / pocket / drop / throw, two-person giant items), events for sounds/effects, cleanup.
+import { PlaytestRecorder } from "./playtest.js";
+import { TEST_INFO } from "./testmap.js";
 import { PLAYER, SIM_DT, MAX_PLAYERS, MAX_INPUTS_PER_TICK, PLAYER_COLORS } from "./constants.js";
 import { makeMoveState, stepMovement, sanitizeInput, groundHeightAt, freezeInput, type MoveInput, type MoveState } from "./movement.js";
 import { stepItem, type ItemBody } from "./itemPhysics.js";
@@ -212,7 +214,7 @@ export type WorldEvent =
   // C5c.2: LE DUMPSTÈRE: booked a table / couldn't / the maître d' turned you away / someone played the piano / the chef saw you
   | { t: "seated"; p: string; paid: number }
   | { t: "restoNo"; p: string; reason: "broke" | "have" }
-  | { t: "bounced"; p: string; reason: "dress" | "cover" | "don" | "exit" }
+  | { t: "bounced"; p: string; reason: "dress" | "cover" | "don" | "exit" | "giant" }
   // R11.4: the back EXIT has no handle outside; SKETCHY STEVE sold you something (heat: a cop saw) or wouldn't
   | { t: "doorLocked"; p: string; prop: string }
   | { t: "deal"; p: string; kind: DealKind; paid: number; heat: boolean }
@@ -407,7 +409,7 @@ export class World {
     this.spawnLoot = opts.spawnLoot ?? true;
     this.lobbySpawn = opts.lobby ?? false;
     if (this.spawnLoot) this.fillLoot(true);
-    this.npc = new NpcSystem(this.npcHost(), opts.npcs ?? (opts.arena ? 0 : NPC_COUNT));
+    this.npc = new NpcSystem(this.npcHost(), opts.npcs ?? (opts.arena || this.arena.variant === "test" ? 0 : NPC_COUNT)); // (the grey-box test map: no passers-by)
     this.match = new MatchSystem(this);
     this.props = new PropSystem(this);
     this.traffic = new TrafficSystem(this, undefined, opts.seed ?? 12345);
@@ -422,7 +424,11 @@ export class World {
     this.mayor = new MayorSystem(this);
     this.stock = new ShopStock(this);
     if (this.spawnLoot) { this.props.reset(); this.stockShops(true); }
+    if (this.arena.variant === "test") this.playtest = new PlaytestRecorder(this, TEST_INFO?.places ?? []);
   }
+  /** Trashington 500's grey-box test: who saw whom, and what they did about it (playtest.ts) */
+  playtest?: PlaytestRecorder;
+  playtestReport() { return this.playtest?.report() ?? null; }
 
   /** R6: somebody flushed the holding cell's toilet: it erupts. Everyone in the cell is knocked back (and soaked). */
   private flushT = -99;
@@ -1267,6 +1273,27 @@ export class World {
     }
   }
 
+  /** Trashington 500's test map: doorways a GIANT won't fit through (the museum's public door). Dragging one into the
+   *  doorway puts you back where you came from: giants leave by the goods yard. (Held giants don't collide with walls,
+   *  so the door's width can't do it.) */
+  private readonly giantToldT = new Map<string, number>();
+  private giantDoors() {
+    const doors = this.arena.giantDoors;
+    if (!doors?.length) return;
+    for (const p of this.players.values()) {
+      if (!p.connected || p.jailT > 0 || p.respawnT > 0 || !p.hand) continue;
+      const it = this.items.get(p.hand);
+      if (!it || lootDef(it.type).size !== "giant") continue;
+      const m = p.move;
+      for (const d of doors) {
+        if (m.x < d.rect.minX || m.x > d.rect.maxX || m.z < d.rect.minZ || m.z > d.rect.maxZ) continue;
+        m.x = d.out.x; m.z = d.out.z; m.vx = Math.sin(d.out.yaw) * 2; m.vz = Math.cos(d.out.yaw) * 2; m.slideT = 0;
+        if (this.time - (this.giantToldT.get(p.id) ?? -99) > 4) { this.giantToldT.set(p.id, this.time); this.emit({ t: "bounced", p: p.id, reason: "giant" }); }
+        break;
+      }
+    }
+  }
+
   // ------------------------------------------------------------------ C5c.3 THE COMPACTOR
   /** who's paid the cover today (Big Crunch's stamp lasts till dawn) */
   readonly clubPass = new Set<string>();
@@ -2079,6 +2106,8 @@ export class World {
     this.police.tick(dt);
     this.raidWatch();
     this.restoDoor();
+    this.giantDoors();
+    this.playtest?.tick(dt);
     this.clubTick();
     this.feverTick(SIM_DT);
     this.gchTick(SIM_DT); // (R12.6)

@@ -30,6 +30,7 @@ import {
 const MAP_PARAM = new URLSearchParams(location.search).get("map") ?? import.meta.env.VITE_BFB_MAP;
 if (MAP_PARAM === "roads" || MAP_PARAM === "roads2" || MAP_PARAM === "new") setCityMap("new");
 if (MAP_PARAM === "classic") setCityMap("classic");
+if (MAP_PARAM === "test") setCityMap("test"); // (Trashington 500: the grey-box playable test)
 const ROAD_TEST = cityMap() === "new";
 // Both the server and this client build the same city from the same shared code.
 const CITY = buildTrashington();
@@ -58,6 +59,20 @@ if (STRESS.includes("city2")) {
 }
 const STRESS_NPCS = /npcs(\d)/.exec(STRESS)?.[1] ? Number(/npcs(\d)/.exec(STRESS)![1]) * NPC_COUNT : undefined;
 
+/** Trashington 500's test map: the host's (or solo) game writes down sightings, trips and the way home (shared
+ *  playtest.ts); saved as a JSON file (and a short text summary) to Downloads at the end of each scavenge. */
+let playtestSaved = "";
+function playtestWorld() { return cityMap() !== "test" ? null : local?.world ?? ((room as any)?.isHost ? (room as any).world : null); }
+function savePlaytest(round: number) {
+  const w = playtestWorld(); if (!w) return;
+  const rep = w.playtestReport(); if (!rep) return;
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+  const text = rep.cycles.map((c: any) => c.summary.join("\n")).join("\n\n");
+  for (const [name, body, type] of [[`trashington500-playtest-${stamp}-cycle${round}.json`, JSON.stringify(rep, null, 1), "application/json"], [`trashington500-playtest-${stamp}-cycle${round}.txt`, text, "text/plain"]] as const) {
+    try { const url = URL.createObjectURL(new Blob([body], { type })); const el = document.createElement("a"); el.href = url; el.download = name; document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000); } catch { /* (a blocked download: the report is still in __bfb.playtest()) */ }
+  }
+  toast("Playtest report saved to your Downloads (trashington500-playtest-...)", 5000);
+}
 function toast(text: string, ms = 2600) {
   const el = document.createElement("div");
   el.className = "toast";
@@ -202,7 +217,7 @@ async function startSolo() {
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
   $("lp-hint").textContent = "Press ENTER to start. Each cycle: an 8-minute scavenge (day, then sunset, then 2 min of NIGHT: x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
-  $("mode-badge").textContent = ROAD_TEST ? "NEW CITY R3 / SOLO" : "CITY C5c.3 / SOLO";
+  $("mode-badge").textContent = cityMap() === "test" ? "TRASHINGTON 500 TEST / SOLO" : ROAD_TEST ? "NEW CITY R3 / SOLO" : "CITY C5c.3 / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -350,6 +365,8 @@ function updateMatchHud(a: ArenaScene) {
   }
   document.body.classList.toggle("night", m.phase === "night" || (m.phase === "dusk" && m.timeLeft < DUSK_TIME / 2));
 
+  // Trashington 500's test map: the host saves the playtest report when each scavenge ends (and at the final card)
+  if ((m.phase === "prep" || m.phase === "over") && playtestSaved !== m.round + m.phase) { playtestSaved = m.round + m.phase; savePlaytest(m.round); }
   // R14: PREP at home (the mouse is released while it's open)
   const ov = m.phase === "prep" ? "prep" : "";
   if (ov !== overlayOpen) {
@@ -494,7 +511,7 @@ async function enterOnline(r: GameRoom) {
   $("lp-title").textContent = "LOBBY";
   show("lp-code-row");
   $("lp-code").textContent = r.roomId;
-  $("mode-badge").textContent = r.isHost ? "CITY C5c / HOSTING" : "CITY C5c / ONLINE";
+  $("mode-badge").textContent = (cityMap() === "test" ? "TRASHINGTON 500 TEST" : "CITY C5c") + (r.isHost ? " / HOSTING" : " / ONLINE");
 
   r.onMessage(MSG.ANNOUNCE, (m: { text: string }) => toast(m.text));
   r.onDrop(() => {
@@ -1410,6 +1427,7 @@ enterTitle();
     fortOf: (slot: number) => arena?.fortsR.loopOf(slot) ?? null,
     stealTarget: () => arena?.stealTarget ?? null,
     prepOpen: () => overlayOpen === "prep",
+    playtest: () => playtestWorld()?.playtestReport() ?? null,
     /** (tests, solo) put `n` of an item straight on my shelves, banked */
     fortGive: (type: string, n = 1, value = 10) => { if (!local) return; const p = local.world.players.get(SOLO_ID)!, f = local.world.fort.of(p); for (let i = 0; i < n; i++) f.recs.push({ id: "dbg" + Math.random().toString(36).slice(2, 8), type, value, safe: false }); f.v++; },
     myLot: () => arena?.arenaLayout.forts?.find((f) => f.slot === arena!.myColorIdx) ?? null,

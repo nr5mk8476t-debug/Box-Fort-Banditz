@@ -2,6 +2,28 @@
 
 _Last updated: 2026-09-25 (Phase 1 started)._
 
+## TR1: Trashington 500, the smallest playable test (2026-11-18)
+Blake's answers: 500 x 500 m with the landmarks out; grey boxes first; 20 m market lanes; junk-lot starter yards; no
+WANTED list yet; build the smallest playable test; stop calling it Queens (the code folder `shared/src/queens/` keeps
+its name for now, but nothing new says it). Decisions:
+- **"Landmarks out" = the loop moved out, not the landmarks pushed off the loop.** The avenues went from +-118 to
+  +-146 m and the edges from +-196 to +-242 m, so the blocks between got deeper and the corner plots bigger. Each
+  landmark's door is 30 m past its corner. The nearest landmark is now 31.6 s walked (the option Blake picked said
+  "~32-35 s"). The plan is otherwise the last proposal's.
+- **The whole city as grey boxes, three places open**, rather than only the slice: Blake said he can't judge the size
+  until he plays it, and grey blocks are cheap to draw (342 draws in the busiest view against the real city's 1,321).
+- **Two players start west** (F1, F4: `TEST_SLOT`), the museum's side, so the first test is the one designed
+  (Blake museum, Tyson electronics). Players 3 and 4 get the east.
+- **Giants out of the museum by the goods yard only: a rule, not a doorway.** A held giant follows its carrier without
+  colliding, so no doorway width can stop it; `arena.giantDoors` puts a carrier back inside, with a message at most
+  every 4 s.
+- **The recorder runs on the host and shows nothing to the players.** Sight is the planning model's: eye to eye, 90 m
+  by day and 54 m at night, through the game's own line-of-sight test (the cops' one), so the report shows what the
+  players could have seen. Whether they did see is for Blake and Tyson to say.
+- **A joiner on the wrong map is turned away before getting a seat**, and their page reloads onto the host's map. Doing
+  it at the welcome left a ghost "(away)" player behind.
+- **Not in the test:** traffic, police, passers-by, the other interiors, the WANTED list (Blake: not yet).
+
 ## CQ1: Compact Queens, a proposal (2026-11-18)
 Blake's brief: smaller and denser, sized by the trip to the nearest landmark (~25 s), more shops where players go, more
 chances to see each other. Proposed (`docs/queens/compact/proposal.md`; `docs/queens/decisions.md` D-29 to D-36): a

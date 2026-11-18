@@ -27,3 +27,5 @@ export * from "./loop/quests.js";
 export * from "./loop/mayor.js";
 export * from "./loop/security.js";
 export * from "./shopStock.js";
+export * from "./testmap.js";
+export * from "./playtest.js";

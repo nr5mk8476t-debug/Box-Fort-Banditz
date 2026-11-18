@@ -1,7 +1,7 @@
 // Joining a friend's browser-hosted game: find the host through the matchmaking server by room
 // code, then talk to their browser directly. Looks like a Colyseus Room to the rest of the game.
 import type { Client, Room } from "@colyseus/sdk";
-import { MSG } from "@bfb/shared";
+import { MSG, cityMap } from "@bfb/shared";
 import { PeerLink, type SignalData } from "./channel";
 import { applyDelta, emptyState, type NetState } from "./sync";
 import { Listeners } from "./channel";
@@ -85,12 +85,18 @@ export class PeerRoom {
   }
 
   private wire(link: PeerLink, finish: (err?: Error) => void, current: () => boolean) {
-      link.onOpen = () => { if (current()) link.send({ t: "hello", name: this.name, token: this.reconnectionToken }); else finish(new Error("left")); };
+      link.onOpen = () => { if (current()) link.send({ t: "hello", name: this.name, token: this.reconnectionToken, map: cityMap() }); else finish(new Error("left")); };
       link.onClose = () => finish(new Error("p2p closed: couldn't connect to the host's computer"));
       link.onMessage = (m) => {
         // (R12.4: a welcome or a first snapshot that turns up after you've left, or for an attempt that's been
         //  superseded, closes its own link: it never brings a closed room back to life)
         if (!current()) { finish(new Error("left")); return; }
+        // the host is playing a different city (a code typed into a page without the host's ?map=): reload onto it
+        if (m?.t === "reject" && m.reason === "map" && typeof m.map === "string" && typeof location !== "undefined") {
+          const u = new URL(location.href); u.searchParams.set("map", m.map); u.searchParams.set("room", this.roomId);
+          location.replace(u.toString());
+          return finish(new Error("switching to the host's city"));
+        }
         if (m?.t === "reject") return finish(new Error(m.reason === "full" ? "room is full" : "rejected"));
         if (m?.t === "welcome") {
           this.sessionId = m.id;
