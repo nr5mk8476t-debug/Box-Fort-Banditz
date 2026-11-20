@@ -2,6 +2,7 @@
 // PLACEHOLDER-QUALITY ART built from simple shapes, but deliberately styled: toon shading,
 // ink outlines, grimy-bright colours, shop signs, parody ads, windows.
 // Performance: static meshes are merged by material, so the whole city is a few dozen draw calls.
+import { buildParkKit } from "./parkKit.ts";
 import {
   Scene, MeshBuilder, Mesh, TransformNode, Color3, StandardMaterial, Texture, VertexBuffer, Vector3, VertexData, Quaternion, PointLight,
   type ShadowGenerator, type CellMaterial,
@@ -667,6 +668,7 @@ export class CityRenderer {
     }
     this.buildSignAtlas();
     this.buildForts();
+    if (this.arena.park) buildParkKit(this.scene, this.arena, this.root, (slot) => PLAYER_COLORS[slot % PLAYER_COLORS.length]); // (TR4: the park's first finished section)
     this.buildAds();
     this.flush();
   }
@@ -1645,20 +1647,23 @@ export class CityRenderer {
       node.rotation.y = f.yaw;
       node.parent = this.root;
       const part = (m: Mesh, c: string, o = 0.03) => { m.parent = node; m.material = toon(this.scene, c); ink(m, o); m.isPickable = false; this.shadows?.addShadowCaster(m); m.receiveShadows = true; return m; };
-      const box = part(MeshBuilder.CreateBox("fortbox", { width: 2.4, height: 1.5, depth: 1.9 }, this.scene), PALETTE.cardboard);
-      box.position.y = 0.75;
-      box.rotation.z = 0.03;
-      const awning = part(MeshBuilder.CreateBox("awning", { width: 2.8, height: 0.05, depth: 1.4 }, this.scene), PALETTE.blanket);
-      awning.position.set(0, 1.75, 1.35);
-      awning.rotation.x = 0.35;
-      for (const sx of [-1.25, 1.25]) {
-        const stick = part(MeshBuilder.CreateCylinder("stick", { diameter: 0.07, height: 1.55 }, this.scene), "#6b4a2b", 0.015);
-        stick.position.set(sx, 0.78, 1.95);
+      // (TR4: the test map's finished plot draws its own cardboard home: the park kit)
+      if (this.arena.park?.fort !== f.slot) {
+        const box = part(MeshBuilder.CreateBox("fortbox", { width: 2.4, height: 1.5, depth: 1.9 }, this.scene), PALETTE.cardboard);
+        box.position.y = 0.75;
+        box.rotation.z = 0.03;
+        const awning = part(MeshBuilder.CreateBox("awning", { width: 2.8, height: 0.05, depth: 1.4 }, this.scene), PALETTE.blanket);
+        awning.position.set(0, 1.75, 1.35);
+        awning.rotation.x = 0.35;
+        for (const sx of [-1.25, 1.25]) {
+          const stick = part(MeshBuilder.CreateCylinder("stick", { diameter: 0.07, height: 1.55 }, this.scene), "#6b4a2b", 0.015);
+          stick.position.set(sx, 0.78, 1.95);
+        }
+        const pole = part(MeshBuilder.CreateCylinder("pole", { diameter: 0.06, height: 1.4 }, this.scene), "#6b4a2b", 0.01);
+        pole.position.set(0.9, 2.2, -0.3);
+        const flag = part(MeshBuilder.CreateBox("flag", { width: 0.7, height: 0.45, depth: 0.03 }, this.scene), color, 0.015);
+        flag.position.set(1.25, 2.65, -0.3);
       }
-      const pole = part(MeshBuilder.CreateCylinder("pole", { diameter: 0.06, height: 1.4 }, this.scene), "#6b4a2b", 0.01);
-      pole.position.set(0.9, 2.2, -0.3);
-      const flag = part(MeshBuilder.CreateBox("flag", { width: 0.7, height: 0.45, depth: 0.03 }, this.scene), color, 0.015);
-      flag.position.set(1.25, 2.65, -0.3);
       // R14: the DEPOSIT MAT in front (exactly the mat: loot resting on it 10 s is banked onto the shelves)
       const mh = LOOP.matHalf * 2;
       const pad = MeshBuilder.CreateGround("pad", { width: mh, height: mh }, this.scene);

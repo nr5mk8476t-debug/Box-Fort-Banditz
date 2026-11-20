@@ -163,3 +163,83 @@ test("TR3 the roundabout market park: a round road, the park inside it; every pl
   for (const b of arena.boxes) if (Math.hypot(b.x, b.z) < 3 && b.h > 0.2 && b.y - b.h / 2 < 2) assert.fail(`something in the middle of the plaza: ${b.kind} at (${b.x}, ${b.z})`);
 });
 const T_HOME_HALF = 23;
+
+test("TR4 the finished section: F1's plot, the SELL stall and the north path, drawn by the park kit over hidden collision; clutter never in the biggest fort's footprint or on the ways in; a giant-wide route through both gates; a clear approach to the stall; the stall's goods aren't loot", async () => {
+  const { fortMaxRects } = await import("../src/queens/check.js");
+  const { FIN_FORT } = await import("../src/testmap.js");
+  setCityMap("test"); const arena = buildTrashington(); setCityMap("new");
+  usePlan(TRASH400);
+  const pk = arena.park!;
+  assert.ok(pk && pk.fort === 0, "the finished plot is the first player's (F1)");
+  assert.ok(pk.fences.length > 12 && pk.yardPoly.length >= 4 && pk.trees.length >= 3 && pk.track.length === 5, JSON.stringify({ f: pk.fences.length, t: pk.trees.length }));
+  assert.equal(pk.stall?.id, "sell");
+  assert.deepEqual(pk.props.map((p) => p.kind).sort(), ["crates", "pallets", "sofa", "tyres"]);
+  const f1 = TRASH400.forts.find((f) => f.id === FIN_FORT)!, plan = fortMaxRects(f1);
+  const segD = (p: [number, number], a: [number, number], b: [number, number]) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dz * t); };
+  const routes: [[number, number], [number, number]][] = [[pk.track[0], pk.track[1]], [pk.track[1], pk.track[2]], [pk.track[3], pk.track[4]]];
+  for (const q of pk.props) {
+    const half = Math.max(q.w, q.d) / 2;
+    for (const r of plan) assert.ok(!(q.x + half > r.rect.minX && q.x - half < r.rect.maxX && q.z + half > r.rect.minZ && q.z - half < r.rect.maxZ), `${q.kind} sits in the planned ${r.name}`);
+    for (const [a, b] of routes) assert.ok(segD([q.x, q.z], a, b) > half + 1.1, `${q.kind} too close to a way in (${segD([q.x, q.z], a, b).toFixed(1)} m)`);
+    const r0 = Math.hypot(q.x, q.z); assert.ok(r0 < T_PARK.fenceR - half && r0 > T_PARK.plazaR + half, `${q.kind} inside the fence`);
+  }
+  // the ways in, a player's width either side (a carried giant follows its carrier without colliding: the gates' openings
+  // are checked against the widest giant below), against everything solid (not the ground)
+  const solid = arena.boxes.filter((b) => b.h > 0.3 && b.y - b.h / 2 < 1.8 && b.kind !== "fort");
+  for (const [a, b] of routes) {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    for (let t = 0.4; t <= L - 0.4; t += 0.25) {
+      const x = a[0] + ((b[0] - a[0]) * t) / L, z = a[1] + ((b[1] - a[1]) * t) / L;
+      for (const s of solid) for (const [dx, dz] of [[0, 0], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]]) if (inFoot(s, x + dx, z + dz)) assert.fail(`${s.kind} in the way at (${x.toFixed(1)}, ${z.toFixed(1)})`);
+    }
+  }
+  // each gate's opening is wider than the widest giant (1.5 m across) with room for its carrier
+  const widest = Math.max(...["rubber_duck", "arcade_machine"].map((t) => lootDef(t).radius * 2));
+  for (const g of [pk.track[0], pk.track[4]]) {
+    let open = 0;
+    for (const [ux, uz] of [[1, 0], [0, 1]]) { let lo = 0, hi = 0; const hit = (o: number) => solid.some((s) => inFoot(s, g[0] + ux * o, g[1] + uz * o));
+      while (lo > -4 && !hit(lo - 0.05)) lo -= 0.05; while (hi < 4 && !hit(hi + 0.05)) hi += 0.05; open = Math.max(open, Math.min(hi - lo, 8)); }
+    assert.ok(open >= widest + 0.8, `the gate at (${g}) is ${open.toFixed(1)} m open (the widest giant is ${widest.toFixed(1)} m)`);
+  }
+  // the stall: 1.6 m clear in front of it (the customer's side) along its whole front; no loot spot or prop at it
+  const st = pk.stall!, [fx, fz] = st.face;
+  for (let o = -st.w / 2; o <= st.w / 2; o += 0.3) for (const d of [0.3, 0.9, 1.5]) {
+    const x = st.x + fx * (st.w / 2 + d) + (fz ? o : 0), z = st.z + fz * (st.w / 2 + d) + (fx ? o : 0);
+    for (const s of solid) if (inFoot(s, x, z)) assert.fail(`${s.kind} in the stall's approach at (${x.toFixed(1)}, ${z.toFixed(1)})`);
+  }
+  const near = (x: number, z: number) => Math.abs(x - st.x) < st.w && Math.abs(z - st.z) < st.w;
+  assert.ok(!(arena.lootSpawns ?? []).some((l) => near(l.x, l.z)), "no loot spot at the stall");
+  assert.ok(!(arena.props ?? []).some((p) => near(p.x, p.z)), "no usable prop at the stall");
+});
+
+/** steer a player along waypoints with the real movement code (forward input, turned toward the next point each tick) */
+function drive(w: World, id: string, pts: [number, number][], maxS = 40) {
+  const p = w.players.get(id)!; let seq = 1, i = 0;
+  for (let t = 0; t < maxS * 60 && i < pts.length; t++) {
+    const [x, z] = pts[i], dx = x - p.move.x, dz = z - p.move.z;
+    if (Math.hypot(dx, dz) < 0.6) { i++; continue; }
+    const yaw = Math.atan2(dx, dz);
+    w.pushInputs(id, [{ seq: seq++, mx: 0, mz: 1, yaw, pitch: 0, jump: false, sprint: false, crouch: false, dodge: false }]); w.tick();
+  }
+  return i >= pts.length;
+}
+test("TR4 playing the finished section: drag a GIANT in through F1's front gate onto the mat (it banks); walk out of the back gate; two players at the SELL stall at once", () => {
+  setCityMap("test"); const arena = buildTrashington(); setCityMap("new");
+  const w = new World({ seed: 21, arena }), a = w.addPlayer("a", "Blake"), b = w.addPlayer("b", "Tyson"); w.startMatch(); toScavenge(w);
+  const pk = arena.park!, lot = arena.forts!.find((f) => f.slot === pk.fort)!, [gate, mat] = [pk.track[0], pk.track[1]];
+  // the duck on the north path, outside the gate; Blake grabs it and drags it home: path -> gate -> mat
+  a.move.x = 1.5; a.move.z = gate[1]; a.move.yaw = Math.atan2(-1, 0);
+  const duck = w.placeItem("rubber_duck", 0.0, 0.8, gate[1]); for (let i = 0; i < 20; i++) w.tick();
+  w.action("a", { a: "grab", item: duck }); for (let i = 0; i < 10; i++) w.tick();
+  assert.equal(w.items.get(duck)!.holder, "a", "holding the duck");
+  assert.ok(drive(w, "a", [[gate[0] + 1.2, gate[1]], [gate[0] - 1.5, gate[1] - 0.6], [mat[0], mat[1] + 0.8]], 60), `reached the mat (at ${a.move.x.toFixed(1)}, ${a.move.z.toFixed(1)})`);
+  w.action("a", { a: "drop" }); for (let i = 0; i < 60 * 12; i++) w.tick();
+  assert.ok(w.fort.of(a).recs.some((r) => r.type === "rubber_duck"), `the duck banked on F1's mat (${JSON.stringify(w.fort.of(a).recs.map((r) => r.type))})`);
+  // out of the back gate (round the fort), to the verge
+  const rear = pk.track[4];
+  assert.ok(drive(w, "a", [[lot.x + 2.5, lot.z - 2.8], [lot.x - 3, lot.z - 2.8], [rear[0] + 1.5, rear[1]], [rear[0] - 2, rear[1]]], 40), `out of the back gate (at ${a.move.x.toFixed(1)}, ${a.move.z.toFixed(1)})`);
+  // both players walk up to the SELL stall's front and stand there together
+  const st = pk.stall!, front: [number, number] = [st.x + st.face[0] * (st.w / 2 + 0.8), st.z + st.face[1] * (st.w / 2 + 0.8)];
+  a.move.x = front[0] + 3; a.move.z = front[1] - 1; b.move.x = front[0] + 3; b.move.z = front[1] + 1;
+  assert.ok(drive(w, "a", [[front[0], front[1] - 0.7]], 15) && drive(w, "b", [[front[0], front[1] + 0.7]], 15), "both reached the counter's front");
+});

@@ -436,6 +436,20 @@ export interface ArenaLayout {
   chinatown?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
   /** R4: Little Italy (Chinatown's mirror on the new map): the street, its two arches, the rows of café lights over it */
   littleItaly?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
+  /** TR4: the park's first finished section (the test map): what the client's park kit draws; the collision for it is
+   *  in \`boxes\` (hidden) */
+  park?: {
+    /** the finished fort plot's slot, its dirt outline, its fence pieces (gaps for the gates already cut), its gate posts */
+    fort: number; yardPoly: [number, number][]; fences: [[number, number], [number, number]][]; gatePosts: [number, number][];
+    /** the finished stall: its centre, size and the way its front faces */
+    stall: { id: string; label: string; x: number; z: number; w: number; face: [number, number] } | null;
+    props: { kind: "sofa" | "pallets" | "tyres" | "crates"; x: number; z: number; yaw: number; w: number; d: number; h: number }[];
+    trees: { x: number; z: number; v: number; s: number; yaw: number }[];
+    /** the worn track through the plot: front gate, mat, the fort's front, its back, the back gate */
+    track: [number, number][];
+    /** the paved plaza (a disc) and the finished path */
+    paving: { plazaR: number; path: Rect };
+  };
   /** TR2 (Blake, playtesting: "it either feels too big or the player is running too slow"): the map's pace, a multiplier
    *  on walking, sprinting and crouching (absent = 1; the ?map=test city is 1.1) */
   pace?: number;

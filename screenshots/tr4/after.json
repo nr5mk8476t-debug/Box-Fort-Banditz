@@ -1,0 +1,73 @@
+{
+ "label": "after",
+ "loadMs": 6942,
+ "views": {
+  "day:01-stall": {
+   "draws": 71,
+   "meshes": 71,
+   "tris": 40652,
+   "frameMs": 256
+  },
+  "day:02-stall-from-below": {
+   "draws": 69,
+   "meshes": 69,
+   "tris": 39628,
+   "frameMs": 208
+  },
+  "day:03-yard-entrance": {
+   "draws": 81,
+   "meshes": 81,
+   "tris": 44822,
+   "frameMs": 254
+  },
+  "day:04-path-approach": {
+   "draws": 111,
+   "meshes": 111,
+   "tris": 51930,
+   "frameMs": 179.2
+  },
+  "day:05-overhead": {
+   "draws": 113,
+   "meshes": 113,
+   "tris": 52804,
+   "frameMs": 183.6
+  },
+  "dusk:01-stall": {
+   "draws": 74,
+   "meshes": 74,
+   "tris": 43628,
+   "frameMs": 263.6
+  },
+  "dusk:04-path-approach": {
+   "draws": 113,
+   "meshes": 113,
+   "tris": 51986,
+   "frameMs": 197.5
+  },
+  "night:01-stall": {
+   "draws": 74,
+   "meshes": 74,
+   "tris": 43628,
+   "frameMs": 275.8
+  },
+  "night:03-yard-entrance": {
+   "draws": 83,
+   "meshes": 83,
+   "tris": 44878,
+   "frameMs": 256.1
+  },
+  "night:04-path-approach": {
+   "draws": 113,
+   "meshes": 113,
+   "tris": 51986,
+   "frameMs": 202.7
+  }
+ },
+ "scene": {
+  "materials": 142,
+  "textures": 60,
+  "textureMB": 125.9,
+  "meshesTotal": 268
+ },
+ "errors": []
+}

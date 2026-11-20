@@ -24,6 +24,10 @@ function poolTexture(scene: Scene) {
   return t;
 }
 
+/** TR4: anything that changes with the dark (the park kit's lanterns, glow pools and lifted colours) is told the level
+ *  (0 day .. 1 night) whenever it changes */
+export const NIGHT_HOOKS = new Set<(n: number) => void>();
+
 export class NightRenderer {
   /** 0 = full day, 1 = full night */
   level = 0;
@@ -123,5 +127,6 @@ export class NightRenderer {
     this.pools?.setEnabled(n > 0.01);
     this.moon.setEnabled(n > 0.05);
     this.bulbMat.emissiveColor = Color3.Lerp(Color3.FromHexString("#d8cfa0"), Color3.FromHexString("#fff6c8"), n);
+    for (const h of NIGHT_HOOKS) h(n);
   }
 }

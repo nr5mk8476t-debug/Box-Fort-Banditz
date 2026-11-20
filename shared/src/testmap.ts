@@ -17,6 +17,11 @@ import { usePlan, layout } from "./queens/check.js";
 import { TRASH400, T_HOME, T_RING, T_FORTS, T_STALLS, T_PARK, LOOP_AT, EDGE_AT } from "./queens/trashington400.js";
 import type { QRect, QUnit, XZ } from "./queens/plan.js";
 
+/** TR4 (Blake: "finish one small area first"): the first finished section of the park: F1's plot (north-west), the
+ *  SELL stall beside it, and the path between them. The client's park kit (client/src/game/parkKit.ts) draws it from
+ *  `arena.park`; here it is invisible collision (hide: true) matched to what's drawn. The other three plots and stalls
+ *  keep TR3's plain look until Blake approves the section. */
+export const FIN_FORT = "F1", FIN_STALL = "sell";
 /** TR2 (Blake): the test map is faster on foot (TR3: 8%) */
 export const TEST_PACE = 1.08; // (TR3, Blake: "10% could be a little bit too fast... only make it 8%")
 /** the open units (by plan id) */
@@ -184,13 +189,16 @@ export function buildTestMap(): ArenaLayout {
   // paths out to the crossings, a grass verge with trees, the roundabout. No centrepiece (Blake: it would be in the way
   // of loot being dragged home); lamp posts, bunting, benches and the notice board round the edge of the plaza.
   const scenery: NonNullable<ArenaLayout["scenery"]> = [];
+  const park: NonNullable<ArenaLayout["park"]> = { fort: TEST_SLOT[FIN_FORT], yardPoly: [], fences: [], gatePosts: [], stall: null, props: [], trees: [], track: [], paving: { plazaR: T_PARK.plazaR, path: R(-T_HOME.lane / 2, T_HOME.lane / 2, 0, T_PARK.kerbR) } };
   {
     const { plazaR, fenceR, kerbR } = T_PARK, L = T_HOME.lane / 2;
     scenery.push({ kind: "grassdisc", x: 0, z: 0, r: kerbR, h: kerbR - 0.4 }); // (a paved edge, then the lawn)
     const circ = (r: number, n: number, a0 = 0, a1 = Math.PI * 2): XZ[] => Array.from({ length: n }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return [+(r * Math.cos(a)).toFixed(3), +(r * Math.sin(a)).toFixed(3)] as XZ; });
     // the market's two paths, out to the crossings on the roundabout, and the plaza where they meet
-    boxes.push(slab(R(-L, L, -kerbR, kerbR), 0.045, "plaza", "#cdbfa2"), slab(R(-kerbR, kerbR, -L, L), 0.045, "plaza", "#cdbfa2"));
-    boxes.push({ ...polyBox(circ(plazaR, 40), 0.05, "plaza"), color: "#d6c6a4" });
+    // (TR4: the north path and the plaza are the finished section's paving: drawn by the park kit, kept here as the
+    //  ground's collision)
+    boxes.push({ ...slab(R(-L, L, 0, kerbR), 0.045, "plaza", "#cdbfa2"), hide: true }, slab(R(-L, L, -kerbR, 0), 0.045, "plaza", "#cdbfa2"), slab(R(-kerbR, kerbR, -L, L), 0.045, "plaza", "#cdbfa2"));
+    boxes.push({ ...polyBox(circ(plazaR, 40), 0.05, "plaza"), color: "#d6c6a4", hide: true });
     // the four plots: the square yard, clipped to the fence circle (its dirt), with a wooden fence round it: along the two
     // straight sides, round the back arc, round the plaza at the front corner; a gate on the path side, one at the back
     for (const f of T_FORTS) {
@@ -199,7 +207,9 @@ export function buildTestMap(): ArenaLayout {
       const dirt = circ(fenceR, 96).filter(([x, z]) => inside(x, z)).concat([[y.minX, y.minZ], [y.maxX, y.minZ], [y.maxX, y.maxZ], [y.minX, y.maxZ]].filter(([x, z]) => Math.hypot(x, z) <= fenceR) as XZ[]);
       const cx = (y.minX + y.maxX) / 2, cz = (y.minZ + y.maxZ) / 2;
       dirt.sort((p, q) => Math.atan2(p[1] - cz, p[0] - cx) - Math.atan2(q[1] - cz, q[0] - cx));
-      boxes.push({ ...polyBox(dirt, 0.042, "plaza"), color: "#a5784c" });
+      const fin = f.id === FIN_FORT;
+      boxes.push({ ...polyBox(dirt, 0.042, "plaza"), color: "#a5784c", ...(fin ? { hide: true } : {}) });
+      if (fin) park.yardPoly = dirt.map(([x, z]) => [x, z] as [number, number]);
       // the fence: walk the plot's outline (inner corner on the plaza circle, the straight sides, the back on the fence
       // circle), as short straight pieces; gaps for the gates
       const ix = sx * L, iz = sz * L, outer = sx * T_HOME.half, outerZ = sz * T_HOME.half;
@@ -235,14 +245,16 @@ export function buildTestMap(): ArenaLayout {
           if ((r1 - r0) * Ls < 0.2) continue;
           const p0: XZ = [a[0] + (b[0] - a[0]) * r0, a[1] + (b[1] - a[1]) * r0], p1: XZ = [a[0] + (b[0] - a[0]) * r1, a[1] + (b[1] - a[1]) * r1];
           const nx = -(p1[1] - p0[1]) / Ls * 0.06, nz = (p1[0] - p0[0]) / Ls * 0.06;
-          boxes.push({ ...polyBox([[p0[0] + nx, p0[1] + nz], [p1[0] + nx, p1[1] + nz], [p1[0] - nx, p1[1] - nz], [p0[0] - nx, p0[1] - nz]], 1.05, "fence"), color: "#8b6a43" });
+          boxes.push({ ...polyBox([[p0[0] + nx, p0[1] + nz], [p1[0] + nx, p1[1] + nz], [p1[0] - nx, p1[1] - nz], [p0[0] - nx, p0[1] - nz]], 1.05, "fence"), color: "#8b6a43", ...(fin ? { hide: true } : {}) });
+          if (fin) park.fences.push([[+p0[0].toFixed(3), +p0[1].toFixed(3)], [+p1[0].toFixed(3), +p1[1].toFixed(3)]]);
         }
       }
       // gate posts with a little flag (the plot's colour) either side of the front gate
       const along = Math.abs(f.front[0]) === L ? "z" : "x";
       for (const s2 of [-1, 1]) {
         const gx = along === "z" ? f.front[0] : f.front[0] + s2 * 1.75, gz = along === "z" ? f.front[1] + s2 * 1.75 : f.front[1];
-        boxes.push({ ...box(gx, gz, 0.22, 0.22, 1.5, "fence", 0), color: "#6e5232" });
+        boxes.push({ ...box(gx, gz, 0.22, 0.22, 1.5, "fence", 0), color: "#6e5232", ...(fin ? { hide: true } : {}) });
+        if (fin) park.gatePosts.push([gx, gz]);
       }
     }
     // the four stalls on the plaza's diagonals: a counter, four posts, a striped awning, the sign facing the path it
@@ -252,6 +264,14 @@ export function buildTestMap(): ArenaLayout {
       const r = qr(st.rect), cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2, w = r.maxX - r.minX;
       if (st.id === "board") continue;
       const look = STALL[st.id];
+      if (st.id === FIN_STALL) {
+        // TR4: the finished stall (drawn by the park kit): its collision is the counter and goods block (to counter
+        // height) and the four posts; the canopy is overhead (2.1 m and up at its lowest edge)
+        boxes.push({ ...box(cx, cz, w, w, 1.0, "kiosk", 0), hide: true });
+        for (const [px, pz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) boxes.push({ ...box(cx + px * (w / 2 - 0.1), cz + pz * (w / 2 - 0.1), 0.16, 0.16, 2.4, "fence", 0), hide: true });
+        park.stall = { id: st.id, label: st.label, x: cx, z: cz, w, face: look.face };
+        continue;
+      }
       boxes.push({ ...box(cx, cz, w, w, 1.0, "kiosk", 0), color: "#8a6440" });
       for (const [px, pz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) boxes.push({ ...box(cx + px * (w / 2 - 0.12), cz + pz * (w / 2 - 0.12), 0.14, 0.14, 2.3, "fence", 1.0), color: "#6e5232" });
       // the awning: stripes across the stall, alternating its colour and cream, a little proud on the sign side
@@ -285,7 +305,9 @@ export function buildTestMap(): ArenaLayout {
     for (let k = 0; k < 24; k++) {
       const a = (k / 24) * Math.PI * 2 + 0.07, x = (fenceR + 1) * Math.cos(a), z = (fenceR + 1) * Math.sin(a);
       if (Math.abs(x) < L + 2.5 || Math.abs(z) < L + 2.5) continue;
-      boxes.push({ ...box(x, z, 0.5, 0.5, 4.6, "tree", 0) });
+      // (TR4: the north-west quarter's trees are the finished section's: drawn by the park kit, three crown shapes)
+      if (x < 0 && z > 0) { boxes.push({ ...box(x, z, 0.5, 0.5, 4.6, "tree", 0), hide: true }); park.trees.push({ x, z, v: k % 3, s: 0.9 + hash(x, z) * 0.3, yaw: hash(z, x) * Math.PI * 2 }); }
+      else boxes.push({ ...box(x, z, 0.5, 0.5, 4.6, "tree", 0) });
     }
   }
   // forts: the box, the mat (pad) in front, facing out of the yard toward the market (the plan's pinwheel)
@@ -296,6 +318,30 @@ export function buildTestMap(): ArenaLayout {
     const fx = f.mat[0] - dx * 6, fz = f.mat[1] - dz * 6;
     boxes.push({ ...box(fx, fz, Math.abs(dx) ? 1.9 : 2.4, Math.abs(dx) ? 2.4 : 1.9, 1.5, "fort", 0) });
     forts.push({ slot: TEST_SLOT[f.id], x: fx, z: fz, padX: f.mat[0], padZ: f.mat[1], yaw, zone: r, backX: f.rear[0], backZ: f.rear[1] });
+    // TR4: the finished plot: a few recognisable things grouped at its edges (a sofa, stacked pallets, tyres, crates),
+    // never in the largest planned fort's footprint or on the ways in (tested), so upgrades never land on them; a worn
+    // track from both gates to the mat and the fort
+    if (f.id === FIN_FORT) {
+      // (in the yard's own frame, like the plan's fortMax: v in from the front gate's side, u along it)
+      const side = Math.abs(f.front[0] - r.maxX) < 0.01 ? "E" : Math.abs(f.front[0] - r.minX) < 0.01 ? "W" : Math.abs(f.front[1] - r.maxZ) < 0.01 ? "N" : "S";
+      const cu = side === "E" || side === "W" ? cz : cx;
+      const yardAt = (u: number, v: number): [number, number] => side === "E" ? [r.maxX - v, cu + u] : side === "W" ? [r.minX + v, cu - u] : side === "N" ? [cu - u, r.maxZ - v] : [cu + u, r.minZ + v];
+      const yawAt = (a: number) => (side === "E" ? -Math.PI / 2 : side === "W" ? Math.PI / 2 : side === "N" ? Math.PI : 0) + a;
+      const PROPS: { kind: "sofa" | "pallets" | "tyres" | "crates"; u: number; v: number; w: number; d: number; h: number; a: number }[] = [
+        { kind: "sofa", u: 5, v: 17, w: 2.0, d: 0.9, h: 0.85, a: Math.PI / 2 + 0.12 },
+        { kind: "pallets", u: -6.7, v: 16.6, w: 1.2, d: 1.0, h: 0.62, a: 0.2 },
+        { kind: "tyres", u: -7.9, v: 15.0, w: 0.8, d: 0.8, h: 0.75, a: 0 },
+        { kind: "crates", u: -3.8, v: 1.3, w: 1.3, d: 0.7, h: 0.6, a: -0.15 },
+      ];
+      for (const q of PROPS) {
+        const [x, z] = yardAt(q.u, q.v), yaw = yawAt(q.a), c = Math.abs(Math.cos(yaw)), sn = Math.abs(Math.sin(yaw));
+        park.props.push({ kind: q.kind, x, z, yaw, w: q.w, d: q.d, h: q.h });
+        // (collision: the prop's turned footprint's bounding box, a little smaller: nobody snags on an invisible corner)
+        boxes.push({ ...box(x, z, (q.w * c + q.d * sn) * 0.9, (q.w * sn + q.d * c) * 0.9, q.h, "junk", 0), hide: true });
+      }
+      park.track = [f.front as [number, number], [f.mat[0], f.mat[1]], [fx + dx * 1.3, fz + dz * 1.3], [fx - dx * 1.3, fz - dz * 1.3], f.rear as [number, number]];
+      continue;
+    }
     // junk-lot dressing: piles in the back corners (walk round them; they hide you a little)
     const back = (u: number, v: number): [number, number] => [fx - dx * v + dz * u, fz - dz * v - dx * u];
     for (const [u, v, w, h] of [[-6.5, 3.5, 2.2, 1.2], [6.5, 4.5, 1.6, 1.7], [-3.5, 6, 2.6, 0.9], [7, -6, 1.4, 1.1]] as const) {
@@ -548,7 +594,7 @@ export function buildTestMap(): ArenaLayout {
   landmarks.museumGate = { x: TEST_INFO!.museum.gate[0], z: TEST_INFO!.museum.gate[1], yaw: 0 };
   for (const p of places) landmarks[p.id] = { x: p.door[0], z: p.door[1], yaw: 0 };
   return {
-    halfSize: HALF, boxes: canonTest(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, crosswalks, shops, scenery, giantDoors, decor, variant: "test", pace: TEST_PACE,
+    park, halfSize: HALF, boxes: canonTest(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, crosswalks, shops, scenery, giantDoors, decor, variant: "test", pace: TEST_PACE,
     // (pedestrian grid: the pavements' middle lines; the test has no passers-by, but the shopkeepers need a graph)
     navLines: NAV, navLinesZ: NAV,
   };
