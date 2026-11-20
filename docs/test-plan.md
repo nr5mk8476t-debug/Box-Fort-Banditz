@@ -21,7 +21,8 @@ Note on the automated browser test: it renders 3D on the CPU, so it runs at sing
 | The stall | 1.6 m clear in front along its whole front; no loot spot or usable prop at it (its goods are scenery) | unit | pass |
 | Playing it | drag the giant duck in through the front gate onto the mat (it banks); walk out of the back gate; two players at the counter together (the real movement code) | unit | pass |
 | Measured | draws, meshes, triangles, materials, textures, frame time, load; fixed cameras before/after; day, dusk, night | `tests/park-measure.mjs` | `screenshots/tr4/README.md` |
-| The normal game | unit 382 + 40, typecheck | as every round | pass. Pushed at Blake's request ("can i play it now") before the smokes, draw budget and e2e x2: results to follow |
+| The normal game | unit, typecheck, smokes, draw budget, e2e x2 | as every round | Pushed at Blake's request ("can i play it now") before the full run; run straight after. Unit 382 + 40, typecheck, signal + server smokes: pass. e2e 464/464, e2e at LATENCY=110 464/464. Draw budget: one view over on the first run (caratrunLookOut 132 against 129: the crowd's variance, as before; the park kit is built only on the test map); measured again twice, 127 and 129, within budget |
+| The test map in the browser | the TR3 views, no errors; online host + joiner | `tests/testmap-shots.mjs`, `tests/testmap-2p.mjs` | pass, no errors; 2p 9/9 |
 
 ## TR3 checks: the roundabout market park (2026-11-20)
 
