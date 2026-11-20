@@ -11,6 +11,18 @@ Every phase adds to this plan. Nothing is reported as working unless one of thes
 
 Note on the automated browser test: it renders 3D on the CPU, so it runs at single-digit FPS with several windows open. Distance checks therefore compare movement against the number of simulation steps actually run, not wall-clock time. Frame rate and feel must be judged on a real machine.
 
+## TR4 checks: the park's first finished section (2026-11-20)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| The section's data | F1's plot, the SELL stall, the north path, the NW trees; hidden collision matched to the kit | unit | pass |
+| Clutter vs upgrades | every yard prop outside the biggest planned fort's footprint, off the ways in, inside the fence | unit | pass |
+| Ways in | a player-wide route from both gates to the mat and the fort; each gate wider than the widest giant (+0.8 m) | unit | pass |
+| The stall | 1.6 m clear in front along its whole front; no loot spot or usable prop at it (its goods are scenery) | unit | pass |
+| Playing it | drag the giant duck in through the front gate onto the mat (it banks); walk out of the back gate; two players at the counter together (the real movement code) | unit | pass |
+| Measured | draws, meshes, triangles, materials, textures, frame time, load; fixed cameras before/after; day, dusk, night | `tests/park-measure.mjs` | `screenshots/tr4/README.md` |
+| The normal game | unit 382 + 40, typecheck | as every round | pass. Pushed at Blake's request ("can i play it now") before the smokes, draw budget and e2e x2: results to follow |
+
 ## TR3 checks: the roundabout market park (2026-11-20)
 
 | Area | Check | How | Result |
@@ -18,9 +30,9 @@ Note on the automated browser test: it renders 3D on the CPU, so it runs at sing
 | The plan | every rule with a round ring road (crossings within 25 cm of the ring's line: it's 48 straight pieces); nearest landmark 19-25 s; floor areas | unit | pass (22.5 s estimated) |
 | The park | the round road (roadRings); fences round each plot; a clear walk (player-wide) from each mat out through the front gate onto the path and out through the back gate; the stalls on the plaza; nothing in the middle | unit (`shared/test/testmap.test.ts`) | pass |
 | Pace | 8% faster on the test map only | unit | pass |
-| In the browser | the park from above, the plaza, a home lot, from the roundabout, the dressed route, at dusk; draws and meshes; no errors | `tests/testmap-shots.mjs` | RESULT_SHOTS |
-| Online | host + plain-page joiner on the test map, a sighting recorded, the report saved | `tests/testmap-2p.mjs` | RESULT_2P |
-| The normal game | unit, typecheck, smokes, draw budget, e2e x2 | as every round | RESULT_GAME |
+| In the browser | the park from above, the plaza, a home lot, from the roundabout, the dressed route, at dusk; draws and meshes; no errors | `tests/testmap-shots.mjs` | pass, no errors (TR3's own run) |
+| Online | host + plain-page joiner on the test map, a sighting recorded, the report saved | `tests/testmap-2p.mjs` | 9/9 pass |
+| The normal game | unit, typecheck, smokes, draw budget, e2e x2 | as every round | all pass: unit 380 + 40, typecheck, signal + server smokes, draw budget (every view within budget), e2e 465/465, e2e at LATENCY=110 464/464 |
 
 ## TR2 checks: Trashington 400 (2026-11-20)
 

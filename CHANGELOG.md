@@ -2,6 +2,29 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## TR4: the park's first finished section (2026-11-20)
+
+Blake: "finish one small area first", with his annotated reference picture. The north-west plot (F1), the SELL stall
+and the north path, at the intended final quality, for his review before the other three plots and stalls.
+- **The park kit** (`client/src/game/parkKit.ts`):
+  - one painted texture sheet drawn in code (wood grain, cardboard with tape, striped canvas, corrugated metal, the
+    tarp, the SELL board, a crown);
+  - vertex-colour variation, with painted shading near the ground;
+  - geometry written straight into a handful of meshes.
+- **The SELL stall:** posts and braces, a waist-high counter, a sloping striped canopy with a scalloped edge, the
+  SELL board, scales, a salvage crate, a cashbox, spare crates under the counter, two hanging lanterns.
+- **F1's cardboard home:** mixed cardboard, folded flaps, tape, a doorway with its flap open, the owner's crown, the
+  flag, a tarp awning on sticks, a tin-can lantern.
+- **The yard:** patchy grass and dirt, a worn track from both gates to the mat and the fort, and a battered sofa,
+  stacked pallets, tyres and crates grouped at the edges, kept out of the biggest planned fort's footprint.
+- **The fence:** pallet sections with uneven planks, gaps and rails, and the odd corrugated patch.
+- **Trees:** three angular low-poly crown shapes.
+- **Ground:** the paved plaza and north path, with stone edging.
+- **Dusk and night:** glowing lantern glass, warm painted pools of light on the ground, the kit's colours lifted a
+  little. No real-time lights or shadows.
+- **Measured** before and after from fixed cameras (`tests/park-measure.mjs`, `screenshots/tr4/README.md`): draws and
+  meshes slightly down in every view, triangles up about 6-7k, one more material and five more textures.
+
 ## TR3: the roundabout market park (2026-11-20)
 
 Blake played TR2 and liked the size and the timing. He sent a reference picture ("ROUNDABOUT MARKET PARK") and
