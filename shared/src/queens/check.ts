@@ -174,7 +174,7 @@ export function validate(): Issue[] {
     if (!inRect(f.mat, matR, 0.01)) fail("mats", `${f.id}'s mat isn't where the largest fort puts it`);
   }
   // 6b. crossings: one within 12 m of every rear gate's way across, one at every market exit
-  for (const c of P.crossings) if (segsOf(ring.pts).every(([a, b]) => pointSeg(c.at, a, b).d > 0.01)) fail("crossings", `${c.id} isn't on the ring road`);
+  for (const c of P.crossings) if (segsOf(ring.pts).every(([a, b]) => pointSeg(c.at, a, b).d > 0.25)) fail("crossings", `${c.id} isn't on the ring road`); // (0.25: a round ring is drawn as straight pieces, up to 8 cm inside the true circle)
   for (const f of P.forts) { const out: XZ = [f.rear[0] * (P.ring / P.home.half), f.rear[1] * (P.ring / P.home.half)]; if (!P.crossings.some((c) => len(sub(c.at, out)) <= 12)) fail("crossings", `no crossing near ${f.id}'s rear gate`); }
   for (const e of P.marketExits) if (!P.crossings.some((c) => len(sub(c.at, e)) < 1)) fail("crossings", `no crossing at the market exit (${e})`);
   // 7. the railway

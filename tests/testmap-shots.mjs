@@ -17,15 +17,21 @@ await ev(() => { window.__bfb.testInput(true); window.__bfb.startMatch(); });
 await page.waitForFunction(() => window.__bfb.match().phase === "intro", null, { timeout: 30000 });
 await sleep(2500); await shot("01-at-the-fort");
 const views = JSON.parse(process.env.VIEWS ?? "null") ?? [
-  ["02-home-lot", -4, 1.7, 11, -1.33, 0.12], ["03-market", 0, 1.6, -6, 0, 0.05], ["04-leaving-home", -30, 1.6, 12, -Math.PI / 2, 0.02],
-  ["05-stain-way-south", -97, 1.6, 2, Math.PI, 0.03], ["06-plug-and-pray", -103, 1.7, -40, 2.4, 0.06], ["07-museum-goods-in", -145, 1.7, -119, -2.7, 0.1],
-  ["08-museum-gallery", -150, 1.7, -136, Math.PI, 0.05], ["09-wood-havoc-lane", -147, 1.7, -30, 2.41, 0.05], ["10-museum-front", -120, 1.6, -112, Math.PI, 0.1],
-  ["11-overview", -60, 90, 40, -2.4, 0.7],
+  ["02-park-overview", 0, 40, -66, 0, 0.62], ["03-plaza-street-level", 0, 1.7, -15, 0, 0.04], ["04-home-lot", -4, 1.7, 9, -1.1, 0.12],
+  ["05-park-from-the-roundabout", 30, 1.7, -30, -0.75, 0.04], ["06-stain-way-south", -101, 1.6, 2, Math.PI, 0.03], ["07-plug-and-pray", -107, 1.7, -40, 2.4, 0.06],
+  ["08-museum-goods-in", -149, 1.7, -119, -2.7, 0.1], ["09-wood-havoc-lane", -151, 1.7, -30, 2.41, 0.05], ["10-overview", -60, 90, 40, -2.4, 0.7],
 ];
+// and at dusk (the scavenge's last minutes): the approach to the park across the roundabout (Blake's third picture)
+const duskViews = JSON.parse(process.env.DUSK_VIEWS ?? "null") ?? [["11-dusk-approach", 3, 1.7, -52, 0, 0.03], ["12-dusk-plaza", 0, 1.7, -15, 0, 0.04]];
 // draws (the engine's real count, median of 6 frames) and meshes drawn at each view: the performance note
 const cost = () => ev(() => new Promise((res) => { const e = window.__bfb.scene().getEngine(); let prev = e._drawCalls.current, k = 0; const dc = []; const f = () => { const c = e._drawCalls.current; dc.push(c - prev); prev = c; if (++k < 7) requestAnimationFrame(f); else { dc.shift(); dc.sort((x, y) => x - y); res({ draws: dc[dc.length >> 1], meshes: window.__bfb.scene().getActiveMeshes().length }); } }; requestAnimationFrame(f); }));
 const costs = {};
 for (const [n, x, y, z, yaw, pitch] of views) { await ev((a) => window.__bfb.camAt(...a), [x, y, z, yaw, pitch]); await sleep(3500); await shot(n); costs[n] = await cost(); }
+if (duskViews.length) {
+  for (let k = 0; k < 4 && (await ev(() => window.__bfb.match().phase)) !== "dusk"; k++) { await ev(() => window.__bfb.setTimeLeft(1)); await sleep(1500); }
+  await sleep(4000);
+  for (const [n, x, y, z, yaw, pitch] of duskViews) { await ev((a) => window.__bfb.camAt(...a), [x, y, z, yaw, pitch]); await sleep(3500); await shot(n); costs[n] = await cost(); }
+}
 console.log("cost", JSON.stringify(costs));
 fs.writeFileSync(`${OUT}/costs.json`, JSON.stringify(costs, null, 1));
 console.log("errors", errs.length, errs.slice(0, 5).join(" | "));

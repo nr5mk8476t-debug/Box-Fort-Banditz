@@ -5,7 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World } from "../src/world.js";
-import { setCityMap, buildTrashington, TEST_INFO, lootDef, type MoveInput } from "../src/index.js";
+import { setCityMap, buildTrashington, TEST_INFO, lootDef, inFoot, type MoveInput } from "../src/index.js";
+import { T_PARK } from "../src/queens/trashington400.js";
 import { usePlan, validate, routes, floorAreas, railColumns } from "../src/queens/check.js";
 import { TRASH400, LOOP_AT, EDGE_AT, T_RING } from "../src/queens/trashington400.js";
 
@@ -39,7 +40,7 @@ const fwd = (seq: number): MoveInput => ({ seq, mx: 0, mz: 1, yaw: 0, pitch: 0, 
 
 test("TR test map: four equal yards on the home block (rotated forts, mats in the yards), the market, no passers-by, no city events, nothing else on the map's rules", () => {
   const { w, arena } = testWorld();
-  assert.equal(arena.variant, "test"); assert.equal(arena.halfSize, 200); assert.equal(arena.pace, 1.1, "10% faster on foot (Blake, TR2)");
+  assert.equal(arena.variant, "test"); assert.equal(arena.halfSize, 200); assert.equal(arena.pace, 1.08, "8% faster on foot (Blake, TR3)");
   assert.equal(arena.forts!.length, 4);
   const sizes = arena.forts!.map((f) => [f.zone.maxX - f.zone.minX, f.zone.maxZ - f.zone.minZ]);
   for (const s of sizes) assert.deepEqual(s, [18, 18]);
@@ -125,7 +126,7 @@ test("TR the recorder: a sighting on Stain Way (where, when, what each carried, 
   assert.ok(bl && bl.places.includes("THE MUSEUM OF QUESTIONABLE HISTORY") && bl.wayHome === "Wood Havoc Lane", JSON.stringify(bl));
 });
 
-test("TR2 the test map is 10% faster on foot (sprint and walk), and only the test map", () => {
+test("TR2/TR3 the test map is 8% faster on foot (sprint and walk), and only the test map", () => {
   const run = (pace: number | undefined, sprint: boolean) => {
     setCityMap("test"); const arena = buildTrashington(); setCityMap("new");
     if (pace === undefined) delete (arena as any).pace; else arena.pace = pace;
@@ -136,8 +137,29 @@ test("TR2 the test map is 10% faster on foot (sprint and walk), and only the tes
     return p.move.z - (-LOOP_AT + 10);
   };
   for (const sprint of [true, false]) {
-    const base = run(undefined, sprint), fast = run(1.1, sprint);
-    assert.ok(fast / base > 1.07 && fast / base < 1.12, `${sprint ? "sprint" : "walk"}: ${base.toFixed(1)} m vs ${fast.toFixed(1)} m in 3 s`);
+    const base = run(undefined, sprint), fast = run(1.08, sprint);
+    assert.ok(fast / base > 1.05 && fast / base < 1.10, `${sprint ? "sprint" : "walk"}: ${base.toFixed(1)} m vs ${fast.toFixed(1)} m in 3 s`);
   }
   setCityMap("new"); assert.equal(buildTrashington().pace, undefined, "the normal city's pace is unchanged");
 });
+
+test("TR3 the roundabout market park: a round road, the park inside it; every plot fenced with two open gates (a clear walk from the mat out of each); the stalls on the plaza; no centrepiece", () => {
+  setCityMap("test"); const arena = buildTrashington(); setCityMap("new");
+  assert.deepEqual(arena.roadRings, [{ x: 0, z: 0, r0: T_PARK.kerbR, r1: T_PARK.kerbR + 8 }]);
+  const fences = arena.boxes.filter((b) => b.kind === "fence" && Math.hypot(b.x, b.z) < T_PARK.kerbR);
+  assert.ok(fences.length > 40, `${fences.length} fence pieces`);
+  const clear = (a: [number, number], b: [number, number]) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let t = 0; t <= L; t += 0.2) { const x = a[0] + ((b[0] - a[0]) * t) / L, z = a[1] + ((b[1] - a[1]) * t) / L; for (const f of fences) for (const [dx, dz] of [[0, 0], [0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) if (inFoot(f, x + dx, z + dz)) return `blocked at (${x.toFixed(1)}, ${z.toFixed(1)})`; } return ""; };
+  for (const f of TRASH400.forts) {
+    const out = (p: [number, number], k: number): [number, number] => [p[0] + Math.sign(p[0]) * (Math.abs(p[0]) === T_HOME_HALF ? k : 0), p[1] + Math.sign(p[1]) * (Math.abs(p[1]) === T_HOME_HALF ? k : 0)];
+    // out of the front gate onto the path, and out of the back gate toward the road
+    const front = f.front as [number, number], rear = f.rear as [number, number];
+    const toPath: [number, number] = Math.abs(front[0]) < 6 ? [Math.sign(front[0]) * 1, front[1]] : [front[0], Math.sign(front[1]) * 1];
+    assert.equal(clear(f.mat as [number, number], front), "", `${f.id}: mat to the front gate`);
+    assert.equal(clear(front, toPath), "", `${f.id}: through the front gate onto the path`);
+    assert.equal(clear(f.mat as [number, number], rear), "", `${f.id}: mat to the back gate`);
+    assert.equal(clear(rear, out(rear, 3)), "", `${f.id}: through the back gate`);
+  }
+  // the stalls are on the plaza, the middle is clear (Blake: nothing to drag loot round)
+  for (const b of arena.boxes) if (Math.hypot(b.x, b.z) < 3 && b.h > 0.2 && b.y - b.h / 2 < 2) assert.fail(`something in the middle of the plaza: ${b.kind} at (${b.x}, ${b.z})`);
+});
+const T_HOME_HALF = 23;

@@ -1675,6 +1675,9 @@ export class CityRenderer {
       label.material = unlitTextured(this.scene, textTexture(this.scene, PLAYER_COLOR_NAMES[f.slot] + "'S FORT", { w: 1024, h: 220, fg: color, stroke: "#1b1420" }), "fortLabel");
       label.isPickable = false;
       // Phase 3: painted yard boundary. Loot resting inside it banks for this fort after 10 s.
+      // (TR3: not on Trashington 400's test map: its plots are fenced and rounded, and the square banking zone's painted
+      //  lines crossed the paths and the corners outside the fences)
+      if (this.arena.variant === "test") continue;
       const z = f.zone;
       const w = z.maxX - z.minX, d = z.maxZ - z.minZ, cx = (z.minX + z.maxX) / 2, cz = (z.minZ + z.maxZ) / 2;
       // (C1.1: bold, on top of Tent Town's ground, with a flag post at each corner: your safe zone)

@@ -9,7 +9,7 @@
 import type { World, PlayerSim } from "./world.js";
 import { lootDef } from "./loot.js";
 import { hyp } from "./fmath.js";
-import { TRASH400, LOOP_AT, T_HOME, T_RING } from "./queens/trashington400.js";
+import { TRASH400, LOOP_AT, T_PARK } from "./queens/trashington400.js";
 import type { XZ } from "./queens/plan.js";
 import { TEST_SLOT } from "./testmap.js";
 
@@ -21,7 +21,9 @@ export const PLAYTEST = {
   after: 20,
   eye: 1.6,
 };
-const HOME_HALF = T_HOME.half + T_HOME.pave; // the home block's edge (27 m)
+/** home = inside the roundabout market park (TR3: a circle) */
+const HOME_R = T_PARK.kerbR;
+const atHome = (x: number, z: number) => Math.hypot(x, z) <= HOME_R;
 
 interface Sample { t: number; x: number; z: number; carry: string; size: string }
 export interface Sighting {
@@ -47,9 +49,9 @@ export interface Trip {
 /** a named place for a point on the test map (the plan's roads, lanes, the open places, the yards) */
 export function placeName(x: number, z: number, places: { id: string; name: string; inside: { minX: number; maxX: number; minZ: number; maxZ: number } }[]): string {
   for (const p of places) if (x >= p.inside.minX && x <= p.inside.maxX && z >= p.inside.minZ && z <= p.inside.maxZ) return p.name;
-  if (Math.abs(x) <= HOME_HALF && Math.abs(z) <= HOME_HALF) {
+  if (atHome(x, z)) {
     for (const f of TRASH400.forts) { const r = f.yard; if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return `${f.id}'s yard`; }
-    return "the market";
+    return "the market park";
   }
   for (const u of TRASH400.units) for (const g of u.grounds ?? []) { const r = g.rect; if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return `${u.name}: ${g.name.replace(/ \(.*/, "")}`; }
   let best = "", bd = 1e9;
@@ -61,7 +63,7 @@ export function placeName(x: number, z: number, places: { id: string; name: stri
       if (d <= half && d < bd) { bd = d; best = name; }
     }
   };
-  for (const r of TRASH400.roads) near(r.kind === "ring" ? [[-T_RING, -T_RING], [T_RING, -T_RING], [T_RING, T_RING], [-T_RING, T_RING], [-T_RING, -T_RING]] : r.pts, r.w / 2 + r.sw + 0.5, r.name);
+  for (const r of TRASH400.roads) near(r.pts, r.w / 2 + r.sw + 0.5, r.kind === "ring" ? "THE ROUNDABOUT" : r.name);
   for (const p of TRASH400.paths) near(p.pts, p.w / 2 + 1, p.id === "al_pub" ? "WOOD HAVOC LANE (behind the pub)" : p.kind === "alley" ? "a back lane" : p.note?.split(":")[0] ?? p.id);
   return best || "between buildings";
 }
@@ -95,7 +97,7 @@ export class PlaytestRecorder {
     const it = p.hand ? this.w.items.get(p.hand) : undefined;
     return { type: it ? lootDef(it.type).name : "", size: it ? lootDef(it.type).size : "", pockets: p.pockets.filter(Boolean).length };
   }
-  private home = (p: PlayerSim) => Math.abs(p.move.x) <= HOME_HALF && Math.abs(p.move.z) <= HOME_HALF;
+  private home = (p: PlayerSim) => atHome(p.move.x, p.move.z);
 
   /** called every simulation tick */
   tick(dt: number) {
@@ -148,7 +150,7 @@ export class PlaytestRecorder {
     let still = 0, maxStill = 0;
     for (let k = 1; k < after.length; k++) { const sp = hyp(after[k].x - after[k - 1].x, after[k].z - after[k - 1].z) / Math.max(0.1, after[k].t - after[k - 1].t); still = sp < 0.8 ? still + (after[k].t - after[k - 1].t) : 0; maxStill = Math.max(maxStill, still); }
     const wasLane = before.some((q) => inLane(q.x, q.z)), lane = !wasLane && after.some((q) => inLane(q.x, q.z));
-    const home = after.some((q) => Math.abs(q.x) <= HOME_HALF && Math.abs(q.z) <= HOME_HALF);
+    const home = after.some((q) => atHome(q.x, q.z));
     const note = lane ? "ducked into Wood Havoc Lane" : turned ? "turned back" : maxStill >= 4 ? "stopped / waited" : home ? "went home" : "kept going";
     return { turned, stopped: maxStill >= 4, lane, home, note };
   }

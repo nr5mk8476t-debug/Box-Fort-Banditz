@@ -62,7 +62,17 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of TR2: Trashington 400, smaller and dressed)
+## Next up (as of TR3: the roundabout market park)
+- Blake (2026-11-20) likes the 400 m size and the timing. The plan is `docs/trashington400/roadmap.md`. He wants one
+  thing at a time: no cars, no shadows, no shops until he's happy with the park. The test map has no ink outline (cheaper)
+  and is 8% faster on foot.
+- The home block is a round park (`T_PARK` in `trashington400.ts`: plaza 10 m, fences 31 m, kerb 33 m, the road's
+  centre line 37 m). It's built in `shared/src/testmap.ts`: the plaza, the stalls, rounded fenced plots with two gates,
+  the verge, the trees, the bunting.
+- Waiting on Blake: a play of the park, then which stage next (roadmap Stage 1b: the full massing; or Stage 2: the style
+  kit on one street).
+
+## Earlier: Next up (as of TR2: Trashington 400, smaller and dressed)
 - Blake (2026-11-20, after playing TR1): too big. The plan is now 400 x 400 m with 18 m yards
   (`shared/src/queens/trashington400.ts`, `TRASH400`; pictures and walked times: `npx tsx tests/trash400-report.ts` ->
   `docs/trashington400/`). He wants "quick dopamine... iconic little areas", an arcade loop, not an open world.

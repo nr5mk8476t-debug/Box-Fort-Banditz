@@ -182,3 +182,14 @@ Throughout:
 7. **The park in the middle:** trees and grass only, or a centrepiece (a fountain, a statue of the Mayor)? (A new
    landmark only if you want one.)
 8. **First-release shops:** still the 20 (8 / 7 / 5), or fewer, finished better, first?
+
+## Blake's answers (2026-11-20) and what TR3 did
+1. The roundabout: rounded plots inside a round park, about 15% bigger. Done in TR3 (the park is 66 m across, the plots
+   fenced and rounded).
+2. Cars: not yet ("one thing at a time").
+3. The outline: whatever's cheaper. Off on the test map.
+4. Shadows: not yet (end-of-project polish).
+5. References: not yet; the centre and the park first (his "ROUNDABOUT MARKET PARK" picture).
+6. Pace: 8%, not 10%.
+7. The park: trees and grass. No centrepiece for now (it would be in the way of loot being dragged home).
+8. Shops: not yet. "If I'm confident that you do a good job, we will do bigger updates."

@@ -463,6 +463,9 @@ export class ArenaScene {
     void toon;
     scene.blockMaterialDirtyMechanism = false;
     installOneDrawOutlines(scene); // (R12.8: an ink outline is one draw, not two)
+    // TR3 (Blake: "whatever gives you a cheaper draw"): no ink outline on Trashington 400's test map. His reference
+    // pictures have none, and every outlined mesh's shell is a draw of its own. (?ink=on brings it back for comparison.)
+    if (arena.variant === "test" && !(typeof location !== "undefined" && /[?&]ink=on\b/.test(location.search))) { const ol = (scene as any).getOutlineRenderer?.(); if (ol) ol.enabled = false; }
   }
 
   /** Compile every shader before the player drops in (avoids a freeze on the first frames). */

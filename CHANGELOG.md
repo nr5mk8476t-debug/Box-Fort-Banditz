@@ -2,6 +2,36 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## TR3: the roundabout market park (2026-11-20)
+
+Blake played TR2 and liked the size and the timing. He sent a reference picture ("ROUNDABOUT MARKET PARK") and
+answered the roadmap's questions:
+- a roundabout, the forts' plots rounded to fit, the park about 15% bigger;
+- no cars yet, no shadows yet, no centrepiece (it would be in the way of loot);
+- whatever's cheapest for the outline;
+- 8% faster, not 10%;
+- no shops until he's seen this.
+
+Still the test map only (`?map=test`).
+- **The home block is a round park** inside a round road. The roundabout's centre line is at 37 m, the kerb at 33 m:
+  the park is 66 m across, against the 54 m square it replaces.
+  - The paved plaza in the middle (10 m) has the four market stalls on its diagonals (SELL, BUY, UPGRADE, CRAFT,
+    each with a striped awning in its colour), bunting across the paths, benches, lamp posts, and the PARK NOTICES
+    board at the edge of the south path.
+  - The four 18 m plots are rounded at the back to the park's circle and at the front corner to the plaza, with a
+    wooden fence round each, a front gate on the path, a back gate to the road, and gate posts.
+  - The market's paths run out to zebra crossings, past a grass verge with trees and lamp posts.
+  - The roundabout's outer pavement is cut round it, with small pavement squares at the corners.
+  - Nothing in the middle of the plaza.
+- **The plan** (`trashington400.ts`, `T_PARK`): a round ring road, the spokes joining it, the forts' gates and the
+  stalls moved to fit. Every rule passes. The nearest landmark is 22.5 s estimated (was 22.1).
+- **8% faster on foot** on the test map (was 10%).
+- **No ink outline on the test map:** Blake's pictures have none, and it's a draw per outlined mesh. `?ink=on` brings
+  it back.
+- **The recorder's "home"** is the park's circle now.
+- **Tests:** a park test (the round road, the fences, a clear walk from each mat out through both gates, the stalls on
+  the plaza, nothing in the middle); the pace test at 8%.
+
 ## TR2: Trashington 400, smaller and dressed like Blake's photos (2026-11-20)
 
 Blake, playtesting TR1: the fort yards and the square are too big, the city feels too big ("quick dopamine... iconic

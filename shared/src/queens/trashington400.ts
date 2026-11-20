@@ -11,6 +11,12 @@ import { R, type XZ, type QRect, type Side, type QRoad, type QPath, type QBlock,
 /** yards 36 m (v2), market lanes 20 m (v2 28 m: see the proposal), block pavement 4 m, ring road 8 m + 4 m pavements */
 /** yards 18 m (Blake: half of 36), market lanes 10 m, block pavement 4 m, ring road 8 m + 4 m pavements */
 export const T_HOME = { yard: 18, lane: 10, half: 23, pave: 4, ringW: 8, ringPave: 4 } as const;
+/** TR3 (Blake, 2026-11-20, with his "ROUNDABOUT MARKET PARK" reference): the home block is a ROUND PARK inside a
+ *  roundabout, about 15% bigger than the square it replaces. The yards stay 18 x 18 m (the forts' plans need them) but
+ *  are rounded: their fences follow the park's circle at the back and the plaza's circle at the front corner. Inside
+ *  out: the plaza (the market stalls, the board) to plazaR, the yards and the market's paths to fenceR, a grass verge
+ *  with trees to kerbR, the roundabout road to kerbR + ringW, its outer pavement to RO. */
+export const T_PARK = { plazaR: 10, fenceR: 31, kerbR: 33 } as const;
 /** the largest planned fort, at the new yard size: the 500 m plan's (30 x 34 m) halved: big upgrades stack UP, not out */
 export const FORT_MAX_400 = {
   border: 0.3,
@@ -20,13 +26,13 @@ export const FORT_MAX_400 = {
   traps: [{ u: [-2, 0], v: [2, 3] }, { u: [2.5, 4.5], v: [2, 3] }],
   mat: { u: [-0.8, 0.8], v: [4.2, 5.8] },
 };
-export const T_RING = T_HOME.half + T_HOME.pave + T_HOME.ringW / 2; // 54
+export const T_RING = T_PARK.kerbR + T_HOME.ringW / 2; // 37: the roundabout's centre line
 /** the avenue loop's centre line, and the edge road's: set so the nearest landmark is ~25 s from every mat */
 export const LOOP_AT = 100, EDGE_AT = 192, SPOKE_OFF = 12;
 /** how far past the loop's corner a landmark's public door is (Blake: landmarks out); its goods gate 34 m further on */
 export const LM_DOOR = 20, LM_BACK = 50;
 const AV = { w: 8, sw: 4 }, SIDE = { w: 7, sw: 3 }, EDGE = { w: 7, sw: 3 };
-const RO = T_RING + T_HOME.ringW / 2 + T_HOME.ringPave; // 39: the ring's outer pavement edge
+const RO = T_RING + T_HOME.ringW / 2 + T_HOME.ringPave; // 45: the roundabout's outer pavement edge (the blocks start here)
 const AI = LOOP_AT - AV.w / 2 - AV.sw, AO = LOOP_AT + AV.w / 2 + AV.sw; // 92 / 108: the avenue corridor's edges
 const EI = EDGE_AT - EDGE.w / 2 - EDGE.sw; // 185.5
 const SH = SIDE.w / 2 + SIDE.sw; // 6.5: a spoke's corridor half
@@ -44,22 +50,27 @@ const QUAD = ["NW", "NE", "SE", "SW"] as const;
 // ---- the home block ------------------------------------------------------------------------------------------------
 const Y = T_HOME.half, L = T_HOME.lane / 2; // 46, 10
 export const T_FORTS: QFort[] = [
-  { id: "F1", slot: 0, corner: "NW", yard: R(-Y, -L, L, Y), mat: [-10, 14], front: [-L, 22], rear: [-Y, 10], colour: "#e74c3c" },
-  { id: "F2", slot: 1, corner: "NE", yard: R(L, Y, L, Y), mat: [14, 10], front: [22, L], rear: [10, Y], colour: "#3498db" },
-  { id: "F3", slot: 2, corner: "SE", yard: R(L, Y, -Y, -L), mat: [10, -14], front: [L, -22], rear: [Y, -10], colour: "#2ecc71" },
-  { id: "F4", slot: 3, corner: "SW", yard: R(-Y, -L, -Y, -L), mat: [-14, -10], front: [-22, -L], rear: [-10, -Y], colour: "#f1c40f" },
+  { id: "F1", slot: 0, corner: "NW", yard: R(-Y, -L, L, Y), mat: [-10, 14], front: [-L, 22], rear: [-Y, 14], colour: "#e74c3c" },
+  { id: "F2", slot: 1, corner: "NE", yard: R(L, Y, L, Y), mat: [14, 10], front: [22, L], rear: [14, Y], colour: "#3498db" },
+  { id: "F3", slot: 2, corner: "SE", yard: R(L, Y, -Y, -L), mat: [10, -14], front: [L, -22], rear: [Y, -14], colour: "#2ecc71" },
+  { id: "F4", slot: 3, corner: "SW", yard: R(-Y, -L, -Y, -L), mat: [-14, -10], front: [-22, -L], rear: [-14, -Y], colour: "#f1c40f" },
 ];
 /** the market square is 20 x 20 m where the lanes cross: a stall on each of its corners (each seen straight down two
  *  lanes), the board in the middle (seen from all four front gates) */
 export const T_STALLS: { id: string; label: string; rect: QRect }[] = [
-  { id: "sell", label: "SELL", rect: R(-5, -2.5, 2.5, 5) }, { id: "buy", label: "BUY", rect: R(2.5, 5, 2.5, 5) },
-  { id: "upgrade", label: "UPGRADE", rect: R(2.5, 5, -5, -2.5) }, { id: "craft", label: "CRAFT", rect: R(-5, -2.5, -5, -2.5) },
-  { id: "board", label: "BOARD", rect: R(-1, 1, -0.6, 0.6) },
+  // (TR3: on the plaza's four diagonals, between the yards' rounded front corners, facing the middle)
+  { id: "sell", label: "SELL", rect: R(-7, -4.2, 4.2, 7) }, { id: "buy", label: "BUY", rect: R(4.2, 7, 4.2, 7) },
+  { id: "upgrade", label: "UPGRADE", rect: R(4.2, 7, -7, -4.2) }, { id: "craft", label: "CRAFT", rect: R(-7, -4.2, -7, -4.2) },
+  { id: "board", label: "PARK NOTICES", rect: R(-4.7, -4.1, -12.2, -10.4) }, // (at the edge of the south path, just off the plaza: nothing in the middle, Blake)
 ];
 
 // ---- roads ----------------------------------------------------------------------------------------------------------
-const CH = 4; // the ring's chamfered corners
-const ring: XZ[] = [[-T_RING + CH, -T_RING], [T_RING - CH, -T_RING], [T_RING, -T_RING + CH], [T_RING, T_RING - CH], [T_RING - CH, T_RING], [-T_RING + CH, T_RING], [-T_RING, T_RING - CH], [-T_RING, -T_RING + CH], [-T_RING + CH, -T_RING]];
+// the roundabout: a circle (48 straight pieces for the checker and the route model)
+const ring: XZ[] = Array.from({ length: 49 }, (_, i) => { const a = (i % 48) / 48 * Math.PI * 2; return [+(T_RING * Math.cos(a)).toFixed(3), +(T_RING * Math.sin(a)).toFixed(3)] as XZ; });
+/** where a road meeting the roundabout at offset `off` from its axis joins the circle */
+const onRing = (off: number) => +Math.sqrt(T_RING * T_RING - off * off).toFixed(3);
+/** a spoke starts just inside the circle, so it crosses the ring's line (the route model joins lines where they cross) */
+const spokeIn = (off: number) => +(onRing(off) - 0.5).toFixed(3);
 const A = LOOP_AT, E = EDGE_AT;
 export const T_ROADS: QRoad[] = [
   { id: "ring", name: "FORT BLOCK ROAD", kind: "ring", w: T_HOME.ringW, sw: T_HOME.ringPave, pts: ring },
@@ -70,10 +81,10 @@ export const T_ROADS: QRoad[] = [
   { id: "ditmarsh", name: "DIT MARSH BLVD", kind: "main", ...AV, pts: [[A, -E], [A, E]] },
   // the spokes, offset 12 m from the market's lanes in the same turning sense; the north one stops at Rooster Velt
   // (the removed north spur), the other three run on to the edge
-  { id: "mkt_n", name: "MARKET ST", kind: "side", ...SIDE, pts: [[SPOKE_OFF, T_RING], [SPOKE_OFF, A]] },
-  { id: "queasy_e", name: "QUEASY BLVD (EAST)", kind: "side", ...SIDE, pts: [[T_RING, -SPOKE_OFF], [E, -SPOKE_OFF]] },
-  { id: "mkt_s", name: "MARKET ST (SOUTH)", kind: "side", ...SIDE, pts: [[-SPOKE_OFF, -T_RING], [-SPOKE_OFF, -E]] },
-  { id: "queasy_w", name: "QUEASY BLVD", kind: "side", ...SIDE, pts: [[-T_RING, SPOKE_OFF], [-E, SPOKE_OFF]] },
+  { id: "mkt_n", name: "MARKET ST", kind: "side", ...SIDE, pts: [[SPOKE_OFF, spokeIn(SPOKE_OFF)], [SPOKE_OFF, A]] },
+  { id: "queasy_e", name: "QUEASY BLVD (EAST)", kind: "side", ...SIDE, pts: [[spokeIn(SPOKE_OFF), -SPOKE_OFF], [E, -SPOKE_OFF]] },
+  { id: "mkt_s", name: "MARKET ST (SOUTH)", kind: "side", ...SIDE, pts: [[-SPOKE_OFF, -spokeIn(SPOKE_OFF)], [-SPOKE_OFF, -E]] },
+  { id: "queasy_w", name: "QUEASY BLVD", kind: "side", ...SIDE, pts: [[-spokeIn(SPOKE_OFF), SPOKE_OFF], [-E, SPOKE_OFF]] },
   // the edge roads (buildings on their inner side; beyond: the shore, the rail yard, the expressway wall)
   { id: "border_n", name: "NORTH SHORE RD", kind: "border", ...EDGE, pts: [[-E, E], [E, E]] },
   { id: "border_s", name: "SOUTH SHORE RD", kind: "border", ...EDGE, pts: [[-E, -E], [E, -E]] },
@@ -82,7 +93,7 @@ export const T_ROADS: QRoad[] = [
 ];
 // zebra crossings on the ring: one at each market exit (beside its spoke), one outside each fort's rear gate; and on the
 // avenues where the shopping strips are crossed most (drawn; the ring's are the checked ones)
-const exitN: XZ = [2, T_RING], rearN: XZ = [-T_RING, 10];
+const exitN: XZ = [2, onRing(2)], rearN: XZ = [-onRing(14), 14];
 export const T_CROSSINGS: { id: string; at: XZ; across: "x" | "z"; w: number }[] = [
   ...QUAD.map((q, k) => ({ id: `x_mkt_${"nesw"[k]}`, at: rotP(k, exitN), across: (k % 2 ? "x" : "z") as "x" | "z", w: 6 })),
   ...QUAD.map((q, k) => ({ id: `x_f${k + 1}`, at: rotP(k, rearN), across: (k % 2 ? "z" : "x") as "x" | "z", w: 5 })),

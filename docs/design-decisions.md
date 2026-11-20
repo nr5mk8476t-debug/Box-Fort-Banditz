@@ -2,6 +2,24 @@
 
 _Last updated: 2026-09-25 (Phase 1 started)._
 
+## TR3: the roundabout market park (2026-11-20)
+Blake's reference picture and answers (`docs/trashington400/roadmap.md`, questions 1-8). Decisions:
+- **"15% bigger"** was read as the park's width: 66 m across inside the road, against TR2's 54 m square (+22%). The
+  yards stay 18 m, so the forts' plans fit, and the market's paths stay 10 m. The extra room is the round plaza (10 m)
+  and the grass verge (2 m) where the picture has its trees and lamp posts. The circle had to clear the yards' square
+  corners, and the biggest planned fort had to fit inside the fences.
+- **Rounded plots, square banking zones.** Each plot's fence follows the park's circle at the back and the plaza's at
+  the front corner. The fort's yard (its banking zone) is still the 18 m square, so the rules and upgrades don't change;
+  only the fence and the dirt are round.
+- **Fences with two open gates.** The picture has fenced plots. Starter yards had no walls before (walls come with
+  upgrades). The fence is 1 m high with a 3.2 m front gate onto the path and a 2.6 m back gate toward the road.
+  A test walks out of each. It's easy to remove if it gets in the way.
+- **The stalls face the paths in a pinwheel**, like the forts. The middle stays empty for dragging loot (Blake: no
+  centrepiece), and the notice board moved to the edge of the south path.
+- **The outline is off on the test map only** (Blake: "whatever gives you a cheaper draw"). Each outlined mesh's shell
+  is a draw of its own. The normal game keeps its look.
+- **No cars and no shadows** (Blake: one thing at a time; shadows are end-of-project polish).
+
 ## TR2: Trashington 400, smaller, faster, dressed (2026-11-20)
 Blake played TR1 and found it too big. His picks: 18 m yards, 400 x 400 m, 10% faster, the route dressed like his
 photos, the game's names kept. Decisions:

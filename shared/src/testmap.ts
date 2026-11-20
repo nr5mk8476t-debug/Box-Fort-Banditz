@@ -14,11 +14,11 @@
 // Picked with ?map=test (both players' pages), setCityMap("test") in code.
 import { box, polyBox, canonBoxes, type ArenaLayout, type Box, type FortLot, type Rect, type ShopDef, type SpawnPoint } from "./arena.js";
 import { usePlan, layout } from "./queens/check.js";
-import { TRASH400, T_HOME, T_RING, T_FORTS, T_STALLS, LOOP_AT, EDGE_AT } from "./queens/trashington400.js";
+import { TRASH400, T_HOME, T_RING, T_FORTS, T_STALLS, T_PARK, LOOP_AT, EDGE_AT } from "./queens/trashington400.js";
 import type { QRect, QUnit, XZ } from "./queens/plan.js";
 
-/** TR2 (Blake): the test map is 10% faster on foot */
-export const TEST_PACE = 1.1;
+/** TR2 (Blake): the test map is faster on foot (TR3: 8%) */
+export const TEST_PACE = 1.08; // (TR3, Blake: "10% could be a little bit too fast... only make it 8%")
 /** the open units (by plan id) */
 export const TEST_OPEN = ["plugpray", "fishy", "museum"] as const;
 /** ground height of pavements, blocks and yards (roads are at 0) */
@@ -132,7 +132,7 @@ function onRoute(r: Rect) {
   const pubBlock = r.minX >= -EI - 0.5 && r.maxX <= -AO + 0.5 && r.maxZ <= 6 && r.minZ >= -AI - 0.5;
   return (southStretch && (stainOuter || stainInner)) || pubBlock;
 }
-const NAV = [-106, -94, -37, -25, -17, -7, 7, 17, 25, 37, 94, 106];
+const NAV = [-106, -94, -43, -17, -7, 7, 17, 43, 94, 106];
 
 /** canonBoxes plus the wall and window kinds the dressed route chooses (every test box gets both keys, so they stay one
  *  shape). (canonBoxes drops them for every map: see the note in docs/design-decisions TR2) */
@@ -145,19 +145,29 @@ export function buildTestMap(): ArenaLayout {
   const A = LOOP_AT, E = EDGE_AT, HALF = 200;
 
   // ---- roads: the carriageways at 0, the pavements (and every block's ground) at kerb height ----
-  // (the ring road is squared off for the test: its chamfers only matter to the drawing)
+  // (TR3: the roundabout is a round road: roadRings, with its outer pavement cut round it below)
   const segs: { a: XZ; b: XZ; w: number; sw: number }[] = [];
-  for (const r of P.roads) {
-    if (r.kind === "ring") {
-      const c = T_RING, sq: XZ[] = [[-c, -c], [c, -c], [c, c], [-c, c], [-c, -c]];
-      for (let i = 1; i < sq.length; i++) segs.push({ a: sq[i - 1], b: sq[i], w: r.w, sw: r.sw });
-    } else for (let i = 1; i < r.pts.length; i++) segs.push({ a: r.pts[i - 1], b: r.pts[i], w: r.w, sw: r.sw });
-  }
+  for (const r of P.roads) if (r.kind !== "ring") for (let i = 1; i < r.pts.length; i++) segs.push({ a: r.pts[i - 1], b: r.pts[i], w: r.w, sw: r.sw });
   const segRect = (s: { a: XZ; b: XZ }, half: number, ext: number) => R(Math.min(s.a[0], s.b[0]) - (s.a[0] === s.b[0] ? half : ext), Math.max(s.a[0], s.b[0]) + (s.a[0] === s.b[0] ? half : ext),
     Math.min(s.a[1], s.b[1]) - (s.a[1] === s.b[1] ? half : ext), Math.max(s.a[1], s.b[1]) + (s.a[1] === s.b[1] ? half : ext));
   for (const s of segs) roads.push(segRect(s, s.w / 2, s.w / 2));
   const corridors = segs.map((s) => segRect(s, s.w / 2 + s.sw, s.w / 2 + s.sw));
   for (const p of minusAll(corridors, roads)) boxes.push(slab(p, KERB, "sidewalk"));
+  // the roundabout's outer pavement: from the road's outer kerb out to the square where the blocks start (the corners
+  // become little pavement squares), in thin wedges, leaving gaps where the spokes cross it
+  const ringOut = T_PARK.kerbR + T_HOME.ringW, RO = T_RING + T_HOME.ringW / 2 + T_HOME.ringPave;
+  const roadRings = [{ x: 0, z: 0, r0: T_PARK.kerbR, r1: ringOut }];
+  {
+    const N = 192, toSq = (a: number) => RO / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
+    const hitsRoad = (pts: XZ[]) => roads.some((q) => pts.some(([x, z]) => x > q.minX - 0.3 && x < q.maxX + 0.3 && z > q.minZ - 0.3 && z < q.maxZ + 0.3));
+    for (let i = 0; i < N; i++) {
+      const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2, am = (a0 + a1) / 2;
+      // (a wedge never spans a corner of the square: the corners are at 45 degrees, on wedge edges)
+      const q: XZ[] = [[ringOut * Math.cos(a0), ringOut * Math.sin(a0)], [ringOut * Math.cos(a1), ringOut * Math.sin(a1)], [toSq(a1) * Math.cos(a1), toSq(a1) * Math.sin(a1)], [toSq(a0) * Math.cos(a0), toSq(a0) * Math.sin(a0)]];
+      if (hitsRoad([...q, [((ringOut + toSq(am)) / 2) * Math.cos(am), ((ringOut + toSq(am)) / 2) * Math.sin(am)]])) continue;
+      boxes.push(polyBox(q.map(([x, z]) => [+x.toFixed(3), +z.toFixed(3)] as [number, number]), KERB, "sidewalk"));
+    }
+  }
   // every block's ground (back lanes, yards, the gaps between buildings) at kerb height, flush with the pavements
   for (const b of P.blocks) for (const { r } of b.rects) for (const p of minusAll([qr(r)], [...roads, ...corridors])) boxes.push(slab(p, KERB, "sidewalk", "#a39d94"));
   // the strip between the edge roads and the boundary
@@ -168,15 +178,115 @@ export function buildTestMap(): ArenaLayout {
   // zebra crossings at the market exits and the rear gates (the plan's checked ones)
   for (const c of P.crossings) crosswalks.push(c.across === "z" ? R(c.at[0] - c.w / 2, c.at[0] + c.w / 2, c.at[1] - 4, c.at[1] + 4) : R(c.at[0] - 4, c.at[0] + 4, c.at[1] - c.w / 2, c.at[1] + c.w / 2));
 
-  // ---- the home block: the yards (junk lots), the market lanes, the stalls ----
-  // (at ground level, like the forts' own drawing: the mat, the shelves and the fort sit at y = 0; the ring's inner
-  //  pavement is the kerb round it)
-  const H = T_HOME.half; // the block's edge (23)
-  boxes.push(slab(R(-H, H, -H, H), 0.006, "plaza", "#c9c1b0"));
-  for (const f of T_FORTS) boxes.push(slab(qr(f.yard), 0.012, "plaza", "#a5784c")); // (under the mat's rim, which sits at 0.01-0.03)
-  for (const s of T_STALLS) {
-    const r = qr(s.rect);
-    boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, s.id === "board" ? 2.2 : 2.6, s.id === "board" ? "board" : "kiosk", 0), sign: s.label, color: "#b9b2a6", face: [0, 1] });
+  // ---- TR3: the home block is the ROUNDABOUT MARKET PARK (Blake's reference picture) ----
+  // Ground level (the forts' own drawing sits at y = 0). Inside out: the paved plaza with the four market stalls, the
+  // four fenced fort plots (rounded at the back to the park's circle and at the front corner to the plaza), the market's
+  // paths out to the crossings, a grass verge with trees, the roundabout. No centrepiece (Blake: it would be in the way
+  // of loot being dragged home); lamp posts, bunting, benches and the notice board round the edge of the plaza.
+  const scenery: NonNullable<ArenaLayout["scenery"]> = [];
+  {
+    const { plazaR, fenceR, kerbR } = T_PARK, L = T_HOME.lane / 2;
+    scenery.push({ kind: "grassdisc", x: 0, z: 0, r: kerbR, h: kerbR - 0.4 }); // (a paved edge, then the lawn)
+    const circ = (r: number, n: number, a0 = 0, a1 = Math.PI * 2): XZ[] => Array.from({ length: n }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return [+(r * Math.cos(a)).toFixed(3), +(r * Math.sin(a)).toFixed(3)] as XZ; });
+    // the market's two paths, out to the crossings on the roundabout, and the plaza where they meet
+    boxes.push(slab(R(-L, L, -kerbR, kerbR), 0.045, "plaza", "#cdbfa2"), slab(R(-kerbR, kerbR, -L, L), 0.045, "plaza", "#cdbfa2"));
+    boxes.push({ ...polyBox(circ(plazaR, 40), 0.05, "plaza"), color: "#d6c6a4" });
+    // the four plots: the square yard, clipped to the fence circle (its dirt), with a wooden fence round it: along the two
+    // straight sides, round the back arc, round the plaza at the front corner; a gate on the path side, one at the back
+    for (const f of T_FORTS) {
+      const y = qr(f.yard), sx = Math.sign(y.minX + y.maxX), sz = Math.sign(y.minZ + y.maxZ);
+      const inside = (x: number, z: number) => x >= y.minX - 1e-6 && x <= y.maxX + 1e-6 && z >= y.minZ - 1e-6 && z <= y.maxZ + 1e-6;
+      const dirt = circ(fenceR, 96).filter(([x, z]) => inside(x, z)).concat([[y.minX, y.minZ], [y.maxX, y.minZ], [y.maxX, y.maxZ], [y.minX, y.maxZ]].filter(([x, z]) => Math.hypot(x, z) <= fenceR) as XZ[]);
+      const cx = (y.minX + y.maxX) / 2, cz = (y.minZ + y.maxZ) / 2;
+      dirt.sort((p, q) => Math.atan2(p[1] - cz, p[0] - cx) - Math.atan2(q[1] - cz, q[0] - cx));
+      boxes.push({ ...polyBox(dirt, 0.042, "plaza"), color: "#a5784c" });
+      // the fence: walk the plot's outline (inner corner on the plaza circle, the straight sides, the back on the fence
+      // circle), as short straight pieces; gaps for the gates
+      const ix = sx * L, iz = sz * L, outer = sx * T_HOME.half, outerZ = sz * T_HOME.half;
+      const zc = Math.sqrt(plazaR * plazaR - L * L), xr = Math.sqrt(fenceR * fenceR - T_HOME.half * T_HOME.half);
+      const line: XZ[] = [];
+      // (1) along the x = ix side (the N-S path) from the plaza out to the far side
+      line.push([ix, sz * zc], [ix, outerZ]);
+      // (2) along z = outerZ toward the outside, to where the fence circle cuts it
+      line.push([sx * xr, outerZ]);
+      // (3) round the back arc to the other side
+      const aA = Math.atan2(outerZ, sx * xr), aB = Math.atan2(sz * xr, outer);
+      let da = aB - aA; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      for (let k = 1; k <= 8; k++) { const a = aA + (da * k) / 8; line.push([fenceR * Math.cos(a), fenceR * Math.sin(a)]); }
+      // (4) along x = outer back in, then z = iz toward the plaza
+      line.push([outer, iz], [sx * zc, iz]);
+      // (5) round the plaza's edge back to the start
+      const pA = Math.atan2(iz, sx * zc), pB = Math.atan2(sz * zc, ix);
+      let pa = pB - pA; while (pa > Math.PI) pa -= 2 * Math.PI; while (pa < -Math.PI) pa += 2 * Math.PI;
+      for (let k = 1; k <= 4; k++) { const a = pA + (pa * k) / 4; line.push([plazaR * Math.cos(a), plazaR * Math.sin(a)]); }
+      const gates = [{ at: f.front, w: 3.2 }, { at: f.rear, w: 2.6 }];
+      for (let i = 1; i < line.length; i++) {
+        const [a, b] = [line[i - 1], line[i]], Ls = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (Ls < 0.05) continue;
+        // split the piece at any gate on it
+        const cuts: [number, number][] = [];
+        for (const g of gates) { const t = ((g.at[0] - a[0]) * (b[0] - a[0]) + (g.at[1] - a[1]) * (b[1] - a[1])) / (Ls * Ls), px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t;
+          if (t > -0.01 && t < 1.01 && Math.hypot(px - g.at[0], pz - g.at[1]) < 0.6) cuts.push([t - g.w / 2 / Ls, t + g.w / 2 / Ls]); }
+        cuts.sort((p, q) => p[0] - q[0]);
+        let t0 = 0; const runs: [number, number][] = [];
+        for (const [c0, c1] of cuts) { if (c0 > t0) runs.push([t0, c0]); t0 = Math.max(t0, c1); }
+        if (t0 < 1) runs.push([t0, 1]);
+        for (const [r0, r1] of runs) {
+          if ((r1 - r0) * Ls < 0.2) continue;
+          const p0: XZ = [a[0] + (b[0] - a[0]) * r0, a[1] + (b[1] - a[1]) * r0], p1: XZ = [a[0] + (b[0] - a[0]) * r1, a[1] + (b[1] - a[1]) * r1];
+          const nx = -(p1[1] - p0[1]) / Ls * 0.06, nz = (p1[0] - p0[0]) / Ls * 0.06;
+          boxes.push({ ...polyBox([[p0[0] + nx, p0[1] + nz], [p1[0] + nx, p1[1] + nz], [p1[0] - nx, p1[1] - nz], [p0[0] - nx, p0[1] - nz]], 1.05, "fence"), color: "#8b6a43" });
+        }
+      }
+      // gate posts with a little flag (the plot's colour) either side of the front gate
+      const along = Math.abs(f.front[0]) === L ? "z" : "x";
+      for (const s2 of [-1, 1]) {
+        const gx = along === "z" ? f.front[0] : f.front[0] + s2 * 1.75, gz = along === "z" ? f.front[1] + s2 * 1.75 : f.front[1];
+        boxes.push({ ...box(gx, gz, 0.22, 0.22, 1.5, "fence", 0), color: "#6e5232" });
+      }
+    }
+    // the four stalls on the plaza's diagonals: a counter, four posts, a striped awning, the sign facing the path it
+    // serves (a pinwheel, like the forts)
+    const STALL: Record<string, { stripe: string; face: [number, number] }> = { sell: { stripe: "#d63c3c", face: [1, 0] }, buy: { stripe: "#1f9e8c", face: [0, -1] }, upgrade: { stripe: "#2f6db5", face: [-1, 0] }, craft: { stripe: "#e8b21f", face: [0, 1] } };
+    for (const st of T_STALLS) {
+      const r = qr(st.rect), cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2, w = r.maxX - r.minX;
+      if (st.id === "board") continue;
+      const look = STALL[st.id];
+      boxes.push({ ...box(cx, cz, w, w, 1.0, "kiosk", 0), color: "#8a6440" });
+      for (const [px, pz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) boxes.push({ ...box(cx + px * (w / 2 - 0.12), cz + pz * (w / 2 - 0.12), 0.14, 0.14, 2.3, "fence", 1.0), color: "#6e5232" });
+      // the awning: stripes across the stall, alternating its colour and cream, a little proud on the sign side
+      const n = 7, sw2 = (w + 0.6) / n;
+      for (let k = 0; k < n; k++) {
+        const o = -w / 2 - 0.3 + sw2 * (k + 0.5), col = k % 2 ? "#f3ead8" : look.stripe;
+        boxes.push({ ...box(look.face[0] ? cx + look.face[0] * 0.3 : cx + o, look.face[1] ? cz + look.face[1] * 0.3 : cz + o, look.face[0] ? w + 0.6 : sw2, look.face[1] ? w + 0.6 : sw2, 0.12, "roof", 3.3), color: col });
+      }
+      boxes.push({ ...box(cx + look.face[0] * (w / 2 + 0.25), cz + look.face[1] * (w / 2 + 0.25), look.face[1] ? w : 0.12, look.face[0] ? w : 0.12, 0.7, "wall", 2.5), color: "#f3ead8", sign: st.label, face: look.face, signBg: "#f3ead8", signFg: "#3a2a1a", signW: w - 0.3, signY: 2.85 });
+      // a few goods on the counter (looks)
+      for (const k of [-0.6, 0.5]) boxes.push({ ...box(cx + (look.face[1] ? k : 0), cz + (look.face[0] ? k : 0), 0.45, 0.45, 0.35, "boxes", 1.0), color: k < 0 ? "#c9a06a" : "#7a9cc0" });
+    }
+    // the notice board at the edge of the south path, benches round the plaza, lamp posts at the path mouths and round
+    // the verge, bunting strung across the paths where they meet the plaza
+    const bd = qr(T_STALLS.find((x) => x.id === "board")!.rect);
+    boxes.push({ ...box((bd.minX + bd.maxX) / 2, (bd.minZ + bd.maxZ) / 2, bd.maxX - bd.minX, bd.maxZ - bd.minZ, 2.0, "board", 0.045), sign: "PARK NOTICES", color: "#7a5a3c", face: [1, 0] });
+    for (const [x, z, alongX] of [[-7.5, -2.2, 1], [7.5, 2.2, 1], [2.2, 8.2, 0], [-2.2, -8.2, 0]] as const) {
+      boxes.push({ ...box(x, z, alongX ? 1.8 : 0.5, alongX ? 0.5 : 1.8, 0.45, "wall", 0), color: "#8b6a43" });
+      boxes.push({ ...box(x + (alongX ? 0 : -0.22 * Math.sign(x)), z + (alongX ? -0.22 * Math.sign(z) : 0), alongX ? 1.8 : 0.08, alongX ? 0.08 : 1.8, 0.5, "wall", 0.45), color: "#7a5a3c" });
+    }
+    for (const [x, z] of [[L + 0.6, plazaR + 1], [-L - 0.6, -plazaR - 1], [plazaR + 1, -L - 0.6], [-plazaR - 1, L + 0.6]]) decor.push({ kind: "streetlight", x, z });
+    for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; decor.push({ kind: "streetlight", x: (kerbR - 0.9) * Math.cos(a), z: (kerbR - 0.9) * Math.sin(a) }); }
+    // bunting: a string across each path just outside the plaza, little flags along it
+    const FLAGS = ["#e74c3c", "#f1c40f", "#2ecc71", "#3498db", "#9b59b6", "#e67e22"];
+    for (const [axis, sgn] of [["z", 1], ["z", -1], ["x", 1], ["x", -1]] as const) {
+      const at = sgn * (plazaR + 1);
+      boxes.push({ ...box(axis === "z" ? 0 : at, axis === "z" ? at : 0, axis === "z" ? 2 * L + 1.2 : 0.03, axis === "z" ? 0.03 : 2 * L + 1.2, 0.03, "wall", 3.6), color: "#3a3030" });
+      for (let k = 0; k < 9; k++) { const o = -L + 0.3 + (k * (2 * L - 0.6)) / 8; boxes.push({ ...box(axis === "z" ? o : at, axis === "z" ? at : o, axis === "z" ? 0.32 : 0.03, axis === "z" ? 0.03 : 0.32, 0.36, "wall", 3.25), color: FLAGS[k % FLAGS.length] }); }
+    }
+    // trees round the verge (not in the paths or the crossings), and a few in the plots' back corners
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2 + 0.07, x = (fenceR + 1) * Math.cos(a), z = (fenceR + 1) * Math.sin(a);
+      if (Math.abs(x) < L + 2.5 || Math.abs(z) < L + 2.5) continue;
+      boxes.push({ ...box(x, z, 0.5, 0.5, 4.6, "tree", 0) });
+    }
   }
   // forts: the box, the mat (pad) in front, facing out of the yard toward the market (the plan's pinwheel)
   const forts: FortLot[] = [];
@@ -189,13 +299,13 @@ export function buildTestMap(): ArenaLayout {
     // junk-lot dressing: piles in the back corners (walk round them; they hide you a little)
     const back = (u: number, v: number): [number, number] => [fx - dx * v + dz * u, fz - dz * v - dx * u];
     for (const [u, v, w, h] of [[-6.5, 3.5, 2.2, 1.2], [6.5, 4.5, 1.6, 1.7], [-3.5, 6, 2.6, 0.9], [7, -6, 1.4, 1.1]] as const) {
-      const [x, z] = back(u, v); if (x > r.minX + 1 && x < r.maxX - 1 && z > r.minZ + 1 && z < r.maxZ - 1) boxes.push({ ...box(x, z, w, w * 0.8, h, "junk", 0), color: "#6f6250" });
+      const [x, z] = back(u, v); if (x > r.minX + 1 && x < r.maxX - 1 && z > r.minZ + 1 && z < r.maxZ - 1 && Math.hypot(x, z) < T_PARK.fenceR - 1.5 && Math.hypot(x, z) > T_PARK.plazaR + 1.5) boxes.push({ ...box(x, z, w, w * 0.8, h, "junk", 0), color: "#6f6250" });
     }
     // (TR2, Blake's photo: a dirt lot with tufts of grass and a few stones)
     for (let k = 0; k < 14; k++) {
       const x = r.minX + 1 + hash(fx + k, fz) * (r.maxX - r.minX - 2), z = r.minZ + 1 + hash(fz - k, fx) * (r.maxZ - r.minZ - 2);
-      if (Math.hypot(x - f.mat[0], z - f.mat[1]) < 2.5 || Math.hypot(x - fx, z - fz) < 2.5) continue;
-      if (k % 3) decor.push({ kind: "grass", x, z, w: 0.5 + hash(x, z) * 0.5, d: 0.4 + hash(z, x) * 0.4, h: 0.03 });
+      if (Math.hypot(x - f.mat[0], z - f.mat[1]) < 2.5 || Math.hypot(x - fx, z - fz) < 2.5 || Math.hypot(x, z) > T_PARK.fenceR - 0.8 || Math.hypot(x, z) < T_PARK.plazaR + 0.8) continue;
+      if (k % 3) decor.push({ kind: "grass", x, z, w: 0.5 + hash(x, z) * 0.5, d: 0.4 + hash(z, x) * 0.4, h: 0.05 });
       else boxes.push({ ...box(x, z, 0.45, 0.35, 0.14, "junk", 0), color: "#9a9a9e" });
     }
   }
@@ -402,7 +512,7 @@ export function buildTestMap(): ArenaLayout {
   }
 
   // ---- the El: columns only (the deck is looks: drawn as scenery) ----
-  const scenery: NonNullable<ArenaLayout["scenery"]> = [];
+  // (scenery: declared with the park)
   {
     const [a, b] = P.rail.pts, L = Math.hypot(b[0] - a[0], b[1] - a[1]), yaw = Math.atan2(b[0] - a[0], b[1] - a[1]);
     for (let s = 0; s < L; s += 12) {
@@ -438,7 +548,7 @@ export function buildTestMap(): ArenaLayout {
   landmarks.museumGate = { x: TEST_INFO!.museum.gate[0], z: TEST_INFO!.museum.gate[1], yaw: 0 };
   for (const p of places) landmarks[p.id] = { x: p.door[0], z: p.door[1], yaw: 0 };
   return {
-    halfSize: HALF, boxes: canonTest(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, crosswalks, shops, scenery, giantDoors, decor, variant: "test", pace: TEST_PACE,
+    halfSize: HALF, boxes: canonTest(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, roadRings, crosswalks, shops, scenery, giantDoors, decor, variant: "test", pace: TEST_PACE,
     // (pedestrian grid: the pavements' middle lines; the test has no passers-by, but the shopkeepers need a graph)
     navLines: NAV, navLinesZ: NAV,
   };
