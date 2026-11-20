@@ -11,6 +11,17 @@ Every phase adds to this plan. Nothing is reported as working unless one of thes
 
 Note on the automated browser test: it renders 3D on the CPU, so it runs at single-digit FPS with several windows open. Distance checks therefore compare movement against the number of simulation steps actually run, not wall-clock time. Frame rate and feel must be judged on a real machine.
 
+## TR2 checks: Trashington 400 (2026-11-20)
+
+| Area | Check | How | Result |
+|---|---|---|---|
+| The plan | every rule; 400 x 400 m; 18 m yards; nearest landmark 19-25 s from every fort (estimate), the same for all four; the nearest shop of each tier within 22 s; floor areas | unit (`shared/test/testmap.test.ts`) | pass (22.1 s estimated; 20.8 s walked at today's speed by `tests/trash400-report.ts`) |
+| Pace | the test map 10% faster: a 3 s sprint and a 3 s walk go 7-12% further than on the same map without it; the normal city has no pace | unit | pass |
+| The test map | four equal 18 m yards, rotated forts, no passers-by, no city events, the other maps untouched; stock; the museum's two doors; the recorder | unit (moved to the 400 m plan) | pass |
+| In the browser | the dressed views, no errors; draws and meshes per view | `tests/testmap-shots.mjs` | pass, no errors. Draws / meshes (software renderer, relative only): home lot 119/73, market 162/93, Stain Way 107/62, PLUG & PRAY 94/55, GOODS IN 49/28, gallery 37/20, Wood Havoc Lane 115/65, overview 106/62 (the real city's budgeted views run up to 1,321 draws) |
+| Online | host on `?map=test`, a plain-page joiner moved onto it, a sighting on Stain Way recorded, the report saved | `tests/testmap-2p.mjs` | not run before the push (Blake: "push it now, I want to see"); run after: see the next commit |
+| The normal game | unit (shared + client), typecheck, signal + server smokes, draw budget, e2e x2 | as every round | unit 379 shared + 40 client, typecheck, signal smoke, server smoke: pass. The draw budget and e2e x2 were still running when Blake asked to push ("push it now, I want to see"): results in the next commit |
+
 ## TR1 checks: Trashington 500, the smallest playable test (2026-11-18)
 
 | Area | Check | How | Result |

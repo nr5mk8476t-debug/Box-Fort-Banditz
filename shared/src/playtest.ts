@@ -9,7 +9,7 @@
 import type { World, PlayerSim } from "./world.js";
 import { lootDef } from "./loot.js";
 import { hyp } from "./fmath.js";
-import { TRASH500, LOOP_AT, T_HOME } from "./queens/trashington.js";
+import { TRASH400, LOOP_AT, T_HOME, T_RING } from "./queens/trashington400.js";
 import type { XZ } from "./queens/plan.js";
 import { TEST_SLOT } from "./testmap.js";
 
@@ -21,7 +21,7 @@ export const PLAYTEST = {
   after: 20,
   eye: 1.6,
 };
-const HOME_HALF = T_HOME.half + T_HOME.pave; // the home block's edge (50 m)
+const HOME_HALF = T_HOME.half + T_HOME.pave; // the home block's edge (27 m)
 
 interface Sample { t: number; x: number; z: number; carry: string; size: string }
 export interface Sighting {
@@ -48,10 +48,10 @@ export interface Trip {
 export function placeName(x: number, z: number, places: { id: string; name: string; inside: { minX: number; maxX: number; minZ: number; maxZ: number } }[]): string {
   for (const p of places) if (x >= p.inside.minX && x <= p.inside.maxX && z >= p.inside.minZ && z <= p.inside.maxZ) return p.name;
   if (Math.abs(x) <= HOME_HALF && Math.abs(z) <= HOME_HALF) {
-    for (const f of TRASH500.forts) { const r = f.yard; if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return `${f.id}'s yard`; }
+    for (const f of TRASH400.forts) { const r = f.yard; if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return `${f.id}'s yard`; }
     return "the market";
   }
-  for (const u of TRASH500.units) for (const g of u.grounds ?? []) { const r = g.rect; if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return `${u.name}: ${g.name.replace(/ \(.*/, "")}`; }
+  for (const u of TRASH400.units) for (const g of u.grounds ?? []) { const r = g.rect; if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return `${u.name}: ${g.name.replace(/ \(.*/, "")}`; }
   let best = "", bd = 1e9;
   const near = (pts: XZ[], half: number, name: string) => {
     for (let i = 1; i < pts.length; i++) {
@@ -61,11 +61,11 @@ export function placeName(x: number, z: number, places: { id: string; name: stri
       if (d <= half && d < bd) { bd = d; best = name; }
     }
   };
-  for (const r of TRASH500.roads) near(r.kind === "ring" ? [[-54, -54], [54, -54], [54, 54], [-54, 54], [-54, -54]] : r.pts, r.w / 2 + r.sw + 0.5, r.name);
-  for (const p of TRASH500.paths) near(p.pts, p.w / 2 + 1, p.id === "al_pub" ? "WOOD HAVOC LANE (behind the pub)" : p.kind === "alley" ? "a back lane" : p.note?.split(":")[0] ?? p.id);
+  for (const r of TRASH400.roads) near(r.kind === "ring" ? [[-T_RING, -T_RING], [T_RING, -T_RING], [T_RING, T_RING], [-T_RING, T_RING], [-T_RING, -T_RING]] : r.pts, r.w / 2 + r.sw + 0.5, r.name);
+  for (const p of TRASH400.paths) near(p.pts, p.w / 2 + 1, p.id === "al_pub" ? "WOOD HAVOC LANE (behind the pub)" : p.kind === "alley" ? "a back lane" : p.note?.split(":")[0] ?? p.id);
   return best || "between buildings";
 }
-const LANE = TRASH500.paths.find((p) => p.id === "al_pub")!.pts;
+const LANE = TRASH400.paths.find((p) => p.id === "al_pub")!.pts;
 function inLane(x: number, z: number) {
   for (let i = 1; i < LANE.length; i++) {
     const [a, b] = [LANE[i - 1], LANE[i]];

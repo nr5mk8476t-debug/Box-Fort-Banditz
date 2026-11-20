@@ -1,4 +1,4 @@
-// Trashington 500's grey-box test, ONLINE: Blake hosts with ?map=test; Tyson types the room code into a plain page (no
+// Trashington 400's test map, ONLINE: Blake hosts with ?map=test; Tyson types the room code into a plain page (no
 // ?map=): he's moved onto the host's city and joins. The host's game records them seeing each other on Stain Way, and
 // saves the playtest report when the scavenge ends. (server from server/ + vite preview on 4173)
 import { chromium } from "playwright";
@@ -22,7 +22,7 @@ const A = await open("Blake", "?test=1&map=test");
 await A.fill("#name-input", "Blake"); await A.click("#btn-create");
 await A.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 180000 });
 const code = (await A.evaluate(() => window.__bfb.info())).roomCode;
-ok(/TRASHINGTON 500 TEST \/ HOSTING/.test(await A.textContent("#mode-badge")), `host on the test map (${await A.textContent("#mode-badge")}), room ${code}`);
+ok(/TRASHINGTON 400 TEST \/ HOSTING/.test(await A.textContent("#mode-badge")), `host on the test map (${await A.textContent("#mode-badge")}), room ${code}`);
 // Tyson: a plain page, types the code
 const B = await open("Tyson", "?test=1");
 await B.fill("#name-input", "Tyson"); await B.fill("#code-input", code); await B.click("#btn-join");
@@ -32,7 +32,7 @@ ok(B.url().includes("map=test"), `the joiner was moved onto the host's map (${B.
 await B.waitForFunction(() => window.__bfb?.info().screen === "title" || window.__bfb?.info().screen === "playing", null, { timeout: 480000 });
 if ((await B.evaluate(() => window.__bfb.info().screen)) === "title") { await B.fill("#name-input", "Tyson").catch(() => {}); await B.click("#btn-accept-invite", { timeout: 60000 }); }
 await B.waitForFunction(() => window.__bfb.info().screen === "playing", null, { timeout: 1500000 });
-ok(/TRASHINGTON 500 TEST/.test(await B.textContent("#mode-badge")), `joiner's badge: ${await B.textContent("#mode-badge")}`);
+ok(/TRASHINGTON 400 TEST/.test(await B.textContent("#mode-badge")), `joiner's badge: ${await B.textContent("#mode-badge")}`);
 await A.waitForFunction(() => Object.keys(window.__bfb.info().players).length === 2, null, { timeout: 60000 }).catch(() => {});
 ok(Object.keys((await A.evaluate(() => window.__bfb.info())).players).length === 2, "two players in the host's game");
 // the match: F1 (Blake) and F4 (Tyson), the west side
@@ -40,8 +40,8 @@ await A.click("#btn-start");
 await A.waitForFunction(() => window.__bfb.match().phase === "scavenge", null, { timeout: 60000 });
 const lots = await A.evaluate(() => window.__bfb.info().players);
 // put them on Stain Way, 40 m apart, in plain view
-await A.evaluate(() => window.__bfb.teleport(-140, -20, Math.PI));
-await B.evaluate(() => window.__bfb.teleport(-140, -60, 0));
+await A.evaluate(() => window.__bfb.teleport(-94, -20, Math.PI));
+await B.evaluate(() => window.__bfb.teleport(-94, -60, 0));
 await sleep(8000);
 await A.screenshot({ path: `${OUT}/01-blake-sees-tyson.png` }); await B.screenshot({ path: `${OUT}/02-tyson-sees-blake.png` });
 const rep = await A.evaluate(() => window.__bfb.playtest());

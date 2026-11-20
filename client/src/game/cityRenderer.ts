@@ -1231,14 +1231,15 @@ export class CityRenderer {
     if (b.kind === "board") w = 0.9;
     if (b.face && b.kind === "wall" && b.h > 3) w = 5;
     else if (b.face && b.kind === "wall") w = Math.min(w, (b.h + 0.3) / 0.22);
+    if (b.signW) w = b.signW; // (TR2: the dressed test route chooses its signs' sizes and colours)
     const p = MeshBuilder.CreatePlane("sign", { width: w, height: w * (b.kind === "board" ? 0.9 : 0.22) }, this.scene);
-    const y = b.front === "shop" ? Math.min(4.05, top - 0.5 - w * 0.11) : b.kind === "board" ? 0.6 : b.face && b.kind === "building" ? top - 0.9 : b.face && b.kind !== "truck" ? b.y : b.kind === "truck" ? 2.55 : b.kind === "roof" ? top - 0.9 : b.kind === "tower" ? 5.5 : b.kind === "plinth" ? (b.mayor ? b.y : 0.6) : Math.min(top - 0.6, 2.9);
+    const y = b.signY !== undefined ? b.signY : b.front === "shop" ? Math.min(4.05, top - 0.5 - w * 0.11) : b.kind === "board" ? 0.6 : b.face && b.kind === "building" ? top - 0.9 : b.face && b.kind !== "truck" ? b.y : b.kind === "truck" ? 2.55 : b.kind === "roof" ? top - 0.9 : b.kind === "tower" ? 5.5 : b.kind === "plinth" ? (b.mayor ? b.y : 0.6) : Math.min(top - 0.6, 2.9);
     const off = b.mayor ? 0.08 : b.kind === "board" || b.kind === "plinth" ? 0.03 : b.kind === "truck" ? 0.12 : 0.34;
     p.position.set(b.x + nx * (b.w / 2 + off), y, b.z + nz * (b.d / 2 + off)); // in front of the window planes
     p.rotation.y = Math.atan2(-nx, -nz);
-    const bg = ["#f3e2b8", "#ffe14a", "#43c7a6", "#ff8fa3", "#9fe3ff"][Math.floor(hash(b.x, b.z) * 5)];
+    const bg = b.signBg ?? ["#f3e2b8", "#ffe14a", "#43c7a6", "#ff8fa3", "#9fe3ff"][Math.floor(hash(b.x, b.z) * 5)];
     p.isPickable = false;
-    if (b.kind !== "board") { this.atlasSigns.push({ mesh: p, text: b.sign!, bg }); return; } // C2: drawn on a shared sheet
+    if (b.kind !== "board") { this.atlasSigns.push({ mesh: p, text: b.sign!, bg, ...(b.signFg ? { fg: b.signFg } : {}) }); return; } // C2: drawn on a shared sheet
     p.material = unlitTextured(this.scene, textTexture(this.scene, b.sign!, { w: 256, h: 230, bg: "#2b2433", fg: "#f4f1ea" }), "boardMat");
     p.material.zOffset = -4; p.material.zOffsetUnits = -8; // beats the (biased) windows behind it
     ink(p, 0.05);
@@ -1661,7 +1662,7 @@ export class CityRenderer {
       // R14: the DEPOSIT MAT in front (exactly the mat: loot resting on it 10 s is banked onto the shelves)
       const mh = LOOP.matHalf * 2;
       const pad = MeshBuilder.CreateGround("pad", { width: mh, height: mh }, this.scene);
-      pad.position.set(f.padX, 0.03, f.padZ);
+      pad.position.set(f.padX, 0.045, f.padZ); // (TR2: clear of the rim, whose top is at 0.03: they fought for the same pixels and hid the DEPOSIT lettering)
       pad.rotation.y = f.yaw + Math.PI;
       pad.material = unlitTextured(this.scene, textTexture(this.scene, "DEPOSIT", { w: 512, h: 512, bg: "#3a2a1a", fg: color, stroke: "#1b1420" }), "depositMat");
       pad.parent = this.root;

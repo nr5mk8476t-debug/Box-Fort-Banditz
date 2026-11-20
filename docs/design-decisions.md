@@ -2,6 +2,29 @@
 
 _Last updated: 2026-09-25 (Phase 1 started)._
 
+## TR2: Trashington 400, smaller, faster, dressed (2026-11-20)
+Blake played TR1 and found it too big. His picks: 18 m yards, 400 x 400 m, 10% faster, the route dressed like his
+photos, the game's names kept. Decisions:
+- **The same shape, pulled in, rather than a new layout.** The home block shrank from 92 to 46 m, and the avenue loop
+  and the edges moved in to fit 400 m. The nearest landmark went from 31.6 s to 20.8 s walked at today's speed (about
+  19 s at the test map's pace), and the far corner from 40.9 s to 27.3 s.
+- **The biggest planned fort can't fit an 18 m yard.** The plan's largest fort is halved (`FORT_MAX_400`): big
+  upgrades will have to stack up, not spread out. Today's game forts (16 x 15 m yards) already fit.
+- **Starter shops face their spokes.** A 62 m ring has no room for a shop to face it beside the spoke, so each fort's
+  starter shop is on its spoke's corner, 4 s from the mat.
+- **The El moved** to run from the top edge to the east edge, on the casino side. Its old line crossed the NE corner
+  junction on a long skew (52 m between columns, against a 36 m limit).
+- **The pace is the map's, not the game's** (`arena.pace`, read by stepMovement). The host and the joiners build the
+  same arena, so their predictions agree, and the normal game, its tests and its balance are untouched.
+- **Dressed with the game's own pieces:** coloured boxes, the façade windows and wall kinds the city already draws,
+  signs on the shared sign sheet (now with chosen colours), the streetlights, cones, pallets and boxes. No new
+  meshes, models or textures. The rest of the city stays grey, so the dressed route reads as the place to go.
+- **Found, not fixed:** `canonBoxes` drops `wallKind` and `winKind` on every map. The R13 stores' upper floors have
+  never shown the walls and windows they were designed with. Fixing it would change the normal city's look, which
+  Blake didn't ask for, so the test map keeps them itself (`canonTest`) and the fix is left for a separate round.
+- **The DEPOSIT mat's flicker** (every map): the lettered mat sat exactly at its rim box's top. Now it's 1.5 cm above,
+  a placement fix within the mounted-things rule.
+
 ## TR1: Trashington 500, the smallest playable test (2026-11-18)
 Blake's answers: 500 x 500 m with the landmarks out; grey boxes first; 20 m market lanes; junk-lot starter yards; no
 WANTED list yet; build the smallest playable test; stop calling it Queens (the code folder `shared/src/queens/` keeps

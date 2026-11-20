@@ -213,7 +213,7 @@ async function startSolo() {
   $("lp-players").innerHTML = "";
   addPlayerRow(settings.playerName, 0, ["YOU"], true);
   $("lp-hint").textContent = "Press ENTER to start. Each cycle: an 8-minute scavenge (day, then sunset, then 2 min of NIGHT: x2 loot, fort raids), then sell your fort loot at the pawn shop. 3 cycles, richest bandit wins!";
-  $("mode-badge").textContent = cityMap() === "test" ? "TRASHINGTON 500 TEST / SOLO" : ROAD_TEST ? "NEW CITY R3 / SOLO" : "CITY C5c.3 / SOLO";
+  $("mode-badge").textContent = cityMap() === "test" ? "TRASHINGTON 400 TEST / SOLO" : ROAD_TEST ? "NEW CITY R3 / SOLO" : "CITY C5c.3 / SOLO";
 }
 
 /** Hook the arena's loot actions + feedback up to the right place (server or local world). */
@@ -504,7 +504,7 @@ async function enterOnline(r: GameRoom) {
   $("lp-title").textContent = "LOBBY";
   show("lp-code-row");
   $("lp-code").textContent = r.roomId;
-  $("mode-badge").textContent = (cityMap() === "test" ? "TRASHINGTON 500 TEST" : "CITY C5c") + (r.isHost ? " / HOSTING" : " / ONLINE");
+  $("mode-badge").textContent = (cityMap() === "test" ? "TRASHINGTON 400 TEST" : "CITY C5c") + (r.isHost ? " / HOSTING" : " / ONLINE");
 
   r.onMessage(MSG.ANNOUNCE, (m: { text: string }) => toast(m.text));
   r.onDrop(() => {

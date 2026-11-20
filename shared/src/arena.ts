@@ -17,6 +17,9 @@ export interface Box {
   /** optional look hints for the renderer (colour, sign text, windows...) */
   color?: string;
   sign?: string;
+  /** TR2 (the dressed test route): the sign's colours, width (m) and centre height, when they're chosen (else a palette
+   *  colour, sized and placed by the box's kind) */
+  signBg?: string; signFg?: string; signW?: number; signY?: number;
   /** R13b: a façade's wall material and window style, chosen (else picked by the district) */
   wallKind?: "brick" | "render" | "stone" | "paint" | "concrete" | "tile" | "corrugated" | "clapboard";
   winKind?: "windows" | "curtain" | "winShutter" | "winArched" | "winBlinds" | "winCurtain" | "winBoarded";
@@ -433,6 +436,9 @@ export interface ArenaLayout {
   chinatown?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
   /** R4: Little Italy (Chinatown's mirror on the new map): the street, its two arches, the rows of café lights over it */
   littleItaly?: { street: Rect; gates: { x: number; z: number; w: number }[]; lanternRows: number[]; route: { x: number; z: number }[] };
+  /** TR2 (Blake, playtesting: "it either feels too big or the player is running too slow"): the map's pace, a multiplier
+   *  on walking, sprinting and crouching (absent = 1; the ?map=test city is 1.1) */
+  pace?: number;
   /** Trashington 500's test map: doorways a dragged GIANT can't go through (you're put back at \`out\`, inside) */
   giantDoors?: { rect: Rect; out: { x: number; z: number; yaw: number } }[];
   /** named places, used by tests and tutorials */
@@ -521,6 +527,7 @@ export function canonBoxes(boxes: Box[]): Box[] {
     x: b.x, y: b.y, z: b.z, w: b.w, h: b.h, d: b.d, kind: b.kind, poly: b.poly, off: b.off, belt: b.belt, pump: b.pump, unit: b.unit,
     hide: b.hide, color: b.color, sign: b.sign, windows: b.windows, face: b.face, art: b.art, chain: b.chain, mayor: b.mayor,
     china: b.china, front: b.front, deco: b.deco, italy: b.italy,
+    signBg: b.signBg, signFg: b.signFg, signW: b.signW, signY: b.signY, // (TR2: the dressed test route's signs)
   }));
 }
 

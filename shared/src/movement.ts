@@ -481,6 +481,7 @@ export function stepMovement(s: MoveState, input: MoveInput, fullArena: ArenaLay
   if (s.swarmT > 0) speed *= 0.6; // pigeons everywhere
   if (s.y < 0.3 && inWater(fullArena, s.x, s.z)) speed *= WADE_SPEED; // Slice 2A: wading through the pond
   if (swimming) speed = PLAYER.walkSpeed * SWIM_SPEED * Math.min(1, s.carryMul + 0.3);
+  speed *= fullArena.pace ?? 1; // (the map's pace: Trashington 400's test map is 10% faster, Blake TR2)
   const wishX = dirX * speed;
   const wishZ = dirZ * speed;
 

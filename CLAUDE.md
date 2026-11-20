@@ -62,7 +62,19 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of TR1: Trashington 500, the smallest playable test)
+## Next up (as of TR2: Trashington 400, smaller and dressed)
+- Blake (2026-11-20, after playing TR1): too big. The plan is now 400 x 400 m with 18 m yards
+  (`shared/src/queens/trashington400.ts`, `TRASH400`; pictures and walked times: `npx tsx tests/trash400-report.ts` ->
+  `docs/trashington400/`). He wants "quick dopamine... iconic little areas", an arcade loop, not an open world.
+- The test map (`?map=test`, `shared/src/testmap.ts`) is built from `TRASH400`. It's 10% faster on foot
+  (`arena.pace`) and the route is dressed like his photos (home lots, Stain Way, PLUG & PRAY, the museum's GOODS IN,
+  Wood Havoc Lane). Boxes can choose their sign colours (`signBg`/`signFg`/`signW`/`signY`).
+- Known: `canonBoxes` drops `wallKind`/`winKind` on every map (the R13 stores' upper floors never got theirs); the
+  test map keeps them itself (`canonTest`). Fixing it for the normal city changes its look: ask Blake first.
+- Waiting on Blake: a play of the 400 m test with Tyson, the reports, his verdict on size and pace, what to dress or open
+  next.
+
+## Earlier: Next up (as of TR1: Trashington 500, the smallest playable test)
 - Blake (2026-11-18): "500 x 500 m, landmarks out"; keep the original look and DON'T SAY "QUEENS" (in messages, docs,
   names: it's Trashington); grey boxes first; 20 m market lanes; junk-lot starter yards; no WANTED list yet.
 - The plan: `shared/src/queens/trashington.ts` (`TRASH500`; the folder keeps its old name for now), checked by

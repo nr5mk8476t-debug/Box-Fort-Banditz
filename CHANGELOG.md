@@ -2,6 +2,31 @@
 
 Every update to Box Fort Banditz, newest first. Each round has its screenshots in `screenshots/<round>/`, and the full reasoning and test results are in `docs/design-decisions.md` and `docs/test-plan.md` (search for the round's name, e.g. "R12.2c").
 
+## TR2: Trashington 400, smaller and dressed like Blake's photos (2026-11-20)
+
+Blake, playtesting TR1: the fort yards and the square are too big, the city feels too big ("quick dopamine... iconic
+little areas... not a massive big open world"). His picks: 18 m yards, a 400 x 400 m city, 10% faster on foot, the
+test route dressed like his four photos, the game's own names kept. Still the test map only (`?map=test`).
+
+- **The 400 x 400 m plan** (`shared/src/queens/trashington400.ts`).
+  - The home block is 46 m across: four 18 m yards and 10 m market lanes.
+  - The avenue loop is at +-100 m and the edges at +-192 m.
+  - The starter shops face their spokes; the El was re-routed so it crosses each avenue cleanly.
+  - Every rule passes. Walked at today's speed, the nearest landmark is **20.8 s** from every fort (about 19 s on the
+    test map) and the far corner 27.3 s.
+- **10% faster on the test map** (`arena.pace`, applied in the movement code; the normal game's pace is unchanged).
+- **The dressed route:**
+  - the home lots (dirt, grass, stones; the fort and mat at ground level);
+  - Stain Way's coloured terraces with windows and lamp posts;
+  - PLUG & PRAY's teal shopfront, window telly and hanging plug sign; FISHY BUSINESS's blue front;
+  - the museum's GOODS IN (shutter, bollards, hatched bay, pallets, cones, banner, the duck on a red dolly);
+  - Wood Havoc Lane with THE SOGGY SHAMROCK's back door (step, sign, lamp, drainpipe, wheelie bin) and lamp posts.
+- **Boxes can choose their sign's colours, width and height** (`signBg`, `signFg`, `signW`, `signY`).
+- **The DEPOSIT mat's lettering shows** (every map): the mat sat exactly at its rim's height and the two fought for the
+  same pixels; it's 1.5 cm above the rim now.
+- **Tests:** a new pace test (10% further in 3 s, walking and sprinting, the normal city unchanged); the plan, yard,
+  stock, museum and recorder tests moved to the 400 m plan; `tests/trash400-report.ts` (the pictures, the walked table).
+
 ## TR1: Trashington 500, the smallest playable test (2026-11-18)
 
 Blake's answers to the Compact questions: "500 x 500 m, landmarks out"; keep the original look and stop calling it

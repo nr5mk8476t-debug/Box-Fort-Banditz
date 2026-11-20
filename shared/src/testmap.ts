@@ -1,5 +1,6 @@
 // TRASHINGTON 500: the SMALLEST PLAYABLE TEST (Blake, 2026-11-18: "yes build the smallest playable test"; "grey boxes
-// first"). The whole 500 x 500 m plan (shared/src/queens/trashington.ts) as grey boxes, so distances and sightlines are
+// first"; TR2, 2026-11-20: "shrink the city down to 400 by 400", 18 m yards, 10% faster, the route dressed like his
+// photos). The whole 400 x 400 m plan (shared/src/queens/trashington400.ts) as grey boxes, so distances and sightlines are
 // the real ones, with only what the test needs open:
 //   - the home block: four starter yards (junk lots: no walls, walls come as upgrades), the 20 m market lanes, the stalls
 //     as markers;
@@ -11,11 +12,13 @@
 // Everything else is a closed grey block with the plan's name on it (signs on the planned shops), so you can tell where
 // you are. No traffic, no police, no passers-by: two players, one scavenge, and what you each saw.
 // Picked with ?map=test (both players' pages), setCityMap("test") in code.
-import { box, canonBoxes, type ArenaLayout, type Box, type FortLot, type Rect, type ShopDef, type SpawnPoint } from "./arena.js";
+import { box, polyBox, canonBoxes, type ArenaLayout, type Box, type FortLot, type Rect, type ShopDef, type SpawnPoint } from "./arena.js";
 import { usePlan, layout } from "./queens/check.js";
-import { TRASH500, T_HOME, T_RING, T_FORTS, T_STALLS, LOOP_AT, EDGE_AT } from "./queens/trashington.js";
+import { TRASH400, T_HOME, T_RING, T_FORTS, T_STALLS, LOOP_AT, EDGE_AT } from "./queens/trashington400.js";
 import type { QRect, QUnit, XZ } from "./queens/plan.js";
 
+/** TR2 (Blake): the test map is 10% faster on foot */
+export const TEST_PACE = 1.1;
 /** the open units (by plan id) */
 export const TEST_OPEN = ["plugpray", "fishy", "museum"] as const;
 /** ground height of pavements, blocks and yards (roads are at 0) */
@@ -60,13 +63,16 @@ function sideOf(r: Rect, p: XZ): { side: "N" | "S" | "E" | "W"; at: number } {
  * A walk-in shell: four walls on the rectangle (a gap of width w at each opening), a roof, a floor at kerb height.
  * Returns the boxes; the inside is r shrunk by the wall.
  */
-function shell(r: Rect, h: number, openings: { side: "N" | "S" | "E" | "W"; at: number; w: number }[], color: string, out: Box[]) {
+type Opening = { side: "N" | "S" | "E" | "W"; at: number; w: number; glass?: boolean };
+function shell(r: Rect, h: number, openings: Opening[], color: string, out: Box[], sideColor: Partial<Record<"N" | "S" | "E" | "W", string>> = {}) {
   const y0 = KERB, top = KERB + h;
-  const wall = (x0: number, x1: number, z0: number, z1: number) => { if (x1 - x0 > 0.05 && z1 - z0 > 0.05) out.push({ ...box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, "wall", y0), color }); };
+  let col = color;
+  const wall = (x0: number, x1: number, z0: number, z1: number) => { if (x1 - x0 > 0.05 && z1 - z0 > 0.05) out.push({ ...box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, "wall", y0), color: col }); };
   for (const side of ["N", "S", "E", "W"] as const) {
+    col = sideColor[side] ?? color;
     const along = side === "N" || side === "S";
     const lo = along ? r.minX : r.minZ, hi = along ? r.maxX : r.maxZ;
-    const cuts = openings.filter((o) => o.side === side).map((o) => [Math.max(lo, o.at - o.w / 2), Math.min(hi, o.at + o.w / 2)] as [number, number]).sort((a, b) => a[0] - b[0]);
+    const cuts = openings.filter((o) => o.side === side).map((o) => [Math.max(lo, o.at - o.w / 2), Math.min(hi, o.at + o.w / 2), o.glass ? 1 : 0] as [number, number, number]).sort((a, b) => a[0] - b[0]);
     let s = lo;
     const piece = (a: number, b: number) => {
       if (side === "N") wall(a, b, r.maxZ - WALL, r.maxZ); else if (side === "S") wall(a, b, r.minZ, r.minZ + WALL);
@@ -75,16 +81,33 @@ function shell(r: Rect, h: number, openings: { side: "N" | "S" | "E" | "W"; at: 
     for (const [a, b] of cuts) { piece(s, a); s = b; }
     piece(s, hi);
     // a lintel over each opening (the roof line stays whole from outside)
-    for (const [a, b] of cuts) {
+    for (const [a, b, glass] of cuts) {
+      // a shop window: a sill wall, the glass, the wall above (the lintel below)
+      if (glass) {
+        const at = (yb: number, hh: number, kind: Box["kind"]) => side === "N" ? box((a + b) / 2, r.maxZ - WALL / 2, b - a, WALL, hh, kind, y0 + yb) : side === "S" ? box((a + b) / 2, r.minZ + WALL / 2, b - a, WALL, hh, kind, y0 + yb)
+          : side === "E" ? box(r.maxX - WALL / 2, (a + b) / 2, WALL, b - a, hh, kind, y0 + yb) : box(r.minX + WALL / 2, (a + b) / 2, WALL, b - a, hh, kind, y0 + yb);
+        out.push({ ...at(0, 0.8, "wall"), color: col }, { ...at(0.8, 2.0, "glass") });
+      }
       const lh = Math.max(0, h - 2.8);
       if (lh <= 0) continue;
       const lb = side === "N" ? box((a + b) / 2, r.maxZ - WALL / 2, b - a, WALL, lh, "wall", y0 + 2.8) : side === "S" ? box((a + b) / 2, r.minZ + WALL / 2, b - a, WALL, lh, "wall", y0 + 2.8)
         : side === "E" ? box(r.maxX - WALL / 2, (a + b) / 2, WALL, b - a, lh, "wall", y0 + 2.8) : box(r.minX + WALL / 2, (a + b) / 2, WALL, b - a, lh, "wall", y0 + 2.8);
-      out.push({ ...lb, color });
+      out.push({ ...lb, color: col });
     }
   }
   out.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, 0.3, "roof", top), color });
 }
+
+/** a box on the outside of a wall: side of rectangle r, centred `at` along it, standing `off` m out (its own depth d),
+ *  w wide, h tall, from height y0 (TR2 dressing: signs, doors, lamps, pipes, bollards) */
+function onWall(r: Rect, side: "N" | "S" | "E" | "W", at: number, off: number, w: number, d: number, h: number, y0: number, kind: Box["kind"] = "wall"): Box {
+  const o = off + d / 2;
+  if (side === "N") return box(at, r.maxZ + o, w, d, h, kind, y0);
+  if (side === "S") return box(at, r.minZ - o, w, d, h, kind, y0);
+  if (side === "E") return box(r.maxX + o, at, d, w, h, kind, y0);
+  return box(r.minX - o, at, d, w, h, kind, y0);
+}
+const FACE = { N: [0, 1], S: [0, -1], E: [1, 0], W: [-1, 0] } as const;
 
 export interface TestMapInfo {
   /** the open places: the inside rectangle and the doors (for the recorder, the tests and the HUD) */
@@ -99,13 +122,27 @@ export let TEST_INFO: TestMapInfo | null = null;
 /** who gets which fort, by join order: a two-player test puts the first two on the WEST side (F1 north-west, F4
  *  south-west), the museum's side, with Stain Way between them and the museum; players 3 and 4 get the east */
 export const TEST_SLOT: Record<string, number> = { F1: 0, F4: 1, F2: 2, F3: 3 };
-const NAV = [-152, -140, -60, -48, -17, -7, 7, 17, 48, 60, 140, 152];
+/** TR2: the dressed route's terrace colours and walls (Blake's Stain Way photo: cream, red brick, mauve, tan) */
+const TERRACE: [string, NonNullable<Box["wallKind"]>][] = [["#e8d6ad", "render"], ["#b9553f", "brick"], ["#9c7fa3", "render"], ["#d8b48a", "render"], ["#a8473a", "brick"], ["#c9a07a", "brick"], ["#e2c9a0", "render"]];
+/** is a footprint on the dressed route: Stain Way's south stretch (either side) or the pub's block (Wood Havoc Lane) */
+function onRoute(r: Rect) {
+  const A = LOOP_AT, AV = 8, SW = 4, AO = A + AV / 2 + SW, AI = A - AV / 2 - SW, EI = EDGE_AT - 6.5;
+  const southStretch = r.maxZ > -A - 2 && r.minZ < 20;
+  const stainOuter = r.maxX > -AO - 18 && r.maxX <= -AO + 0.5, stainInner = r.minX >= -AI - 0.5 && r.minX < -AI + 18;
+  const pubBlock = r.minX >= -EI - 0.5 && r.maxX <= -AO + 0.5 && r.maxZ <= 6 && r.minZ >= -AI - 0.5;
+  return (southStretch && (stainOuter || stainInner)) || pubBlock;
+}
+const NAV = [-106, -94, -37, -25, -17, -7, 7, 17, 25, 37, 94, 106];
+
+/** canonBoxes plus the wall and window kinds the dressed route chooses (every test box gets both keys, so they stay one
+ *  shape). (canonBoxes drops them for every map: see the note in docs/design-decisions TR2) */
+function canonTest(boxes: Box[]): Box[] { return canonBoxes(boxes).map((c, i) => Object.assign(c, { wallKind: boxes[i].wallKind, winKind: boxes[i].winKind })); }
 
 export function buildTestMap(): ArenaLayout {
-  usePlan(TRASH500);
-  const P = TRASH500, lay = layout();
-  const boxes: Box[] = [], roads: Rect[] = [], crosswalks: Rect[] = [];
-  const A = LOOP_AT, E = EDGE_AT, HALF = 250;
+  usePlan(TRASH400);
+  const P = TRASH400, lay = layout();
+  const boxes: Box[] = [], roads: Rect[] = [], crosswalks: Rect[] = [], decor: NonNullable<ArenaLayout["decor"]> = [];
+  const A = LOOP_AT, E = EDGE_AT, HALF = 200;
 
   // ---- roads: the carriageways at 0, the pavements (and every block's ground) at kerb height ----
   // (the ring road is squared off for the test: its chamfers only matter to the drawing)
@@ -132,12 +169,14 @@ export function buildTestMap(): ArenaLayout {
   for (const c of P.crossings) crosswalks.push(c.across === "z" ? R(c.at[0] - c.w / 2, c.at[0] + c.w / 2, c.at[1] - 4, c.at[1] + 4) : R(c.at[0] - 4, c.at[0] + 4, c.at[1] - c.w / 2, c.at[1] + c.w / 2));
 
   // ---- the home block: the yards (junk lots), the market lanes, the stalls ----
-  const H = T_HOME.half + T_HOME.pave; // the block's edge (50)
-  boxes.push(slab(R(-H, H, -H, H), KERB, "sidewalk"));
-  for (const f of T_FORTS) boxes.push(slab(qr(f.yard), 0.02, "plaza", "#8a7a5e", KERB));
+  // (at ground level, like the forts' own drawing: the mat, the shelves and the fort sit at y = 0; the ring's inner
+  //  pavement is the kerb round it)
+  const H = T_HOME.half; // the block's edge (23)
+  boxes.push(slab(R(-H, H, -H, H), 0.006, "plaza", "#c9c1b0"));
+  for (const f of T_FORTS) boxes.push(slab(qr(f.yard), 0.012, "plaza", "#a5784c")); // (under the mat's rim, which sits at 0.01-0.03)
   for (const s of T_STALLS) {
     const r = qr(s.rect);
-    boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, s.id === "board" ? 2.2 : 2.6, s.id === "board" ? "board" : "kiosk", KERB), sign: s.label, color: "#b9b2a6", face: [0, 1] });
+    boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, s.id === "board" ? 2.2 : 2.6, s.id === "board" ? "board" : "kiosk", 0), sign: s.label, color: "#b9b2a6", face: [0, 1] });
   }
   // forts: the box, the mat (pad) in front, facing out of the yard toward the market (the plan's pinwheel)
   const forts: FortLot[] = [];
@@ -145,19 +184,31 @@ export function buildTestMap(): ArenaLayout {
     const r = qr(f.yard), cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
     const dx = Math.sign(Math.round(f.mat[0] - cx)), dz = Math.sign(Math.round(f.mat[1] - cz)), yaw = Math.atan2(dx, dz);
     const fx = f.mat[0] - dx * 6, fz = f.mat[1] - dz * 6;
-    boxes.push({ ...box(fx, fz, Math.abs(dx) ? 1.9 : 2.4, Math.abs(dx) ? 2.4 : 1.9, 1.5, "fort", KERB) });
+    boxes.push({ ...box(fx, fz, Math.abs(dx) ? 1.9 : 2.4, Math.abs(dx) ? 2.4 : 1.9, 1.5, "fort", 0) });
     forts.push({ slot: TEST_SLOT[f.id], x: fx, z: fz, padX: f.mat[0], padZ: f.mat[1], yaw, zone: r, backX: f.rear[0], backZ: f.rear[1] });
     // junk-lot dressing: piles in the back corners (walk round them; they hide you a little)
     const back = (u: number, v: number): [number, number] => [fx - dx * v + dz * u, fz - dz * v - dx * u];
-    for (const [u, v, w, h] of [[-12, 4, 3, 1.4], [11, 5, 2.4, 2.0], [-6, 9, 4, 1.1], [14, -8, 2.5, 1.6]] as const) {
-      const [x, z] = back(u, v); if (x > r.minX + 2 && x < r.maxX - 2 && z > r.minZ + 2 && z < r.maxZ - 2) boxes.push({ ...box(x, z, w, w * 0.8, h, "junk", KERB), color: "#6f6250" });
+    for (const [u, v, w, h] of [[-6.5, 3.5, 2.2, 1.2], [6.5, 4.5, 1.6, 1.7], [-3.5, 6, 2.6, 0.9], [7, -6, 1.4, 1.1]] as const) {
+      const [x, z] = back(u, v); if (x > r.minX + 1 && x < r.maxX - 1 && z > r.minZ + 1 && z < r.maxZ - 1) boxes.push({ ...box(x, z, w, w * 0.8, h, "junk", 0), color: "#6f6250" });
+    }
+    // (TR2, Blake's photo: a dirt lot with tufts of grass and a few stones)
+    for (let k = 0; k < 14; k++) {
+      const x = r.minX + 1 + hash(fx + k, fz) * (r.maxX - r.minX - 2), z = r.minZ + 1 + hash(fz - k, fx) * (r.maxZ - r.minZ - 2);
+      if (Math.hypot(x - f.mat[0], z - f.mat[1]) < 2.5 || Math.hypot(x - fx, z - fz) < 2.5) continue;
+      if (k % 3) decor.push({ kind: "grass", x, z, w: 0.5 + hash(x, z) * 0.5, d: 0.4 + hash(z, x) * 0.4, h: 0.03 });
+      else boxes.push({ ...box(x, z, 0.45, 0.35, 0.14, "junk", 0), color: "#9a9a9e" });
     }
   }
 
   // ---- the city's buildings: closed grey blocks ----
   for (const b of lay.buildings) {
     const r = qr(b.rect), g = GREY[b.style] ?? GREY.low, h = Math.max(2, b.floors) * FLOOR_H;
-    boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, h, "building", KERB), color: g[Math.floor(hash(r.minX, r.minZ) * g.length)] });
+    // TR2 (Blake's photos): the test route's buildings in colour, with windows: Stain Way between Gnome Ave and Queasy
+    // Blvd (both sides), and the pub's block round Wood Havoc Lane. The rest of the city stays grey.
+    const dressed = onRoute(r);
+    const t = Math.floor(hash(r.minX, r.minZ) * TERRACE.length);
+    boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, h, "building", KERB), color: dressed ? TERRACE[t][0] : g[Math.floor(hash(r.minX, r.minZ) * g.length)],
+      ...(dressed ? { windows: true, wallKind: TERRACE[t][1] } : {}) });
   }
   // the plan's units: open ones built as shells below, the rest closed blocks with their name on the door side
   const places: TestMapInfo["places"] = [], shops: ShopDef[] = [], loot: SpawnPoint[] = [], giantDoors: NonNullable<ArenaLayout["giantDoors"]> = [];
@@ -168,7 +219,9 @@ export function buildTestMap(): ArenaLayout {
     u.parts.forEach((pr, i) => {
       const r = qr(pr), h = Math.min(u.kind === "landmark" ? 24 : 30, Math.max(2, u.floors ?? 3) * FLOOR_H), sd = sideOf(r, u.door);
       const face: [number, number] = sd.side === "N" ? [0, 1] : sd.side === "S" ? [0, -1] : sd.side === "E" ? [1, 0] : [-1, 0];
-      boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, h, "building", KERB), color: u.phase === "reserved" ? "#9a958c" : "#8e8890",
+      const pub = u.id === "pub"; // (TR2: THE SOGGY SHAMROCK in its oxblood brick, on the dressed route)
+      boxes.push({ ...box((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, h, "building", KERB), color: pub ? "#8e3a2f" : u.phase === "reserved" ? "#9a958c" : "#8e8890",
+        ...(pub ? { windows: true, wallKind: "brick" as const, signBg: "#2f5f3a", signFg: "#f0d9a0" } : {}),
         ...(i === 0 ? { sign: u.phase === "reserved" ? `${u.name} (LATER)` : u.name, face } : {}) });
       // a coloured band at the door (tier at a glance from down the street)
       if (i === 0) {
@@ -181,13 +234,16 @@ export function buildTestMap(): ArenaLayout {
   }
 
   // ---- the two open shops on Stain Way south ----
-  const shopShell = (u: QUnit, sid: number, type: ShopDef["type"], pool: string[]) => {
+  const shopShell = (u: QUnit, sid: number, type: ShopDef["type"], pool: string[], look: { front: string; fascia: string; fg: string; wall: string }) => {
     const r = qr(u.parts[0]), sd = sideOf(r, u.door), bk = u.back ? sideOf(r, u.back) : null;
-    const h = 4.2;
-    shell(r, h, [{ ...sd, w: 2.4 }, ...(bk ? [{ ...bk, w: 1.6 }] : [])], "#9a948c", boxes);
-    // the sign over the door, on a band above the opening
-    const face: [number, number] = sd.side === "N" ? [0, 1] : sd.side === "S" ? [0, -1] : sd.side === "E" ? [1, 0] : [-1, 0];
-    boxes.push({ ...box(face[1] ? sd.at : (face[0] > 0 ? r.maxX + 0.2 : r.minX - 0.2), face[0] ? sd.at : (face[1] > 0 ? r.maxZ + 0.2 : r.minZ - 0.2), face[1] ? 6 : 0.3, face[0] ? 6 : 0.3, 1.0, "wall", KERB + h - 1.1), color: SIGN_TINT[u.tier ?? "low"], sign: u.name, face });
+    const h = 4.2, along = sd.side === "N" || sd.side === "S", span = along ? r.maxX - r.minX : r.maxZ - r.minZ, lo = along ? r.minX : r.minZ;
+    // (TR2, Blake's photo: a coloured shopfront: the door, a big window beside it with a display in it, the fascia sign)
+    const winAt = sd.at - lo > span / 2 ? sd.at - 3.4 : sd.at + 3.4;
+    shell(r, h, [{ ...sd, w: 2.4 }, { side: sd.side, at: winAt, w: 3.6, glass: true }, ...(bk ? [{ ...bk, w: 1.6 }] : [])], look.wall, boxes, { [sd.side]: look.front });
+    const face = FACE[sd.side] as unknown as [number, number];
+    boxes.push({ ...onWall(r, sd.side, lo + span / 2, 0, span - 0.6, 0.3, 1.0, KERB + h - 1.15), color: look.fascia, sign: u.name, face, signBg: look.fascia, signFg: look.fg, signW: Math.min(span - 1.2, 9), signY: KERB + h - 0.65 });
+    // door frame and a darker door leaf standing open (looks: the opening is the way in)
+    for (const s2 of [-1, 1]) boxes.push({ ...onWall(r, sd.side, sd.at + s2 * 1.32, 0, 0.24, 0.12, 2.8, KERB), color: "#14514b" });
     const inside = R(r.minX + WALL, r.maxX - WALL, r.minZ + WALL, r.maxZ - WALL);
     // in the shop's own frame: v from the door inward, u across
     const [fx, fz] = face, inX = -fx, inZ = -fz;
@@ -210,8 +266,22 @@ export function buildTestMap(): ArenaLayout {
     places.push({ id: u.id, name: u.name, inside, door: u.door, ...(u.back ? { back: u.back } : {}) });
   };
   const unit = (id: string) => P.units.find((u) => u.id === id)!;
-  shopShell(unit("plugpray"), 0, "repair", ["crt_tv", "giant_toaster", "phone_handset", "laptop", "disposable_camera"]);
-  shopShell(unit("fishy"), 1, "mart", ["smelly_fish", "canned_beans", "fancy_cheese", "soda_can", "golden_spork"]);
+  shopShell(unit("plugpray"), 0, "repair", ["crt_tv", "giant_toaster", "phone_handset", "laptop", "disposable_camera"], { front: "#1f8a80", fascia: "#16756c", fg: "#f3ead0", wall: "#c8574a" });
+  shopShell(unit("fishy"), 1, "mart", ["smelly_fish", "canned_beans", "fancy_cheese", "soda_can", "golden_spork"], { front: "#2f6fa3", fascia: "#1f5582", fg: "#ffe9a8", wall: "#e3d2ad" });
+  // PLUG & PRAY: the hanging plug sign over the pavement, and a broken telly in the window (Blake's Stain Way photo)
+  {
+    const u = unit("plugpray"), r = qr(u.parts[0]), sd = sideOf(r, u.door), along = sd.side === "N" || sd.side === "S";
+    const span = along ? r.maxX - r.minX : r.maxZ - r.minZ, lo = along ? r.minX : r.minZ, edge = sd.at - lo > span / 2 ? lo + span - 0.6 : lo + 0.6;
+    boxes.push({ ...onWall(r, sd.side, edge, 0, 0.14, 1.5, 0.14, KERB + 4.6), color: "#2a2a2e" }); // the bracket
+    boxes.push({ ...onWall(r, sd.side, edge, 0.75, 0.3, 0.6, 0.85, KERB + 3.7), color: "#f2c230" }); // the plug
+    for (const k of [-0.13, 0.13]) boxes.push({ ...onWall(r, sd.side, edge + k, 1.35, 0.08, 0.35, 0.12, KERB + 4.05), color: "#f2c230" }); // its prongs
+    // the telly in the window, on a little table, just inside the glass
+    const winAt = sd.at - lo > span / 2 ? sd.at - 3.4 : sd.at + 3.4, [fx, fz] = FACE[sd.side];
+    const wx = along ? winAt : fx > 0 ? r.maxX - 0.9 : r.minX + 0.9, wz = along ? (fz > 0 ? r.maxZ - 0.9 : r.minZ + 0.9) : winAt;
+    boxes.push({ ...box(wx, wz, along ? 1.6 : 0.8, along ? 0.8 : 1.6, 0.75, "table", KERB), color: "#7a5a3c" });
+    boxes.push({ ...box(wx, wz, 0.75, 0.65, 0.65, "wall", KERB + 0.75), color: "#d9d2bf" });
+    boxes.push({ ...box(wx + fx * 0.34, wz + fz * 0.34, along ? 0.55 : 0.04, along ? 0.04 : 0.55, 0.45, "wall", KERB + 0.85), color: "#2c3a40" });
+  }
 
   // ---- the museum: forecourt, a narrow public door, one gallery, the goods-yard gate ----
   const mu = unit("museum"), mr = qr(mu.parts[0]);
@@ -220,7 +290,7 @@ export function buildTestMap(): ArenaLayout {
   const front = sideOf(mr, [(court.minX + court.maxX) / 2, (court.minZ + court.maxZ) / 2]);
   const doorAt = front.side === "N" || front.side === "S" ? mu.door[0] : mu.door[1];
   const gateAt = front.side === "N" || front.side === "S" ? mu.back![0] : mu.back![1];
-  shell(mr, 7, [{ side: front.side, at: doorAt, w: MUSEUM_DOOR_W }, { side: front.side, at: gateAt, w: 4.5 }], "#a6a39c", boxes);
+  shell(mr, 7, [{ side: front.side, at: doorAt, w: MUSEUM_DOOR_W }, { side: front.side, at: gateAt, w: 4.5 }], "#d6cbb1", boxes);
   // the goods yard: fenced on its open sides, a wide gate on the street
   {
     const sd = sideOf(yard, mu.back!), gw = 5;
@@ -242,7 +312,32 @@ export function buildTestMap(): ArenaLayout {
     const wx = front.side === "N" || front.side === "S" ? doorAt : fx > 0 ? mr.maxX : mr.minX, wz = front.side === "E" || front.side === "W" ? doorAt : fz > 0 ? mr.maxZ : mr.minZ;
     for (const s of [-1, 1]) boxes.push({ ...box(wx + fx * 1.2 + fz * s * 2.2, wz + fz * 1.2 + fx * s * 2.2, 0.9, 0.9, 6.5, "wall", KERB), color: "#d8d2c4" });
     boxes.push({ ...box(wx + fx * 0.15, wz + fz * 0.15, fz ? 10 : 0.3, fx ? 10 : 0.3, 1.4, "wall", KERB + 7 - 1.6), color: SIGN_TINT.landmark, sign: "THE MUSEUM OF QUESTIONABLE HISTORY", face: [fx, fz] });
-    boxes.push({ ...box(wx + fx * 0.15 + (fz ? gateAt - doorAt : 0), wz + fz * 0.15 + (fx ? gateAt - doorAt : 0), fz ? 6 : 0.3, fx ? 6 : 0.3, 0.9, "wall", KERB + 7 - 1.2), color: "#5c5a60", sign: "GOODS IN", face: [fx, fz] });
+    boxes.push({ ...box(wx + fx * 0.15 + (fz ? gateAt - doorAt : 0), wz + fz * 0.15 + (fx ? gateAt - doorAt : 0), fz ? 6 : 0.3, fx ? 6 : 0.3, 0.9, "wall", KERB + 7 - 1.2), color: "#efe2b0", sign: "GOODS IN", face: [fx, fz], signBg: "#efe2b0", signFg: "#1b1420", signW: 3.4, signY: KERB + 7 - 0.75 });
+  }
+  // TR2 (Blake's GOODS IN photo): the roller shutter rolled up over the goods door, yellow bollards, a hatched loading bay,
+  // pallets of boxes, cones, the museum's banner on the wall
+  {
+    const sd = front.side, [fx, fz] = FACE[sd], along = sd === "N" || sd === "S", away = Math.sign(gateAt - doorAt) || 1;
+    boxes.push({ ...onWall(mr, sd, gateAt, 0, 5.0, 0.55, 0.65, KERB + 2.8), color: "#8d939b" }); // the shutter's drum
+    for (const k of [0.95, 1.6, 2.25]) boxes.push({ ...onWall(mr, sd, gateAt, 0.02, 4.6, 0.04, 0.05, KERB + 2.8 + k * 0.2), color: "#6f757d" }); // its slats showing
+    for (const s2 of [-1, 1]) boxes.push({ ...onWall(mr, sd, gateAt + s2 * 2.75, 0.25, 0.32, 0.32, 1.1, KERB), color: "#f2c230" });
+    // the banner on the wall beside the door (away from the public door)
+    boxes.push({ ...onWall(mr, sd, gateAt + away * 6.5, 0, 6.5, 0.15, 1.6, KERB + 2.3), color: "#ece4f2", sign: "MUSEUM OF QUESTIONABLE HISTORY", face: [fx, fz], signBg: "#ece4f2", signFg: "#5b3f8c", signW: 6.2, signY: KERB + 3.1 });
+    // the hatched bay in front of the door: a yellow border and diagonal stripes (flat paint)
+    const bay = (u: number, v: number): XZ => along ? [gateAt + u, (fz > 0 ? mr.maxZ : mr.minZ) + fz * v] : [(fx > 0 ? mr.maxX : mr.minX) + fx * v, gateAt + u];
+    const paint = (a: XZ, b: XZ, c: XZ, d: XZ) => boxes.push({ ...polyBox([a, b, c, d], 0.025, "plaza", KERB + 0.02), color: "#f2c230" });
+    const t = 0.15, W2 = 2.6, D0 = 0.6, D1 = 5.0;
+    paint(bay(-W2, D0), bay(W2, D0), bay(W2, D0 + t), bay(-W2, D0 + t)); paint(bay(-W2, D1 - t), bay(W2, D1 - t), bay(W2, D1), bay(-W2, D1));
+    paint(bay(-W2, D0), bay(-W2 + t, D0), bay(-W2 + t, D1), bay(-W2, D1)); paint(bay(W2 - t, D0), bay(W2, D0), bay(W2, D1), bay(W2 - t, D1));
+    for (let k = -2; k <= 2; k++) { const u0 = k * 1.1 - 0.9; paint(bay(u0, D0 + t), bay(u0 + 0.25, D0 + t), bay(u0 + 0.25 + 1.6, D1 - t), bay(u0 + 1.6, D1 - t)); }
+    // pallets of boxes and cones by the bay
+    for (const [u, v, two] of [[-4.6, 1.6, 1], [-4.4, 3.4, 0], [4.6, 2.2, 1]] as const) {
+      const [x, z] = bay(u * away, v);
+      boxes.push({ ...box(x, z, 1.2, 1.0, 0.15, "pallet", KERB), color: "#b08a5a" });
+      boxes.push({ ...box(x, z, 1.0, 0.85, 0.75, "boxes", KERB + 0.15), color: "#c9a06a" });
+      if (two) boxes.push({ ...box(x + 0.1, z - 0.05, 0.75, 0.65, 0.55, "boxes", KERB + 0.9), color: "#d1ab78" });
+    }
+    for (const u of [-3.4, -3.0]) { const [x, z] = bay(u * away, 5.6 + (u + 3.4) * 1.5); decor.push({ kind: "cone", x, z }); }
   }
   // the gallery: plinths with the heavy exhibits, the giants on the floor by the goods door
   const gallery = R(mr.minX + WALL, mr.maxX - WALL, mr.minZ + WALL, mr.maxZ - WALL);
@@ -259,7 +354,13 @@ export function buildTestMap(): ArenaLayout {
     const gz = front.side === "E" || front.side === "W" ? gateAt : (front.side === "N" ? gallery.maxZ - 6 : gallery.minZ + 6);
     for (const [u, v] of [[0, 0], [5, 3], [-5, 3]]) {
       const x = gx + (front.side === "N" || front.side === "S" ? u : (front.side === "E" ? -v : v)), z = gz + (front.side === "E" || front.side === "W" ? u : (front.side === "N" ? -v : v));
-      loot.push({ x, y: KERB, z, zone: "shop", pool: ["rubber_duck", "arcade_machine"], shop: 2, tier: 2 });
+      // (TR2, Blake's photo: the giant duck waits on a red dolly just inside the goods door)
+      const dolly = u === 0 && v === 0;
+      if (dolly) {
+        boxes.push({ ...box(x, z, 2.2, 1.6, 0.18, "platform", KERB + 0.12), color: "#c0392b" });
+        for (const [a, b] of [[-0.9, -0.6], [0.9, -0.6], [-0.9, 0.6], [0.9, 0.6]]) boxes.push({ ...box(x + a, z + b, 0.22, 0.22, 0.12, "junk", KERB), color: "#26262b" });
+      }
+      loot.push({ x, y: dolly ? KERB + 0.3 : KERB, z, zone: "shop", pool: dolly ? ["rubber_duck"] : ["rubber_duck", "arcade_machine"], shop: 2, tier: 2 });
     }
     shops.push({ id: 2, name: mu.name, type: "jeweller", rect: gallery, cashier: { x: cx, z: cz, yaw: 0 }, till: { x: cx, y: KERB + 1, z: cz }, floorColor: "#cfc9bd", wallColor: "#a6a39c", maxY: 7, heat: 2 });
     const dpt: XZ = front.side === "N" || front.side === "S" ? [doorAt, front.side === "N" ? mr.maxZ + 1 : mr.minZ - 1] : [front.side === "E" ? mr.maxX + 1 : mr.minX - 1, doorAt];
@@ -282,6 +383,24 @@ export function buildTestMap(): ArenaLayout {
     };
   }
 
+  // ---- TR2 (Blake's Wood Havoc Lane photo): THE SOGGY SHAMROCK's back door on the lane: a green door up a step, the
+  //      pub's sign beside it, a lamp over it, the drainpipe, a green wheelie bin; lamp posts along the lane ----
+  {
+    const pu = unit("pub"), pr = qr(pu.parts[0]), sd = sideOf(pr, pu.back!), z0 = sd.at;
+    boxes.push({ ...onWall(pr, sd.side, z0, 0, 1.6, 0.6, 0.15, KERB), color: "#bdb6aa" });
+    boxes.push({ ...onWall(pr, sd.side, z0, 0, 1.2, 0.1, 2.25, KERB), color: "#2f7a3f" });
+    boxes.push({ ...onWall(pr, sd.side, z0 + 0.4, 0.1, 0.08, 0.06, 0.25, KERB + 1.0), color: "#c9c4b8" }); // the handle
+    boxes.push({ ...onWall(pr, sd.side, z0 + 2.6, 0, 2.8, 0.12, 1.5, KERB + 1.4), color: "#6b3f22", sign: "THE SOGGY SHAMROCK", face: FACE[sd.side] as unknown as [number, number], signBg: "#6b3f22", signFg: "#f0d9a0", signW: 2.6, signY: KERB + 2.15 });
+    boxes.push({ ...onWall(pr, sd.side, z0, 0, 0.55, 0.28, 0.35, KERB + 2.65), color: "#ffe58a" });
+    boxes.push({ ...onWall(pr, sd.side, z0 - 1.5, 0, 0.18, 0.18, 9.5, KERB), color: "#3b3b40" });
+    boxes.push({ ...onWall(pr, sd.side, z0 - 2.6, 0.3, 0.75, 0.8, 1.1, KERB), color: "#2f8f3a" });
+    boxes.push({ ...onWall(pr, sd.side, z0 - 2.6, 0.25, 0.85, 0.9, 0.08, KERB + 1.1), color: "#25702d" });
+    const lane = P.paths.find((p) => p.id === "al_pub")!.pts;
+    for (let i = 1; i < lane.length; i++) { const [a, b] = [lane[i - 1], lane[i]], L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let k = 12; k < L - 4; k += 26) decor.push({ kind: "streetlight", x: a[0] + ((b[0] - a[0]) * k) / L + 2, z: a[1] + ((b[1] - a[1]) * k) / L }); }
+    // and along Stain Way's south stretch, both pavements
+    for (let z = -A + 12; z < 10; z += 24) for (const x of [-A - 6.6, -A + 6.6]) decor.push({ kind: "streetlight", x, z: z + (x < -A ? 12 : 0) });
+  }
+
   // ---- the El: columns only (the deck is looks: drawn as scenery) ----
   const scenery: NonNullable<ArenaLayout["scenery"]> = [];
   {
@@ -294,7 +413,6 @@ export function buildTestMap(): ArenaLayout {
   }
 
   // street-name signs on two corners of every junction of named streets (finding your way in a grey city)
-  const decor: NonNullable<ArenaLayout["decor"]> = [];
   {
     const named = P.roads.filter((r) => r.kind !== "ring" && r.pts.length === 2);
     const vert = named.filter((r) => r.pts[0][0] === r.pts[1][0]), hor = named.filter((r) => r.pts[0][1] === r.pts[1][1]);
@@ -320,7 +438,7 @@ export function buildTestMap(): ArenaLayout {
   landmarks.museumGate = { x: TEST_INFO!.museum.gate[0], z: TEST_INFO!.museum.gate[1], yaw: 0 };
   for (const p of places) landmarks[p.id] = { x: p.door[0], z: p.door[1], yaw: 0 };
   return {
-    halfSize: HALF, boxes: canonBoxes(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, crosswalks, shops, scenery, giantDoors, decor, variant: "test",
+    halfSize: HALF, boxes: canonTest(boxes), spawns, lootSpawns: loot, forts, landmarks, roads, crosswalks, shops, scenery, giantDoors, decor, variant: "test", pace: TEST_PACE,
     // (pedestrian grid: the pavements' middle lines; the test has no passers-by, but the shopkeepers need a graph)
     navLines: NAV, navLinesZ: NAV,
   };

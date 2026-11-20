@@ -1,4 +1,4 @@
-// Trashington 500's grey-box playable test (?map=test), solo in the browser: the views a player sees. Screenshots to
+// Trashington 400's playable test (?map=test), solo in the browser: the views a player sees. Screenshots to
 // OUT_DIR. (vite preview on 4173)
 import { chromium } from "playwright";
 import fs from "node:fs";
@@ -17,9 +17,10 @@ await ev(() => { window.__bfb.testInput(true); window.__bfb.startMatch(); });
 await page.waitForFunction(() => window.__bfb.match().phase === "intro", null, { timeout: 30000 });
 await sleep(2500); await shot("01-at-the-fort");
 const views = JSON.parse(process.env.VIEWS ?? "null") ?? [
-  ["02-market", 0, 1.6, -8, 0, 0.05], ["03-leaving-home", -60, 1.6, 12, -Math.PI / 2, 0.02], ["04-stain-way-south", -142, 1.6, 20, Math.PI, 0.03],
-  ["05-plug-and-pray", -136, 1.6, -52, 0, 0.0], ["06-museum-front", -176, 1.6, -150, Math.PI, 0.08], ["07-museum-gallery", -195, 1.7, -195, 0.4, 0.05],
-  ["08-goods-yard", -210, 1.6, -158, Math.PI, 0.05], ["09-wood-havoc-lane", -196, 1.6, -100, 0, 0.02], ["10-overview", -60, 120, 60, -2.4, 0.7],
+  ["02-home-lot", -4, 1.7, 11, -1.33, 0.12], ["03-market", 0, 1.6, -6, 0, 0.05], ["04-leaving-home", -30, 1.6, 12, -Math.PI / 2, 0.02],
+  ["05-stain-way-south", -97, 1.6, 2, Math.PI, 0.03], ["06-plug-and-pray", -103, 1.7, -40, 2.4, 0.06], ["07-museum-goods-in", -145, 1.7, -119, -2.7, 0.1],
+  ["08-museum-gallery", -150, 1.7, -136, Math.PI, 0.05], ["09-wood-havoc-lane", -147, 1.7, -30, 2.41, 0.05], ["10-museum-front", -120, 1.6, -112, Math.PI, 0.1],
+  ["11-overview", -60, 90, 40, -2.4, 0.7],
 ];
 // draws (the engine's real count, median of 6 frames) and meshes drawn at each view: the performance note
 const cost = () => ev(() => new Promise((res) => { const e = window.__bfb.scene().getEngine(); let prev = e._drawCalls.current, k = 0; const dc = []; const f = () => { const c = e._drawCalls.current; dc.push(c - prev); prev = c; if (++k < 7) requestAnimationFrame(f); else { dc.shift(); dc.sort((x, y) => x - y); res({ draws: dc[dc.length >> 1], meshes: window.__bfb.scene().getActiveMeshes().length }); } }; requestAnimationFrame(f); }));
