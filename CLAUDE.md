@@ -62,7 +62,26 @@ A first-person 3D browser party game set in the city of Trashington. Babylon.js 
 ## Process safety
 - Never `pkill` (or `pgrep -f`, or a kill loop over grep) a pattern that appears in your own command line. Kill by PID, in a separate command from the launches. List with `ps -o pid,args -p ...` first.
 
-## Next up (as of TR3: the roundabout market park)
+## Next up (as of TR4: the park's first finished section)
+- Blake's TR4 brief: finish ONE section first (F1's fort and yard, the SELL stall, the north path, the fence, the trees,
+  day and night) and show it with numbers before copying it. It's built by `client/src/game/parkKit.ts`:
+  - one procedural atlas;
+  - merged meshes;
+  - the game's collision boxes kept and hidden.
+
+  The section's data is `arena.park` (built in `shared/src/testmap.ts`). Measure it with `tests/park-measure.mjs`, with
+  the before/after table in `screenshots/tr4/README.md`.
+- Known to fix before spreading:
+  - the canopy's scallops read flat;
+  - the SELL board is cut off close up;
+  - the gate lantern is oversized;
+  - the night pools are faint;
+  - back faces are drawn (fill cost);
+  - the atlas is painted at load (+1.6 s).
+- Waiting on Blake: his play and verdict on the section. Only then apply it to F2-F4 and the BUY, CRAFT and UPGRADE
+  stalls.
+
+## Earlier: Next up (as of TR3: the roundabout market park)
 - Blake (2026-11-20) likes the 400 m size and the timing. The plan is `docs/trashington400/roadmap.md`. He wants one
   thing at a time: no cars, no shadows, no shops until he's happy with the park. The test map has no ink outline (cheaper)
   and is 8% faster on foot.

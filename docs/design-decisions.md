@@ -2,6 +2,31 @@
 
 _Last updated: 2026-09-25 (Phase 1 started)._
 
+## TR4: the park's first finished section (2026-11-20)
+Blake's brief: one connected section to the final look first (the SELL stall, F1's fort and yard, the north path, the
+fence, the trees, day and night), shown with numbers before it's copied. Decisions:
+- **The kit is one procedural atlas plus merged geometry** (`client/src/game/parkKit.ts`). A 1024² canvas painted at
+  load (planks, cardboard, canopy stripes, tarp, grass, dirt, paving, the signs) carries the look. The section's pieces
+  are merged into about seven meshes, and colour variety rides in vertex colours, not new materials. The other three
+  plots and stalls will reuse the same atlas and builders: BUY, CRAFT and UPGRADE share the stall frame and canopy and
+  swap only their counter goods and sign.
+- **Collision is unchanged in shape.** The game's boxes stay as they were (hidden where the kit draws the thing), so the
+  fence, the stall and the props block exactly what they blocked before.
+- **Decorative goods are scenery,** not loot: the scales, the cashbox and the crates aren't items, so E never targets
+  them (tested).
+- **How the clutter lives with upgrades.** Junk sits only in a band along the fence, outside the footprint of the
+  biggest planned fort and off the gates' ways in (tested). Upgrades never have to move it. If a later upgrade needs
+  that band, the props are data in `arena.park.props` and can be dropped per fort level.
+- **Night: emissive, painted, no lights.**
+  - The lantern glass is emissive: it glows at any distance and costs nothing.
+  - The pools of light under the lanterns are painted decals.
+  - The kit's colours are lifted a little at night (the `NIGHT_HOOKS` hook), so the signs stay readable.
+  - No real lights were added: each one costs on every mesh it touches.
+- **Open trade-offs (measured):**
+  - The kit draws both sides of its faces. That was the quick fix for mixed winding, and it adds fill cost.
+  - The atlas is painted at load (+1.6 s on the test box). Saving it as images would remove most of that.
+  - Both are for the spread-out round, not this one.
+
 ## TR3: the roundabout market park (2026-11-20)
 Blake's reference picture and answers (`docs/trashington400/roadmap.md`, questions 1-8). Decisions:
 - **"15% bigger"** was read as the park's width: 66 m across inside the road, against TR2's 54 m square (+22%). The
